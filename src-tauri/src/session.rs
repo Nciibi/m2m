@@ -350,16 +350,165 @@ impl Session {
         Ok(())
     }
 
-    /// Get the peer's fingerprint for display/verification.
-    pub fn peer_fingerprint(&self) -> String {
-        crypto::fingerprint_from_public_key(&self.peer_identity_pub)
+    /// Send a file transfer request to the peer.
+    pub async fn send_file_request(
+        &mut self,
+        stream: &mut TcpStream,
+        transfer_id: &str,
+        filename: &str,
+        total_size: u64,
+        total_chunks: u32,
+        file_hash: Vec<u8>,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        self.check_expiry()?;
+
+        let req = FileTransferRequestData {
+            transfer_id: transfer_id.to_string(),
+            filename: filename.to_string(),
+            total_size,
+            total_chunks,
+            file_hash,
+        };
+        let body_bytes = protocol::serialize(&req)?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes).await
     }
 
-    /// Mark the peer as verified (user confirmed fingerprint out-of-band).
-    pub fn mark_peer_verified(&mut self) {
-        self.peer_verified = true;
+    /// Send a single file chunk.
+    pub async fn send_file_chunk(
+        &mut self,
+        stream: &mut TcpStream,
+        transfer_id: &str,
+        chunk_index: u32,
+        data: Vec<u8>,
+        chunk_hash: Vec<u8>,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        self.check_expiry()?;
+        if data.len() > MAX_FILE_CHUNK_SIZE {
+            return Err(SessionError::Protocol(protocol::ProtocolError::MessageTooLarge));
+        }
+
+        let chunk = FileTransferChunkData {
+            transfer_id: transfer_id.to_string(),
+            chunk_index,
+            data,
+            chunk_hash,
+        };
+        let body_bytes = protocol::serialize(&chunk)?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferChunk, &body_bytes).await
     }
-}
+
+    /// Send file transfer complete notification.
+    pub async fn send_file_complete(
+        &mut self,
+        stream: &mut TcpStream,
+        transfer_id: &str,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        self.check_expiry()?;
+
+        let complete = FileTransferCompleteData {
+            transfer_id: transfer_id.to_string(),
+        };
+        let body_bytes = protocol::serialize(&complete)?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferComplete, &body_bytes).await
+    }
+
+    /// Accept an incoming file transfer.
+    pub async fn send_file_accept(
+        &mut self,
+        stream: &mut TcpStream,
+        transfer_id: &str,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        let body = protocol::serialize(&serde_json::json!({ "transfer_id": transfer_id }))?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferAccept, &body).await
+    }
+
+    /// Reject an incoming file transfer.
+    pub async fn send_file_reject(
+        &mut self,
+        stream: &mut TcpStream,
+        transfer_id: &str,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        let body = protocol::serialize(&serde_json::json!({ "transfer_id": transfer_id }))?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferReject, &body).await
+    }
+
+    /// Encrypt and send data with a specific packet type.
+    async fn send_encrypted_typed(
+        &mut self,
+        stream: &mut TcpStream,
+        packet_type: PacketType,
+        plaintext: &[u8],
+    ) -> Result<(), SessionError> {
+        let keys = self
+            .session_keys
+            .as_ref()
+            .ok_or(SessionError::InvalidState)?;
+
+        self.tx_counter += 1;
+
+        let mut aad = Vec::with_capacity(9);
+        aad.push(packet_type.to_byte());
+        aad.extend_from_slice(&self.tx_counter.to_be_bytes());
+
+        let (nonce, ciphertext) = keys.encrypt(plaintext, &aad)?;
+
+        let envelope = EncryptedEnvelope {
+            nonce,
+            counter: self.tx_counter,
+            ciphertext,
+        };
+        let envelope_bytes = protocol::serialize(&envelope)?;
+
+        network::write_frame(stream, packet_type, &envelope_bytes).await?;
+        Ok(())
+    }
+
+    /// Decrypt an encrypted frame of any type (not just EncryptedMessage).
+    pub fn decrypt_typed_frame(&mut self, frame: &RawFrame) -> Result<Vec<u8>, SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        self.check_expiry()?;
+
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body)?;
+
+        if envelope.counter <= self.rx_high_water_mark {
+            return Err(SessionError::ReplayDetected {
+                received: envelope.counter,
+                expected: self.rx_high_water_mark + 1,
+            });
+        }
+
+        let keys = self
+            .session_keys
+            .as_ref()
+            .ok_or(SessionError::InvalidState)?;
+
+        let mut aad = Vec::with_capacity(9);
+        aad.push(frame.packet_type.to_byte());
+        aad.extend_from_slice(&envelope.counter.to_be_bytes());
+
+        let plaintext = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
+        self.rx_high_water_mark = envelope.counter;
+
+        Ok(plaintext)
+    }
+
 
 impl Drop for Session {
     fn drop(&mut self) {
