@@ -509,6 +509,16 @@ impl Session {
         Ok(plaintext)
     }
 
+    /// Get the peer's fingerprint for display/verification.
+    pub fn peer_fingerprint(&self) -> String {
+        crypto::fingerprint_from_public_key(&self.peer_identity_pub)
+    }
+
+    /// Mark the peer as verified (user confirmed fingerprint out-of-band).
+    pub fn mark_peer_verified(&mut self) {
+        self.peer_verified = true;
+    }
+}
 
 impl Drop for Session {
     fn drop(&mut self) {
