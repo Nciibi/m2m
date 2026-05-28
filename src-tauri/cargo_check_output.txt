@@ -1,8 +1,8 @@
-﻿cargo :    Compiling m2m v0.1.0 (C:\Users\ncibi\Desktop\M2M\src-tauri)
+﻿cargo :     Checking m2m v0.1.0 (C:\Users\ncibi\Desktop\M2M\src-tauri)
 At line:1 char:61
 + ... licy -Scope Process -ExecutionPolicy Bypass; cargo check 2>&1 | Out-F ...
 +                                                  ~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (   Compiling m2...\M2M\src-tauri):String) [], RemoteException
+    + CategoryInfo          : NotSpecified: (    Checking m2...\M2M\src-tauri):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
 warning: unused import: `ConnectionState`
@@ -63,6 +63,39 @@ error[E0308]: mismatched types
 108 |         Ok(Ok(())) => {}
     |               ^^ expected `usize`, found `()`
 
+error[E0308]: mismatched types
+   --> src\session.rs:185:71
+    |
+185 |         crypto::verify_signature(&init.identity_pub, &peer_sign_data, &init.signature)
+    |         ------------------------                                      ^^^^^^^^^^^^^^^ expected `&[u8; 64]`, 
+found `&Vec<u8>`
+    |         |
+    |         arguments to this function are incorrect
+    |
+    = note: expected reference `&[u8; 64]`
+               found reference `&Vec<u8>`
+note: function defined here
+   --> src\crypto.rs:119:8
+    |
+119 | pub fn verify_signature(
+    |        ^^^^^^^^^^^^^^^^
+...
+122 |     signature: &[u8; 64],
+    |     --------------------
+
+error[E0308]: mismatched types
+   --> src\session.rs:209:13
+    |
+209 |             signature,
+    |             ^^^^^^^^^ expected `Vec<u8>`, found `[u8; 64]`
+    |
+    = note: expected struct `Vec<u8>`
+                found array `[u8; 64]`
+help: try using a conversion method
+    |
+209 |             signature: signature.to_vec(),
+    |             ++++++++++          +++++++++
+
 warning: variable does not need to be mutable
    --> src\commands.rs:175:25
     |
@@ -83,6 +116,37 @@ error[E0499]: cannot borrow `conn` as mutable more than once at a time
     |          ---------      ^^^^ second mutable borrow occurs here
     |          |
     |          first borrow later used by call
+
+error[E0308]: mismatched types
+  --> src\session.rs:98:13
+   |
+98 |             signature,
+   |             ^^^^^^^^^ expected `Vec<u8>`, found `[u8; 64]`
+   |
+   = note: expected struct `Vec<u8>`
+               found array `[u8; 64]`
+help: try using a conversion method
+   |
+98 |             signature: signature.to_vec(),
+   |             ++++++++++          +++++++++
+
+error[E0308]: mismatched types
+   --> src\session.rs:131:75
+    |
+131 |         crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
+    |         ------------------------ arguments to this function are incorrect ^^^^^^^^^^^^^^^^^^^ expected `&[u8; 
+64]`, found `&Vec<u8>`
+    |
+    = note: expected reference `&[u8; 64]`
+               found reference `&Vec<u8>`
+note: function defined here
+   --> src\crypto.rs:119:8
+    |
+119 | pub fn verify_signature(
+    |        ^^^^^^^^^^^^^^^^
+...
+122 |     signature: &[u8; 64],
+    |     --------------------
 
 error[E0599]: no function or associated item named `from_slice` found for struct `Signature` in the current scope
    --> src\crypto.rs:126:26
@@ -106,350 +170,51 @@ help: there is an associated function `from_str` with a similar name
 126 +         sign::Signature::from_str(signature).ok_or(CryptoError::SignatureInvalid)?;
     |
 
-error[E0277]: the trait bound `[u8; 64]: serde::Serialize` is not satisfied
-    --> src\protocol.rs:164:24
-     |
- 164 | #[derive(Debug, Clone, Serialize, Deserialize)]
-     |                        ^^^^^^^^^ the trait `Serialize` is not implemented for `[u8; 64]`
+error[E0308]: mismatched types
+  --> src\identity.rs:82:9
+   |
+82 |         nonce,
+   |         ^^^^^ expected `Vec<u8>`, found `[u8; 16]`
+   |
+   = note: expected struct `Vec<u8>`
+               found array `[u8; 16]`
+help: try using a conversion method
+   |
+82 |         nonce: nonce.to_vec(),
+   |         ++++++      +++++++++
+
+error[E0308]: mismatched types
+  --> src\identity.rs:94:49
+   |
+94 |     let signed_invite = SignedInvite { payload, signature };
+   |                                                 ^^^^^^^^^ expected `Vec<u8>`, found `[u8; 64]`
+   |
+   = note: expected struct `Vec<u8>`
+               found array `[u8; 64]`
+help: try using a conversion method
+   |
+94 |     let signed_invite = SignedInvite { payload, signature: signature.to_vec() };
+   |                                                 ++++++++++          +++++++++
+
+error[E0308]: mismatched types
+   --> src\identity.rs:179:9
+    |
+176 |     crypto::verify_signature(
+    |     ------------------------ arguments to this function are incorrect
 ...
- 170 |     pub signature: [u8; 64],
-     |     --- required by a bound introduced by this call
-     |
-     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Serialize`:
-               [T; 0]
-               [T]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `commands::_::_serde::ser::SerializeStruct::serialize_field`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\ser\mod.rs:1917:21
-     |
-1915 |     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
-     |        --------------- required by a bound in this associated function
-1916 |     where
-1917 |         T: ?Sized + Serialize;
-     |                     ^^^^^^^^^ required by this bound in `SerializeStruct::serialize_field`
-     = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for 
-more info)
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-    --> src\protocol.rs:170:20
-     |
- 170 |     pub signature: [u8; 64],
-     |                    ^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-     |
-     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Deserialize<'de>`:
-               &[u8]
-               [T; 0]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `next_element`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\de\mod.rs:1771:12
-     |
-1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
-     |        ------------ required by a bound in this associated function
-1770 |     where
-1771 |         T: Deserialize<'de>,
-     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-    --> src\protocol.rs:170:20
-     |
- 170 |     pub signature: [u8; 64],
-     |                    ^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-     |
-     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Deserialize<'de>`:
-               &[u8]
-               [T; 0]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `next_value`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\de\mod.rs:1916:12
-     |
-1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
-     |        ---------- required by a bound in this associated function
-1915 |     where
-1916 |         V: Deserialize<'de>,
-     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-   --> src\protocol.rs:164:35
+179 |         &signed.signature,
+    |         ^^^^^^^^^^^^^^^^^ expected `&[u8; 64]`, found `&Vec<u8>`
     |
-164 | #[derive(Debug, Clone, Serialize, Deserialize)]
-    |                                   ^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
+    = note: expected reference `&[u8; 64]`
+               found reference `&Vec<u8>`
+note: function defined here
+   --> src\crypto.rs:119:8
     |
-    = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-    = note: for types from other crates check whether the crate offers a `serde` feature flag
-    = help: the following other types implement trait `Deserialize<'de>`:
-              &[u8]
-              [T; 0]
-              [T; 1]
-              [T; 2]
-              [T; 3]
-              [T; 4]
-              [T; 5]
-              [T; 6]
-            and 26 others
-note: required by a bound in `commands::_::_serde::__private228::de::missing_field`
-   --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:26:8
-    |
- 24 | pub fn missing_field<'de, V, E>(field: &'static str) -> Result<V, E>
-    |        ------------- required by a bound in this function
- 25 | where
- 26 |     V: Deserialize<'de>,
-    |        ^^^^^^^^^^^^^^^^ required by this bound in `missing_field`
-    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace 
-for more info)
-
-error[E0277]: the trait bound `[u8; 64]: serde::Serialize` is not satisfied
-    --> src\protocol.rs:173:24
-     |
- 173 | #[derive(Debug, Clone, Serialize, Deserialize)]
-     |                        ^^^^^^^^^ the trait `Serialize` is not implemented for `[u8; 64]`
+119 | pub fn verify_signature(
+    |        ^^^^^^^^^^^^^^^^
 ...
- 179 |     pub signature: [u8; 64],
-     |     --- required by a bound introduced by this call
-     |
-     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Serialize`:
-               [T; 0]
-               [T]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `commands::_::_serde::ser::SerializeStruct::serialize_field`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\ser\mod.rs:1917:21
-     |
-1915 |     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
-     |        --------------- required by a bound in this associated function
-1916 |     where
-1917 |         T: ?Sized + Serialize;
-     |                     ^^^^^^^^^ required by this bound in `SerializeStruct::serialize_field`
-     = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for 
-more info)
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-    --> src\protocol.rs:179:20
-     |
- 179 |     pub signature: [u8; 64],
-     |                    ^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-     |
-     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Deserialize<'de>`:
-               &[u8]
-               [T; 0]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `next_element`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\de\mod.rs:1771:12
-     |
-1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
-     |        ------------ required by a bound in this associated function
-1770 |     where
-1771 |         T: Deserialize<'de>,
-     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-    --> src\protocol.rs:179:20
-     |
- 179 |     pub signature: [u8; 64],
-     |                    ^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-     |
-     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Deserialize<'de>`:
-               &[u8]
-               [T; 0]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `next_value`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\de\mod.rs:1916:12
-     |
-1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
-     |        ---------- required by a bound in this associated function
-1915 |     where
-1916 |         V: Deserialize<'de>,
-     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-   --> src\protocol.rs:173:35
-    |
-173 | #[derive(Debug, Clone, Serialize, Deserialize)]
-    |                                   ^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-    |
-    = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-    = note: for types from other crates check whether the crate offers a `serde` feature flag
-    = help: the following other types implement trait `Deserialize<'de>`:
-              &[u8]
-              [T; 0]
-              [T; 1]
-              [T; 2]
-              [T; 3]
-              [T; 4]
-              [T; 5]
-              [T; 6]
-            and 26 others
-note: required by a bound in `commands::_::_serde::__private228::de::missing_field`
-   --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:26:8
-    |
- 24 | pub fn missing_field<'de, V, E>(field: &'static str) -> Result<V, E>
-    |        ------------- required by a bound in this function
- 25 | where
- 26 |     V: Deserialize<'de>,
-    |        ^^^^^^^^^^^^^^^^ required by this bound in `missing_field`
-    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace 
-for more info)
-
-error[E0277]: the trait bound `[u8; 64]: serde::Serialize` is not satisfied
-    --> src\protocol.rs:291:24
-     |
- 291 | #[derive(Debug, Clone, Serialize, Deserialize)]
-     |                        ^^^^^^^^^ the trait `Serialize` is not implemented for `[u8; 64]`
-...
- 294 |     pub signature: [u8; 64],
-     |     --- required by a bound introduced by this call
-     |
-     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Serialize`:
-               [T; 0]
-               [T]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `commands::_::_serde::ser::SerializeStruct::serialize_field`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\ser\mod.rs:1917:21
-     |
-1915 |     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
-     |        --------------- required by a bound in this associated function
-1916 |     where
-1917 |         T: ?Sized + Serialize;
-     |                     ^^^^^^^^^ required by this bound in `SerializeStruct::serialize_field`
-     = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for 
-more info)
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-    --> src\protocol.rs:294:20
-     |
- 294 |     pub signature: [u8; 64],
-     |                    ^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-     |
-     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Deserialize<'de>`:
-               &[u8]
-               [T; 0]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `next_element`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\de\mod.rs:1771:12
-     |
-1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
-     |        ------------ required by a bound in this associated function
-1770 |     where
-1771 |         T: Deserialize<'de>,
-     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-    --> src\protocol.rs:294:20
-     |
- 294 |     pub signature: [u8; 64],
-     |                    ^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-     |
-     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-     = note: for types from other crates check whether the crate offers a `serde` feature flag
-     = help: the following other types implement trait `Deserialize<'de>`:
-               &[u8]
-               [T; 0]
-               [T; 1]
-               [T; 2]
-               [T; 3]
-               [T; 4]
-               [T; 5]
-               [T; 6]
-             and 26 others
-note: required by a bound in `next_value`
-    --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde_core-1.0.228\src\de\mod.rs:1916:12
-     |
-1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
-     |        ---------- required by a bound in this associated function
-1915 |     where
-1916 |         V: Deserialize<'de>,
-     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
-
-error[E0277]: the trait bound `[u8; 64]: serde::Deserialize<'de>` is not satisfied
-   --> src\protocol.rs:291:35
-    |
-291 | #[derive(Debug, Clone, Serialize, Deserialize)]
-    |                                   ^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `[u8; 64]`
-    |
-    = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `[u8; 64]` type
-    = note: for types from other crates check whether the crate offers a `serde` feature flag
-    = help: the following other types implement trait `Deserialize<'de>`:
-              &[u8]
-              [T; 0]
-              [T; 1]
-              [T; 2]
-              [T; 3]
-              [T; 4]
-              [T; 5]
-              [T; 6]
-            and 26 others
-note: required by a bound in `commands::_::_serde::__private228::de::missing_field`
-   --> C:\Users\ncibi\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:26:8
-    |
- 24 | pub fn missing_field<'de, V, E>(field: &'static str) -> Result<V, E>
-    |        ------------- required by a bound in this function
- 25 | where
- 26 |     V: Deserialize<'de>,
-    |        ^^^^^^^^^^^^^^^^ required by this bound in `missing_field`
-    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace 
-for more info)
+122 |     signature: &[u8; 64],
+    |     --------------------
 
 warning: unused variable: `state_clone`
    --> src\commands.rs:165:9
@@ -459,7 +224,7 @@ warning: unused variable: `state_clone`
     |
     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
-Some errors have detailed explanations: E0277, E0308, E0499, E0599.
-For more information about an error, try `rustc --explain E0277`.
+Some errors have detailed explanations: E0308, E0499, E0599.
+For more information about an error, try `rustc --explain E0308`.
 warning: `m2m` (lib) generated 8 warnings
-error: could not compile `m2m` (lib) due to 16 previous errors; 8 warnings emitted
+error: could not compile `m2m` (lib) due to 11 previous errors; 8 warnings emitted

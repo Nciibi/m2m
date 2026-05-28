@@ -167,7 +167,7 @@ pub struct HandshakeInit {
     pub ephemeral_pub: [u8; 32],
     pub identity_pub: [u8; 32],
     pub timestamp: u64,
-    pub signature: [u8; 64],
+    pub signature: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,7 +176,7 @@ pub struct HandshakeResponse {
     pub ephemeral_pub: [u8; 32],
     pub identity_pub: [u8; 32],
     pub timestamp: u64,
-    pub signature: [u8; 64],
+    pub signature: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -284,14 +284,14 @@ pub struct InvitePayload {
     pub address_hint: String,
     pub created_at: u64,
     pub expires_at: u64,
-    pub nonce: [u8; 16],
+    pub nonce: Vec<u8>,
     pub flags: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedInvite {
     pub payload: InvitePayload,
-    pub signature: [u8; 64],
+    pub signature: Vec<u8>,
 }
 
 /// Serialize a packet body to MessagePack bytes.
