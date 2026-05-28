@@ -251,9 +251,9 @@ impl Session {
     }
 
     /// Encrypt and send a text message.
-    pub async fn send_text(
+    pub async fn send_text<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         text: &str,
     ) -> Result<String, SessionError> {
         if self.state != ConnectionState::Established {
@@ -273,9 +273,9 @@ impl Session {
     }
 
     /// Encrypt a payload and send it as an EncryptedMessage.
-    async fn send_encrypted(
+    async fn send_encrypted<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
         let keys = self
@@ -352,9 +352,9 @@ impl Session {
     }
 
     /// Send a file transfer request to the peer.
-    pub async fn send_file_request(
+    pub async fn send_file_request<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         transfer_id: &str,
         filename: &str,
         total_size: u64,
@@ -378,9 +378,9 @@ impl Session {
     }
 
     /// Send a single file chunk.
-    pub async fn send_file_chunk(
+    pub async fn send_file_chunk<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         transfer_id: &str,
         chunk_index: u32,
         data: Vec<u8>,
@@ -405,9 +405,9 @@ impl Session {
     }
 
     /// Send file transfer complete notification.
-    pub async fn send_file_complete(
+    pub async fn send_file_complete<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         transfer_id: &str,
     ) -> Result<(), SessionError> {
         if self.state != ConnectionState::Established {
@@ -423,9 +423,9 @@ impl Session {
     }
 
     /// Accept an incoming file transfer.
-    pub async fn send_file_accept(
+    pub async fn send_file_accept<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         transfer_id: &str,
     ) -> Result<(), SessionError> {
         if self.state != ConnectionState::Established {
@@ -436,9 +436,9 @@ impl Session {
     }
 
     /// Reject an incoming file transfer.
-    pub async fn send_file_reject(
+    pub async fn send_file_reject<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         transfer_id: &str,
     ) -> Result<(), SessionError> {
         if self.state != ConnectionState::Established {
@@ -449,9 +449,9 @@ impl Session {
     }
 
     /// Encrypt and send data with a specific packet type.
-    async fn send_encrypted_typed(
+    async fn send_encrypted_typed<W: AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut W,
         packet_type: PacketType,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
