@@ -4,6 +4,7 @@
 /// replay protection, sequencing, and session lifecycle.
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
 use zeroize::Zeroize;
 
