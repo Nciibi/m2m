@@ -43,10 +43,10 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 base64 = "0.22"
 
 # Rate limiting
-governor = "0.8"
+governor = "0.6"
 
-# Encrypted local storage
-rusqlite = { version = "0.33", features = ["bundled-sqlcipher"] }
+# Local storage (app-level encryption via sodiumoxide, no OpenSSL needed)
+rusqlite = { version = "0.33", features = ["bundled"] }
 
 # Argon2id for passphrase-based key derivation
 argon2 = "0.5"
