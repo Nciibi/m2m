@@ -1,0 +1,70 @@
+[package]
+name = "m2m"
+version = "0.1.0"
+description = "Peer-to-peer encrypted messenger for journalists and high-risk users"
+authors = ["M2M Contributors"]
+edition = "2021"
+
+[lib]
+name = "m2m_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Crypto: libsodium bindings (proven, audited)
+sodiumoxide = "0.2"
+
+# Serialization: MessagePack (compact, well-specified)
+rmp-serde = "1"
+
+# Async runtime for networking
+tokio = { version = "1", features = ["full"] }
+
+# Logging (structured, redaction-friendly)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Secure memory zeroization
+zeroize = { version = "1", features = ["derive"] }
+
+# UUID generation for message IDs
+uuid = { version = "1", features = ["v4"] }
+
+# Time handling
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# Base64url encoding for invite links
+base64 = "0.22"
+
+# Rate limiting
+governor = "0.8"
+
+# Encrypted local storage
+rusqlite = { version = "0.33", features = ["bundled-sqlcipher"] }
+
+# Argon2id for passphrase-based key derivation
+argon2 = "0.5"
+
+# Hex encoding for fingerprints
+hex = "0.4"
+
+# Random number generation
+rand = "0.9"
+
+# State machine
+thiserror = "2"
+
+[features]
+default = []
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
