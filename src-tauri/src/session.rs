@@ -85,9 +85,7 @@ impl Session {
         sign_data.extend_from_slice(&ephemeral.public_key_bytes());
         sign_data.extend_from_slice(&now.to_be_bytes());
 
-        let signature_vec = identity.sign(&sign_data);
-        let mut signature = [0u8; 64];
-        signature.copy_from_slice(&signature_vec);
+        let signature = identity.sign(&sign_data);
 
         // Send HandshakeInit
         let init = HandshakeInit {
@@ -196,9 +194,7 @@ impl Session {
         sign_data.extend_from_slice(&ephemeral.public_key_bytes());
         sign_data.extend_from_slice(&now.to_be_bytes());
 
-        let signature_vec = identity.sign(&sign_data);
-        let mut signature = [0u8; 64];
-        signature.copy_from_slice(&signature_vec);
+        let signature = identity.sign(&sign_data);
 
         // Send HandshakeResponse
         let response = HandshakeResponse {

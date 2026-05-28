@@ -64,9 +64,7 @@ pub fn create_invite(
     }
 
     let now = now_unix_secs();
-    let nonce_bytes = crypto::random_bytes(16);
-    let mut nonce = [0u8; 16];
-    nonce.copy_from_slice(&nonce_bytes);
+    let nonce = crypto::random_bytes(16);
 
     let mut flags: u8 = INVITE_FLAG_LISTENER; // We are the listener
     if one_time {
@@ -87,9 +85,7 @@ pub fn create_invite(
     let payload_bytes = protocol::serialize(&payload)?;
 
     // Sign the serialized payload with identity key
-    let signature_vec = identity.sign(&payload_bytes);
-    let mut signature = [0u8; 64];
-    signature.copy_from_slice(&signature_vec);
+    let signature = identity.sign(&payload_bytes);
 
     let signed_invite = SignedInvite { payload, signature };
 

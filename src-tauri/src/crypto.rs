@@ -119,7 +119,7 @@ pub fn fingerprint_from_public_key(public_key: &[u8; 32]) -> String {
 pub fn verify_signature(
     public_key: &[u8; 32],
     message: &[u8],
-    signature: &[u8; 64],
+    signature: &[u8],
 ) -> Result<(), CryptoError> {
     let pk = sign::PublicKey::from_slice(public_key).ok_or(CryptoError::InvalidKeyLength)?;
     let sig =
