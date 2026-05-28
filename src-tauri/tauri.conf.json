@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "org.m2m.messenger",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "node node_modules/vite/bin/vite.js",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build",
     "frontendDist": "../dist"
   },
   "app": {
