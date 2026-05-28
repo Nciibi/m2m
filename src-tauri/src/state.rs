@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
@@ -14,9 +15,10 @@ use crate::network::ConnectionState;
 use crate::session::Session;
 use crate::storage::{KeyStore, MessageStore};
 
-/// Peer connection handle, holding the TCP stream and session state.
+/// Peer connection handle, holding the write half and session state.
+/// The read half is consumed by the receive loop task.
 pub struct PeerConnection {
-    pub stream: TcpStream,
+    pub write_half: OwnedWriteHalf,
     pub session: Session,
     pub remote_addr: SocketAddr,
 }
