@@ -45,6 +45,16 @@ M2M treats the network boundary as entirely hostile. All cryptographic operation
 
 ---
 
+## 📸 Screenshots
+
+*(Add screenshots of the dark-mode setup, hub, and chat views here once captured!)*
+```markdown
+<!-- Example -->
+<!-- ![M2M Chat Interface](docs/assets/chat_ui.gif) -->
+```
+
+---
+
 ## 🏗️ Architecture
 
 ```mermaid
@@ -74,8 +84,8 @@ graph TD
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/m2m-messenger.git
-   cd m2m-messenger
+   git clone https://github.com/Nciibi/m2m.git
+   cd m2m
    ```
 
 2. **Install dependencies**
@@ -114,6 +124,13 @@ To test the application on a single machine:
 - **Cryptography:** `sodiumoxide` (libsodium), `zeroize`
 - **Networking:** `tokio` (Async TCP)
 - **Serialization:** `rmp-serde` (MessagePack for protocol efficiency)
+
+## 📚 Documentation & Contributing
+
+For a deep dive into the engineering, security choices, and how to get involved, please check out the following resources:
+- [Threat Model (`docs/threat-model.md`)](docs/threat-model.md): Detailed breakdown of the attack surfaces, mitigations, and what M2M *does not* protect against.
+- [Architecture & Protocol (`docs/architecture.md`)](docs/architecture.md): A detailed view of the backend modules and protocol serialization structure.
+- [Contributing Guidelines (`CONTRIBUTING.md`)](CONTRIBUTING.md): How to submit PRs, report bugs, and adhere to our coding standards.
 
 ---
 
