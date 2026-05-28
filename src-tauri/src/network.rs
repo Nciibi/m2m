@@ -6,20 +6,17 @@
 ///
 /// All data crossing the network boundary is treated as untrusted.
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::sync::mpsc;
-use tokio::time::{self, Instant};
+use tokio::time;
 
 use thiserror::Error;
 
 use crate::protocol::{
     self, validate_frame_size, validate_version, PacketType, MAX_FRAME_SIZE, LENGTH_PREFIX_SIZE,
-    HEARTBEAT_INTERVAL_SECS, HEARTBEAT_TIMEOUT_SECS,
 };
 
 /// Network operation timeout for reads/writes.
@@ -91,7 +88,7 @@ async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFram
     // Read the 4-byte length prefix
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     match time::timeout(NETWORK_TIMEOUT, reader.read_exact(&mut len_buf)).await {
-        Ok(Ok(())) => {}
+        Ok(Ok(_)) => {}
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
             return Err(NetworkError::PeerClosed);
         }
@@ -105,7 +102,7 @@ async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFram
     // Read the frame payload (version + type + body)
     let mut payload = vec![0u8; frame_len as usize];
     match time::timeout(NETWORK_TIMEOUT, reader.read_exact(&mut payload)).await {
-        Ok(Ok(())) => {}
+        Ok(Ok(_)) => {}
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
             return Err(NetworkError::PeerClosed);
         }
@@ -143,8 +140,8 @@ pub async fn read_frame_from_read_half(
     read_frame_impl(read_half).await
 }
 
-/// Internal: write a frame to any AsyncWrite sink.
-async fn write_frame_impl<W: AsyncWrite + Unpin>(
+/// Write a complete frame to an AsyncWrite stream.
+pub async fn write_frame<W: AsyncWrite + Unpin>(
     writer: &mut W,
     packet_type: PacketType,
     body: &[u8],
@@ -164,15 +161,6 @@ async fn write_frame_impl<W: AsyncWrite + Unpin>(
     }
 
     Ok(())
-}
-
-/// Write a complete frame to a TCP stream.
-pub async fn write_frame(
-    stream: &mut TcpStream,
-    packet_type: PacketType,
-    body: &[u8],
-) -> Result<(), NetworkError> {
-    write_frame_impl(stream, packet_type, body).await
 }
 
 /// Start a TCP listener on the given address.
@@ -224,7 +212,7 @@ pub async fn send_heartbeat(stream: &mut TcpStream) -> Result<(), NetworkError> 
 pub async fn send_heartbeat_ack<W: AsyncWrite + Unpin>(
     writer: &mut W,
 ) -> Result<(), NetworkError> {
-    write_frame_impl(writer, PacketType::HeartbeatAck, &[]).await
+    write_frame(writer, PacketType::HeartbeatAck, &[]).await
 }
 
 /// Send a disconnect packet with reason (works with any AsyncWrite).
@@ -234,7 +222,7 @@ pub async fn send_disconnect<W: AsyncWrite + Unpin>(
 ) -> Result<(), NetworkError> {
     let msg = protocol::DisconnectMessage { reason };
     let body = protocol::serialize(&msg)?;
-    write_frame_impl(writer, PacketType::Disconnect, &body).await
+    write_frame(writer, PacketType::Disconnect, &body).await
 }
 
 /// Send an error packet.

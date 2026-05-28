@@ -123,7 +123,7 @@ pub fn verify_signature(
 ) -> Result<(), CryptoError> {
     let pk = sign::PublicKey::from_slice(public_key).ok_or(CryptoError::InvalidKeyLength)?;
     let sig =
-        sign::Signature::from_slice(signature).ok_or(CryptoError::SignatureInvalid)?;
+        sign::Signature::from_bytes(signature).map_err(|_| CryptoError::SignatureInvalid)?;
     if sign::verify_detached(&sig, message, &pk) {
         Ok(())
     } else {

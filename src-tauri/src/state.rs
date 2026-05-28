@@ -37,6 +37,10 @@ pub struct AppState {
     pub history_enabled: RwLock<bool>,
     /// Data directory path.
     pub data_dir: String,
+    /// Pending outgoing file transfers. Key: transfer_id, Value: filepath
+    pub outgoing_transfers: RwLock<HashMap<String, String>>,
+    /// Accepted incoming file transfers. Key: transfer_id, Value: (filename, total_size, file_hash)
+    pub incoming_transfers: RwLock<HashMap<String, (String, u64, Vec<u8>)>>,
 }
 
 impl AppState {
@@ -48,6 +52,8 @@ impl AppState {
             incoming_tx: Mutex::new(None),
             history_enabled: RwLock::new(true),
             data_dir,
+            outgoing_transfers: RwLock::new(HashMap::new()),
+            incoming_transfers: RwLock::new(HashMap::new()),
         }
     }
 

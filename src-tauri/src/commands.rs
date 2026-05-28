@@ -4,7 +4,7 @@
 /// Each command validates inputs and returns safe, typed responses.
 /// No secrets are exposed to the frontend.
 use std::net::SocketAddr;
-use std::path::PathBuf;
+
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
@@ -12,11 +12,11 @@ use tokio::sync::Mutex;
 
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
-use crate::network::{self, ConnectionState};
+use crate::network;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType};
 use crate::session::Session;
 use crate::state::{AppState, PeerConnection};
-use crate::storage::{self, KeyStore, MessageStore};
+use crate::storage::{self, KeyStore};
 
 use serde::{Deserialize, Serialize};
 
@@ -310,6 +310,8 @@ async fn handle_incoming_connection(
         .await;
         return;
     }
+    
+    drop(identity);
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();
@@ -422,9 +424,9 @@ pub async fn send_message(
         .clone();
 
     let mut conn = conn_arc.lock().await;
-    let msg_id = conn
-        .session
-        .send_text(&mut conn.write_half, &content)
+    let PeerConnection { session, write_half, .. } = &mut *conn;
+    let msg_id = session
+        .send_text(write_half, &content)
         .await
         .map_err(|e| format!("send failed: {e}"))?;
 
