@@ -617,6 +617,23 @@ fn spawn_receive_loop(
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
                                         .as_secs();
+
+                                    // Persist received message
+                                    let history = *state.history_enabled.read().await;
+                                    if history {
+                                        let sk = state.storage_key.read().await;
+                                        let ms = state.message_store.read().await;
+                                        if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
+                                            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), key)
+                                                .unwrap_or_default();
+                                            let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
+                                            let _ = store.store_message(
+                                                &id, &peer_key_hex, "received",
+                                                &encrypted, &nonce, now as i64,
+                                            );
+                                        }
+                                    }
+
                                     let _ = app_handle.emit("m2m://message", MessageEvent {
                                         peer_key_hex: peer_key_hex.clone(),
                                         message: ChatMessage {
