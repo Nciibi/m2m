@@ -162,12 +162,12 @@ pub async fn init_identity(
     let msg_store = MessageStore::open(&msgs_db_path)
         .map_err(|e| format!("message store error: {e}"))?;
     {
-        let mut ms = state.message_store.write().await;
+        let mut ms = state.message_store.lock().await;
         *ms = Some(msg_store);
     }
     // Store the key store handle
     {
-        let mut ks = state.key_store.write().await;
+        let mut ks = state.key_store.lock().await;
         *ks = Some(key_store);
     }
 
@@ -364,7 +364,7 @@ async fn handle_incoming_connection(
 
     // Upsert peer in key store
     {
-        let ks = state.key_store.read().await;
+        let ks = state.key_store.lock().await;
         if let Some(ref store) = *ks {
             let _ = store.upsert_peer(
                 &hex::decode(&peer_key_hex).unwrap_or_default(),
@@ -475,7 +475,7 @@ pub async fn send_message(
     let history = *state.history_enabled.read().await;
     if history {
         let sk = state.storage_key.read().await;
-        let ms = state.message_store.read().await;
+        let ms = state.message_store.lock().await;
         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
             let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), key)
                 .unwrap_or_default();
@@ -622,7 +622,7 @@ fn spawn_receive_loop(
                                     let history = *state.history_enabled.read().await;
                                     if history {
                                         let sk = state.storage_key.read().await;
-                                        let ms = state.message_store.read().await;
+                                        let ms = state.message_store.lock().await;
                                         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
                                             let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), key)
                                                 .unwrap_or_default();
@@ -827,7 +827,7 @@ pub async fn load_messages(
     peer_key_hex: String,
     limit: Option<i64>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let ms = state.message_store.read().await;
+    let ms = state.message_store.lock().await;
     let sk = state.storage_key.read().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;

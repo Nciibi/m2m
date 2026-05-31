@@ -53,9 +53,9 @@ pub struct AppState {
     /// Active incoming file transfers. Key: transfer_id
     pub incoming_transfers: RwLock<HashMap<String, IncomingFileTransfer>>,
     /// Message store (initialised when identity is loaded).
-    pub message_store: RwLock<Option<MessageStore>>,
+    pub message_store: Mutex<Option<MessageStore>>,
     /// Key store (initialised when identity is loaded).
-    pub key_store: RwLock<Option<KeyStore>>,
+    pub key_store: Mutex<Option<KeyStore>>,
     /// The storage encryption key (derived from passphrase or identity).
     /// Held in memory only for the lifetime of the app.
     pub storage_key: RwLock<Option<[u8; 32]>>,
@@ -72,8 +72,8 @@ impl AppState {
             data_dir,
             outgoing_transfers: RwLock::new(HashMap::new()),
             incoming_transfers: RwLock::new(HashMap::new()),
-            message_store: RwLock::new(None),
-            key_store: RwLock::new(None),
+            message_store: Mutex::new(None),
+            key_store: Mutex::new(None),
             storage_key: RwLock::new(None),
         }
     }
