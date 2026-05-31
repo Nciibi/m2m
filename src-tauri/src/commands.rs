@@ -16,7 +16,7 @@ use crate::network;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType};
 use crate::session::Session;
 use crate::state::{AppState, PeerConnection};
-use crate::storage::{self, KeyStore};
+use crate::storage::{self, KeyStore, MessageStore};
 
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +99,7 @@ pub async fn init_identity(
     let data_dir = storage::ensure_data_dir()
         .map_err(|e| format!("data dir error: {e}"))?;
     let keys_db_path = data_dir.join("keys.db");
+    let msgs_db_path = data_dir.join("messages.db");
 
     let key_store = KeyStore::open(&keys_db_path)
         .map_err(|e| format!("key store error: {e}"))?;
@@ -109,8 +110,6 @@ pub async fn init_identity(
             .load_identity()
             .map_err(|e| format!("failed to load identity: {e}"))?;
 
-        // For MVP, the private key is stored with a hardcoded derivation.
-        // In production, this would prompt for a passphrase.
         let mut pub_arr = [0u8; 32];
         pub_arr.copy_from_slice(&pub_bytes);
 
@@ -121,6 +120,12 @@ pub async fn init_identity(
 
         let mut sk_arr = [0u8; 64];
         sk_arr.copy_from_slice(&sk_bytes);
+
+        // Store the storage key for message encryption
+        {
+            let mut sk_lock = state.storage_key.write().await;
+            *sk_lock = Some(storage_key);
+        }
 
         IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
             .map_err(|e| format!("failed to reconstruct identity: {e}"))?
@@ -141,11 +146,30 @@ pub async fn init_identity(
             .store_identity(&pub_bytes, &encrypted_sk, &nonce, now)
             .map_err(|e| format!("failed to store identity: {e}"))?;
 
+        // Store the storage key for message encryption
+        {
+            let mut sk_lock = state.storage_key.write().await;
+            *sk_lock = Some(storage_key);
+        }
+
         kp
     };
 
     let fingerprint = keypair.fingerprint();
     let pub_hex = hex::encode(keypair.public_key_bytes());
+
+    // Initialise message store
+    let msg_store = MessageStore::open(&msgs_db_path)
+        .map_err(|e| format!("message store error: {e}"))?;
+    {
+        let mut ms = state.message_store.write().await;
+        *ms = Some(msg_store);
+    }
+    // Store the key store handle
+    {
+        let mut ks = state.key_store.write().await;
+        *ks = Some(key_store);
+    }
 
     let mut identity = state.identity.write().await;
     *identity = Some(keypair);
