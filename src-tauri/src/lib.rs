@@ -56,6 +56,13 @@ pub fn run() {
             commands::send_message,
             commands::get_connection_state,
             commands::verify_peer,
+            commands::disconnect_peer,
+            commands::list_peers,
+            commands::load_messages,
+            commands::send_file,
+            commands::accept_file_transfer,
+            commands::reject_file_transfer,
+            commands::get_listen_address,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
