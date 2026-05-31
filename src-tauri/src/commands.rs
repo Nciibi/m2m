@@ -357,7 +357,7 @@ async fn handle_incoming_connection(
     let _ = app_handle.emit("m2m://connection", ConnectionEvent {
         peer_key_hex: peer_key_hex.clone(),
         state: "established".to_string(),
-        peer_fingerprint: Some(peer_fingerprint),
+        peer_fingerprint: Some(peer_fingerprint.clone()),
     });
 
     tracing::info!(peer = %peer_key_hex, "peer connected and authenticated");
@@ -882,8 +882,9 @@ pub async fn send_file(
     let conn_arc = conns.get(&peer_key_hex)
         .ok_or("no connection to this peer")?.clone();
     let mut conn = conn_arc.lock().await;
-    conn.session.send_file_request(
-        &mut conn.write_half,
+    let PeerConnection { session, write_half, .. } = &mut *conn;
+    session.send_file_request(
+        &mut *write_half,
         &transfer_id, &filename, total_size, total_chunks, file_hash.0.to_vec(),
     ).await.map_err(|e| format!("failed to send file request: {e}"))?;
 
@@ -909,8 +910,9 @@ pub async fn accept_file_transfer(
     let conn_arc = conns.get(&peer_key_hex)
         .ok_or("no connection to this peer")?.clone();
     let mut conn = conn_arc.lock().await;
+    let PeerConnection { session, write_half, .. } = &mut *conn;
 
-    conn.session.send_file_accept(&mut conn.write_half, &transfer_id)
+    session.send_file_accept(&mut *write_half, &transfer_id)
         .await.map_err(|e| format!("failed to send accept: {e}"))?;
 
     Ok(())
@@ -927,8 +929,9 @@ pub async fn reject_file_transfer(
     let conn_arc = conns.get(&peer_key_hex)
         .ok_or("no connection to this peer")?.clone();
     let mut conn = conn_arc.lock().await;
+    let PeerConnection { session, write_half, .. } = &mut *conn;
 
-    conn.session.send_file_reject(&mut conn.write_half, &transfer_id)
+    session.send_file_reject(&mut *write_half, &transfer_id)
         .await.map_err(|e| format!("failed to send reject: {e}"))?;
 
     Ok(())
@@ -961,8 +964,9 @@ async fn send_file_chunks(
         let conn_arc = conns.get(peer_key_hex)
             .ok_or("peer disconnected during transfer")?.clone();
         let mut conn = conn_arc.lock().await;
-        conn.session.send_file_chunk(
-            &mut conn.write_half,
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session.send_file_chunk(
+            &mut *write_half,
             transfer_id, i as u32, chunk.to_vec(), chunk_hash.0.to_vec(),
         ).await.map_err(|e| format!("chunk send failed: {e}"))?;
     }
@@ -972,7 +976,8 @@ async fn send_file_chunks(
     let conn_arc = conns.get(peer_key_hex)
         .ok_or("peer disconnected during transfer")?.clone();
     let mut conn = conn_arc.lock().await;
-    conn.session.send_file_complete(&mut conn.write_half, transfer_id)
+    let PeerConnection { session, write_half, .. } = &mut *conn;
+    session.send_file_complete(&mut *write_half, transfer_id)
         .await.map_err(|e| format!("complete send failed: {e}"))?;
 
     // Clean up
