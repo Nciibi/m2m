@@ -23,6 +23,13 @@ interface ConnectionInfo {
   peer_key_hex: string | null;
 }
 
+interface FileRequest {
+  peer_key_hex: string;
+  transfer_id: string;
+  filename: string;
+  total_size: number;
+}
+
 function App() {
   const [view, setView] = useState<"setup" | "hub" | "chat">("setup");
   const [identity, setIdentity] = useState<IdentityInfo | null>(null);
@@ -32,8 +39,10 @@ function App() {
   const [inviteToConnect, setInviteToConnect] = useState("");
   const [generatedInvite, setGeneratedInvite] = useState("");
   const [copied, setCopied] = useState(false);
+  const [fileRequests, setFileRequests] = useState<FileRequest[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize and check identity
   useEffect(() => {
@@ -51,13 +60,11 @@ function App() {
     checkIdentity();
   }, []);
 
-  // Listen for Tauri events
-  useEffect(() => {
     const unlistenMsg = listen<any>("m2m://message", (event) => {
       setMessages((prev) => [...prev, event.payload.message]);
     });
     
-    const unlistenConn = listen<any>("m2m://connection", (event) => {
+    const unlistenConn = listen<any>("m2m://connection", async (event) => {
       const stateStr = event.payload.state;
       setConnection({
         state: stateStr,
@@ -67,15 +74,32 @@ function App() {
       });
       if (stateStr === "established") {
         setView("chat");
+        try {
+          const history = await invoke<ChatMessage[]>("load_messages", { peerKeyHex: event.payload.peer_key_hex });
+          setMessages(history);
+        } catch (e) {
+          console.error("Failed to load history", e);
+        }
       } else if (stateStr === "disconnected") {
         setView("hub");
         setConnection(null);
+        setMessages([]);
       }
+    });
+
+    const unlistenFileReq = listen<any>("m2m://file-request", (event) => {
+      setFileRequests(prev => [...prev, event.payload]);
+    });
+
+    const unlistenFileComp = listen<any>("m2m://file-complete", (event) => {
+      alert(`File transfer complete!\nSaved to: ${event.payload.path}`);
     });
 
     return () => {
       unlistenMsg.then(f => f());
       unlistenConn.then(f => f());
+      unlistenFileReq.then(f => f());
+      unlistenFileComp.then(f => f());
     };
   }, []);
 
@@ -85,11 +109,10 @@ function App() {
 
   const handleGenerateInvite = async () => {
     try {
-      // For MVP, we listen on a random port or predefined localhost address
-      // Make sure the listener is started
       await invoke("start_listening", { address: "127.0.0.1:0" });
+      const address = await invoke<string>("get_listen_address");
       const invite = await invoke<string>("create_invite", {
-        address: "127.0.0.1:8080", // Hardcoded MVP address hint for local testing
+        address,
         validityMinutes: 60,
         oneTime: true
       });
@@ -139,6 +162,69 @@ function App() {
       setConnection({ ...connection, peer_verified: true });
     } catch(e) {
       console.error(e);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!connection?.peer_key_hex) return;
+    try {
+      await invoke("disconnect_peer", { peerKeyHex: connection.peer_key_hex });
+      setView("hub");
+      setConnection(null);
+      setMessages([]);
+    } catch (e) {
+      console.error("Disconnect failed", e);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !connection?.peer_key_hex) return;
+    // Tauri doesn't easily expose full paths from standard web file inputs.
+    // For a real app we'd use @tauri-apps/plugin-dialog, but for simplicity
+    // we assume the user types the path, or we can just mock a UI here.
+    // Since we need an absolute path for rust, let's use prompt for now.
+    const path = prompt("Enter absolute path to file to send:");
+    if (!path) return;
+    
+    try {
+      await invoke("send_file", { peerKeyHex: connection.peer_key_hex, filePath: path });
+      setMessages((prev) => [...prev, {
+        id: Date.now().toString(),
+        content: `Sent file request for: ${path}`,
+        direction: "sent",
+        timestamp: Math.floor(Date.now() / 1000)
+      }]);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to send file: " + err);
+    }
+  };
+
+  const acceptFile = async (req: FileRequest) => {
+    const dir = prompt("Enter absolute directory path to save to:");
+    if (!dir) return;
+    try {
+      await invoke("accept_file_transfer", { 
+        peerKeyHex: req.peer_key_hex, 
+        transferId: req.transfer_id,
+        saveDir: dir
+      });
+      setFileRequests(prev => prev.filter(r => r.transfer_id !== req.transfer_id));
+    } catch (err) {
+      alert("Accept failed: " + err);
+    }
+  };
+
+  const rejectFile = async (req: FileRequest) => {
+    try {
+      await invoke("reject_file_transfer", { 
+        peerKeyHex: req.peer_key_hex, 
+        transferId: req.transfer_id
+      });
+      setFileRequests(prev => prev.filter(r => r.transfer_id !== req.transfer_id));
+    } catch (err) {
+      alert("Reject failed: " + err);
     }
   };
 
@@ -214,10 +300,27 @@ function App() {
           )}
           Encrypted Session
         </h1>
-        <div className={`status-badge ${connection?.state === 'established' ? 'connected' : 'disconnected'}`}>
-          {connection?.state || 'Unknown'}
+        <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+          <div className={`status-badge ${connection?.state === 'established' ? 'connected' : 'disconnected'}`}>
+            {connection?.state || 'Unknown'}
+          </div>
+          <button onClick={handleDisconnect} style={{padding: '6px 12px', fontSize: '0.8rem'}}>Disconnect</button>
         </div>
       </div>
+      
+      {fileRequests.length > 0 && (
+        <div className="file-requests">
+          {fileRequests.map(req => (
+            <div key={req.transfer_id} className="file-request-banner">
+              <span>Incoming File: {req.filename} ({Math.round(req.total_size/1024)} KB)</span>
+              <div>
+                <button onClick={() => acceptFile(req)} style={{marginRight: '8px', padding: '4px 8px'}}>Accept</button>
+                <button onClick={() => rejectFile(req)} className="secondary" style={{padding: '4px 8px'}}>Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="messages">
         <div style={{textAlign: 'center', opacity: 0.5, fontSize: '0.8rem', marginBottom: '20px'}}>
           Connected to peer.<br/>
@@ -234,6 +337,15 @@ function App() {
         <div ref={messagesEndRef} />
       </div>
       <form className="input-area" onSubmit={handleSendMessage}>
+        <button type="button" onClick={() => {
+            const path = prompt("Enter absolute path to file to send:");
+            if (path) {
+                invoke("send_file", { peerKeyHex: connection?.peer_key_hex, filePath: path })
+                .catch(e => alert("Failed: " + e));
+            }
+        }} style={{padding: '12px', background: 'transparent', border: '1px solid var(--border)'}} title="Send File">
+          📎
+        </button>
         <input 
           placeholder="Type a secure message..." 
           value={inputText}
