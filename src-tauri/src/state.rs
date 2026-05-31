@@ -4,6 +4,7 @@
 /// Manages the identity, active sessions, and storage handles.
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::net::tcp::OwnedWriteHalf;
@@ -23,6 +24,16 @@ pub struct PeerConnection {
     pub remote_addr: SocketAddr,
 }
 
+/// State for an in-progress file transfer (receiving side).
+pub struct IncomingFileTransfer {
+    pub filename: String,
+    pub total_size: u64,
+    pub total_chunks: u32,
+    pub file_hash: Vec<u8>,
+    pub received_chunks: HashMap<u32, Vec<u8>>,
+    pub save_path: PathBuf,
+}
+
 /// Central application state.
 pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
@@ -39,8 +50,15 @@ pub struct AppState {
     pub data_dir: String,
     /// Pending outgoing file transfers. Key: transfer_id, Value: filepath
     pub outgoing_transfers: RwLock<HashMap<String, String>>,
-    /// Accepted incoming file transfers. Key: transfer_id, Value: (filename, total_size, file_hash)
-    pub incoming_transfers: RwLock<HashMap<String, (String, u64, Vec<u8>)>>,
+    /// Active incoming file transfers. Key: transfer_id
+    pub incoming_transfers: RwLock<HashMap<String, IncomingFileTransfer>>,
+    /// Message store (initialised when identity is loaded).
+    pub message_store: RwLock<Option<MessageStore>>,
+    /// Key store (initialised when identity is loaded).
+    pub key_store: RwLock<Option<KeyStore>>,
+    /// The storage encryption key (derived from passphrase or identity).
+    /// Held in memory only for the lifetime of the app.
+    pub storage_key: RwLock<Option<[u8; 32]>>,
 }
 
 impl AppState {
@@ -54,6 +72,9 @@ impl AppState {
             data_dir,
             outgoing_transfers: RwLock::new(HashMap::new()),
             incoming_transfers: RwLock::new(HashMap::new()),
+            message_store: RwLock::new(None),
+            key_store: RwLock::new(None),
+            storage_key: RwLock::new(None),
         }
     }
 
