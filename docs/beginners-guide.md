@@ -138,4 +138,114 @@ This ensures that the database file sitting on your hard drive looks entirely li
 
 By combining React for a beautiful User Interface, Rust for high-performance memory safety, and libsodium for military-grade cryptography, M2M creates a messaging environment that is fast, resilient, and entirely private. 
 
-As a beginner, exploring the M2M codebase is a fantastic way to learn how modern software puts together networking, databases, and encryption into a single, cohesive product!
+---
+
+## 8. Codebase Deep Dive: How the Pieces Fit Together
+
+Now that you understand the high-level concepts, let's look at the actual code! A project like this is split into many files so that it stays organized. Here is a guided tour of the M2M codebase and how data flows from a button click in the UI all the way to a secure network socket.
+
+### Step 1: The Frontend (`src/App.tsx`)
+This is where the user interface lives. We use **React**, a JavaScript library for building UI components. 
+
+When you type a message and hit "Send", React doesn't know how to encrypt data or open network ports. Instead, it asks the Rust backend to do it using Tauri's `invoke` command:
+
+```typescript
+// From App.tsx
+const handleSendMessage = async (e: React.FormEvent) => {
+  e.preventDefault();
+  // Call the Rust function named "send_message"
+  const msg = await invoke<ChatMessage>("send_message", {
+    peerKeyHex: connection.peer_key_hex,
+    content: inputText
+  });
+  // Update the UI with the sent message
+  setMessages((prev) => [...prev, msg]);
+};
+```
+React also listens for events *from* Rust (like when your friend sends you a message) using the `listen` function:
+```typescript
+const unlistenMsg = listen<any>("m2m://message", (event) => {
+  // When a message arrives from Rust, put it on the screen!
+  setMessages((prev) => [...prev, event.payload.message]);
+});
+```
+
+### Step 2: The Command Bridge (`src-tauri/src/commands.rs`)
+When React calls `invoke("send_message")`, Tauri looks for a Rust function marked with the `#[tauri::command]` tag. `commands.rs` acts as the **bridge** between JavaScript and Rust.
+
+```rust
+// From commands.rs
+#[tauri::command]
+pub async fn send_message(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    content: String,
+) -> Result<ChatMessage, String> {
+    // 1. Look up the active connection for this peer
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(&peer_key_hex).unwrap();
+    let mut conn = conn_arc.lock().await;
+
+    // 2. Ask the session to encrypt and send the message over the network
+    conn.session.send_text(&mut conn.write_half, &content).await;
+
+    // 3. Save the encrypted message to the local SQLite database
+    state.message_store.lock().await.store_message(...);
+
+    // 4. Return success to React!
+    Ok(ChatMessage { ... })
+}
+```
+
+### Step 3: Managing the State (`src-tauri/src/state.rs`)
+Notice the `state` variable in the function above? In a web app, variables are usually isolated to one user's request. But a desktop app stays open for hours, managing multiple background connections simultaneously. 
+
+`state.rs` defines the `AppState` struct—a giant container that holds the app's memory:
+*   `connections`: A dictionary (HashMap) of all active peer connections.
+*   `message_store`: The SQLite database connection for saving chat history.
+*   `identity`: Your secret keys.
+
+Because multiple tasks (like the UI clicking a button, and the network receiving a packet) might try to access the `AppState` at the *exact same time*, we wrap everything in a **Mutex** (Mutual Exclusion lock). A Mutex forces tasks to form an orderly line, preventing memory corruption.
+
+### Step 4: The Session State Machine (`src-tauri/src/session.rs`)
+When `commands.rs` calls `session.send_text()`, it hands the message to the **Session**. 
+
+The Session represents the mathematical and cryptographic state of a connection. It holds the shared `Session Key` we talked about in the Cryptography section. Its job is to take raw text, encrypt it into cipher-bytes using `libsodium`, and format it into a `PacketType::EncryptedMessage`.
+
+```rust
+// Inside session.rs
+pub fn encrypt_message(&mut self, body: MessageBody) -> Result<Vec<u8>, ProtocolError> {
+    // Use the shared symmetric key (XChaCha20-Poly1305) to lock the message
+    let ciphertext = aead::seal(&plaintext, None, &nonce, &self.tx_key);
+    Ok(ciphertext)
+}
+```
+
+### Step 5: The Network Layer (`src-tauri/src/network.rs`)
+Once the Session has encrypted the data, it hands the raw bytes down to the lowest level: the Network layer.
+
+The Network layer doesn't care about encryption or chat messages. Its only job is to push bytes out to the physical internet via **TCP Sockets**. It also implements the **Length-Prefixed Framing** we discussed earlier. 
+
+```rust
+// Inside network.rs
+pub async fn write_frame<W: AsyncWrite + Unpin>(stream: &mut W, frame: RawFrame) {
+    // 1. Calculate how big the frame is
+    let length = frame.payload.len() as u32;
+    // 2. Send the 4-byte size header first
+    stream.write_u32(length).await;
+    // 3. Send the actual payload
+    stream.write_all(&frame.payload).await;
+}
+```
+
+### Summary of the Data Flow
+Let's trace a message from start to finish:
+1. You type "Hello" and click Send in **`App.tsx`**.
+2. React triggers an IPC command which calls `send_message` in **`commands.rs`**.
+3. `commands.rs` grabs the active connection from **`state.rs`**.
+4. The raw text is passed to **`session.rs`**, which uses `libsodium` to encrypt "Hello" into unreadable cipher-bytes.
+5. The cipher-bytes are passed to **`network.rs`**, which calculates the size, prepends a 4-byte header, and fires it over the TCP socket.
+6. `commands.rs` then uses **`storage.rs`** to securely encrypt the message *again* and save it to your local SQLite database for later.
+7. Finally, the function returns, and React displays your chat bubble!
+
+This layered architecture (UI -> Commands -> Session -> Network) ensures that the code stays clean. The Network layer never has to worry about UI buttons, and the UI never has to worry about TCP byte headers!
