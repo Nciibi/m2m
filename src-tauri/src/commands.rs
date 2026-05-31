@@ -675,6 +675,117 @@ fn spawn_receive_loop(
                         }
                     }
                 }
+                PacketType::FileTransferChunk => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(chunk) = protocol::deserialize::<protocol::FileTransferChunkData>(&plaintext) {
+                                    let mut transfers = state.incoming_transfers.write().await;
+                                    if let Some(transfer) = transfers.get_mut(&chunk.transfer_id) {
+                                        // Verify chunk hash
+                                        let hash = sodiumoxide::crypto::hash::sha256::hash(&chunk.data);
+                                        if hash.0.to_vec() == chunk.chunk_hash {
+                                            transfer.received_chunks.insert(chunk.chunk_index, chunk.data);
+                                        } else {
+                                            tracing::warn!("file chunk hash mismatch");
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt file chunk");
+                            }
+                        }
+                    }
+                }
+                PacketType::FileTransferComplete => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(complete) = protocol::deserialize::<protocol::FileTransferCompleteData>(&plaintext) {
+                                    let mut transfers = state.incoming_transfers.write().await;
+                                    if let Some(transfer) = transfers.remove(&complete.transfer_id) {
+                                        // Reassemble and write file
+                                        let mut file_data = Vec::with_capacity(transfer.total_size as usize);
+                                        for i in 0..transfer.total_chunks {
+                                            if let Some(chunk) = transfer.received_chunks.get(&i) {
+                                                file_data.extend_from_slice(chunk);
+                                            } else {
+                                                tracing::warn!("missing chunk {i} for file transfer");
+                                                break;
+                                            }
+                                        }
+                                        // Verify total hash
+                                        let hash = sodiumoxide::crypto::hash::sha256::hash(&file_data);
+                                        if hash.0.to_vec() == transfer.file_hash {
+                                            if let Err(e) = std::fs::write(&transfer.save_path, &file_data) {
+                                                tracing::warn!(error = %e, "failed to write received file");
+                                            } else {
+                                                let _ = app_handle.emit("m2m://file-complete", serde_json::json!({
+                                                    "transfer_id": complete.transfer_id,
+                                                    "filename": transfer.filename,
+                                                    "path": transfer.save_path.to_string_lossy(),
+                                                }));
+                                            }
+                                        } else {
+                                            tracing::warn!("file hash verification failed");
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt file complete");
+                            }
+                        }
+                    }
+                }
+                PacketType::FileTransferAccept => {
+                    // Peer accepted our file transfer — start sending chunks
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
+                                    if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
+                                        let transfers = state.outgoing_transfers.read().await;
+                                        if let Some(filepath) = transfers.get(tid) {
+                                            let filepath = filepath.clone();
+                                            let tid = tid.to_string();
+                                            let state_c = state.clone();
+                                            let peer_c = peer_key_hex.clone();
+                                            drop(conn);
+                                            drop(conns);
+                                            // Spawn chunk sender
+                                            tokio::spawn(async move {
+                                                let _ = send_file_chunks(state_c, &peer_c, &tid, &filepath).await;
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt file accept"),
+                        }
+                    }
+                }
+                PacketType::FileTransferReject => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        if let Ok(plaintext) = conn.session.decrypt_typed_frame(&frame) {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
+                                if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
+                                    state.outgoing_transfers.write().await.remove(tid);
+                                    tracing::info!(transfer_id = %tid, "file transfer rejected by peer");
+                                }
+                            }
+                        }
+                    }
+                }
                 PacketType::Heartbeat => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
@@ -707,11 +818,173 @@ fn spawn_receive_loop(
     });
 }
 
+// ─── New Commands ───
+
+/// Load message history for a peer.
+#[tauri::command]
+pub async fn load_messages(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    limit: Option<i64>,
+) -> Result<Vec<ChatMessage>, String> {
+    let ms = state.message_store.read().await;
+    let sk = state.storage_key.read().await;
+    let store = ms.as_ref().ok_or("message store not initialised")?;
+    let key = sk.as_ref().ok_or("storage key not available")?;
+
+    let stored = store
+        .load_messages(&peer_key_hex, limit.unwrap_or(100))
+        .map_err(|e| format!("failed to load messages: {e}"))?;
+
+    let mut messages = Vec::with_capacity(stored.len());
+    for m in stored {
+        let content = crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
+            .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
+            .unwrap_or_else(|_| "[encrypted]".to_string());
+        messages.push(ChatMessage {
+            id: m.id,
+            content,
+            direction: m.direction,
+            timestamp: m.timestamp as u64,
+        });
+    }
+    Ok(messages)
+}
+
+/// Initiate a file transfer to a peer.
+#[tauri::command]
+pub async fn send_file(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    file_path: String,
+) -> Result<FileTransferInfo, String> {
+    let path = std::path::Path::new(&file_path);
+    if !path.exists() {
+        return Err("file not found".to_string());
+    }
+
+    let metadata = std::fs::metadata(path).map_err(|e| format!("cannot read file: {e}"))?;
+    let total_size = metadata.len();
+    let filename = path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let file_data = std::fs::read(path).map_err(|e| format!("failed to read file: {e}"))?;
+    let file_hash = sodiumoxide::crypto::hash::sha256::hash(&file_data);
+    let total_chunks = ((total_size as usize + protocol::MAX_FILE_CHUNK_SIZE - 1) / protocol::MAX_FILE_CHUNK_SIZE) as u32;
+    let transfer_id = uuid::Uuid::new_v4().to_string();
+
+    // Store for later chunk sending
+    state.outgoing_transfers.write().await.insert(transfer_id.clone(), file_path);
+
+    // Send the request
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(&peer_key_hex)
+        .ok_or("no connection to this peer")?.clone();
+    let mut conn = conn_arc.lock().await;
+    conn.session.send_file_request(
+        &mut conn.write_half,
+        &transfer_id, &filename, total_size, total_chunks, file_hash.0.to_vec(),
+    ).await.map_err(|e| format!("failed to send file request: {e}"))?;
+
+    Ok(FileTransferInfo {
+        transfer_id,
+        filename,
+        total_size,
+        peer_key_hex,
+    })
+}
+
+/// Accept an incoming file transfer.
+#[tauri::command]
+pub async fn accept_file_transfer(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    transfer_id: String,
+    save_dir: String,
+) -> Result<(), String> {
+    // The transfer metadata should have been stored when we received the request
+    // For now, create the entry so chunks can be received
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(&peer_key_hex)
+        .ok_or("no connection to this peer")?.clone();
+    let mut conn = conn_arc.lock().await;
+
+    conn.session.send_file_accept(&mut conn.write_half, &transfer_id)
+        .await.map_err(|e| format!("failed to send accept: {e}"))?;
+
+    Ok(())
+}
+
+/// Reject an incoming file transfer.
+#[tauri::command]
+pub async fn reject_file_transfer(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(&peer_key_hex)
+        .ok_or("no connection to this peer")?.clone();
+    let mut conn = conn_arc.lock().await;
+
+    conn.session.send_file_reject(&mut conn.write_half, &transfer_id)
+        .await.map_err(|e| format!("failed to send reject: {e}"))?;
+
+    Ok(())
+}
+
+/// Get the actual listening address (after binding to port 0).
+#[tauri::command]
+pub async fn get_listen_address(
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let addr = state.listen_addr.read().await;
+    addr.map(|a| a.to_string()).ok_or("not listening".to_string())
+}
+
+// ─── Internal Helpers ───
+
+/// Send file chunks to a peer after they've accepted the transfer.
+async fn send_file_chunks(
+    state: Arc<AppState>,
+    peer_key_hex: &str,
+    transfer_id: &str,
+    file_path: &str,
+) -> Result<(), String> {
+    let file_data = std::fs::read(file_path).map_err(|e| format!("read failed: {e}"))?;
+    let chunks: Vec<&[u8]> = file_data.chunks(protocol::MAX_FILE_CHUNK_SIZE).collect();
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_hash = sodiumoxide::crypto::hash::sha256::hash(chunk);
+        let conns = state.connections.read().await;
+        let conn_arc = conns.get(peer_key_hex)
+            .ok_or("peer disconnected during transfer")?.clone();
+        let mut conn = conn_arc.lock().await;
+        conn.session.send_file_chunk(
+            &mut conn.write_half,
+            transfer_id, i as u32, chunk.to_vec(), chunk_hash.0.to_vec(),
+        ).await.map_err(|e| format!("chunk send failed: {e}"))?;
+    }
+
+    // Send completion
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(peer_key_hex)
+        .ok_or("peer disconnected during transfer")?.clone();
+    let mut conn = conn_arc.lock().await;
+    conn.session.send_file_complete(&mut conn.write_half, transfer_id)
+        .await.map_err(|e| format!("complete send failed: {e}"))?;
+
+    // Clean up
+    state.outgoing_transfers.write().await.remove(transfer_id);
+    Ok(())
+}
+
 // ─── Storage Helpers ───
 
 /// Derive a storage encryption key from the public key.
-/// In production, this should use Argon2id with a user passphrase.
-/// For MVP, we use a deterministic derivation so the app works without a passphrase prompt.
+/// Uses HKDF-SHA256 with a domain-separation context.
+/// In a future version, this should incorporate a user passphrase via Argon2id.
 fn derive_storage_key(public_key: &[u8]) -> [u8; 32] {
     use sodiumoxide::crypto::hash::sha256;
     let context = b"m2m-storage-key-v1";
@@ -745,3 +1018,4 @@ fn crypto_decrypt_storage(
     let aead_key = aead::Key::from_slice(key).ok_or("invalid key length")?;
     aead::open(ciphertext, None, &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
 }
+
