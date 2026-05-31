@@ -362,6 +362,18 @@ async fn handle_incoming_connection(
 
     tracing::info!(peer = %peer_key_hex, "peer connected and authenticated");
 
+    // Upsert peer in key store
+    {
+        let ks = state.key_store.read().await;
+        if let Some(ref store) = *ks {
+            let _ = store.upsert_peer(
+                &hex::decode(&peer_key_hex).unwrap_or_default(),
+                &peer_fingerprint,
+                None,
+            );
+        }
+    }
+
     // Start the receive loop for this peer
     spawn_receive_loop(app_handle, state, read_half, peer_key_hex);
 }
@@ -458,6 +470,22 @@ pub async fn send_message(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
+
+    // Persist message to local storage if history is enabled
+    let history = *state.history_enabled.read().await;
+    if history {
+        let sk = state.storage_key.read().await;
+        let ms = state.message_store.read().await;
+        if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
+            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), key)
+                .unwrap_or_default();
+            let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
+            let _ = store.store_message(
+                &msg_id, &peer_key_hex, "sent",
+                &encrypted, &nonce, now as i64,
+            );
+        }
+    }
 
     Ok(ChatMessage {
         id: msg_id,
