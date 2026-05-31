@@ -285,3 +285,26 @@ input:focus, select:focus {
   display: flex;
   gap: 12px;
 }
+
+.file-requests {
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-request-banner {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--accent-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.file-request-banner button {
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
