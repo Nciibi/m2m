@@ -3,7 +3,7 @@
   <h1>M2M Secure Messenger</h1>
   <p><strong>A zero-trust, peer-to-peer, encrypted desktop messenger built with Rust & Tauri.</strong></p>
 
-  <p>
+  <p> 
     <a href="#features">Features</a> •
     <a href="#security-model">Security</a> •
     <a href="#architecture">Architecture</a> •
