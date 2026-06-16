@@ -431,15 +431,18 @@ function App() {
 
   // ═══════════ Vault Unlock View ═══════════
   if (view === "vault") {
+    const isFirstTime = !vaultInitialized;
     return (
       <div className="app-container">
         <div className="centered-view">
           <div className="setup-icon vault-icon">🔐</div>
-          <h2>Unlock Your Vault</h2>
+          <h2>{isFirstTime ? "Set Up Your Vault" : "Unlock Your Vault"}</h2>
           <p>
-            Enter a passphrase to encrypt your local data.
+            {isFirstTime
+              ? "Choose a passphrase to encrypt your local data. This protects your identity keys and message history."
+              : "Enter your passphrase to decrypt your local data."}
             <br />
-            Minimum 8 characters. This uses Argon2id key derivation.
+            Minimum 8 characters. Uses Argon2id key derivation.
           </p>
           <div className="vault-form">
             <input
@@ -450,17 +453,19 @@ function App() {
               onChange={(e) => setPassphrase(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleUnlockVault()}
             />
-            <input
-              id="vault-passphrase-confirm"
-              type="password"
-              placeholder="Confirm passphrase (first time only)"
-              value={passphraseConfirm}
-              onChange={(e) => setPassphraseConfirm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleUnlockVault()}
-            />
+            {isFirstTime && (
+              <input
+                id="vault-passphrase-confirm"
+                type="password"
+                placeholder="Confirm passphrase"
+                value={passphraseConfirm}
+                onChange={(e) => setPassphraseConfirm(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleUnlockVault()}
+              />
+            )}
             {vaultError && <div className="vault-error">{vaultError}</div>}
             <button id="vault-unlock-btn" onClick={handleUnlockVault}>
-              Unlock Vault
+              {isFirstTime ? "Create Vault" : "Unlock"}
             </button>
           </div>
         </div>
