@@ -158,7 +158,7 @@ pub async fn init_identity(
     let pub_hex = hex::encode(keypair.public_key_bytes());
 
     // Initialise message store
-    let msg_store = MessageStore::open(&msgs_db_path)
+    let msg_store = storage::MessageStore::open(&msgs_db_path)
         .map_err(|e| format!("message store error: {e}"))?;
     {
         let mut ms = state.message_store.lock().await;
