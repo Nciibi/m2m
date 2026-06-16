@@ -16,7 +16,7 @@ use tokio::time;
 use thiserror::Error;
 
 use crate::protocol::{
-    self, validate_frame_size, validate_version, PacketType, MAX_FRAME_SIZE, LENGTH_PREFIX_SIZE,
+    self, validate_frame_size, validate_version, PacketType, LENGTH_PREFIX_SIZE,
 };
 
 /// Network operation timeout for reads/writes.
@@ -88,7 +88,7 @@ async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFram
     // Read the 4-byte length prefix
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     match time::timeout(NETWORK_TIMEOUT, reader.read_exact(&mut len_buf)).await {
-        Ok(Ok(_)) => {}
+        Ok(Ok(_n)) => {}
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
             return Err(NetworkError::PeerClosed);
         }
@@ -102,7 +102,7 @@ async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFram
     // Read the frame payload (version + type + body)
     let mut payload = vec![0u8; frame_len as usize];
     match time::timeout(NETWORK_TIMEOUT, reader.read_exact(&mut payload)).await {
-        Ok(Ok(_)) => {}
+        Ok(Ok(_n)) => {}
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
             return Err(NetworkError::PeerClosed);
         }
@@ -140,7 +140,7 @@ pub async fn read_frame_from_read_half(
     read_frame_impl(read_half).await
 }
 
-/// Write a complete frame to an AsyncWrite stream.
+/// Write a complete frame to any AsyncWrite stream.
 pub async fn write_frame<W: AsyncWrite + Unpin>(
     writer: &mut W,
     packet_type: PacketType,
@@ -226,8 +226,8 @@ pub async fn send_disconnect<W: AsyncWrite + Unpin>(
 }
 
 /// Send an error packet.
-pub async fn send_error(
-    stream: &mut TcpStream,
+pub async fn send_error<W: AsyncWrite + Unpin>(
+    writer: &mut W,
     code: protocol::ErrorCode,
     description: &str,
 ) -> Result<(), NetworkError> {
@@ -236,5 +236,5 @@ pub async fn send_error(
         description: description.to_string(),
     };
     let body = protocol::serialize(&msg)?;
-    write_frame(stream, PacketType::Error, &body).await
+    write_frame(writer, PacketType::Error, &body).await
 }
