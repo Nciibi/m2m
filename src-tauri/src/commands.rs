@@ -1038,7 +1038,6 @@ async fn send_file_chunks(
 /// The `salt` should be unique per identity (we use the public key).
 fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     use argon2::{Argon2, Algorithm, Version, Params};
-    use argon2::password_hash::Output;
 
     let params = Params::new(
         65536, // 64 MiB memory
