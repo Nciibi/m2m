@@ -66,6 +66,7 @@ function App() {
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
   const [vaultError, setVaultError] = useState("");
+  const [vaultInitialized, setVaultInitialized] = useState(false);
 
   // Settings state
   const [networkSettings, setNetworkSettings] =
@@ -98,18 +99,19 @@ function App() {
         const info = await invoke<IdentityInfo>("init_identity");
         setIdentity(info);
         if (info.has_identity) {
-          // Check vault status
-          try {
-            const vs = await invoke<VaultStatus>("get_vault_status");
-            if (vs.unlocked) {
-              setView("hub");
-            } else {
-              setView("vault");
-            }
-          } catch {
-            // Vault commands may not exist in legacy builds — fallback
+          // Existing identity — check vault status
+          const vs = await invoke<VaultStatus>("get_vault_status");
+          setVaultInitialized(vs.initialized);
+          if (vs.unlocked) {
             setView("hub");
+          } else {
+            // Show vault screen ("set passphrase" for legacy, "enter passphrase" for vaulted)
+            setView("vault");
           }
+        } else {
+          // No identity — go directly to vault setup to create one
+          setVaultInitialized(false);
+          setView("vault");
         }
       } catch (err) {
         console.error("Init failed:", err);
@@ -201,12 +203,20 @@ function App() {
       setVaultError("Passphrase must be at least 8 characters.");
       return;
     }
-    if (passphraseConfirm && passphrase !== passphraseConfirm) {
+    // Require confirmation only on first-time setup
+    if (!vaultInitialized && passphraseConfirm && passphrase !== passphraseConfirm) {
       setVaultError("Passphrases do not match.");
+      return;
+    }
+    if (!vaultInitialized && !passphraseConfirm) {
+      setVaultError("Please confirm your passphrase.");
       return;
     }
     try {
       await invoke("unlock_vault", { passphrase });
+      // Refresh identity info after unlock (keypair is now loaded)
+      const info = await invoke<IdentityInfo>("get_identity");
+      setIdentity(info);
       setView("hub");
     } catch (e: any) {
       setVaultError(String(e));
@@ -320,20 +330,19 @@ function App() {
     }
   };
 
-  // Native Tauri dialog for save directory
+  // Native Tauri dialog for save location
   const acceptFile = async (req: FileRequest) => {
     try {
-      const dir = await save({
+      const filePath = await save({
         title: `Save "${req.filename}" to...`,
         defaultPath: req.filename,
       });
-      if (!dir) return;
-      // Use the directory portion of the save path
-      const savePath = dir.replace(/[/\\][^/\\]*$/, "");
+      if (!filePath) return;
+      // Pass the full file path — backend handles dir vs file detection
       await invoke("accept_file_transfer", {
         peerKeyHex: req.peer_key_hex,
         transferId: req.transfer_id,
-        saveDir: savePath,
+        saveDir: filePath,
       });
       setFileRequests((prev) =>
         prev.filter((r) => r.transfer_id !== req.transfer_id)
