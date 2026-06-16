@@ -38,12 +38,19 @@ pub struct ConnectionInfo {
     pub peer_key_hex: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, zeroize::Zeroize)]
 pub struct ChatMessage {
     pub id: String,
     pub content: String,
     pub direction: String,
     pub timestamp: u64,
+}
+
+impl Drop for ChatMessage {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.content.zeroize();
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
