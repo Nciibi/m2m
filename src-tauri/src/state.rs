@@ -59,6 +59,12 @@ pub struct AppState {
     /// The storage encryption key (derived from passphrase or identity).
     /// Held in memory only for the lifetime of the app.
     pub storage_key: RwLock<Option<[u8; 32]>>,
+    /// Whether the vault has been unlocked with a passphrase.
+    pub vault_unlocked: RwLock<bool>,
+    /// Whether a vault passphrase has been set (first-run detection).
+    pub vault_initialized: RwLock<bool>,
+    /// Discovered public IP address (via STUN).
+    pub public_ip: RwLock<Option<SocketAddr>>,
 }
 
 impl AppState {
@@ -75,6 +81,9 @@ impl AppState {
             message_store: Mutex::new(None),
             key_store: Mutex::new(None),
             storage_key: RwLock::new(None),
+            vault_unlocked: RwLock::new(false),
+            vault_initialized: RwLock::new(false),
+            public_ip: RwLock::new(None),
         }
     }
 
