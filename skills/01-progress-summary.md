@@ -1,10 +1,10 @@
 # Progress Summary: M2M Secure Messenger
 
-**Status**: Backend core implemented. Ready for file transfer logic and frontend UI.
-**Last Updated**: 2026-05-28
+**Status**: Complete MVP — Backend and Frontend fully implemented and integrated.
+**Last Updated**: 2026-06-16
 
 ## Core Architecture Completed
-The foundation of the M2M secure messenger has been established using Rust and Tauri v2. The project strictly adheres to the requested threat model, ensuring no central servers, no accounts, and no metadata leakage.
+The M2M secure messenger is a fully functional MVP built with Rust (Tauri v2) and React. The project strictly adheres to zero-trust principles: no central servers, no accounts, no metadata leakage.
 
 ## Backend Modules Built (`src-tauri/src/`)
 
@@ -26,6 +26,7 @@ The foundation of the M2M secure messenger has been established using Rust and T
    - TCP listener and connector built using `tokio::net`.
    - Timeout wrappers on all network operations to prevent DoS.
    - Connection state machine transitions (Disconnected -> Connecting -> Handshaking -> Established).
+   - Generic `write_frame` supports any `AsyncWrite` target (TcpStream, OwnedWriteHalf, etc.).
    - Functions for reading/writing fully framed bytes safely.
 
 4. **Identity & Invite Module (`identity.rs`)**
@@ -37,19 +38,45 @@ The foundation of the M2M secure messenger has been established using Rust and T
    - Replay protection mechanism enforcing monotonically increasing packet counters.
    - Transparent encryption and decryption of payload data.
    - Time-bound session expirations.
+   - Encrypted file transfer support (request, chunk, complete, accept, reject).
 
 6. **Storage Module (`storage.rs`)**
    - Implemented SQLite (`rusqlite`) storage with **application-level encryption**.
-   - Bypassed OpenSSL requirements of SQLCipher by encrypting private keys and chat histories with `XChaCha20-Poly1305` before writing them to the database.
+   - Encrypts private keys and chat histories with `XChaCha20-Poly1305` before writing to the database.
    - Implemented secure deletion pragmas (`PRAGMA secure_delete=ON`) and `VACUUM` capability.
    - Separated key store (`keys.db`) and message store (`messages.db`).
 
 7. **Tauri Commands Bridge (`commands.rs` & `state.rs`)**
    - Thread-safe `AppState` wrapping the identity, TCP listeners, and active peer connections.
    - Clean, safe Tauri commands that return strictly typed structs to the frontend.
+   - Full file transfer lifecycle commands (send, accept, reject).
    - *Security note: No secret keys ever cross the Tauri IPC boundary to the React frontend.*
 
-## Current State of the Code
-- The Rust code compiles successfully (`cargo check` passes).
-- The npm dependencies (`react`, `vite`, `@tauri-apps/api`) are installed.
-- The `tauri.conf.json` is hardened with strict CSPs and window sizing.
+## Frontend (`src/`)
+
+1. **App.tsx** — Complete React application with three views:
+   - **Setup View**: Animated loading screen during identity initialization.
+   - **Hub View**: Host/Join cards for connection management, fingerprint display.
+   - **Chat View**: Real-time encrypted messaging, file transfer requests, peer verification.
+
+2. **App.css** — Premium glassmorphic dark-mode UI:
+   - Design token system (CSS variables) for consistent theming.
+   - JetBrains Mono for fingerprints and cryptographic data.
+   - Micro-animations (pulse, slide-up, bounce-dot loaders).
+   - Gradient message bubbles, glowing status badges.
+   - Custom scrollbar, responsive layout.
+
+## Project Configuration
+- `tauri.conf.json` hardened with strict CSP and window sizing.
+- `Cargo.toml` configured with release optimizations (LTO, strip, codegen-units=1).
+- `package.json` with React 19, Vite 7, Tauri v2.
+- `index.html` properly branded.
+
+## What Was Fixed (2026-06-16)
+- **crypto.rs**: Fixed `Signature::from_slice` → `Signature::new` (ed25519 API change).
+- **network.rs**: Made `write_frame` and `send_error` generic over `AsyncWrite + Unpin`; fixed `read_exact` match patterns.
+- **commands.rs**: Fixed borrow-checker errors (state move-while-borrowed, double mutable borrow on PeerConnection); cleaned all unused imports.
+- **state.rs**: Cleaned unused imports, qualified storage types.
+- **App.tsx**: Fixed missing `useEffect` wrapper for event listeners (syntax bug that caused runtime crash).
+- **App.css**: Complete premium UI overhaul.
+- **index.html**: Fixed title from Tauri template default.
