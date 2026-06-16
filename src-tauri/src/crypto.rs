@@ -16,7 +16,7 @@ use sodiumoxide::crypto::sign;
 use sodiumoxide::randombytes;
 use zeroize::Zeroize;
 
-use serde::{Deserialize, Serialize};
+
 use thiserror::Error;
 
 /// Maximum size of data that can be encrypted in a single operation (16 MiB).
@@ -122,8 +122,12 @@ pub fn verify_signature(
     signature: &[u8],
 ) -> Result<(), CryptoError> {
     let pk = sign::PublicKey::from_slice(public_key).ok_or(CryptoError::InvalidKeyLength)?;
-    let sig =
-        sign::Signature::from_bytes(signature).map_err(|_| CryptoError::SignatureInvalid)?;
+    if signature.len() != 64 {
+        return Err(CryptoError::SignatureInvalid);
+    }
+    let mut sig_bytes = [0u8; 64];
+    sig_bytes.copy_from_slice(signature);
+    let sig = sign::Signature::new(sig_bytes);
     if sign::verify_detached(&sig, message, &pk) {
         Ok(())
     } else {
