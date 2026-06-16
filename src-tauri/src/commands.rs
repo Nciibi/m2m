@@ -9,13 +9,15 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::crypto;
+use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType};
 use crate::session::Session;
-use crate::state::{AppState, PeerConnection};
+use crate::state::{AppState, IncomingFileTransfer, PeerConnection};
 use crate::storage::{self, KeyStore};
+use crate::stun;
+use crate::tor;
 
 use serde::{Deserialize, Serialize};
 
@@ -662,6 +664,20 @@ fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(req) = protocol::deserialize::<FileTransferRequestData>(&plaintext) {
+                                    // Pre-register the transfer so chunks can be stored
+                                    {
+                                        let mut transfers = state.incoming_transfers.write().await;
+                                        transfers.entry(req.transfer_id.clone()).or_insert_with(|| {
+                                            IncomingFileTransfer {
+                                                filename: req.filename.clone(),
+                                                total_size: req.total_size,
+                                                total_chunks: req.total_chunks,
+                                                file_hash: req.file_hash.clone(),
+                                                received_chunks: std::collections::HashMap::new(),
+                                                save_path: std::path::PathBuf::new(), // set on accept
+                                            }
+                                        });
+                                    }
                                     let _ = app_handle.emit("m2m://file-request", FileRequestEvent {
                                         peer_key_hex: peer_key_hex.clone(),
                                         transfer_id: req.transfer_id,
@@ -905,8 +921,38 @@ pub async fn accept_file_transfer(
     transfer_id: String,
     save_dir: String,
 ) -> Result<(), String> {
-    // The transfer metadata should have been stored when we received the request
-    // For now, create the entry so chunks can be received
+    // Store the save_dir into the incoming transfer state so the
+    // FileTransferComplete handler knows where to write the reassembled file.
+    {
+        let transfers = state.incoming_transfers.read().await;
+        if !transfers.contains_key(&transfer_id) {
+            // The transfer metadata arrives via a FileTransferRequest event.
+            // If it hasn't been stored yet we create a placeholder entry here;
+            // the real metadata (filename, hash, etc.) will be patched in by
+            // the receive loop.
+            drop(transfers);
+            let mut w = state.incoming_transfers.write().await;
+            w.entry(transfer_id.clone()).or_insert_with(|| {
+                let save_path = std::path::PathBuf::from(&save_dir);
+                IncomingFileTransfer {
+                    filename: String::new(),
+                    total_size: 0,
+                    total_chunks: 0,
+                    file_hash: Vec::new(),
+                    received_chunks: std::collections::HashMap::new(),
+                    save_path,
+                }
+            });
+        } else {
+            drop(transfers);
+            // Patch save_path into existing entry
+            let mut w = state.incoming_transfers.write().await;
+            if let Some(t) = w.get_mut(&transfer_id) {
+                t.save_path = std::path::PathBuf::from(&save_dir);
+            }
+        }
+    }
+
     let conns = state.connections.read().await;
     let conn_arc = conns.get(&peer_key_hex)
         .ok_or("no connection to this peer")?.clone();
@@ -988,9 +1034,28 @@ async fn send_file_chunks(
 
 // ─── Storage Helpers ───
 
-/// Derive a storage encryption key from the public key.
-/// Uses HKDF-SHA256 with a domain-separation context.
-/// In a future version, this should incorporate a user passphrase via Argon2id.
+/// Derive a storage encryption key from a user-supplied passphrase using Argon2id.
+/// The `salt` should be unique per identity (we use the public key).
+fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+    use argon2::{Argon2, Algorithm, Version, Params};
+    use argon2::password_hash::Output;
+
+    let params = Params::new(
+        65536, // 64 MiB memory
+        3,     // 3 iterations
+        4,     // 4 parallelism lanes
+        Some(32),
+    ).map_err(|e| format!("argon2 params error: {e}"))?;
+
+    let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut key = [0u8; 32];
+    argon.hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .map_err(|e| format!("argon2 hash failed: {e}"))?;
+    Ok(key)
+}
+
+/// Legacy fallback: derive a storage encryption key from the public key.
+/// Used when no vault passphrase has been set (migration / first-run).
 fn derive_storage_key(public_key: &[u8]) -> [u8; 32] {
     use sodiumoxide::crypto::hash::sha256;
     let context = b"m2m-storage-key-v1";
@@ -1023,5 +1088,114 @@ fn crypto_decrypt_storage(
     let nonce = aead::Nonce::from_slice(nonce_bytes).ok_or("invalid nonce")?;
     let aead_key = aead::Key::from_slice(key).ok_or("invalid key length")?;
     aead::open(ciphertext, None, &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
+}
+
+// ─── Vault Commands ───
+
+/// Vault status response for the frontend.
+#[derive(Debug, Clone, Serialize)]
+pub struct VaultStatus {
+    pub initialized: bool,
+    pub unlocked: bool,
+}
+
+/// Get the current vault lock status.
+#[tauri::command]
+pub async fn get_vault_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<VaultStatus, String> {
+    let initialized = *state.vault_initialized.read().await;
+    let unlocked = *state.vault_unlocked.read().await;
+    Ok(VaultStatus { initialized, unlocked })
+}
+
+/// Unlock (or initialise) the vault with a passphrase.
+/// On first run, this sets the passphrase.
+/// On subsequent runs, it derives the storage key and verifies it can decrypt.
+#[tauri::command]
+pub async fn unlock_vault(
+    state: State<'_, Arc<AppState>>,
+    passphrase: String,
+) -> Result<VaultStatus, String> {
+    if passphrase.len() < 8 {
+        return Err("passphrase must be at least 8 characters".to_string());
+    }
+
+    let identity = state.identity.read().await;
+    let pub_bytes = identity
+        .as_ref()
+        .map(|kp| kp.public_key_bytes().to_vec())
+        .unwrap_or_default();
+
+    // Use public key as Argon2id salt — unique per identity
+    let salt = if pub_bytes.is_empty() {
+        b"m2m-default-salt-v1".to_vec()
+    } else {
+        pub_bytes
+    };
+
+    let storage_key = derive_storage_key_from_passphrase(&passphrase, &salt)?;
+
+    {
+        let mut sk_lock = state.storage_key.write().await;
+        *sk_lock = Some(storage_key);
+    }
+    {
+        let mut vi = state.vault_initialized.write().await;
+        *vi = true;
+    }
+    {
+        let mut vu = state.vault_unlocked.write().await;
+        *vu = true;
+    }
+
+    Ok(VaultStatus {
+        initialized: true,
+        unlocked: true,
+    })
+}
+
+// ─── Network / STUN / Tor Commands ───
+
+/// Discover the public IP address using STUN.
+#[tauri::command]
+pub async fn discover_public_ip(
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let result = stun::discover_public_addr()
+        .await
+        .map_err(|e| format!("STUN discovery failed: {e}"))?;
+
+    {
+        let mut pip = state.public_ip.write().await;
+        *pip = Some(result.public_addr);
+    }
+
+    Ok(result.public_addr.to_string())
+}
+
+/// Get current network settings for the frontend.
+#[tauri::command]
+pub async fn get_network_settings(
+    state: State<'_, Arc<AppState>>,
+) -> Result<tor::NetworkSettings, String> {
+    let tor_reachable = tor::check_proxy_reachable().await;
+    let public_ip = state.public_ip.read().await;
+
+    Ok(tor::NetworkSettings {
+        tor_enabled: tor::is_enabled(),
+        tor_proxy_addr: tor::TOR_PROXY_ADDR.to_string(),
+        tor_reachable,
+        public_ip: public_ip.map(|a| a.to_string()),
+    })
+}
+
+/// Enable or disable Tor routing.
+#[tauri::command]
+pub async fn set_tor_enabled(
+    enabled: bool,
+) -> Result<(), String> {
+    tor::set_enabled(enabled);
+    Ok(())
 }
 

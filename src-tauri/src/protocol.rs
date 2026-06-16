@@ -4,6 +4,7 @@
 /// Every packet is versioned, length-framed, and strictly validated.
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use zeroize::Zeroize;
 
 /// Current protocol version.
 pub const PROTOCOL_VERSION: u8 = 0x01;
@@ -196,7 +197,8 @@ pub struct EncryptedEnvelope {
 
 // --- Inner Message Types (decrypted content) ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Zeroize)]
+#[zeroize(drop)]
 #[serde(tag = "type")]
 pub enum MessageBody {
     #[serde(rename = "text")]
