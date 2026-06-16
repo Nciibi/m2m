@@ -177,6 +177,8 @@ pub async fn get_identity(
 }
 
 /// Generate an invite link for sharing.
+/// If STUN has discovered a public IP, it replaces the local IP in the address
+/// so the invite works across the internet.
 #[tauri::command]
 pub async fn create_invite(
     state: State<'_, Arc<AppState>>,
@@ -189,13 +191,25 @@ pub async fn create_invite(
         .as_ref()
         .ok_or("identity not initialized")?;
 
-    let _: SocketAddr = address
+    let listen_addr: SocketAddr = address
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
 
+    // If STUN discovered a public IP, use it with the listen port
+    let actual_address = {
+        let pip = state.public_ip.read().await;
+        match *pip {
+            Some(public_addr) => {
+                let public_with_port = SocketAddr::new(public_addr.ip(), listen_addr.port());
+                public_with_port.to_string()
+            }
+            None => address.clone(),
+        }
+    };
+
     let validity_secs = validity_minutes.saturating_mul(60);
 
-    identity::create_invite(kp, &address, validity_secs, one_time)
+    identity::create_invite(kp, &actual_address, validity_secs, one_time)
         .map_err(|e| format!("invite creation failed: {e}"))
 }
 
@@ -713,13 +727,21 @@ fn spawn_receive_loop(
                                         // Verify total hash
                                         let hash = sodiumoxide::crypto::hash::sha256::hash(&file_data);
                                         if hash.0.to_vec() == transfer.file_hash {
-                                            if let Err(e) = std::fs::write(&transfer.save_path, &file_data) {
+                                            // Build the final write path
+                                            let final_path = if transfer.save_path.as_os_str().is_empty() {
+                                                std::path::PathBuf::from(&transfer.filename)
+                                            } else if transfer.save_path.is_dir() {
+                                                transfer.save_path.join(&transfer.filename)
+                                            } else {
+                                                transfer.save_path.clone()
+                                            };
+                                            if let Err(e) = std::fs::write(&final_path, &file_data) {
                                                 tracing::warn!(error = %e, "failed to write received file");
                                             } else {
                                                 let _ = app_handle.emit("m2m://file-complete", serde_json::json!({
                                                     "transfer_id": complete.transfer_id,
                                                     "filename": transfer.filename,
-                                                    "path": transfer.save_path.to_string_lossy(),
+                                                    "path": final_path.to_string_lossy(),
                                                 }));
                                             }
                                         } else {
