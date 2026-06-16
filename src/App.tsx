@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import "./App.css";
 
 interface IdentityInfo {
@@ -30,8 +36,22 @@ interface FileRequest {
   total_size: number;
 }
 
+interface VaultStatus {
+  initialized: boolean;
+  unlocked: boolean;
+}
+
+interface NetworkSettings {
+  tor_enabled: boolean;
+  tor_proxy_addr: string;
+  tor_reachable: boolean;
+  public_ip: string | null;
+}
+
 function App() {
-  const [view, setView] = useState<"setup" | "hub" | "chat">("setup");
+  const [view, setView] = useState<
+    "setup" | "vault" | "hub" | "chat" | "settings"
+  >("setup");
   const [identity, setIdentity] = useState<IdentityInfo | null>(null);
   const [connection, setConnection] = useState<ConnectionInfo | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -42,7 +62,34 @@ function App() {
   const [fileRequests, setFileRequests] = useState<FileRequest[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
 
+  // Vault state
+  const [passphrase, setPassphrase] = useState("");
+  const [passphraseConfirm, setPassphraseConfirm] = useState("");
+  const [vaultError, setVaultError] = useState("");
+
+  // Settings state
+  const [networkSettings, setNetworkSettings] =
+    useState<NetworkSettings | null>(null);
+  const [publicIp, setPublicIp] = useState<string | null>(null);
+  const [stunLoading, setStunLoading] = useState(false);
+
+  // Notification permission
+  const [notifPermission, setNotifPermission] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    async function setupNotifications() {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const result = await requestPermission();
+        granted = result === "granted";
+      }
+      setNotifPermission(granted);
+    }
+    setupNotifications();
+  }, []);
 
   // Initialize and check identity
   useEffect(() => {
@@ -51,7 +98,18 @@ function App() {
         const info = await invoke<IdentityInfo>("init_identity");
         setIdentity(info);
         if (info.has_identity) {
-          setView("hub");
+          // Check vault status
+          try {
+            const vs = await invoke<VaultStatus>("get_vault_status");
+            if (vs.unlocked) {
+              setView("hub");
+            } else {
+              setView("vault");
+            }
+          } catch {
+            // Vault commands may not exist in legacy builds — fallback
+            setView("hub");
+          }
         }
       } catch (err) {
         console.error("Init failed:", err);
@@ -64,6 +122,13 @@ function App() {
   useEffect(() => {
     const unlistenMsg = listen<any>("m2m://message", (event) => {
       setMessages((prev) => [...prev, event.payload.message]);
+      // Desktop notification for received messages
+      if (notifPermission && event.payload.message.direction === "received") {
+        sendNotification({
+          title: "M2M — New Message",
+          body: event.payload.message.content.slice(0, 100),
+        });
+      }
     });
 
     const unlistenConn = listen<any>("m2m://connection", async (event) => {
@@ -84,6 +149,13 @@ function App() {
         } catch (e) {
           console.error("Failed to load history", e);
         }
+        // Notify on new connection
+        if (notifPermission) {
+          sendNotification({
+            title: "M2M — Peer Connected",
+            body: `Encrypted session established`,
+          });
+        }
       } else if (stateStr === "disconnected") {
         setView("hub");
         setConnection(null);
@@ -93,10 +165,21 @@ function App() {
 
     const unlistenFileReq = listen<any>("m2m://file-request", (event) => {
       setFileRequests((prev) => [...prev, event.payload]);
+      if (notifPermission) {
+        sendNotification({
+          title: "M2M — File Transfer",
+          body: `Incoming file: ${event.payload.filename}`,
+        });
+      }
     });
 
     const unlistenFileComp = listen<any>("m2m://file-complete", (event) => {
-      alert(`File received!\nSaved to: ${event.payload.path}`);
+      if (notifPermission) {
+        sendNotification({
+          title: "M2M — File Received",
+          body: `Saved to: ${event.payload.path}`,
+        });
+      }
     });
 
     return () => {
@@ -105,12 +188,30 @@ function App() {
       unlistenFileReq.then((f) => f());
       unlistenFileComp.then((f) => f());
     };
-  }, []);
+  }, [notifPermission]);
 
   // Auto-scroll messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleUnlockVault = async () => {
+    setVaultError("");
+    if (passphrase.length < 8) {
+      setVaultError("Passphrase must be at least 8 characters.");
+      return;
+    }
+    if (passphraseConfirm && passphrase !== passphraseConfirm) {
+      setVaultError("Passphrases do not match.");
+      return;
+    }
+    try {
+      await invoke("unlock_vault", { passphrase });
+      setView("hub");
+    } catch (e: any) {
+      setVaultError(String(e));
+    }
+  };
 
   const handleGenerateInvite = async () => {
     try {
@@ -187,35 +288,52 @@ function App() {
     }
   };
 
-  const handleSendFile = () => {
-    const path = prompt("Enter absolute path to file to send:");
-    if (!path || !connection?.peer_key_hex) return;
-    invoke("send_file", {
-      peerKeyHex: connection.peer_key_hex,
-      filePath: path,
-    })
-      .then(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            content: `📎 File request sent: ${path.split(/[\\/]/).pop()}`,
-            direction: "sent",
-            timestamp: Math.floor(Date.now() / 1000),
-          },
-        ]);
-      })
-      .catch((e) => alert("Failed to send file: " + e));
+  // Native Tauri dialog for file selection
+  const handleSendFile = async () => {
+    if (!connection?.peer_key_hex) return;
+    try {
+      const selected = await open({
+        multiple: false,
+        title: "Select file to send",
+      });
+      if (!selected) return;
+      const filePath = typeof selected === "string" ? selected : selected;
+      await invoke("send_file", {
+        peerKeyHex: connection.peer_key_hex,
+        filePath: filePath,
+      });
+      const filename =
+        typeof filePath === "string"
+          ? filePath.split(/[\\/]/).pop()
+          : "file";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          content: `📎 File request sent: ${filename}`,
+          direction: "sent",
+          timestamp: Math.floor(Date.now() / 1000),
+        },
+      ]);
+    } catch (e) {
+      alert("Failed to send file: " + e);
+    }
   };
 
+  // Native Tauri dialog for save directory
   const acceptFile = async (req: FileRequest) => {
-    const dir = prompt("Enter directory path to save to:");
-    if (!dir) return;
     try {
+      const dir = await save({
+        title: `Save "${req.filename}" to...`,
+        defaultPath: req.filename,
+      });
+      if (!dir) return;
+      // Use the directory portion of the save path
+      const savePath = dir.replace(/[/\\][^/\\]*$/, "");
       await invoke("accept_file_transfer", {
         peerKeyHex: req.peer_key_hex,
         transferId: req.transfer_id,
-        saveDir: dir,
+        saveDir: savePath,
       });
       setFileRequests((prev) =>
         prev.filter((r) => r.transfer_id !== req.transfer_id)
@@ -245,6 +363,41 @@ function App() {
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
+  // Settings helpers
+  const openSettings = async () => {
+    setView("settings");
+    try {
+      const ns = await invoke<NetworkSettings>("get_network_settings");
+      setNetworkSettings(ns);
+      setPublicIp(ns.public_ip);
+    } catch (e) {
+      console.error("Failed to load network settings", e);
+    }
+  };
+
+  const handleStunDiscover = async () => {
+    setStunLoading(true);
+    try {
+      const ip = await invoke<string>("discover_public_ip");
+      setPublicIp(ip);
+    } catch (e) {
+      alert("STUN failed: " + e);
+    } finally {
+      setStunLoading(false);
+    }
+  };
+
+  const handleTorToggle = async () => {
+    if (!networkSettings) return;
+    const newVal = !networkSettings.tor_enabled;
+    try {
+      await invoke("set_tor_enabled", { enabled: newVal });
+      setNetworkSettings({ ...networkSettings, tor_enabled: newVal });
+    } catch (e) {
+      alert("Tor toggle failed: " + e);
+    }
+  };
+
   // ═══════════ Setup View ═══════════
   if (view === "setup") {
     return (
@@ -267,6 +420,129 @@ function App() {
     );
   }
 
+  // ═══════════ Vault Unlock View ═══════════
+  if (view === "vault") {
+    return (
+      <div className="app-container">
+        <div className="centered-view">
+          <div className="setup-icon vault-icon">🔐</div>
+          <h2>Unlock Your Vault</h2>
+          <p>
+            Enter a passphrase to encrypt your local data.
+            <br />
+            Minimum 8 characters. This uses Argon2id key derivation.
+          </p>
+          <div className="vault-form">
+            <input
+              id="vault-passphrase"
+              type="password"
+              placeholder="Passphrase"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUnlockVault()}
+            />
+            <input
+              id="vault-passphrase-confirm"
+              type="password"
+              placeholder="Confirm passphrase (first time only)"
+              value={passphraseConfirm}
+              onChange={(e) => setPassphraseConfirm(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUnlockVault()}
+            />
+            {vaultError && <div className="vault-error">{vaultError}</div>}
+            <button id="vault-unlock-btn" onClick={handleUnlockVault}>
+              Unlock Vault
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ Settings View ═══════════
+  if (view === "settings") {
+    return (
+      <div className="app-container">
+        <div className="header">
+          <h1>
+            <span>⚙️</span> Settings
+          </h1>
+          <button
+            className="secondary"
+            onClick={() => setView("hub")}
+            id="back-to-hub-btn"
+          >
+            ← Back
+          </button>
+        </div>
+        <div className="content-area settings-content">
+          {/* Network / STUN */}
+          <div className="settings-section">
+            <h3>Network</h3>
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Public IP</strong>
+                <span className="settings-desc">
+                  Discovered via STUN — needed for invites that work across the
+                  internet.
+                </span>
+              </div>
+              <div className="settings-value">
+                {publicIp ? (
+                  <span className="mono-value">{publicIp}</span>
+                ) : (
+                  <span className="text-muted">Not discovered</span>
+                )}
+                <button
+                  className="secondary"
+                  onClick={handleStunDiscover}
+                  disabled={stunLoading}
+                  id="stun-discover-btn"
+                >
+                  {stunLoading ? "..." : "Discover"}
+                </button>
+              </div>
+            </div>
+
+            {/* Tor */}
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Tor Routing</strong>
+                <span className="settings-desc">
+                  Route all outgoing connections through Tor SOCKS5 proxy
+                  (127.0.0.1:9050).
+                </span>
+              </div>
+              <div className="settings-value">
+                <span
+                  className={`tor-status ${networkSettings?.tor_reachable ? "reachable" : "unreachable"}`}
+                >
+                  {networkSettings?.tor_reachable ? "Proxy reachable" : "Proxy not found"}
+                </span>
+                <button
+                  className={networkSettings?.tor_enabled ? "danger" : "secondary"}
+                  onClick={handleTorToggle}
+                  id="tor-toggle-btn"
+                >
+                  {networkSettings?.tor_enabled ? "Disable Tor" : "Enable Tor"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Identity */}
+          <div className="settings-section">
+            <h3>Identity</h3>
+            <div className="fingerprint-box" id="settings-fingerprint">
+              <span className="fingerprint-label">Your Identity Fingerprint</span>
+              {identity?.fingerprint}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ═══════════ Hub View ═══════════
   if (view === "hub") {
     return (
@@ -275,7 +551,17 @@ function App() {
           <h1>
             <span>🛡️</span> M2M
           </h1>
-          <div className="status-badge">Offline</div>
+          <div className="header-actions">
+            <div className="status-badge">Offline</div>
+            <button
+              className="icon-btn"
+              onClick={openSettings}
+              title="Settings"
+              id="settings-btn"
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
 
         <div className="content-area centered-view">
