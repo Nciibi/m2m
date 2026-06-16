@@ -60,6 +60,7 @@ function App() {
     checkIdentity();
   }, []);
 
+  useEffect(() => {
     const unlistenMsg = listen<any>("m2m://message", (event) => {
       setMessages((prev) => [...prev, event.payload.message]);
     });
