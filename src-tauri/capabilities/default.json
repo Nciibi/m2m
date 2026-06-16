@@ -4,6 +4,7 @@
   "description": "Capability for the main window of M2M secure messenger",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "event:default"
   ]
 }
