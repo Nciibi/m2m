@@ -96,10 +96,57 @@ impl KeyStore {
             CREATE TABLE IF NOT EXISTS consumed_invites (
                 nonce BLOB PRIMARY KEY,
                 consumed_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS vault_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );",
         )?;
 
         Ok(Self { conn })
+    }
+
+    /// Check if the vault passphrase has ever been set.
+    pub fn is_vault_initialized(&self) -> Result<bool, StorageError> {
+        let result: Result<String, _> = self.conn.query_row(
+            "SELECT value FROM vault_meta WHERE key = 'initialized'",
+            [],
+            |row| row.get(0),
+        );
+        Ok(result.map(|v| v == "true").unwrap_or(false))
+    }
+
+    /// Mark the vault as initialized (passphrase has been set).
+    pub fn set_vault_initialized(&self) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('initialized', 'true')",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Load only the public key (no decryption needed).
+    pub fn load_public_key(&self) -> Result<Vec<u8>, StorageError> {
+        self.conn
+            .query_row(
+                "SELECT public_key FROM identity WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| StorageError::KeyNotFound)
+    }
+
+    /// Update the encrypted private key and nonce (used during legacy→vault migration).
+    pub fn update_encrypted_private_key(
+        &self,
+        encrypted_private_key: &[u8],
+        nonce: &[u8],
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE identity SET encrypted_private_key = ?1, private_key_nonce = ?2 WHERE id = 1",
+            params![encrypted_private_key, nonce],
+        )?;
+        Ok(())
     }
 
     /// Store the identity keypair.
