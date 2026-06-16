@@ -4,19 +4,18 @@
 /// Each command validates inputs and returns safe, typed responses.
 /// No secrets are exposed to the frontend.
 use std::net::SocketAddr;
-
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::crypto::{self, IdentityKeypair};
+use crate::crypto;
 use crate::identity;
 use crate::network;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType};
 use crate::session::Session;
 use crate::state::{AppState, PeerConnection};
-use crate::storage::{self, KeyStore, MessageStore};
+use crate::storage::{self, KeyStore};
 
 use serde::{Deserialize, Serialize};
 
@@ -314,28 +313,28 @@ async fn handle_incoming_connection(
         return;
     }
 
-    let identity = state.identity.read().await;
-    let kp = match identity.as_ref() {
-        Some(kp) => kp,
-        None => {
-            tracing::error!("cannot handle connection: no identity");
+    let mut session = Session::new();
+    {
+        let identity = state.identity.read().await;
+        let kp = match identity.as_ref() {
+            Some(kp) => kp,
+            None => {
+                tracing::error!("cannot handle connection: no identity");
+                return;
+            }
+        };
+
+        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame).await {
+            tracing::warn!(error = %e, "handshake failed for incoming connection");
+            let _ = network::send_error(
+                &mut stream,
+                protocol::ErrorCode::HandshakeFailed,
+                "handshake failed",
+            )
+            .await;
             return;
         }
-    };
-
-    let mut session = Session::new();
-    if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame).await {
-        tracing::warn!(error = %e, "handshake failed for incoming connection");
-        let _ = network::send_error(
-            &mut stream,
-            protocol::ErrorCode::HandshakeFailed,
-            "handshake failed",
-        )
-        .await;
-        return;
-    }
-    
-    drop(identity);
+    } // identity borrow dropped here
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();
@@ -460,11 +459,13 @@ pub async fn send_message(
         .clone();
 
     let mut conn = conn_arc.lock().await;
-    let PeerConnection { session, write_half, .. } = &mut *conn;
-    let msg_id = session
-        .send_text(write_half, &content)
-        .await
-        .map_err(|e| format!("send failed: {e}"))?;
+    let msg_id = {
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session
+            .send_text(write_half, &content)
+            .await
+            .map_err(|e| format!("send failed: {e}"))?
+    };
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

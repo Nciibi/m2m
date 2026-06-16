@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 use crate::crypto::IdentityKeypair;
 use crate::network::ConnectionState;
 use crate::session::Session;
-use crate::storage::{KeyStore, MessageStore};
+use crate::storage;
 
 /// Peer connection handle, holding the write half and session state.
 /// The read half is consumed by the receive loop task.
@@ -53,9 +53,9 @@ pub struct AppState {
     /// Active incoming file transfers. Key: transfer_id
     pub incoming_transfers: RwLock<HashMap<String, IncomingFileTransfer>>,
     /// Message store (initialised when identity is loaded).
-    pub message_store: Mutex<Option<MessageStore>>,
+    pub message_store: Mutex<Option<storage::MessageStore>>,
     /// Key store (initialised when identity is loaded).
-    pub key_store: Mutex<Option<KeyStore>>,
+    pub key_store: Mutex<Option<storage::KeyStore>>,
     /// The storage encryption key (derived from passphrase or identity).
     /// Held in memory only for the lifetime of the app.
     pub storage_key: RwLock<Option<[u8; 32]>>,
