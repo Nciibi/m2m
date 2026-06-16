@@ -9,7 +9,9 @@
 //! - network: TCP with timeouts, heartbeats, rate limiting
 //! - identity: signed invites, fingerprint verification
 //! - session: encrypted messaging with replay protection
-//! - storage: SQLCipher encrypted local database
+//! - storage: Application-level encrypted local database
+//! - stun: STUN client for NAT traversal (public IP discovery)
+//! - tor: SOCKS5 proxy support for Tor onion routing
 //! - commands: Tauri IPC bridge (no secrets exposed to UI)
 
 mod commands;
@@ -20,6 +22,8 @@ mod protocol;
 mod session;
 mod state;
 mod storage;
+mod stun;
+mod tor;
 
 use std::sync::Arc;
 use state::AppState;
@@ -45,6 +49,8 @@ pub fn run() {
     let app_state = Arc::new(AppState::new(data_dir));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::init_identity,
@@ -63,6 +69,11 @@ pub fn run() {
             commands::accept_file_transfer,
             commands::reject_file_transfer,
             commands::get_listen_address,
+            commands::unlock_vault,
+            commands::get_vault_status,
+            commands::discover_public_ip,
+            commands::get_network_settings,
+            commands::set_tor_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
