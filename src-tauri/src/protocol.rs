@@ -198,13 +198,18 @@ pub struct EncryptedEnvelope {
 // --- Inner Message Types (decrypted content) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, Zeroize)]
-#[zeroize(drop)]
 #[serde(tag = "type")]
 pub enum MessageBody {
     #[serde(rename = "text")]
     Text { id: String, content: String },
     #[serde(rename = "ack")]
     Ack { id: String },
+}
+
+impl Drop for MessageBody {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 // --- File Transfer Messages ---
