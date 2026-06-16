@@ -193,11 +193,18 @@ pub async fn start_listener(
 }
 
 /// Connect to a remote peer with timeout.
+/// Routes through Tor SOCKS5 proxy when Tor is enabled, otherwise direct TCP.
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
-    let stream = time::timeout(CONNECT_TIMEOUT, TcpStream::connect(addr))
+    let stream = time::timeout(CONNECT_TIMEOUT, crate::tor::connect(addr))
         .await
         .map_err(|_| NetworkError::ConnectionTimeout)?
-        .map_err(NetworkError::Io)?;
+        .map_err(|e| match e {
+            crate::tor::TorError::Io(io_err) => NetworkError::Io(io_err),
+            other => NetworkError::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                other.to_string(),
+            )),
+        })?;
 
     tracing::debug!("connected to remote peer");
     Ok(stream)
