@@ -95,98 +95,65 @@ pub struct FileRequestEvent {
 
 // ─── Commands ───
 
-/// Initialize the crypto library and load or create identity.
-/// On first launch, generates a new identity and persists it.
+/// Initialize the crypto library and check for existing identity.
+/// Does NOT decrypt the private key — that is deferred to `unlock_vault`.
 #[tauri::command]
 pub async fn init_identity(
     state: State<'_, Arc<AppState>>,
 ) -> Result<IdentityInfo, String> {
     crypto::init().map_err(|e| format!("crypto init failed: {e}"))?;
 
-    // Try to load identity from storage
     let data_dir = storage::ensure_data_dir()
         .map_err(|e| format!("data dir error: {e}"))?;
     let keys_db_path = data_dir.join("keys.db");
-    let msgs_db_path = data_dir.join("messages.db");
 
     let key_store = KeyStore::open(&keys_db_path)
         .map_err(|e| format!("key store error: {e}"))?;
 
-    let keypair = if key_store.has_identity().unwrap_or(false) {
-        // Load existing identity
-        let (pub_bytes, enc_sk, nonce) = key_store
-            .load_identity()
-            .map_err(|e| format!("failed to load identity: {e}"))?;
+    let has_identity = key_store.has_identity().unwrap_or(false);
 
+    let result = if has_identity {
+        // Load only the public key — no decryption needed
+        let pub_bytes = key_store
+            .load_public_key()
+            .map_err(|e| format!("failed to load public key: {e}"))?;
+
+        if pub_bytes.len() != 32 {
+            return Err("invalid public key length in storage".to_string());
+        }
         let mut pub_arr = [0u8; 32];
         pub_arr.copy_from_slice(&pub_bytes);
 
-        // Decrypt the private key using the storage encryption key
-        let storage_key = derive_storage_key(&pub_bytes);
-        let sk_bytes = crypto_decrypt_storage(&enc_sk, &nonce, &storage_key)
-            .map_err(|e| format!("failed to decrypt identity: {e}"))?;
+        let fingerprint = crypto::fingerprint_from_public_key(&pub_arr);
+        let pub_hex = hex::encode(&pub_bytes);
 
-        let mut sk_arr = [0u8; 64];
-        sk_arr.copy_from_slice(&sk_bytes);
-
-        // Store the storage key for message encryption
+        // Persist vault_initialized flag into in-memory state
+        let vault_initialized = key_store.is_vault_initialized().unwrap_or(false);
         {
-            let mut sk_lock = state.storage_key.write().await;
-            *sk_lock = Some(storage_key);
+            let mut vi = state.vault_initialized.write().await;
+            *vi = vault_initialized;
         }
 
-        IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
-            .map_err(|e| format!("failed to reconstruct identity: {e}"))?
+        IdentityInfo {
+            fingerprint,
+            public_key_hex: pub_hex,
+            has_identity: true,
+        }
     } else {
-        // Generate new identity
-        let kp = IdentityKeypair::generate()
-            .map_err(|e| format!("keypair generation failed: {e}"))?;
-
-        // Encrypt and persist
-        let pub_bytes = kp.public_key_bytes();
-        let sk_bytes = kp.secret_key_bytes();
-        let storage_key = derive_storage_key(&pub_bytes);
-        let (nonce, encrypted_sk) = crypto_encrypt_storage(&sk_bytes, &storage_key)
-            .map_err(|e| format!("failed to encrypt identity: {e}"))?;
-
-        let now = chrono::Utc::now().timestamp();
-        key_store
-            .store_identity(&pub_bytes, &encrypted_sk, &nonce, now)
-            .map_err(|e| format!("failed to store identity: {e}"))?;
-
-        // Store the storage key for message encryption
-        {
-            let mut sk_lock = state.storage_key.write().await;
-            *sk_lock = Some(storage_key);
+        IdentityInfo {
+            fingerprint: String::new(),
+            public_key_hex: String::new(),
+            has_identity: false,
         }
-
-        kp
     };
 
-    let fingerprint = keypair.fingerprint();
-    let pub_hex = hex::encode(keypair.public_key_bytes());
-
-    // Initialise message store
-    let msg_store = storage::MessageStore::open(&msgs_db_path)
-        .map_err(|e| format!("message store error: {e}"))?;
-    {
-        let mut ms = state.message_store.lock().await;
-        *ms = Some(msg_store);
-    }
-    // Store the key store handle
+    // Store key store handle for unlock_vault to use later
     {
         let mut ks = state.key_store.lock().await;
         *ks = Some(key_store);
     }
 
-    let mut identity = state.identity.write().await;
-    *identity = Some(keypair);
-
-    Ok(IdentityInfo {
-        fingerprint,
-        public_key_hex: pub_hex,
-        has_identity: true,
-    })
+    Ok(result)
 }
 
 /// Get the current identity info.
