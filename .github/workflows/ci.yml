@@ -7,15 +7,16 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-test:
+  # ─── Code Quality ───
+  lint-and-test:
     runs-on: ubuntu-latest
-    
-    # Needs webkit2gtk for Tauri on Linux
     steps:
     - uses: actions/checkout@v4
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
 
     - name: Install dependencies (Ubuntu)
       run: |
@@ -54,3 +55,62 @@ jobs:
 
     - name: Build Frontend
       run: pnpm build
+
+  # ─── Multi-Platform Build ───
+  build:
+    needs: lint-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-latest
+            args: ""
+            deps: "sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsodium-dev"
+          - platform: windows-latest
+            args: ""
+            deps: ""
+          - platform: macos-latest
+            args: ""
+            deps: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install system dependencies
+      if: matrix.deps != ''
+      run: ${{ matrix.deps }}
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri
+
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Install Frontend Dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Build Tauri App
+      uses: tauri-apps/tauri-action@v0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: m2m-${{ matrix.platform }}
+        path: |
+          src-tauri/target/release/bundle/**/*
+        if-no-files-found: ignore
