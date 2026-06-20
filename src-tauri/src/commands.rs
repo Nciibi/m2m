@@ -831,6 +831,43 @@ fn spawn_receive_loop(
                 PacketType::HeartbeatAck => {
                     // Heartbeat acknowledged — connection alive
                 }
+                PacketType::ConversationMeta => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(meta) = protocol::deserialize::<ConversationMetaData>(&plaintext) {
+                                    // The peer's "my_display_name" is how they want to be seen
+                                    // The peer's "your_display_name" is the name they gave us
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(ref store) = *ms {
+                                        // Store the name the peer assigned to us as peer_display_name
+                                        let _ = store.set_peer_display_name(&peer_key_hex, &meta.my_display_name);
+                                        // If the peer suggested a name for our side, store it as display_name
+                                        // (only if we don't already have one)
+                                        if !meta.your_display_name.is_empty() {
+                                            if let Ok(Some(conv)) = store.get_conversation(&peer_key_hex) {
+                                                if conv.display_name.is_none() {
+                                                    let _ = store.rename_conversation(&peer_key_hex, &meta.your_display_name);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Notify frontend to refresh conversation list
+                                    let _ = app_handle.emit("m2m://conversation-meta", serde_json::json!({
+                                        "peer_key_hex": peer_key_hex.clone(),
+                                        "peer_display_name": meta.my_display_name,
+                                        "suggested_name": meta.your_display_name,
+                                    }));
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt conversation meta");
+                            }
+                        }
+                    }
+                }
                 PacketType::Disconnect => {
                     tracing::info!(peer = %peer_key_hex, "peer sent disconnect");
                     let _ = app_handle.emit("m2m://connection", ConnectionEvent {
