@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
-use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType};
+use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData};
 use crate::session::Session;
 use crate::state::{AppState, IncomingFileTransfer, PeerConnection};
 use crate::storage::{self, KeyStore};
