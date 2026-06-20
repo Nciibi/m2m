@@ -448,6 +448,24 @@ impl Session {
         self.send_encrypted_typed(stream, PacketType::FileTransferReject, &body).await
     }
 
+    /// Send conversation metadata (display names) to the peer.
+    pub async fn send_conversation_meta<W: AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut W,
+        my_display_name: &str,
+        your_display_name: &str,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        let meta = ConversationMetaData {
+            my_display_name: my_display_name.to_string(),
+            your_display_name: your_display_name.to_string(),
+        };
+        let body_bytes = protocol::serialize(&meta)?;
+        self.send_encrypted_typed(stream, PacketType::ConversationMeta, &body_bytes).await
+    }
+
     /// Encrypt and send data with a specific packet type.
     async fn send_encrypted_typed<W: AsyncWrite + Unpin>(
         &mut self,
