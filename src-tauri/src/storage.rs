@@ -274,7 +274,11 @@ impl MessageStore {
                 id TEXT PRIMARY KEY,
                 peer_id BLOB NOT NULL,
                 created_at INTEGER NOT NULL,
-                last_message_at INTEGER
+                last_message_at INTEGER,
+                display_name TEXT,
+                peer_display_name TEXT,
+                auto_delete_at INTEGER,
+                retention_policy TEXT NOT NULL DEFAULT 'none'
             );
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
@@ -290,11 +294,39 @@ impl MessageStore {
                 ON messages(conversation_id, timestamp);",
         )?;
 
+        // Run migrations for existing databases that lack the new columns
+        Self::migrate_conversations_table(&conn)?;
+
         Ok(Self { conn })
     }
 
-    /// Store a message. The `content_encrypted` and `content_nonce` must be
-    /// produced by the caller using XChaCha20-Poly1305.
+    /// Add new columns to the conversations table if they don't exist yet.
+    fn migrate_conversations_table(conn: &Connection) -> Result<(), StorageError> {
+        let mut stmt = conn.prepare("PRAGMA table_info(conversations)")?;
+        let existing_columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !existing_columns.contains(&"display_name".to_string()) {
+            conn.execute("ALTER TABLE conversations ADD COLUMN display_name TEXT", [])?;
+        }
+        if !existing_columns.contains(&"peer_display_name".to_string()) {
+            conn.execute("ALTER TABLE conversations ADD COLUMN peer_display_name TEXT", [])?;
+        }
+        if !existing_columns.contains(&"auto_delete_at".to_string()) {
+            conn.execute("ALTER TABLE conversations ADD COLUMN auto_delete_at INTEGER", [])?;
+        }
+        if !existing_columns.contains(&"retention_policy".to_string()) {
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN retention_policy TEXT NOT NULL DEFAULT 'none'",
+                [],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Store a message.
     pub fn store_message(
         &self,
         id: &str,
@@ -324,7 +356,7 @@ impl MessageStore {
     ) -> Result<(), StorageError> {
         let now = chrono::Utc::now().timestamp();
         self.conn.execute(
-            "INSERT OR IGNORE INTO conversations (id, peer_id, created_at) VALUES (?1, ?2, ?3)",
+            "INSERT OR IGNORE INTO conversations (id, peer_id, created_at, retention_policy) VALUES (?1, ?2, ?3, 'none')",
             params![conversation_id, peer_id, now],
         )?;
         Ok(())
@@ -355,9 +387,159 @@ impl MessageStore {
         for row in rows {
             messages.push(row?);
         }
-        // Reverse to get chronological order
         messages.reverse();
         Ok(messages)
+    }
+
+    /// List all conversations with summary info.
+    pub fn list_conversations(&self) -> Result<Vec<ConversationSummary>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.peer_id, c.created_at, c.last_message_at,
+                    c.display_name, c.peer_display_name,
+                    c.auto_delete_at, c.retention_policy,
+                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count
+             FROM conversations c
+             ORDER BY COALESCE(c.last_message_at, c.created_at) DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ConversationSummary {
+                id: row.get(0)?,
+                peer_id: row.get(1)?,
+                created_at: row.get(2)?,
+                last_message_at: row.get(3)?,
+                display_name: row.get(4)?,
+                peer_display_name: row.get(5)?,
+                auto_delete_at: row.get(6)?,
+                retention_policy: row.get::<_, Option<String>>(7)?
+                    .unwrap_or_else(|| "none".to_string()),
+                message_count: row.get(8)?,
+            })
+        })?;
+        let mut convos = Vec::new();
+        for row in rows {
+            convos.push(row?);
+        }
+        Ok(convos)
+    }
+
+    /// Rename a conversation (local display name).
+    pub fn rename_conversation(
+        &self,
+        conversation_id: &str,
+        display_name: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE conversations SET display_name = ?1 WHERE id = ?2",
+            params![display_name, conversation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Set the peer's display name for a conversation (received from peer).
+    pub fn set_peer_display_name(
+        &self,
+        conversation_id: &str,
+        peer_display_name: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE conversations SET peer_display_name = ?1 WHERE id = ?2",
+            params![peer_display_name, conversation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Set per-conversation retention policy and auto-delete timer.
+    pub fn set_conversation_retention(
+        &self,
+        conversation_id: &str,
+        policy: &str,
+        duration_secs: Option<i64>,
+    ) -> Result<(), StorageError> {
+        let auto_delete_at = duration_secs.map(|d| chrono::Utc::now().timestamp() + d);
+        self.conn.execute(
+            "UPDATE conversations SET retention_policy = ?1, auto_delete_at = ?2 WHERE id = ?3",
+            params![policy, auto_delete_at, conversation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Delete expired conversations. Returns IDs of conversations needing export first.
+    pub fn delete_expired_conversations(&self) -> Result<Vec<String>, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+
+        // Find conversations that need export before deletion
+        let mut export_stmt = self.conn.prepare(
+            "SELECT id FROM conversations WHERE auto_delete_at IS NOT NULL AND auto_delete_at <= ?1 AND retention_policy = 'export'",
+        )?;
+        let export_ids: Vec<String> = export_stmt
+            .query_map(params![now], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Delete conversations with 'delete' policy that have expired
+        self.conn.pragma_update(None, "secure_delete", "ON")?;
+
+        let mut del_stmt = self.conn.prepare(
+            "SELECT id FROM conversations WHERE auto_delete_at IS NOT NULL AND auto_delete_at <= ?1 AND retention_policy = 'delete'",
+        )?;
+        let delete_ids: Vec<String> = del_stmt
+            .query_map(params![now], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        for id in &delete_ids {
+            self.conn.execute(
+                "DELETE FROM messages WHERE conversation_id = ?1",
+                params![id],
+            )?;
+            self.conn.execute(
+                "DELETE FROM conversations WHERE id = ?1",
+                params![id],
+            )?;
+        }
+
+        Ok(export_ids)
+    }
+
+    /// Export all messages for a conversation.
+    pub fn export_conversation_messages(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<StoredMessage>, StorageError> {
+        self.load_messages(conversation_id, i64::MAX)
+    }
+
+    /// Get a single conversation summary.
+    pub fn get_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<ConversationSummary>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.peer_id, c.created_at, c.last_message_at,
+                    c.display_name, c.peer_display_name,
+                    c.auto_delete_at, c.retention_policy,
+                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count
+             FROM conversations c WHERE c.id = ?1",
+        )?;
+        let result = stmt.query_row(params![conversation_id], |row| {
+            Ok(ConversationSummary {
+                id: row.get(0)?,
+                peer_id: row.get(1)?,
+                created_at: row.get(2)?,
+                last_message_at: row.get(3)?,
+                display_name: row.get(4)?,
+                peer_display_name: row.get(5)?,
+                auto_delete_at: row.get(6)?,
+                retention_policy: row.get::<_, Option<String>>(7)?
+                    .unwrap_or_else(|| "none".to_string()),
+                message_count: row.get(8)?,
+            })
+        });
+        match result {
+            Ok(s) => Ok(Some(s)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(StorageError::Database(e)),
+        }
     }
 
     /// Delete a conversation and all its messages.
@@ -396,4 +578,18 @@ pub struct StoredMessage {
     pub content_nonce: Vec<u8>,
     pub timestamp: i64,
     pub delivered: bool,
+}
+
+/// Summary of a conversation for the frontend.
+#[derive(Debug, Clone)]
+pub struct ConversationSummary {
+    pub id: String,
+    pub peer_id: Vec<u8>,
+    pub created_at: i64,
+    pub last_message_at: Option<i64>,
+    pub display_name: Option<String>,
+    pub peer_display_name: Option<String>,
+    pub auto_delete_at: Option<i64>,
+    pub retention_policy: String,
+    pub message_count: i64,
 }
