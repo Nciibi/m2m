@@ -74,6 +74,12 @@ pub fn run() {
             commands::discover_public_ip,
             commands::get_network_settings,
             commands::set_tor_enabled,
+            commands::list_conversations,
+            commands::rename_conversation,
+            commands::delete_conversation_cmd,
+            commands::set_conversation_retention,
+            commands::send_conversation_names,
+            commands::export_conversation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
