@@ -104,6 +104,7 @@ pub enum PacketType {
     HeartbeatAck = 0x21,
     Disconnect = 0x30,
     Error = 0x31,
+    ConversationMeta = 0x40,
 }
 
 impl PacketType {
@@ -123,6 +124,7 @@ impl PacketType {
             0x21 => Ok(PacketType::HeartbeatAck),
             0x30 => Ok(PacketType::Disconnect),
             0x31 => Ok(PacketType::Error),
+            0x40 => Ok(PacketType::ConversationMeta),
             other => Err(ProtocolError::UnknownPacketType(other)),
         }
     }
@@ -234,6 +236,17 @@ pub struct FileTransferChunkData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileTransferCompleteData {
     pub transfer_id: String,
+}
+
+// --- Conversation Metadata ---
+
+/// Exchanged between peers after handshake to set conversation display names.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationMetaData {
+    /// The name the sender chose for their own side of this conversation.
+    pub my_display_name: String,
+    /// The name the sender suggests for the receiver's side.
+    pub your_display_name: String,
 }
 
 // --- Disconnect ---

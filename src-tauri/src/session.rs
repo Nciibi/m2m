@@ -14,7 +14,7 @@ use crate::protocol::{
     self, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
     MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
     FileTransferRequestData, FileTransferChunkData, FileTransferCompleteData,
-    MAX_FILE_CHUNK_SIZE,
+    ConversationMetaData, MAX_FILE_CHUNK_SIZE,
 };
 
 use thiserror::Error;
