@@ -228,6 +228,35 @@ function App() {
     };
   }, [notifPermission]);
 
+  // Fetch conversations
+  const loadConversations = async () => {
+    try {
+      const c = await invoke<ConversationEntry[]>("list_conversations");
+      setConversations(c);
+    } catch (e) {
+      console.error("Failed to load conversations", e);
+    }
+  };
+
+  useEffect(() => {
+    if (view === "hub") {
+      loadConversations();
+    }
+  }, [view]);
+
+  // Validate invite input
+  useEffect(() => {
+    if (inviteToConnect.length > 30) {
+      invoke<any>("validate_invite", { inviteStr: inviteToConnect })
+        .then((info) => {
+          if (info.valid) setInviteValid(true);
+        })
+        .catch(() => setInviteValid(false));
+    } else {
+      setInviteValid(false);
+    }
+  }, [inviteToConnect]);
+
   // Auto-scroll messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -288,12 +317,47 @@ function App() {
         inviteStr: inviteToConnect,
       });
       setConnection(info);
+      setActiveConversationId(info.peer_key_hex || null);
+      if (info.peer_key_hex && (namingMyName || namingTheirName)) {
+        await invoke("send_conversation_names", {
+          peerKeyHex: info.peer_key_hex,
+          myName: namingMyName,
+          theirName: namingTheirName,
+        }).catch(console.error);
+      }
       setView("chat");
+      try {
+        const history = await invoke<ChatMessage[]>("load_messages", {
+          peerKeyHex: info.peer_key_hex,
+        });
+        setMessages(history);
+      } catch (e) {
+        console.error("Failed to load history", e);
+      }
     } catch (e) {
       console.error("Connection failed", e);
       alert("Connection failed: " + e);
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleOpenChat = async (conv: ConversationEntry) => {
+    setActiveConversationId(conv.peer_key_hex);
+    setView("chat");
+    setConnection({
+      state: conv.is_online ? "established" : "disconnected",
+      peer_fingerprint: null,
+      peer_verified: true,
+      peer_key_hex: conv.peer_key_hex,
+    });
+    try {
+      const history = await invoke<ChatMessage[]>("load_messages", {
+        peerKeyHex: conv.peer_key_hex,
+      });
+      setMessages(history);
+    } catch (e) {
+      console.error("Failed to load history", e);
     }
   };
 
