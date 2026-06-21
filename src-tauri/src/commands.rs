@@ -602,7 +602,7 @@ fn spawn_receive_loop(
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
                         match conn.session.decrypt_message(&frame) {
-                            Ok(body) => match body {
+                            Ok(body) => match &body {
                                 MessageBody::Text { id, content } => {
                                     let now = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
@@ -619,7 +619,7 @@ fn spawn_receive_loop(
                                                 .unwrap_or_default();
                                             let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
                                             let _ = store.store_message(
-                                                &id, &peer_key_hex, "received",
+                                                id, &peer_key_hex, "received",
                                                 &encrypted, &nonce, now as i64,
                                             );
                                         }
@@ -628,8 +628,8 @@ fn spawn_receive_loop(
                                     let _ = app_handle.emit("m2m://message", MessageEvent {
                                         peer_key_hex: peer_key_hex.clone(),
                                         message: ChatMessage {
-                                            id,
-                                            content,
+                                            id: id.clone(),
+                                            content: content.clone(),
                                             direction: "received".to_string(),
                                             timestamp: now,
                                         },

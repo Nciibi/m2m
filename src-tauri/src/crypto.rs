@@ -125,7 +125,7 @@ pub fn verify_signature(
     if signature.len() != 64 {
         return Err(CryptoError::SignatureInvalid);
     }
-    let sig = sign::Signature::from_slice(signature).ok_or(CryptoError::SignatureInvalid)?;
+    let sig = sign::Signature::from_bytes(signature).map_err(|_| CryptoError::SignatureInvalid)?;
     if sign::verify_detached(&sig, message, &pk) {
         Ok(())
     } else {
