@@ -344,6 +344,7 @@ function App() {
 
   const handleOpenChat = async (conv: ConversationEntry) => {
     setActiveConversationId(conv.peer_key_hex);
+    setRetentionPolicy(conv.retention_policy || "none");
     setView("chat");
     setConnection({
       state: conv.is_online ? "established" : "disconnected",
@@ -860,6 +861,9 @@ function App() {
           Encrypted Session
         </h1>
         <div className="header-actions">
+          <button className="secondary" onClick={() => setView("hub")}>
+            ← Hub
+          </button>
           <div
             className={`status-badge ${
               connection?.state === "established"
@@ -869,13 +873,15 @@ function App() {
           >
             {connection?.state || "unknown"}
           </div>
-          <button
-            className="danger"
-            onClick={handleDisconnect}
-            id="disconnect-btn"
-          >
-            Disconnect
-          </button>
+          {connection?.state === "established" && (
+            <button
+              className="danger"
+              onClick={handleDisconnect}
+              id="disconnect-btn"
+            >
+              Disconnect
+            </button>
+          )}
         </div>
       </div>
 
@@ -913,10 +919,72 @@ function App() {
             End-to-end encrypted session established.
             <br />
             <span className="peer-fp">
-              {connection?.peer_fingerprint}
+              {connection?.peer_fingerprint || activeConversationId}
             </span>
           </p>
         </div>
+
+        {activeConversationId && (
+          <div className="retention-config">
+            <h4>Conversation Policy</h4>
+            <div className="retention-row">
+              <select 
+                value={retentionPolicy} 
+                onChange={(e) => {
+                  setRetentionPolicy(e.target.value);
+                  invoke("set_conversation_retention", {
+                    conversationId: activeConversationId,
+                    policy: e.target.value,
+                    durationSecs: e.target.value === "none" ? null : parseInt(retentionDuration, 10),
+                  }).catch(console.error);
+                }}
+              >
+                <option value="none">No Expiration</option>
+                <option value="delete">Auto-Delete After</option>
+                <option value="export">Auto-Export After</option>
+              </select>
+              {retentionPolicy !== "none" && (
+                <select
+                  value={retentionDuration}
+                  onChange={(e) => {
+                    setRetentionDuration(e.target.value);
+                    invoke("set_conversation_retention", {
+                      conversationId: activeConversationId,
+                      policy: retentionPolicy,
+                      durationSecs: parseInt(e.target.value, 10),
+                    }).catch(console.error);
+                  }}
+                >
+                  <option value="3600">1 Hour</option>
+                  <option value="86400">24 Hours</option>
+                  <option value="604800">7 Days</option>
+                </select>
+              )}
+              <button 
+                className="secondary" 
+                onClick={async () => {
+                  try {
+                    const savePath = await save({
+                      title: "Export Conversation",
+                      defaultPath: `export_${activeConversationId}.json`
+                    });
+                    if (savePath) {
+                      await invoke("export_conversation", {
+                        conversationId: activeConversationId,
+                        exportPath: savePath
+                      });
+                      alert("Exported successfully to " + savePath);
+                    }
+                  } catch (e) {
+                    alert("Export failed: " + e);
+                  }
+                }}
+              >
+                Export Now
+              </button>
+            </div>
+          </div>
+        )}
 
         {messages.map((m) => (
           <div key={m.id} className={`message-bubble ${m.direction}`}>
