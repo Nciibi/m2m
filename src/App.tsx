@@ -9,6 +9,20 @@ import {
 } from "@tauri-apps/plugin-notification";
 import "./App.css";
 
+interface ConversationEntry {
+  id: string;
+  peer_key_hex: string;
+  display_name: string | null;
+  peer_display_name: string | null;
+  last_message_at: number | null;
+  last_message_preview: string | null;
+  message_count: number;
+  is_online: boolean;
+  auto_delete_at: number | null;
+  retention_policy: string;
+  created_at: number;
+}
+
 interface IdentityInfo {
   fingerprint: string;
   public_key_hex: string;
@@ -73,6 +87,20 @@ function App() {
     useState<NetworkSettings | null>(null);
   const [publicIp, setPublicIp] = useState<string | null>(null);
   const [stunLoading, setStunLoading] = useState(false);
+
+  // Multi-conversation state
+  const [conversations, setConversations] = useState<ConversationEntry[]>([]);
+  const [hubTab, setHubTab] = useState<"connect" | "chats">("connect");
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  // Naming state (for invite validation)
+  const [inviteValid, setInviteValid] = useState(false);
+  const [namingMyName, setNamingMyName] = useState("");
+  const [namingTheirName, setNamingTheirName] = useState("");
+
+  // Per-conversation retention
+  const [retentionPolicy, setRetentionPolicy] = useState("none");
+  const [retentionDuration, setRetentionDuration] = useState<string>("86400");
 
   // Notification permission
   const [notifPermission, setNotifPermission] = useState(false);
@@ -142,6 +170,7 @@ function App() {
         peer_key_hex: event.payload.peer_key_hex,
       });
       if (stateStr === "established") {
+        setActiveConversationId(event.payload.peer_key_hex);
         setView("chat");
         try {
           const history = await invoke<ChatMessage[]>("load_messages", {
@@ -151,7 +180,6 @@ function App() {
         } catch (e) {
           console.error("Failed to load history", e);
         }
-        // Notify on new connection
         if (notifPermission) {
           sendNotification({
             title: "M2M — Peer Connected",
@@ -162,7 +190,14 @@ function App() {
         setView("hub");
         setConnection(null);
         setMessages([]);
+        setActiveConversationId(null);
       }
+      // Refresh conversation list
+      try { const c = await invoke<ConversationEntry[]>("list_conversations"); setConversations(c); } catch {}
+    });
+
+    const unlistenConvMeta = listen<any>("m2m://conversation-meta", async () => {
+      try { const c = await invoke<ConversationEntry[]>("list_conversations"); setConversations(c); } catch {}
     });
 
     const unlistenFileReq = listen<any>("m2m://file-request", (event) => {
@@ -189,6 +224,7 @@ function App() {
       unlistenConn.then((f) => f());
       unlistenFileReq.then((f) => f());
       unlistenFileComp.then((f) => f());
+      unlistenConvMeta.then((f) => f());
     };
   }, [notifPermission]);
 
