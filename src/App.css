@@ -869,33 +869,39 @@ input::placeholder {
 /* ─── Hub Tabs ─── */
 .hub-tabs {
   display: flex;
-  gap: 2px;
-  padding: 0 28px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.1);
+  gap: 8px;
+  padding: 16px 32px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .hub-tab {
   flex: 1;
-  padding: 12px 16px;
+  padding: 16px 20px;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   border-radius: 0;
   color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
   transition: var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
+  box-shadow: none;
+}
+
+.hub-tab::after {
+  display: none;
 }
 
 .hub-tab:hover {
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
   transform: none;
   box-shadow: none;
 }
@@ -903,18 +909,19 @@ input::placeholder {
 .hub-tab.active {
   color: var(--accent-bright);
   border-bottom-color: var(--accent);
-  background: transparent;
+  background: linear-gradient(to top, rgba(99, 102, 241, 0.15), transparent);
 }
 
 .hub-tab .tab-badge {
-  background: var(--accent-glow);
-  color: var(--accent-bright);
-  font-size: 0.7rem;
-  padding: 2px 7px;
-  border-radius: 10px;
-  font-weight: 600;
-  min-width: 20px;
+  background: var(--accent-glow-strong);
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  min-width: 24px;
   text-align: center;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .hub-tab-content {
@@ -926,66 +933,72 @@ input::placeholder {
 
 /* ─── Conversation List ─── */
 .conversation-list {
-  padding: 12px 16px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .conversation-list-empty {
   text-align: center;
-  padding: 48px 24px;
+  padding: 64px 24px;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .conversation-list-empty .empty-icon {
-  font-size: 2rem;
-  margin-bottom: 12px;
+  font-size: 3rem;
+  margin-bottom: 16px;
   display: block;
+  opacity: 0.6;
 }
 
 .conversation-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
+  gap: 16px;
+  padding: 18px 24px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: var(--transition-fast);
-  border: 1px solid transparent;
+  transition: var(--transition-base);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
   position: relative;
 }
 
 .conversation-item:hover {
-  background: var(--bg-hover);
-  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .conversation-item.active-conv {
   background: var(--accent-glow);
-  border-color: rgba(129, 140, 248, 0.2);
+  border-color: rgba(129, 140, 248, 0.3);
 }
 
 .conv-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  font-weight: 700;
   flex-shrink: 0;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.1);
   color: var(--accent-bright);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
   text-transform: uppercase;
 }
 
 .conv-avatar.online {
-  border-color: rgba(52, 211, 153, 0.4);
-  box-shadow: 0 0 8px rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.2);
 }
 
 .conv-body {
@@ -1003,8 +1016,8 @@ input::placeholder {
 }
 
 .conv-name {
-  font-size: 0.88rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1012,15 +1025,17 @@ input::placeholder {
 }
 
 .conv-time {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   flex-shrink: 0;
   margin-left: 8px;
+  font-weight: 500;
 }
 
 .conv-preview {
-  font-size: 0.78rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
+  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
