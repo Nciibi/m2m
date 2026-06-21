@@ -203,7 +203,20 @@ pub async fn create_invite(
                 let public_with_port = SocketAddr::new(public_addr.ip(), listen_addr.port());
                 public_with_port.to_string()
             }
-            None => address.clone(),
+            None => {
+                if listen_addr.ip().is_unspecified() {
+                    let local_ip = std::net::UdpSocket::bind("0.0.0.0:0")
+                        .and_then(|socket| {
+                            socket.connect("8.8.8.8:80")?;
+                            socket.local_addr()
+                        })
+                        .map(|addr| addr.ip())
+                        .unwrap_or(listen_addr.ip());
+                    SocketAddr::new(local_ip, listen_addr.port()).to_string()
+                } else {
+                    address.clone()
+                }
+            }
         }
     };
 

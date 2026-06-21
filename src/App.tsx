@@ -225,7 +225,7 @@ function App() {
 
   const handleGenerateInvite = async () => {
     try {
-      await invoke("start_listening", { address: "127.0.0.1:0" });
+      await invoke("start_listening", { address: "0.0.0.0:0" });
       const address = await invoke<string>("get_listen_address");
       const invite = await invoke<string>("create_invite", {
         address,
