@@ -163,13 +163,13 @@ pub async fn write_frame<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-/// Start a TCP listener on the given address.
+/// Start a TCP listener on the given TcpListener.
 /// Returns accepted connections via the channel.
 pub async fn start_listener(
-    addr: SocketAddr,
+    listener: TcpListener,
     tx: mpsc::Sender<(TcpStream, SocketAddr)>,
 ) -> Result<(), NetworkError> {
-    let listener = TcpListener::bind(addr).await?;
+    let addr = listener.local_addr()?;
     tracing::info!(address = %addr, "TCP listener started");
 
     loop {

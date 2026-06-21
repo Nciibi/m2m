@@ -242,11 +242,18 @@ pub async fn start_listening(
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
 
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("failed to bind listener: {e}"))?;
+
+    let bound_addr = listener.local_addr()
+        .map_err(|e| format!("failed to get local address: {e}"))?;
+
     let (tx, mut rx) = tokio::sync::mpsc::channel::<(tokio::net::TcpStream, SocketAddr)>(8);
 
     {
         let mut listen = state.listen_addr.write().await;
-        *listen = Some(addr);
+        *listen = Some(bound_addr);
     }
     {
         let mut incoming = state.incoming_tx.lock().await;
@@ -255,7 +262,7 @@ pub async fn start_listening(
 
     // Spawn the listener task
     tokio::spawn(async move {
-        if let Err(e) = network::start_listener(addr, tx).await {
+        if let Err(e) = network::start_listener(listener, tx).await {
             tracing::error!(error = %e, "listener failed");
         }
     });
@@ -273,8 +280,8 @@ pub async fn start_listening(
         }
     });
 
-    tracing::info!(address = %addr, "started listening");
-    Ok(format!("listening on {addr}"))
+    tracing::info!(address = %bound_addr, "started listening");
+    Ok(format!("listening on {bound_addr}"))
 }
 
 /// Handle an incoming connection: perform handshake as responder.
