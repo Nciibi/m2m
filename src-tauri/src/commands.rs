@@ -899,8 +899,8 @@ pub async fn load_messages(
     peer_key_hex: String,
     limit: Option<i64>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let ms = state.message_store.lock().await;
     let sk = state.storage_key.read().await;
+    let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
@@ -1373,6 +1373,9 @@ pub struct ConversationListItem {
 pub async fn list_conversations(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<ConversationListItem>, String> {
+    let conns = state.connections.read().await;
+    let sk = state.storage_key.read().await;
+
     let ms = state.message_store.lock().await;
     let store = match ms.as_ref() {
         Some(s) => s,
@@ -1382,9 +1385,6 @@ pub async fn list_conversations(
     let convos = store
         .list_conversations()
         .map_err(|e| format!("failed to list conversations: {e}"))?;
-
-    let conns = state.connections.read().await;
-    let sk = state.storage_key.read().await;
 
     let mut items = Vec::with_capacity(convos.len());
     for c in convos {
@@ -1510,9 +1510,9 @@ pub async fn export_conversation(
     conversation_id: String,
     export_path: String,
 ) -> Result<String, String> {
+    let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
-    let sk = state.storage_key.read().await;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
     // Get conversation metadata
