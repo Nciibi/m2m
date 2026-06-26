@@ -62,6 +62,9 @@ rand = "0.9"
 # State machine
 thiserror = "2"
 
+# Lock-free concurrent hash map for rate limiting
+dashmap = "6"
+
 # SOCKS5 proxy for Tor integration
 tokio-socks = "0.5"
 

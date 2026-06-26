@@ -6,11 +6,12 @@
 /// filename sanitization, and graceful disconnect.
 ///
 /// All data crossing the network boundary is treated as untrusted.
-use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+use dashmap::DashMap;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -50,16 +51,17 @@ const MAX_TOTAL_CONNECTIONS: usize = 50;
 
 /// Per-IP rate limiter with total connection cap.
 ///
-/// Uses a sliding window counter for per-IP tracking and an atomic
-/// counter for global connection limits.
+/// Uses a lock-free concurrent hash map (`DashMap`) for per-IP tracking,
+/// eliminating the single-mutex bottleneck. Each IP's window is a small
+/// `VecDeque<Instant>` that lives in its own DashMap shard.
 ///
 /// ## Limits
 /// - **Per-IP**: max 10 new connections per 60-second window
 /// - **Global**: max 50 concurrent connections total
 pub struct ConnectionLimiter {
-    /// Connection timestamps per IP (sliding window counters).
-    per_ip: Mutex<HashMap<IpAddr, Vec<std::time::Instant>>>,
-    /// Current total active connection count.
+    /// Per-IP sliding window timestamps (lock-free concurrent map).
+    per_ip: DashMap<IpAddr, VecDeque<Instant>>,
+    /// Current total active connection count (lock-free atomic).
     active_connections: AtomicUsize,
 }
 
@@ -67,7 +69,7 @@ impl ConnectionLimiter {
     /// Create a new connection limiter with default limits.
     pub fn new() -> Self {
         Self {
-            per_ip: Mutex::new(HashMap::new()),
+            per_ip: DashMap::new(),
             active_connections: AtomicUsize::new(0),
         }
     }
@@ -75,30 +77,38 @@ impl ConnectionLimiter {
     /// Check if a new connection from this IP is allowed.
     /// Returns `true` if the connection should be accepted,
     /// `false` if rate-limited or at capacity.
+    ///
+    /// Lock behavior: DashMap shard-level locking, not a global mutex.
+    /// Multiple IPs can be checked concurrently without contention.
     pub fn check(&self, ip: IpAddr) -> bool {
-        // Global cap: reject if at max concurrent connections.
+        // Global cap: lock-free atomic check.
         if self.active_connections.load(Ordering::Relaxed) >= MAX_TOTAL_CONNECTIONS {
             tracing::warn!(ip = %ip, active = %self.active_connections.load(Ordering::Relaxed), "connection rejected: at max capacity");
             return false;
         }
 
-        // Per-IP rate limit: sliding window counter.
-        let mut map = self.per_ip.lock().unwrap();
-        let entries = map.entry(ip).or_insert_with(Vec::new);
-        let now = std::time::Instant::now();
+        // Per-IP rate limit: DashMap shard-level locking (not global).
+        let now = Instant::now();
         let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
+        let mut entry = self.per_ip.entry(ip).or_insert_with(VecDeque::new);
 
-        // Remove entries outside the window.
-        entries.retain(|t| now.duration_since(*t) < window);
+        // Drain expired entries from the front.
+        while let Some(&t) = entry.front() {
+            if now.duration_since(t) >= window {
+                entry.pop_front();
+            } else {
+                break;
+            }
+        }
 
         // Check if rate limited.
-        if entries.len() >= MAX_CONNECTIONS_PER_IP as usize {
-            tracing::warn!(ip = %ip, count = entries.len(), "connection rejected: per-IP rate limit exceeded");
+        if entry.len() >= MAX_CONNECTIONS_PER_IP as usize {
+            tracing::warn!(ip = %ip, count = entry.len(), "connection rejected: per-IP rate limit exceeded");
             return false;
         }
 
         // Record this connection attempt.
-        entries.push(now);
+        entry.push_back(now);
         true
     }
 
@@ -229,30 +239,46 @@ pub struct RawFrame {
 }
 
 /// Internal: read a frame from any AsyncRead source.
-async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFrame, NetworkError> {
-    // Read the 4-byte length prefix
+/// Includes Slowloris protection: each bytes-read iteration has a 1s timeout
+/// instead of a single N-second timeout for the entire frame. An attacker
+/// sending 1 byte every 9 seconds will timeout after the first byte.
+pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFrame, NetworkError> {
+    // ── Slowloris-resistant length prefix read ──
+    // Read each byte with a per-byte 1s timeout instead of one 10s timeout
+    // for all 4 bytes. This prevents attackers from holding connections open
+    // by sending data at a trickle (e.g. 1 byte / 9 seconds).
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
-    match time::timeout(NETWORK_TIMEOUT, reader.read_exact(&mut len_buf)).await {
-        Ok(Ok(_n)) => {}
-        Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-            return Err(NetworkError::PeerClosed);
+    let mut read_pos = 0;
+    while read_pos < LENGTH_PREFIX_SIZE {
+        match time::timeout(Duration::from_secs(1), reader.read(&mut len_buf[read_pos..])).await {
+            Ok(Ok(0)) => return Err(NetworkError::PeerClosed),
+            Ok(Ok(n)) => read_pos += n,
+            Ok(Err(e)) => return Err(NetworkError::Io(e)),
+            Err(_) => {
+                tracing::warn!("Slowloris detected: read timeout on {}-byte prefix read (progress: {}/4)", LENGTH_PREFIX_SIZE, read_pos);
+                return Err(NetworkError::ReadTimeout);
+            }
         }
-        Ok(Err(e)) => return Err(NetworkError::Io(e)),
-        Err(_) => return Err(NetworkError::ReadTimeout),
     }
 
     let frame_len = u32::from_be_bytes(len_buf);
     validate_frame_size(frame_len)?;
 
-    // Read the frame payload (version + type + body)
+    // ── Slowloris-resistant frame body read ──
+    // Same per-byte 1s timeout as the length prefix to prevent
+    // trickle-send attacks on large frames.
     let mut payload = vec![0u8; frame_len as usize];
-    match time::timeout(NETWORK_TIMEOUT, reader.read_exact(&mut payload)).await {
-        Ok(Ok(_n)) => {}
-        Ok(Err(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-            return Err(NetworkError::PeerClosed);
+    let mut read_pos = 0;
+    while read_pos < frame_len as usize {
+        match time::timeout(Duration::from_secs(1), reader.read(&mut payload[read_pos..])).await {
+            Ok(Ok(0)) => return Err(NetworkError::PeerClosed),
+            Ok(Ok(n)) => read_pos += n,
+            Ok(Err(e)) => return Err(NetworkError::Io(e)),
+            Err(_) => {
+                tracing::warn!("Slowloris detected: read timeout on frame body (progress: {}/{})", read_pos, frame_len);
+                return Err(NetworkError::ReadTimeout);
+            }
         }
-        Ok(Err(e)) => return Err(NetworkError::Io(e)),
-        Err(_) => return Err(NetworkError::ReadTimeout),
     }
 
     // Parse version

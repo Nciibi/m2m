@@ -55,13 +55,6 @@ pub struct NetworkCandidate {
     pub base_address: Option<String>,
 }
 
-/// Full set of gathered candidates for the local peer.
-#[derive(Debug, Clone, Serialize)]
-pub struct CandidateSet {
-    pub host_candidates: Vec<NetworkCandidate>,
-    pub reflexive_candidates: Vec<NetworkCandidate>,
-}
-
 /// Combined network diagnostics for the frontend.
 #[derive(Debug, Clone, Serialize)]
 pub struct NetworkDiagnostics {
@@ -151,42 +144,3 @@ pub fn gather_reflexive_candidates(
         .collect()
 }
 
-/// Gather the full candidate set: host + STUN-reflexive.
-pub async fn gather_full_candidate_set(
-    stun_config: &stun::StunConfig,
-) -> CandidateSet {
-    let host_candidates = gather_host_candidates();
-
-    let reflexive_candidates = match stun::discover_public_addrs(stun_config).await {
-        Ok(multi) => gather_reflexive_candidates(&multi),
-        Err(e) => {
-            tracing::warn!(error = %e, "STUN discovery failed — no reflexive candidates");
-            Vec::new()
-        }
-    };
-
-    CandidateSet {
-        host_candidates,
-        reflexive_candidates,
-    }
-}
-
-/// Merge host + reflexive into a single sorted list (ICE-Lite).
-pub fn merge_candidates(candidate_set: &CandidateSet) -> Vec<NetworkCandidate> {
-    let mut all: Vec<NetworkCandidate> = Vec::new();
-    all.extend(candidate_set.host_candidates.iter().cloned());
-    all.extend(candidate_set.reflexive_candidates.iter().cloned());
-    all.sort_by(|a, b| b.priority.cmp(&a.priority));
-    all
-}
-
-/// Convert internal candidates to wire-format for handshake messages.
-pub fn to_wire_candidates(candidates: &[NetworkCandidate]) -> Vec<crate::protocol::WireCandidate> {
-    candidates
-        .iter()
-        .map(|c| crate::protocol::WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-        })
-        .collect()
-}

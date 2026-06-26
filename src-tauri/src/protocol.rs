@@ -22,6 +22,7 @@ pub const MAX_TEXT_MESSAGE_SIZE: usize = 64 * 1024;
 pub const MAX_FILE_CHUNK_SIZE: usize = 256 * 1024;
 
 /// Maximum handshake message size: 4 KiB.
+#[allow(dead_code)]
 pub const MAX_HANDSHAKE_SIZE: usize = 4 * 1024;
 
 /// Minimum frame size: version (1) + at least 1 byte payload type.
@@ -30,16 +31,19 @@ pub const MIN_FRAME_SIZE: u32 = 2;
 /// Length prefix size in bytes.
 pub const LENGTH_PREFIX_SIZE: usize = 4;
 
-/// Heartbeat interval in seconds.
+/// Heartbeat interval in seconds (reserved for heartbeating, wired to NETWORK_TIMEOUT).
+#[allow(dead_code)]
 pub const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 /// Heartbeat timeout in seconds.
+#[allow(dead_code)]
 pub const HEARTBEAT_TIMEOUT_SECS: u64 = 10;
 
 /// Maximum session duration in seconds (24 hours).
 pub const MAX_SESSION_DURATION_SECS: u64 = 24 * 60 * 60;
 
-/// Key rotation interval in seconds (1 hour).
+/// Key rotation interval in seconds (1 hour, reserved for future use).
+#[allow(dead_code)]
 pub const KEY_ROTATION_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Maximum invite validity duration in seconds (24 hours).
@@ -55,6 +59,7 @@ pub const MAX_INVITE_LENGTH: usize = 512;
 pub const MAX_ADDRESS_HINT_LENGTH: usize = 256;
 
 /// Rate limit: max messages per second from a single peer.
+#[allow(dead_code)]
 pub const RATE_LIMIT_MSGS_PER_SEC: u32 = 20;
 
 #[derive(Debug, Error)]
@@ -73,14 +78,19 @@ pub enum ProtocolError {
     SerializationError(String),
     #[error("deserialization error: {0}")]
     DeserializationError(String),
+    #[allow(dead_code)]
     #[error("invalid handshake message")]
     InvalidHandshake,
+    #[allow(dead_code)]
     #[error("invalid invite format")]
     InvalidInvite,
+    #[allow(dead_code)]
     #[error("invite expired")]
     InviteExpired,
+    #[allow(dead_code)]
     #[error("invite signature invalid")]
     InviteSignatureInvalid,
+    #[allow(dead_code)]
     #[error("invalid sequence number")]
     InvalidSequence,
     #[error("message too large")]

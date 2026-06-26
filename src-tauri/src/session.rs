@@ -319,7 +319,7 @@ impl Session {
         self.tx_counter += 1;
 
         // Pad plaintext to obfuscate true length
-        let padded = crate::crypto::pad_message(plaintext);
+        let padded = crate::crypto::pad_message_variable(plaintext);
 
         // AAD = packet_type || counter (binds the ciphertext to its context)
         let mut aad = Vec::with_capacity(9);
@@ -378,7 +378,7 @@ impl Session {
         let padded = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
 
         // Remove padding to recover original plaintext
-        let plaintext = crate::crypto::unpad_message(&padded)?;
+        let plaintext = crate::crypto::unpad_message_variable(&padded)?;
 
         // ═══ Forward Secrecy Ratchet ═══
         // Evolve the receiving key AFTER successful decryption.
@@ -537,7 +537,7 @@ impl Session {
         self.tx_counter += 1;
 
         // Pad plaintext to obfuscate true length
-        let padded = crate::crypto::pad_message(plaintext);
+        let padded = crate::crypto::pad_message_variable(plaintext);
 
         let mut aad = Vec::with_capacity(9);
         aad.push(packet_type.to_byte());
@@ -588,7 +588,7 @@ impl Session {
         let padded = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
 
         // Remove padding
-        let plaintext = crate::crypto::unpad_message(&padded)?;
+        let plaintext = crate::crypto::unpad_message_variable(&padded)?;
 
         // Forward secrecy ratchet
         keys.ratchet_rx();
@@ -624,4 +624,397 @@ fn now_unix_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock before Unix epoch")
         .as_secs()
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    use crate::crypto::{self, IdentityKeypair, SessionKeys};
+    use crate::protocol::{EncryptedEnvelope, PacketType, PROTOCOL_VERSION};
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn init_crypto() {
+        let _ = crypto::init();
+    }
+
+    fn make_test_identity() -> IdentityKeypair {
+        IdentityKeypair::generate().unwrap()
+    }
+
+    fn make_session_keys() -> SessionKeys {
+        // We can't construct SessionKeys directly (fields are private),
+        // so we do a minimal key exchange to get valid keys.
+        let alice_eph = crate::crypto::EphemeralKeypair::generate();
+        let bob_eph = crate::crypto::EphemeralKeypair::generate();
+        let alice_keys = alice_eph
+            .client_session_keys(&bob_eph.public_key_bytes())
+            .unwrap();
+        let bob_keys = bob_eph
+            .server_session_keys(&alice_eph.public_key_bytes())
+            .unwrap();
+        alice_keys
+    }
+
+    // ─── Unit Tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_session_new() {
+        init_crypto();
+        let s = Session::new();
+        assert_eq!(s.state, ConnectionState::Disconnected);
+        assert_eq!(s.peer_identity_pub, [0u8; 32]);
+        assert!(!s.peer_verified);
+        assert!(s.session_keys.is_none());
+        assert_eq!(s.established_at, 0);
+        assert!(s.peer_candidates.is_empty());
+        assert!(s.our_candidates.is_empty());
+        // Random initial counters should be non-zero (extremely unlikely to be zero)
+        assert!(s.tx_counter > 0 || s.rx_high_water_mark > 0,
+            "counters should be random, got tx={} rx={}", s.tx_counter, s.rx_high_water_mark);
+    }
+
+    #[test]
+    fn test_session_initial_counters_random() {
+        init_crypto();
+        // Generate multiple sessions and verify counters aren't all the same
+        let sessions: Vec<Session> = (0..5).map(|_| Session::new()).collect();
+        let tx_vals: Vec<u64> = sessions.iter().map(|s| s.tx_counter).collect();
+        let rx_vals: Vec<u64> = sessions.iter().map(|s| s.rx_high_water_mark).collect();
+        // At most one session may have the same tx_counter (collision extremely unlikely)
+        let unique_tx: std::collections::HashSet<&u64> = tx_vals.iter().collect();
+        let unique_rx: std::collections::HashSet<&u64> = rx_vals.iter().collect();
+        assert!(unique_tx.len() >= 4, "tx counters not random enough: {:?}", tx_vals);
+        assert!(unique_rx.len() >= 4, "rx counters not random enough: {:?}", rx_vals);
+    }
+
+    #[test]
+    fn test_mark_peer_verified() {
+        init_crypto();
+        let mut s = Session::new();
+        assert!(!s.peer_verified);
+        s.mark_peer_verified();
+        assert!(s.peer_verified);
+    }
+
+    #[test]
+    fn test_peer_fingerprint_no_identity() {
+        init_crypto();
+        let s = Session::new();
+        let fp = s.peer_fingerprint();
+        // Fingerprint of all-zero key should be deterministic
+        assert_eq!(fp.len(), 47, "fingerprint should be 47 chars (16 hex bytes with separators)");
+    }
+
+    #[test]
+    fn test_drop_clears_keys() {
+        init_crypto();
+        let mut s = Session::new();
+        s.session_keys = Some(make_session_keys());
+        s.peer_identity_pub = [0xAB; 32];
+        drop(s);
+        // Can't assert post-drop, but this ensures the Drop impl doesn't panic.
+        // (Valgrind/Miri would catch actual zeroize failures.)
+    }
+
+    #[test]
+    fn test_check_expiry_no_established() {
+        init_crypto();
+        let s = Session::new();
+        assert_eq!(s.established_at, 0);
+        // Not yet established — check_expiry should return Ok
+        assert!(s.check_expiry().is_ok());
+    }
+
+    #[test]
+    fn test_check_expiry_fresh() {
+        init_crypto();
+        let mut s = Session::new();
+        s.established_at = now_unix_secs();
+        assert!(s.check_expiry().is_ok());
+    }
+
+    #[test]
+    fn test_check_expiry_expired() {
+        init_crypto();
+        let mut s = Session::new();
+        // Set established_at far in the past
+        s.established_at = 1; // Unix epoch + 1 second
+        assert!(s.check_expiry().is_err());
+        assert!(matches!(s.check_expiry(), Err(SessionError::SessionExpired)));
+    }
+
+    #[test]
+    fn test_state_transitions_reject_operations() {
+        init_crypto();
+        let mut s = Session::new();
+        // No session keys, wrong state — operations should fail
+        let dummy: &[u8] = &[];
+        let result = s.decrypt_message(&RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::EncryptedMessage,
+            body: vec![],
+        });
+        assert!(matches!(result, Err(SessionError::InvalidState)));
+    }
+
+    #[test]
+    fn test_replay_protection() {
+        init_crypto();
+        let mut s = Session::new();
+        let keys = make_session_keys();
+        s.session_keys = Some(keys);
+        s.state = ConnectionState::Established;
+        s.rx_high_water_mark = 100;
+        s.established_at = now_unix_secs();
+
+        // Build a frame with a counter <= high water mark
+        let env = EncryptedEnvelope {
+            nonce: vec![0u8; 24],
+            counter: 50, // <= 100, should be rejected
+            ciphertext: vec![0u8; 16],
+        };
+        let body = crate::protocol::serialize(&env).unwrap();
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::EncryptedMessage,
+            body,
+        };
+
+        let result = s.decrypt_message(&frame);
+        assert!(matches!(result, Err(SessionError::ReplayDetected { .. })));
+    }
+
+    #[test]
+    fn test_established_at_tracking() {
+        init_crypto();
+        let now = now_unix_secs();
+        let mut s = Session::new();
+        s.established_at = now;
+        assert_eq!(s.established_at, now);
+    }
+
+    // ─── Async Integration Tests ──────────────────────────────
+
+    #[tokio::test]
+    async fn test_send_and_receive_text() {
+        init_crypto();
+        // Set up sessions with keys manually
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        let keys_alice = make_session_keys();
+        let keys_bob = make_session_keys();
+
+        alice.session_keys = Some(keys_alice);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+
+        bob.session_keys = Some(keys_bob);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+
+        let (mut alice_stream, mut bob_read) = tokio::io::duplex(65536);
+
+        // Alice sends a text message
+        let msg_id = alice.send_text(&mut alice_stream, "Hello, Bob!").await.unwrap();
+        assert!(!msg_id.is_empty(), "message ID should not be empty");
+
+        // Bob reads the frame
+        let frame = crate::network::read_frame_impl(&mut bob_read).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::EncryptedMessage);
+
+        // Bob couldn't decrypt it because keys don't match (we used different key pairs)
+        // The test just verifies that send_text completes and produces a valid frame.
+        // For a proper decrypt test we need matching keys.
+        let _ = frame;
+        let _ = msg_id;
+    }
+
+    #[tokio::test]
+    async fn test_send_and_decrypt_with_matching_keys() {
+        init_crypto();
+        // Generate a matching keypair for both sessions
+        let eph = EphemeralKeypair::generate();
+        let eph2 = EphemeralKeypair::generate();
+
+        let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        alice.session_keys = Some(alice_keys);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        bob.session_keys = Some(bob_keys);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+
+        // Duplex for communication
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        // Alice encodes a text message body directly and sends it via send_message's
+        // internal send_encrypted path. Since send_text is async, we use it.
+        let test_text = "Secret message 🔒";
+        let msg_id = alice.send_text(&mut alice_w, test_text).await.unwrap();
+        assert!(!msg_id.is_empty());
+
+        // Bob reads and decrypts the frame
+        let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
+        let body = bob.decrypt_message(&frame).unwrap();
+        match &body {
+            crate::protocol::MessageBody::Text { id, content } => {
+                assert_eq!(content, test_text);
+                assert_eq!(id, &msg_id);
+            }
+            other => panic!("expected Text body, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_file_transfer_request_roundtrip() {
+        init_crypto();
+        let eph = EphemeralKeypair::generate();
+        let eph2 = EphemeralKeypair::generate();
+        let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        alice.session_keys = Some(alice_keys);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        bob.session_keys = Some(bob_keys);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        // Send a file transfer request
+        let transfer_id = "test-transfer-001";
+        alice.send_file_request(
+            &mut alice_w,
+            transfer_id,
+            "report.pdf",
+            1048576,
+            16,
+            vec![0xAB; 32],
+        ).await.unwrap();
+
+        // Bob receives and decrypts
+        let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::EncryptedMessage);
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let req: crate::protocol::FileTransferRequestData = crate::protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(req.transfer_id, transfer_id);
+        assert_eq!(req.filename, "report.pdf");
+        assert_eq!(req.total_size, 1048576);
+        assert_eq!(req.total_chunks, 16);
+    }
+
+    #[tokio::test]
+    async fn test_replay_protection_integration() {
+        init_crypto();
+        let eph = EphemeralKeypair::generate();
+        let eph2 = EphemeralKeypair::generate();
+        let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        alice.session_keys = Some(alice_keys);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        bob.session_keys = Some(bob_keys);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        // Send first message
+        alice.send_text(&mut alice_w, "Message 1").await.unwrap();
+        let frame1 = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
+        bob.decrypt_message(&frame1).unwrap();
+
+        // Save the raw frame data for replay attempt
+        let frame1_clone = RawFrame {
+            version: frame1.version,
+            packet_type: frame1.packet_type,
+            body: frame1.body.clone(),
+        };
+
+        // Send second message (advances counters)
+        alice.send_text(&mut alice_w, "Message 2").await.unwrap();
+        let frame2 = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
+        bob.decrypt_message(&frame2).unwrap();
+
+        // Try to replay frame1 — should be rejected
+        let replay_result = bob.decrypt_message(&frame1_clone);
+        assert!(matches!(replay_result, Err(SessionError::ReplayDetected { .. })),
+            "replayed message should be rejected");
+    }
+
+    #[tokio::test]
+    async fn test_conversation_meta_roundtrip() {
+        init_crypto();
+
+        // Test via send_conversation_meta
+        let eph = EphemeralKeypair::generate();
+        let eph2 = EphemeralKeypair::generate();
+        let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        alice.session_keys = Some(alice_keys);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        bob.session_keys = Some(bob_keys);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        alice.send_conversation_meta(&mut alice_w, "Alice", "Bob").await.unwrap();
+        let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let meta: crate::protocol::ConversationMetaData = crate::protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(meta.my_display_name, "Alice");
+        assert_eq!(meta.your_display_name, "Bob");
+    }
+
+    #[tokio::test]
+    async fn test_encrypted_message_uses_ratchet() {
+        init_crypto();
+        let eph = EphemeralKeypair::generate();
+        let eph2 = EphemeralKeypair::generate();
+        let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        alice.session_keys = Some(alice_keys);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        bob.session_keys = Some(bob_keys);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+
+        // Save initial keys
+        let initial_tx = alice.session_keys.as_ref().unwrap().tx_key;
+        let initial_rx = bob.session_keys.as_ref().unwrap().rx_key;
+
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        // Send one message — this triggers ratchet on both sides
+        alice.send_text(&mut alice_w, "Message 1").await.unwrap();
+        let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
+        bob.decrypt_message(&frame).unwrap();
+
+        // After ratchet, keys should have changed
+        assert_ne!(alice.session_keys.as_ref().unwrap().tx_key, initial_tx,
+            "alice tx_key should change after ratchet");
+        assert_ne!(bob.session_keys.as_ref().unwrap().rx_key, initial_rx,
+            "bob rx_key should change after ratchet (mirrors alice tx)");
+    }
 }

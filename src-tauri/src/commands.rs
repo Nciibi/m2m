@@ -229,15 +229,17 @@ pub async fn create_invite(
 
     let validity_secs = validity_minutes.saturating_mul(60);
 
-    // ─── Tor Inbound Warning ───
+    // ─── Tor Guard ───
     // When Tor is enabled but private mode is off, the invite contains
     // the user's real IP address. Inbound connections will bypass Tor
-    // entirely, defeating the purpose of Tor for privacy.
+    // entirely. We refuse to create the invite rather than just warning.
     if crate::tor::is_enabled() && !private_mode {
-        tracing::warn!(
-            "Tor is enabled for outbound connections, but this invite contains \
-             your real IP address. Inbound connections will bypass Tor and reveal \
-             your public IP. Enable Private Mode to exclude the IP from invites."
+        return Err(
+            "Tor is enabled for outbound connections but Private Mode is off. \
+             This invite would contain your real IP address, and inbound connections \
+             would bypass Tor entirely. Enable Private Mode in Settings to generate \
+             invites that exclude your public IP."
+                .to_string(),
         );
     }
 
@@ -303,6 +305,27 @@ fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
     let pool_f = pool_size as f64;
     let len = passphrase.len() as f64;
     len * pool_f.log2()
+}
+
+/// Decode a 64-char hex string into a 32-byte peer key.
+/// Returns an error if the hex string is malformed or wrong length.
+fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
+    if hex_str.len() != 64 {
+        return Err(format!(
+            "invalid peer key hex length: expected 64 chars, got {}",
+            hex_str.len()
+        ));
+    }
+    let bytes = hex::decode(hex_str).map_err(|e| format!("invalid peer key hex: {e}"))?;
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&bytes);
+    Ok(key)
+}
+
+/// Decode a peer hex key silently returning [0u8; 32] on failure.
+/// Only use when the caller discards errors anyway (store operations).
+fn decode_peer_key_or_zero(hex_str: &str) -> [u8; 32] {
+    decode_peer_key(hex_str).unwrap_or([0u8; 32])
 }
 
 /// Resolve the local (non-loopback) IP address used for internet connectivity.
@@ -516,7 +539,7 @@ async fn handle_incoming_connection(
         let ks = state.key_store.lock().await;
         if let Some(ref store) = *ks {
             let _ = store.upsert_peer(
-                &hex::decode(&peer_key_hex).unwrap_or_default(),
+                &decode_peer_key_or_zero(&peer_key_hex),
                 &peer_fingerprint,
                 None,
             );
@@ -657,7 +680,7 @@ pub async fn send_message(
         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
             let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), &**key)
                 .unwrap_or_default();
-            let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
+            let _ = store.ensure_conversation(&peer_key_hex, &decode_peer_key_or_zero(&peer_key_hex));
             let _ = store.store_message(
                 &msg_id, &peer_key_hex, "sent",
                 &encrypted, &nonce, now as i64,
@@ -804,7 +827,7 @@ fn spawn_receive_loop(
                                         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
                                             let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), &**key)
                                                 .unwrap_or_default();
-                                            let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
+                                            let _ = store.ensure_conversation(&peer_key_hex, &decode_peer_key_or_zero(&peer_key_hex));
                                             let _ = store.store_message(
                                                 id, &peer_key_hex, "received",
                                                 &encrypted, &nonce, now as i64,

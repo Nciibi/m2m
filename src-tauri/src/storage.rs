@@ -213,48 +213,6 @@ impl KeyStore {
         Ok(())
     }
 
-    /// Mark a peer as verified.
-    pub fn set_peer_verified(&self, public_key: &[u8], verified: bool) -> Result<(), StorageError> {
-        self.conn.execute(
-            "UPDATE peers SET verified = ?1 WHERE public_key = ?2",
-            params![verified as i32, public_key],
-        )?;
-        Ok(())
-    }
-
-    /// Check if an invite nonce has been consumed.
-    pub fn is_invite_consumed(&self, nonce: &[u8]) -> Result<bool, StorageError> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM consumed_invites WHERE nonce = ?1",
-            params![nonce],
-            |row| row.get(0),
-        )?;
-        Ok(count > 0)
-    }
-
-    /// Mark an invite nonce as consumed.
-    pub fn consume_invite(&self, nonce: &[u8]) -> Result<(), StorageError> {
-        let now = chrono::Utc::now().timestamp();
-        self.conn.execute(
-            "INSERT OR IGNORE INTO consumed_invites (nonce, consumed_at) VALUES (?1, ?2)",
-            params![nonce, now],
-        )?;
-        Ok(())
-    }
-
-    /// Securely delete all data.
-    /// Uses DELETE + VACUUM to overwrite freed pages on disk.
-    pub fn secure_delete_all(&self) -> Result<(), StorageError> {
-        // Enable secure_delete so SQLite overwrites deleted content with zeros
-        self.conn.pragma_update(None, "secure_delete", "ON")?;
-        self.conn.execute_batch(
-            "DELETE FROM identity;
-             DELETE FROM peers;
-             DELETE FROM consumed_invites;
-             VACUUM;",
-        )?;
-        Ok(())
-    }
 }
 
 /// The message store: holds chat history (optional).
@@ -369,7 +327,7 @@ impl MessageStore {
         limit: i64,
     ) -> Result<Vec<StoredMessage>, StorageError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, direction, content_encrypted, content_nonce, timestamp, delivered
+            "SELECT id, direction, content_encrypted, content_nonce, timestamp
              FROM messages WHERE conversation_id = ?1
              ORDER BY timestamp DESC LIMIT ?2",
         )?;
@@ -380,7 +338,6 @@ impl MessageStore {
                 content_encrypted: row.get(2)?,
                 content_nonce: row.get(3)?,
                 timestamp: row.get(4)?,
-                delivered: row.get::<_, i32>(5)? != 0,
             })
         })?;
         let mut messages = Vec::new();
@@ -463,44 +420,6 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Delete expired conversations. Returns IDs of conversations needing export first.
-    pub fn delete_expired_conversations(&self) -> Result<Vec<String>, StorageError> {
-        let now = chrono::Utc::now().timestamp();
-
-        // Find conversations that need export before deletion
-        let mut export_stmt = self.conn.prepare(
-            "SELECT id FROM conversations WHERE auto_delete_at IS NOT NULL AND auto_delete_at <= ?1 AND retention_policy = 'export'",
-        )?;
-        let export_ids: Vec<String> = export_stmt
-            .query_map(params![now], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        // Delete conversations with 'delete' policy that have expired
-        self.conn.pragma_update(None, "secure_delete", "ON")?;
-
-        let mut del_stmt = self.conn.prepare(
-            "SELECT id FROM conversations WHERE auto_delete_at IS NOT NULL AND auto_delete_at <= ?1 AND retention_policy = 'delete'",
-        )?;
-        let delete_ids: Vec<String> = del_stmt
-            .query_map(params![now], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        for id in &delete_ids {
-            self.conn.execute(
-                "DELETE FROM messages WHERE conversation_id = ?1",
-                params![id],
-            )?;
-            self.conn.execute(
-                "DELETE FROM conversations WHERE id = ?1",
-                params![id],
-            )?;
-        }
-
-        Ok(export_ids)
-    }
-
     /// Export all messages for a conversation.
     pub fn export_conversation_messages(
         &self,
@@ -557,16 +476,6 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Delete all data and vacuum.
-    pub fn secure_delete_all(&self) -> Result<(), StorageError> {
-        self.conn.pragma_update(None, "secure_delete", "ON")?;
-        self.conn.execute_batch(
-            "DELETE FROM messages;
-             DELETE FROM conversations;
-             VACUUM;",
-        )?;
-        Ok(())
-    }
 }
 
 /// A stored message row.
@@ -577,7 +486,6 @@ pub struct StoredMessage {
     pub content_encrypted: Vec<u8>,
     pub content_nonce: Vec<u8>,
     pub timestamp: i64,
-    pub delivered: bool,
 }
 
 /// Summary of a conversation for the frontend.

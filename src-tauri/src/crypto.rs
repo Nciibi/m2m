@@ -22,13 +22,15 @@ use thiserror::Error;
 /// Maximum size of data that can be encrypted in a single operation (16 MiB).
 const MAX_ENCRYPT_SIZE: usize = 16 * 1024 * 1024;
 
-/// Context string for HKDF session key derivation.
+/// Context string for HKDF session key derivation (reserved).
+#[allow(dead_code)]
 const SESSION_KEY_CONTEXT: &[u8] = b"m2m-v1-session-key";
 
 #[derive(Debug, Error)]
 pub enum CryptoError {
     #[error("sodiumoxide initialization failed")]
     InitFailed,
+    #[allow(dead_code)]
     #[error("encryption failed")]
     EncryptionFailed,
     #[error("decryption failed: ciphertext may be tampered")]
@@ -196,13 +198,9 @@ impl Drop for EphemeralKeypair {
 /// Separate keys for sending and receiving (directional).
 /// Supports ratcheting for forward secrecy: keys evolve after each use.
 pub struct SessionKeys {
-    rx_key: [u8; 32],
-    tx_key: [u8; 32],
+    pub(crate) rx_key: [u8; 32],
+    pub(crate) tx_key: [u8; 32],
 }
-
-/// Block size for message padding to obfuscate plaintext length.
-/// All encrypted messages are padded to the next multiple of this block size.
-const PADDING_BLOCK: usize = 256;
 
 impl SessionKeys {
     /// Encrypt a plaintext message for sending.
@@ -283,65 +281,72 @@ pub fn init() -> Result<(), CryptoError> {
 
 // ─── Message Padding ────────────────────────────────────────────────────────
 
-/// Pad a plaintext message to obfuscate its true length on the wire.
-///
-/// Scheme: [original data] [random padding bytes] [pad_len as u8]
-/// Where total = len(original) + pad_len + 1 is a multiple of PADDING_BLOCK.
-/// pad_len ranges from 0 to 255.
-///
-/// This prevents traffic analysis from determining message content type
-/// by size — all encrypted messages appear to be multiples of PADDING_BLOCK.
-///
-/// # Arguments
-/// * `plaintext` - The message to pad
-///
-/// # Returns
-/// Padded message: [`plaintext` | `padding` | `pad_len`]
-pub fn pad_message(plaintext: &[u8]) -> Vec<u8> {
-    let block = PADDING_BLOCK as u32;
-    // Calculate padding needed: (len + pad_len + 1) % block == 0
-    let needed = (plaintext.len() as u32 + 1) % block;
-    // We want: (plaintext.len() + pad_len + 1) % block == 0
-    // So pad_len = (block - (plaintext.len() + 1) % block) % block
-    let pad_len = if needed == 0 { 0 } else { block - needed };
+/// NOTE: Fixed `pad_message`/`unpad_message` have been replaced by the
+/// exponential-tier `pad_message_variable`/`unpad_message_variable` above.
 
-    let mut padded = Vec::with_capacity(plaintext.len() + pad_len as usize + 1);
+// ─── Variable Padding (Exponential Tiers) ──────────────────────────────────
+
+/// Exponential padding thresholds.
+/// Short messages are padded aggressively, long messages less so.
+/// File chunks get minimal padding (they're already close to chunk size).
+const PADDING_TIERS: &[(usize, usize)] = &[
+    (64, 1024),      // ≤64 bytes → pad to 1KB (aggressive)
+    (256, 2048),     // ≤256 bytes → pad to 2KB
+    (1024, 4096),    // ≤1KB → pad to 4KB
+    (4096, 8192),    // ≤4KB → pad to 8KB
+    (usize::MAX, 16384), // >4KB → pad to 16KB
+];
+
+/// Pad a message using exponential tier-based padding.
+///
+/// Unlike the fixed `pad_message_variable()` which uses a 256-byte block for everything,
+/// this function applies different padding aggressiveness based on message size:
+///
+/// | Message Size | Padding Block | Rationale |
+/// |-------------|--------------|-----------|
+/// | 0-64 B      | 1024 B       | Short text; makes "hi" and "I resign" same size |
+/// | 65-256 B    | 2048 B       | Paragraph text |
+/// | 257-1 KB    | 4096 B       | Long messages |
+/// | 1-4 KB      | 8192 B       | Very long messages |
+/// | >4 KB       | 16384 B      | File chunks (already near chunk size) |
+///
+/// This makes traffic analysis significantly harder: a single word, a paragraph,
+/// and a long message all look like the same wire size within their tier.
+pub fn pad_message_variable(plaintext: &[u8]) -> Vec<u8> {
+    let len = plaintext.len();
+    let block_size = PADDING_TIERS
+        .iter()
+        .find(|(threshold, _)| len <= *threshold)
+        .map(|(_, block)| *block)
+        .unwrap_or(16384);
+
+    // Calculate padding: (len + pad_len + 2) % block_size == 0
+    // The +2 accounts for the u16 padding-length suffix, which supports
+    // block sizes up to 65535 (all our tiers: 1024–16384).
+    let needed = (len + 2) % block_size;
+    let pad_len = if needed == 0 { 0 } else { block_size - needed };
+
+    let mut padded = Vec::with_capacity(len + pad_len + 2);
     padded.extend_from_slice(plaintext);
-    // Fill padding with random bytes for obfuscation
-    padded.extend(random_bytes(pad_len as usize));
-    padded.push(pad_len as u8);
+    padded.extend(random_bytes(pad_len));
+    padded.extend_from_slice(&(pad_len as u16).to_be_bytes());
     padded
 }
 
-/// Remove padding from a padded message.
-///
-/// Reads the last byte to determine pad length, strips padding and the
-/// length byte, returning only the original plaintext.
-///
-/// # Arguments
-/// * `padded` - The padded message
-///
-/// # Returns
-/// Original plaintext, or CryptoError if padding is invalid
-pub fn unpad_message(padded: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    if padded.is_empty() {
+/// Remove exponential padding from a padded message.
+pub fn unpad_message_variable(padded: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    if padded.len() < 2 {
         return Err(CryptoError::DecryptionFailed);
     }
-    let pad_len = padded[padded.len() - 1] as usize;
-    // Validate: pad_len + 1 bytes must fit within the message
-    // pad_len can be 0-255, so pad_len + 1 is 1-256
-    if pad_len >= padded.len() {
-        // pad_len can't be >= the entire message (need at least 1 byte of data)
+    let pad_len = u16::from_be_bytes([
+        padded[padded.len() - 2],
+        padded[padded.len() - 1],
+    ]) as usize;
+    if pad_len + 2 > padded.len() {
         return Err(CryptoError::DecryptionFailed);
     }
-    let original_len = padded.len() - 1 - pad_len;
+    let original_len = padded.len() - 2 - pad_len;
     Ok(padded[..original_len].to_vec())
-}
-
-/// Create a `Zeroizing` wrapper around a 32-byte key.
-/// This ensures the key is automatically zeroized when dropped.
-pub fn protected_key(key: [u8; 32]) -> zeroize::Zeroizing<[u8; 32]> {
-    zeroize::Zeroizing::new(key)
 }
 
 #[cfg(test)]
@@ -364,39 +369,48 @@ mod crypto_tests {
             &[0u8; 1000],
         ];
         for input in test_cases {
-            let padded = pad_message(input);
-            let unpadded = unpad_message(&padded).unwrap();
+            let padded = pad_message_variable(input);
+            let unpadded = unpad_message_variable(&padded).unwrap();
             assert_eq!(input, &unpadded[..], "roundtrip failed for len={}", input.len());
             // Verify padding meets block alignment
-            // padded = input + pad_bytes + [pad_len]
-            // total should be input.len() + pad_len + 1
-            let pad_len = padded[padded.len() - 1] as usize;
-            assert_eq!(padded.len(), input.len() + pad_len + 1,
+            // padded = input + pad_bytes + [pad_len as u16]
+            // total should be input.len() + pad_len + 2
+            let pad_len = u16::from_be_bytes([
+                padded[padded.len() - 2],
+                padded[padded.len() - 1],
+            ]) as usize;
+            assert_eq!(padded.len(), input.len() + pad_len + 2,
                 "padding length mismatch for len={}", input.len());
         }
     }
 
     #[test]
     fn test_padding_hides_length() {
-        // Messages of different lengths should produce same-length ciphertexts
-        // when they're in the same padding block
-        let short = pad_message(b"hi");
-        let long = pad_message(b"hello world this is a longer message");
-        // After padding, both should be aligned to PADDING_BLOCK
-        assert_eq!(short.len() % PADDING_BLOCK, 0,
-            "short message padding not aligned: len={}", short.len());
-        assert_eq!(long.len() % PADDING_BLOCK, 0,
-            "long message padding not aligned: len={}", long.len());
+        // Messages of different lengths within the same tier should
+        // produce the same total padded length (same block alignment).
+        // Both "hi" (2 B) and a longer message (35 B) are in the ≤64 → 1024 B tier.
+        let short = pad_message_variable(b"hi");
+        let long = pad_message_variable(b"hello world this is a longer message");
+        // Both should produce the same total length (2 + pad_len + 2 == 35 + pad_len' + 2)
+        // since both round up to the same 1024-byte block.
+        assert_eq!(short.len(), long.len(),
+            "messages in same tier should produce same padded length: {} vs {}",
+            short.len(), long.len());
+        // The padded length should be a multiple of the tier block size (1024).
+        assert_eq!(short.len() % 1024, 0,
+            "padded length {} not aligned to block 1024", short.len());
     }
 
     #[test]
     fn test_invalid_unpad_rejected() {
-        // Empty message
-        assert!(unpad_message(b"").is_err());
-        // Message with pad_len = 255 but only 10 bytes total
+        // Too short (< 2 bytes)
+        assert!(unpad_message_variable(b"").is_err());
+        assert!(unpad_message_variable(b"x").is_err());
+        // Message with pad_len = 0x03ff but only 10 bytes total
         let mut bad = vec![0u8; 10];
-        bad[9] = 255;
-        assert!(unpad_message(&bad).is_err());
+        bad[8] = 0x03;
+        bad[9] = 0xff;
+        assert!(unpad_message_variable(&bad).is_err());
     }
 
     #[test]
