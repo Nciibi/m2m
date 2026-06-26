@@ -522,6 +522,8 @@ impl Session {
     }
 
     /// Encrypt and send data with a specific packet type.
+    /// Applies KDF ratchet after encryption for forward secrecy.
+    /// Pads plaintext to obfuscate message length.
     async fn send_encrypted_typed<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
@@ -530,16 +532,22 @@ impl Session {
     ) -> Result<(), SessionError> {
         let keys = self
             .session_keys
-            .as_ref()
+            .as_mut()
             .ok_or(SessionError::InvalidState)?;
 
         self.tx_counter += 1;
+
+        // Pad plaintext to obfuscate true length
+        let padded = crate::crypto::pad_message(plaintext);
 
         let mut aad = Vec::with_capacity(9);
         aad.push(packet_type.to_byte());
         aad.extend_from_slice(&self.tx_counter.to_be_bytes());
 
-        let (nonce, ciphertext) = keys.encrypt(plaintext, &aad)?;
+        let (nonce, ciphertext) = keys.encrypt(&padded, &aad)?;
+
+        // Forward secrecy ratchet
+        keys.ratchet_tx();
 
         let envelope = EncryptedEnvelope {
             nonce,
@@ -553,6 +561,7 @@ impl Session {
     }
 
     /// Decrypt an encrypted frame of any type (not just EncryptedMessage).
+    /// Removes padding after decryption, then ratchets the receiving key.
     pub fn decrypt_typed_frame(&mut self, frame: &RawFrame) -> Result<Vec<u8>, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
@@ -570,14 +579,21 @@ impl Session {
 
         let keys = self
             .session_keys
-            .as_ref()
+            .as_mut()
             .ok_or(SessionError::InvalidState)?;
 
         let mut aad = Vec::with_capacity(9);
         aad.push(frame.packet_type.to_byte());
         aad.extend_from_slice(&envelope.counter.to_be_bytes());
 
-        let plaintext = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
+        let padded = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
+
+        // Remove padding
+        let plaintext = crate::crypto::unpad_message(&padded)?;
+
+        // Forward secrecy ratchet
+        keys.ratchet_rx();
+
         self.rx_high_water_mark = envelope.counter;
 
         Ok(plaintext)
