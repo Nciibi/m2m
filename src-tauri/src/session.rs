@@ -176,13 +176,16 @@ impl Session {
     }
 
     /// Execute the handshake as the responder (server).
+    /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
     pub async fn handshake_as_responder(
         &mut self,
         stream: &mut TcpStream,
         identity: &IdentityKeypair,
         init_frame: &RawFrame,
+        local_candidates: Vec<WireCandidate>,
     ) -> Result<(), SessionError> {
         self.state = ConnectionState::Handshaking;
+        self.our_candidates = local_candidates.clone();
 
         // Parse the HandshakeInit we already received
         let init: HandshakeInit = protocol::deserialize(&init_frame.body)?;
@@ -213,13 +216,14 @@ impl Session {
 
         let signature = identity.sign(&sign_data);
 
-        // Send HandshakeResponse
+        // Send HandshakeResponse with our network candidates
         let response = HandshakeResponse {
             version: PROTOCOL_VERSION,
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
             timestamp: now,
             signature,
+            candidates: local_candidates,
         };
         let response_bytes = protocol::serialize(&response)?;
         network::write_frame(stream, PacketType::HandshakeResponse, &response_bytes).await?;
@@ -254,13 +258,16 @@ impl Session {
             ));
         }
 
+        // Store peer candidates for ICE-Lite
+        self.peer_candidates = init.candidates;
+
         // Session established
         self.peer_identity_pub = init.identity_pub;
         self.session_keys = Some(session_keys);
         self.established_at = now_unix_secs();
         self.state = ConnectionState::Established;
 
-        tracing::info!("session established as responder");
+        tracing::info!(peer = %self.peer_fingerprint(), candidates = %self.peer_candidates.len(), "session established as responder");
         Ok(())
     }
 

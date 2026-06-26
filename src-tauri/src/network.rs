@@ -26,7 +26,8 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum number of queued incoming connections.
-const LISTENER_BACKLOG: u32 = 8;
+/// Increased from 8 to 128 for better DoS resilience.
+const LISTENER_BACKLOG: u32 = 128;
 
 #[derive(Debug, Error)]
 pub enum NetworkError {
