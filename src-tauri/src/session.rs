@@ -10,11 +10,12 @@ use zeroize::Zeroize;
 
 use crate::crypto::{self, EphemeralKeypair, IdentityKeypair, SessionKeys};
 use crate::network::{self, ConnectionState, RawFrame};
+use crate::candidate;
 use crate::protocol::{
     self, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
     MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
     FileTransferRequestData, FileTransferChunkData, FileTransferCompleteData,
-    ConversationMetaData, MAX_FILE_CHUNK_SIZE,
+    ConversationMetaData, WireCandidate, MAX_FILE_CHUNK_SIZE,
 };
 
 use thiserror::Error;
@@ -53,6 +54,10 @@ pub struct Session {
     rx_high_water_mark: u64,
     /// Timestamp when the session was established.
     established_at: u64,
+    /// Peer's network candidates received during handshake.
+    pub peer_candidates: Vec<WireCandidate>,
+    /// Our own candidates sent during handshake.
+    pub our_candidates: Vec<WireCandidate>,
 }
 
 impl Session {
@@ -66,6 +71,8 @@ impl Session {
             tx_counter: 0,
             rx_high_water_mark: 0,
             established_at: 0,
+            peer_candidates: Vec::new(),
+            our_candidates: Vec::new(),
         }
     }
 
