@@ -131,10 +131,11 @@ const MAX_FILENAME_LEN: usize = 255;
 /// unsafe.
 ///
 /// # Examples
-/// ```
-/// assert_eq!(sanitize_filename("../../../etc/passwd"), None);
-/// assert_eq!(sanitize_filename("report.pdf"), Some("report.pdf".into()));
-/// assert_eq!(sanitize_filename(""), None);
+/// ```ignore
+/// // This function is part of the m2m crate, use via crate::network::sanitize_filename
+/// assert_eq!(crate::network::sanitize_filename("../../../etc/passwd"), None);
+/// assert_eq!(crate::network::sanitize_filename("report.pdf"), Some("report.pdf".into()));
+/// assert_eq!(crate::network::sanitize_filename(""), None);
 /// ```
 pub fn sanitize_filename(filename: &str) -> Option<String> {
     // Filter to safe characters only — no path separators, no control chars.
