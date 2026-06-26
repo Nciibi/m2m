@@ -162,6 +162,19 @@ pub fn validate_frame_size(size: u32) -> Result<(), ProtocolError> {
     Ok(())
 }
 
+// --- ICE Candidate (Wire Format) ---
+
+/// A network candidate in wire format, exchanged during handshake.
+/// This is a compact representation — the full candidate object lives
+/// only in the candidate module and is not serialized over the wire.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WireCandidate {
+    /// IP:port address (e.g. "1.2.3.4:5678").
+    pub address: String,
+    /// Candidate type as u8: 0=host, 1=srflx, 2=prflx, 3=relay.
+    pub candidate_type: u8,
+}
+
 // --- Handshake Messages ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +184,10 @@ pub struct HandshakeInit {
     pub identity_pub: [u8; 32],
     pub timestamp: u64,
     pub signature: Vec<u8>,
+    /// Network candidates for ICE-Lite connectivity.
+    /// Allows the responder to know the initiator's alternative addresses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<WireCandidate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,6 +197,10 @@ pub struct HandshakeResponse {
     pub identity_pub: [u8; 32],
     pub timestamp: u64,
     pub signature: Vec<u8>,
+    /// Network candidates for ICE-Lite connectivity.
+    /// Allows the initiator to know the responder's alternative addresses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<WireCandidate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

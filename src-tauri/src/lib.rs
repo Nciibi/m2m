@@ -14,6 +14,7 @@
 //! - tor: SOCKS5 proxy support for Tor onion routing
 //! - commands: Tauri IPC bridge (no secrets exposed to UI)
 
+mod candidate;
 mod commands;
 mod crypto;
 mod identity;
