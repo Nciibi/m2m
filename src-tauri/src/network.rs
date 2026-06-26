@@ -195,7 +195,7 @@ pub async fn start_listener(
 
 /// Connect to a remote peer with timeout.
 /// Routes through Tor SOCKS5 proxy when Tor is enabled, otherwise direct TCP.
-/// Sets TCP keepalive on the connected socket to maintain NAT bindings.
+/// Enables TCP keepalive to maintain NAT bindings and detect silent peer disconnects.
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     tracing::info!(target_addr = %addr, tor_enabled = crate::tor::is_enabled(), "attempting TCP connection");
     let result = time::timeout(CONNECT_TIMEOUT, crate::tor::connect(addr)).await;
@@ -214,27 +214,11 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
             )),
         })?;
 
-    // Enable TCP keepalive to maintain NAT bindings and detect dead peers.
-    // This is set at the socket level before any I/O happens.
-    let socket = stream.into_std()?;
-    // Keepalive: send first probe after 30s idle, then every 15s.
-    let keepalive = socket2::TcpKeepalive::new()
-        .with_time(std::time::Duration::from_secs(30))
-        .with_interval(std::time::Duration::from_secs(15));
-    socket.set_tcp_keepalive(&keepalive).ok();
-    // Set a reasonable keepalive retry count (varies by OS, but typically ~3 is the minimum).
-    #[cfg(target_os = "linux")]
-    {
-        // Linux: setsockopt TCP_KEEPCNT
-        use std::os::unix::io::AsRawFd;
-        const TCP_KEEPCNT: libc::c_int = 6;
-        let fd = socket.as_raw_fd();
-        let cnt: libc::c_int = 5;
-        unsafe {
-            libc::setsockopt(fd, libc::IPPROTO_TCP, TCP_KEEPCNT, &cnt as *const _ as *const libc::c_void, std::mem::size_of::<libc::c_int>() as libc::socklen_t);
-        }
-    }
-    let stream = TcpStream::from_std(socket)?;
+    // Enable TCP keepalive with OS defaults to maintain NAT bindings.
+    // This prevents NAT gateways from dropping the mapping due to inactivity.
+    let _ = stream.set_keepalive(Some(Duration::from_secs(30)));
+    // Set TCP_NODELAY to disable Nagle's algorithm for lower latency messaging.
+    let _ = stream.set_nodelay(true);
 
     Ok(stream)
 }
