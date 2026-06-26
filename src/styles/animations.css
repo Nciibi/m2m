@@ -1,0 +1,136 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   M2M Animations
+   All animations use transform + opacity only for GPU compositing.
+   Respects prefers-reduced-motion throughout.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── App Entry ─── */
+@keyframes appFadeIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Message Bubble ─── */
+@keyframes msgSlide {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes msgReceived {
+  from { opacity: 0; transform: translateY(10px); }
+  50%  { box-shadow: 0 0 20px var(--color-accent-glow); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Loading Dots ─── */
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Pulse Ring ─── */
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 var(--color-accent-glow-strong); }
+  50%  { box-shadow: 0 0 20px 4px var(--color-accent-glow); }
+  100% { box-shadow: 0 0 0 0 var(--color-accent-glow-strong); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.7; transform: scale(0.85); }
+}
+
+/* ─── Status Connect ─── */
+@keyframes connectPulse {
+  0%   { box-shadow: 0 0 0 0 var(--color-success-glow); }
+  50%  { box-shadow: 0 0 12px 4px var(--color-success-glow); }
+  100% { box-shadow: 0 0 0 0 var(--color-success-glow); }
+}
+
+/* ─── Toast ─── */
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(100%) scale(0.9); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes toastProgress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+/* ─── Modal ─── */
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes modalZoomIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ─── Shake (error feedback) ─── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(6px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+
+/* ─── Shimmer (loading / progress) ─── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ─── Clipboard "Copied!" pop ─── */
+@keyframes popIn {
+  0%   { transform: scale(0.5); opacity: 0; }
+  70%  { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes popOut {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
+
+/* ─── Lock Unlock ─── */
+@keyframes unlockBounce {
+  0%   { transform: scale(1) rotate(0); }
+  30%  { transform: scale(1.1) rotate(-5deg); }
+  60%  { transform: scale(1.05) rotate(5deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* ─── View Transition ─── */
+@keyframes slideInRight {
+  from { transform: translateX(30px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-30px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+/* ─── Scroll-to-bottom FAB ─── */
+@keyframes fabAppear {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}

@@ -1,0 +1,135 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   M2M Design Tokens
+   Every visual property in one place. No magic values in component CSS.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── Colors: Backgrounds ─── */
+  --color-bg-dark: #030408;
+  --color-bg-surface: rgba(15, 16, 25, 0.75);
+  --color-bg-card: rgba(25, 26, 40, 0.55);
+  --color-bg-input: rgba(255, 255, 255, 0.05);
+  --color-bg-input-focus: rgba(255, 255, 255, 0.1);
+  --color-bg-hover: rgba(255, 255, 255, 0.08);
+  --color-bg-active: rgba(255, 255, 255, 0.12);
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+  --color-bg-tooltip: rgba(20, 22, 35, 0.95);
+
+  /* ─── Colors: Borders ─── */
+  --color-border-default: rgba(255, 255, 255, 0.08);
+  --color-border-active: rgba(129, 140, 248, 0.6);
+  --color-border-strong: rgba(255, 255, 255, 0.15);
+  --color-border-accent: rgba(129, 140, 248, 0.2);
+
+  /* ─── Colors: Accent ─── */
+  --color-accent: #6366f1;
+  --color-accent-bright: #c7d2fe;
+  --color-accent-dim: #4f46e5;
+  --color-accent-glow: rgba(99, 102, 241, 0.3);
+  --color-accent-glow-strong: rgba(99, 102, 241, 0.5);
+  --color-accent-glow-subtle: rgba(99, 102, 241, 0.12);
+
+  /* ─── Colors: Text ─── */
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #0f172a;
+  --color-text-accent: #a5b4fc;
+  --color-text-placeholder: #475569;
+
+  /* ─── Colors: Semantic ─── */
+  --color-success: #10b981;
+  --color-success-glow: rgba(16, 185, 129, 0.25);
+  --color-success-bg: rgba(16, 185, 129, 0.12);
+  --color-danger: #ef4444;
+  --color-danger-glow: rgba(239, 68, 68, 0.25);
+  --color-danger-bg: rgba(239, 68, 68, 0.12);
+  --color-warning: #f59e0b;
+  --color-warning-glow: rgba(245, 158, 11, 0.25);
+  --color-warning-bg: rgba(245, 158, 11, 0.12);
+  --color-info: #6366f1;
+  --color-info-glow: rgba(99, 102, 241, 0.25);
+  --color-info-bg: rgba(99, 102, 241, 0.12);
+
+  /* ─── Glass Effects ─── */
+  --glass-blur: blur(40px);
+  --glass-saturate: saturate(200%);
+
+  /* ─── Spacing Scale (4px base) ─── */
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
+
+  /* ─── Typography Scale ─── */
+  --text-xs: 0.65rem;
+  --text-sm: 0.72rem;
+  --text-base: 0.78rem;
+  --text-md: 0.85rem;
+  --text-lg: 0.95rem;
+  --text-xl: 1.1rem;
+  --text-2xl: 1.3rem;
+  --text-3xl: 1.5rem;
+  --text-4xl: 2rem;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+    'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue', sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas',
+    'Monaco', 'Menlo', monospace;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.025em;
+  --letter-spacing-uppercase: 0.08em;
+
+  /* ─── Border Radius ─── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-full: 9999px;
+
+  /* ─── Shadows ─── */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.6);
+
+  --shadow-accent: 0 4px 12px rgba(99, 102, 241, 0.2);
+  --shadow-accent-strong: 0 8px 24px rgba(99, 102, 241, 0.4);
+  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  /* ─── Transitions ─── */
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-base: 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 500ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ─── Z-Index Scale ─── */
+  --z-base: 1;
+  --z-dropdown: 100;
+  --z-modal: 9999;
+  --z-toast: 10000;
+
+  /* ─── Scrollbar ─── */
+  --scrollbar-width: 6px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+}
