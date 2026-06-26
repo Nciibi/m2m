@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::candidate::{self, NetworkCandidate};
+use crate::candidate;
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
@@ -994,10 +994,12 @@ fn spawn_receive_loop(
                                                     transfer.save_path.clone()
                                                 };
 
-                                                let rename_ok = if let (Some(ref temp_path), Some(ref mut file)) =
+                                                let rename_ok = if let (Some(ref temp_path), Some(_)) =
                                                     (transfer.temp_path.as_ref(), transfer.temp_file.as_mut())
                                                 {
-                                                    drop(file);
+                                                    // Take ownership of the temp file to close it,
+                                                    // so rename can work on Windows.
+                                                    transfer.temp_file.take();
                                                     std::fs::rename(temp_path, &final_path).is_ok()
                                                 } else {
                                                     false

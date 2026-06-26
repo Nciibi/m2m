@@ -831,7 +831,8 @@ mod tests {
     }
 
     #[test]
-    fn test_nat_classification_symmetric() {
+    fn test_nat_classification_different_port_same_ip() {
+        // Same IP but different port = port-restricted cone, not symmetric.
         let addr1: SocketAddr = "8.8.8.8:12345".parse().unwrap();
         let addr2: SocketAddr = "8.8.8.8:54321".parse().unwrap();
         let multi = StunMultiResult {
@@ -852,7 +853,33 @@ mod tests {
             total_servers: 2,
             responding_servers: 2,
         };
-        // Different ports but same IP — for simplicity we detect any difference
+        let nat = classify_nat(&multi);
+        assert_eq!(nat, NatType::PortRestrictedCone);
+    }
+
+    #[test]
+    fn test_nat_classification_symmetric() {
+        // Different IP per server = symmetric NAT behavior detected.
+        let addr1: SocketAddr = "203.0.113.1:12345".parse().unwrap();
+        let addr2: SocketAddr = "198.51.100.1:54321".parse().unwrap();
+        let multi = StunMultiResult {
+            results: vec![
+                StunResult {
+                    public_addr: addr1,
+                    server: "stun1.google.com".into(),
+                    rtt: Duration::from_millis(10),
+                },
+                StunResult {
+                    public_addr: addr2,
+                    server: "stun.cloudflare.com".into(),
+                    rtt: Duration::from_millis(15),
+                },
+            ],
+            consensus_addr: None,
+            consensus: false,
+            total_servers: 2,
+            responding_servers: 2,
+        };
         let nat = classify_nat(&multi);
         assert_eq!(nat, NatType::Symmetric);
     }
