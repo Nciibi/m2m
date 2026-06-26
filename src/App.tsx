@@ -155,6 +155,8 @@ function App() {
   // Per-conversation retention
   const [retentionPolicy, setRetentionPolicy] = useState("none");
   const [retentionDuration, setRetentionDuration] = useState<string>("86400");
+  // Fingerprint verification modal
+  const [showFingerprintModal, setShowFingerprintModal] = useState(false);
 
   // Notification permission
   const [notifPermission, setNotifPermission] = useState(false);
@@ -338,6 +340,31 @@ function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // ─── Keyboard Shortcuts ───
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+Enter / Cmd+Enter to send message
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (view === "chat" && inputText.trim() && connection?.peer_key_hex) {
+          e.preventDefault();
+          handleSendMessage(e as unknown as React.FormEvent);
+        }
+      }
+      // Escape to go back from chat to hub
+      if (e.key === "Escape" && view === "chat") {
+        e.preventDefault();
+        setView("hub");
+      }
+      // Ctrl+, to open settings
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        if (view !== "settings") openSettings();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [view, inputText, connection]);
 
   const handleUnlockVault = async () => {
     setVaultError("");
@@ -546,7 +573,7 @@ function App() {
         prev.filter((r) => r.transfer_id !== req.transfer_id)
       );
     } catch (err) {
-      alert("Reject failed: " + err);
+      addToast("Reject failed: " + err, "error");
     }
   };
 
@@ -630,7 +657,7 @@ function App() {
       setStunConfig({ ...stunConfig, servers: newServers });
       setStunServerInput("");
     } catch (e) {
-      alert("Failed to add STUN server: " + e);
+      addToast("Failed to add STUN server: " + e, "error");
     }
   };
 
@@ -638,14 +665,14 @@ function App() {
     if (!stunConfig) return;
     const newServers = stunConfig.servers.filter((_, i) => i !== idx);
     if (newServers.length === 0) {
-      alert("Cannot remove all STUN servers — at least one required.");
+      addToast("Cannot remove all STUN servers — at least one required.", "warning");
       return;
     }
     try {
       await invoke("set_stun_servers", { servers: newServers });
       setStunConfig({ ...stunConfig, servers: newServers });
     } catch (e) {
-      alert("Failed to remove STUN server: " + e);
+      addToast("Failed to remove STUN server: " + e, "error");
     }
   };
 
@@ -660,7 +687,7 @@ function App() {
       await invoke("set_stun_servers", { servers: defaults });
       setStunConfig(stunConfig ? { ...stunConfig, servers: defaults } : null);
     } catch (e) {
-      alert("Failed to reset STUN servers: " + e);
+      addToast("Failed to reset STUN servers: " + e, "error");
     }
   };
 
@@ -682,7 +709,7 @@ function App() {
       const diag = await invoke<NatTypeInfo>("get_network_diagnostics");
       setNetworkDiagnostics(diag);
     } catch (e) {
-      alert("Connectivity check failed: " + e);
+      addToast("Connectivity check failed: " + e, "error");
     }
   };
 
@@ -693,7 +720,7 @@ function App() {
       await invoke("set_tor_enabled", { enabled: newVal });
       setNetworkSettings({ ...networkSettings, tor_enabled: newVal });
     } catch (e) {
-      alert("Tor toggle failed: " + e);
+      addToast("Tor toggle failed: " + e, "error");
     }
   };
 
@@ -715,6 +742,7 @@ function App() {
             <span />
           </div>
         </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
   }
@@ -773,6 +801,7 @@ function App() {
             </button>
           </div>
         </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
   }
@@ -1019,7 +1048,13 @@ function App() {
               {identity?.fingerprint}
             </div>
           </div>
+
+          {/* Version */}
+          <div className="settings-version">
+            M2M Secure Messenger v0.1.0 — End-to-End Encrypted
+          </div>
         </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
   }
@@ -1220,6 +1255,7 @@ function App() {
             </div>
           )}
         </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
   }
@@ -1229,18 +1265,14 @@ function App() {
     <div className="app-container">
       <div className="header">
         <h1>
-          {connection?.peer_verified ? (
-            <span style={{ fontSize: "1rem" }}>✅</span>
-          ) : (
-            <span
-              className="verify-btn"
-              onClick={handleVerify}
-              title="Click to verify peer fingerprint"
-              style={{ fontSize: "1rem" }}
-            >
-              ⚠️
-            </span>
-          )}
+          <span
+            className="verify-btn"
+            onClick={() => setShowFingerprintModal(true)}
+            title={connection?.peer_verified ? "Fingerprint verified" : "Verify peer fingerprint"}
+            style={{ fontSize: "1rem", cursor: "pointer" }}
+          >
+            {connection?.peer_verified ? "✅" : "⚠️"}
+          </span>
           Encrypted Session
         </h1>
         <div className="header-actions">
@@ -1356,10 +1388,10 @@ function App() {
                         conversationId: activeConversationId,
                         exportPath: savePath
                       });
-                      alert("Exported successfully to " + savePath);
+                      addToast("Exported successfully to " + savePath, "success");
                     }
                   } catch (e) {
-                    alert("Export failed: " + e);
+                    addToast("Export failed: " + e, "error");
                   }
                 }}
               >
@@ -1405,6 +1437,67 @@ function App() {
           ➤
         </button>
       </form>
+      <div style={{ padding: "4px 32px 8px", display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-muted)" }}>
+        <span>🔒 End-to-end encrypted</span>
+        <span>Ctrl+Enter to send · Esc to go back</span>
+      </div>
+      {/* ─── Fingerprint Verification Modal ─── */}
+      {showFingerprintModal && (
+        <div className="modal-overlay" onClick={() => setShowFingerprintModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>🔐 Verify Peer Fingerprint</h2>
+              <button className="modal-close" onClick={() => setShowFingerprintModal(false)}>✕</button>
+            </div>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px", lineHeight: 1.5 }}>
+              Compare the fingerprint below with your peer via a secure out-of-band channel
+              (in person, phone call, or another verified app). Matching fingerprints confirm
+              you're connected to the right person.
+            </p>
+            <div className="fingerprint-comparison">
+              <div className="fp-side">
+                <h3>You (Local)</h3>
+                <div className="fp-grid">
+                  {identity?.fingerprint.split(":").map((g, i) => (
+                    <span key={i} className="fp-group">{g}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="fp-match-row">
+                <span className="match-icon">
+                  {connection?.peer_verified ? "✅ Matched" : "⬜ Not yet verified"}
+                </span>
+              </div>
+              <div className="fp-side">
+                <h3>Peer</h3>
+                <div className="fp-grid">
+                  {connection?.peer_fingerprint?.split(":").map((g, i) => (
+                    <span key={i} className="fp-group">{g}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {!connection?.peer_verified && (
+              <button
+                className="verify-modal-btn"
+                onClick={async () => {
+                  await handleVerify();
+                  setShowFingerprintModal(false);
+                  addToast("Peer fingerprint verified", "success");
+                }}
+              >
+                ✅ Confirm Match & Verify
+              </button>
+            )}
+            {connection?.peer_verified && (
+              <p style={{ textAlign: "center", color: "var(--success)", marginTop: "12px", fontWeight: 600 }}>
+                ✅ Peer verified — fingerprints match
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

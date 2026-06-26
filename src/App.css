@@ -1473,6 +1473,187 @@ input::placeholder {
 .strength-label.strong { color: var(--success); }
 .strength-label.very-strong { color: #22d3ee; }
 
+/* ─── Toast Notifications ─── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  pointer-events: auto;
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  cursor: pointer;
+  backdrop-filter: blur(20px);
+}
+
+.toast-success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(52, 211, 153, 0.2); color: #a7f3d0; }
+.toast-error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(248, 113, 113, 0.2); color: #fca5a5; }
+.toast-warning { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(251, 191, 36, 0.2); color: #fde68a; }
+.toast-info { background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(129, 140, 248, 0.2); color: #c7d2fe; }
+
+.toast-icon { font-size: 1rem; flex-shrink: 0; }
+.toast-message { flex: 1; }
+.toast-dismiss {
+  background: none !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  padding: 0 !important;
+  min-width: auto !important;
+  font-size: 1rem !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(100%) scale(0.9); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ─── Fingerprint Verification Modal ─── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: var(--bg-surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-2xl);
+  padding: 32px;
+  max-width: 560px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl), 0 0 80px var(--accent-glow);
+  animation: modalZoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalZoomIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-close {
+  background: none !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-secondary) !important;
+  padding: 4px 12px !important;
+  min-width: auto !important;
+  font-size: 1.1rem !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.modal-close:hover { background: var(--bg-hover) !important; }
+
+.fingerprint-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fp-side {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 1px solid var(--border);
+}
+
+.fp-side h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.fp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.fp-group {
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.72rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 4px;
+  border-radius: 4px;
+  text-align: center;
+  color: var(--accent-bright);
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.fp-match-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.fp-match-row .match-icon {
+  color: var(--success);
+}
+
+.verify-modal-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px !important;
+  font-size: 1rem !important;
+}
+
+/* ─── Settings Version Info ─── */
+.settings-version {
+  text-align: center;
+  padding: 20px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
 /* ─── Settings section descriptions ─── */
 .settings-content > .settings-section > .settings-desc {
   display: block;
