@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -419,7 +419,7 @@ function App() {
       }
     } catch (e) {
       console.error("Connection failed", e);
-      alert("Connection failed: " + e);
+      addToast("Connection failed: " + e, "error");
     } finally {
       setIsConnecting(false);
     }
@@ -510,7 +510,7 @@ function App() {
         },
       ]);
     } catch (e) {
-      alert("Failed to send file: " + e);
+      addToast("Failed to send file: " + e, "error");
     }
   };
 
@@ -532,7 +532,7 @@ function App() {
         prev.filter((r) => r.transfer_id !== req.transfer_id)
       );
     } catch (err) {
-      alert("Accept failed: " + err);
+      addToast("Accept failed: " + err, "error");
     }
   };
 
@@ -616,7 +616,7 @@ function App() {
       const diag = await invoke<NatTypeInfo>("get_network_diagnostics");
       setNetworkDiagnostics(diag);
     } catch (e) {
-      alert("STUN failed: " + e);
+      addToast("STUN failed: " + e, "error");
     } finally {
       setStunLoading(false);
     }
