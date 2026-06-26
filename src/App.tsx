@@ -121,6 +121,29 @@ function App() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Update passphrase strength indicator
+  useEffect(() => {
+    const entropy = estimateEntropy(passphrase);
+    let percent: number;
+    let label: string;
+    let cls: string;
+    if (passphrase.length === 0) {
+      percent = 0; label = ""; cls = "";
+    } else if (passphrase.length < 12) {
+      percent = Math.min(30, passphrase.length * 5);
+      label = "Too short"; cls = "weak";
+    } else if (entropy < 40) {
+      percent = 40; label = "Weak"; cls = "weak";
+    } else if (entropy < 60) {
+      percent = 65; label = "Fair"; cls = "fair";
+    } else if (entropy < 80) {
+      percent = 85; label = "Strong"; cls = "strong";
+    } else {
+      percent = 100; label = "Very Strong"; cls = "very-strong";
+    }
+    setPassphraseStrength({ percent, label, class: cls });
+  }, [passphrase]);
+
   // Request notification permission on mount
   useEffect(() => {
     async function setupNotifications() {
