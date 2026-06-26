@@ -1436,6 +1436,43 @@ input::placeholder {
   padding: 6px 14px;
 }
 
+/* ─── Passphrase Strength Meter ─── */
+.passphrase-strength {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.strength-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.strength-fill.weak { background: var(--danger); }
+.strength-fill.fair { background: var(--warning); }
+.strength-fill.strong { background: var(--success); }
+.strength-fill.very-strong { background: #22d3ee; }
+
+.strength-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.strength-label.weak { color: var(--danger); }
+.strength-label.fair { color: var(--warning); }
+.strength-label.strong { color: var(--success); }
+.strength-label.very-strong { color: #22d3ee; }
+
 /* ─── Settings section descriptions ─── */
 .settings-content > .settings-section > .settings-desc {
   display: block;

@@ -301,8 +301,8 @@ function App() {
 
   const handleUnlockVault = async () => {
     setVaultError("");
-    if (passphrase.length < 8) {
-      setVaultError("Passphrase must be at least 8 characters.");
+    if (passphrase.length < 12) {
+      setVaultError("Passphrase must be at least 12 characters.");
       return;
     }
     // Require confirmation only on first-time setup
@@ -692,7 +692,7 @@ function App() {
               ? "Choose a passphrase to encrypt your local data. This protects your identity keys and message history."
               : "Enter your passphrase to decrypt your local data."}
             <br />
-            Minimum 8 characters. Uses Argon2id key derivation.
+            Minimum 12 characters. Uses Argon2id key derivation.
           </p>
           <div className="vault-form">
             <input
@@ -703,6 +703,20 @@ function App() {
               onChange={(e) => setPassphrase(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleUnlockVault()}
             />
+            {/* Passphrase strength meter */}
+            {passphrase.length > 0 && (
+              <div className="passphrase-strength">
+                <div className="strength-bar">
+                  <div
+                    className={`strength-fill ${passphraseStrength.class}`}
+                    style={{ width: `${passphraseStrength.percent}%` }}
+                  />
+                </div>
+                <span className={`strength-label ${passphraseStrength.class}`}>
+                  {passphraseStrength.label}{passphraseStrength.label && " — "}{passphrase.length} chars
+                </span>
+              </div>
+            )}
             {isFirstTime && (
               <input
                 id="vault-passphrase-confirm"
