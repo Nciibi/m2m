@@ -53,6 +53,15 @@ jobs:
       run: cargo test
       working-directory: src-tauri
 
+    - name: Cargo Audit (Rust dependency vulnerabilities)
+      continue-on-error: true
+      run: cargo install cargo-audit --locked && cargo audit
+      working-directory: src-tauri
+
+    - name: Pnpm Audit (JS dependency vulnerabilities)
+      continue-on-error: true
+      run: pnpm audit --audit-level=high
+
     - name: Build Frontend
       run: pnpm build
 
