@@ -651,16 +651,18 @@ pub fn classify_nat(result: &StunMultiResult) -> NatType {
 fn is_global_unicast(ip: std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
-            !v4.is_private()
+            // `is_private()`, `is_link_local()`, etc. are methods on `Ipv4Addr`
+            let octets = v4.octets();
+            !is_private_v4(v4)
                 && !v4.is_loopback()
                 && !v4.is_link_local()
                 && !v4.is_broadcast()
                 && !v4.is_documentation()
                 && !v4.is_unspecified()
                 // Exclude CGNAT (100.64.0.0/10)
-                && !((v4.octets()[0] == 100) && (v4.octets()[1] & 0xC0) == 0x40)
-                // Exclude Carrier Grade NAT (100.64.0.0/10)
-                && !((v4.octets()[0] == 198) && (v4.octets()[1] & 0xFE) == 0x18) // 198.18.0.0/15 (benchmarking)
+                && !((octets[0] == 100) && (octets[1] & 0xC0) == 0x40)
+                // Exclude benchmarking range (198.18.0.0/15)
+                && !((octets[0] == 198) && (octets[1] & 0xFE) == 0x18)
         }
         std::net::IpAddr::V6(v6) => {
             !v6.is_loopback()
@@ -669,6 +671,17 @@ fn is_global_unicast(ip: std::net::IpAddr) -> bool {
                 && !v6.is_unique_local()
                 && !v6.is_link_local()
         }
+    }
+}
+
+/// Check if an IPv4 address is in a private range (RFC 1918).
+fn is_private_v4(ip: std::net::Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    match octets[0] {
+        10 => true,
+        172 => octets[1] >= 16 && octets[1] <= 31,
+        192 => octets[1] == 168,
+        _ => false,
     }
 }
 
