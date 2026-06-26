@@ -180,6 +180,7 @@ pub async fn get_identity(
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
 /// so the invite works across the internet.
+/// In private mode, the public IP is NOT included — only the local address.
 #[tauri::command]
 pub async fn create_invite(
     state: State<'_, Arc<AppState>>,
@@ -196,23 +197,27 @@ pub async fn create_invite(
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
 
-    // If STUN discovered a public IP, use it with the listen port
-    let actual_address = {
+    let private_mode = *state.private_mode.read().await;
+
+    // Determine the address to embed in the invite.
+    let actual_address = if private_mode {
+        // Private mode: only use the local address, never expose public IP.
+        let local_ip = if listen_addr.ip().is_unspecified() {
+            resolve_local_ip().unwrap_or(listen_addr.ip())
+        } else {
+            listen_addr.ip()
+        };
+        SocketAddr::new(local_ip, listen_addr.port()).to_string()
+    } else {
+        // Normal mode: use public IP if available, fall back to local.
         let pip = state.public_ip.read().await;
         match *pip {
             Some(public_addr) => {
-                let public_with_port = SocketAddr::new(public_addr.ip(), listen_addr.port());
-                public_with_port.to_string()
+                SocketAddr::new(public_addr.ip(), listen_addr.port()).to_string()
             }
             None => {
                 if listen_addr.ip().is_unspecified() {
-                    let local_ip = std::net::UdpSocket::bind("0.0.0.0:0")
-                        .and_then(|socket| {
-                            socket.connect("8.8.8.8:80")?;
-                            socket.local_addr()
-                        })
-                        .map(|addr| addr.ip())
-                        .unwrap_or(listen_addr.ip());
+                    let local_ip = resolve_local_ip().unwrap_or(listen_addr.ip());
                     SocketAddr::new(local_ip, listen_addr.port()).to_string()
                 } else {
                     address.clone()
@@ -223,8 +228,25 @@ pub async fn create_invite(
 
     let validity_secs = validity_minutes.saturating_mul(60);
 
+    tracing::info!(
+        private_mode = private_mode,
+        address_hint = %actual_address,
+        "generating invite"
+    );
+
     identity::create_invite(kp, &actual_address, validity_secs, one_time)
         .map_err(|e| format!("invite creation failed: {e}"))
+}
+
+/// Resolve the local (non-loopback) IP address used for internet connectivity.
+fn resolve_local_ip() -> Option<std::net::IpAddr> {
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|socket| {
+            socket.connect("8.8.8.8:80")?;
+            socket.local_addr()
+        })
+        .ok()
+        .map(|addr| addr.ip())
 }
 
 /// Validate a received invite link.
@@ -256,9 +278,16 @@ pub async fn start_listening(
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
 
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
+    // Use std TcpListener first to set a custom backlog (128 for DoS resilience),
+    // then convert to tokio for async usage.
+    let std_listener = std::net::TcpListener::bind(addr)
         .map_err(|e| format!("failed to bind listener: {e}"))?;
+    std_listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("failed to set non-blocking: {e}"))?;
+
+    let listener = tokio::net::TcpListener::from_std(std_listener)
+        .map_err(|e| format!("failed to create async listener: {e}"))?;
 
     let bound_addr = listener.local_addr()
         .map_err(|e| format!("failed to get local address: {e}"))?;

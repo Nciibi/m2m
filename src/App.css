@@ -1179,3 +1179,229 @@ input::placeholder {
   border-color: var(--border-active);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
+/* ─── Connectivity Check ─── */
+.connectivity-result {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  animation: msgSlide 0.3s ease-out;
+}
+
+.connectivity-result.success {
+  background: var(--success-glow);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.connectivity-result.warning {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.connectivity-details {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.connectivity-details code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.nat-warning {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: 6px;
+  color: var(--warning);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+/* ─── STUN Server List ─── */
+.stun-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.stun-server-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.stun-server-item .icon-btn {
+  padding: 4px 8px;
+  min-width: auto;
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+.stun-server-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stun-server-add input {
+  flex: 1;
+  min-width: 200px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.stun-server-add button {
+  white-space: nowrap;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+}
+
+/* ─── Network Diagnostics ─── */
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.diagnostic-item {
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.diagnostic-item.full-width {
+  grid-column: span 2;
+}
+
+.diagnostic-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.diagnostic-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+/* ─── STUN Health List ─── */
+.stun-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stun-health-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.stun-health-item code {
+  flex: 1;
+  font-size: 0.75rem;
+}
+
+.stun-health-item .rtt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.stun-health-item.ok {
+  border-left: 3px solid var(--success);
+}
+
+.stun-health-item.fail {
+  border-left: 3px solid var(--danger);
+}
+
+/* ─── Candidate List ─── */
+.candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.candidate-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid transparent;
+}
+
+.candidate-item.type-0 {
+  border-left: 3px solid var(--accent);
+}
+
+.candidate-item.type-1 {
+  border-left: 3px solid var(--success);
+}
+
+.candidate-item.type-2 {
+  border-left: 3px solid var(--warning);
+}
+
+.candidate-item.type-3 {
+  border-left: 3px solid var(--danger);
+}
+
+.candidate-type {
+  font-weight: 500;
+  min-width: 60px;
+  font-size: 0.75rem;
+}
+
+.candidate-item code {
+  flex: 1;
+  font-size: 0.78rem;
+}
+
+.candidate-priority {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.candidate-active {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--success-glow);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+/* ─── Settings section descriptions ─── */
+.settings-content > .settings-section > .settings-desc {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}

@@ -216,9 +216,11 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
 
     // Enable TCP keepalive with OS defaults to maintain NAT bindings.
     // This prevents NAT gateways from dropping the mapping due to inactivity.
-    let _ = stream.set_keepalive(Some(Duration::from_secs(30)));
-    // Set TCP_NODELAY to disable Nagle's algorithm for lower latency messaging.
-    let _ = stream.set_nodelay(true);
+    if let Ok(std_stream) = stream.into_std() {
+        let _ = std_stream.set_keepalive(true);
+        let _ = std_stream.set_nodelay(true);
+        stream = TcpStream::from_std(std_stream).map_err(NetworkError::Io)?;
+    }
 
     Ok(stream)
 }

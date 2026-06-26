@@ -473,6 +473,36 @@ function App() {
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
+  // Network diagnostics state
+  const [networkDiagnostics, setNetworkDiagnostics] = useState<any>(null);
+  const [stunConfig, setStunConfig] = useState<StunConfig | null>(null);
+  const [stunServerInput, setStunServerInput] = useState("");
+  const [privateMode, setPrivateMode] = useState(false);
+  const [connectivityResult, setConnectivityResult] = useState<any>(null);
+
+  interface StunConfig {
+    servers: string[];
+    timeout_secs: number;
+    private_mode: boolean;
+  }
+
+  interface NatTypeInfo {
+    nat_type: string;
+    stun_servers: Array<{ server: string; reachable: boolean; rtt_ms: number | null; error: string | null }>;
+    connectivity: {
+      reachable: boolean;
+      nat_type: string;
+      public_addr: string | null;
+      host_addrs: string[];
+      behind_symmetric_nat: boolean;
+    };
+    candidates: Array<{
+      address: string;
+      candidate_type: number;
+      priority: number;
+    }>;
+  }
+
   // Settings helpers
   const openSettings = async () => {
     setView("settings");
@@ -480,6 +510,15 @@ function App() {
       const ns = await invoke<NetworkSettings>("get_network_settings");
       setNetworkSettings(ns);
       setPublicIp(ns.public_ip);
+      // Load STUN config
+      const sc = await invoke<StunConfig>("get_stun_config");
+      setStunConfig(sc);
+      setPrivateMode(sc.private_mode);
+      // Load diagnostics
+      try {
+        const diag = await invoke<NatTypeInfo>("get_network_diagnostics");
+        setNetworkDiagnostics(diag);
+      } catch (e) { console.error("Failed to load diagnostics", e); }
     } catch (e) {
       console.error("Failed to load network settings", e);
     }
@@ -490,10 +529,77 @@ function App() {
     try {
       const ip = await invoke<string>("discover_public_ip");
       setPublicIp(ip);
+      // Refresh diagnostics
+      const diag = await invoke<NatTypeInfo>("get_network_diagnostics");
+      setNetworkDiagnostics(diag);
     } catch (e) {
       alert("STUN failed: " + e);
     } finally {
       setStunLoading(false);
+    }
+  };
+
+  const handleAddStunServer = async () => {
+    if (!stunConfig || !stunServerInput.trim()) return;
+    const newServers = [...stunConfig.servers, stunServerInput.trim()];
+    try {
+      await invoke("set_stun_servers", { servers: newServers });
+      setStunConfig({ ...stunConfig, servers: newServers });
+      setStunServerInput("");
+    } catch (e) {
+      alert("Failed to add STUN server: " + e);
+    }
+  };
+
+  const handleRemoveStunServer = async (idx: number) => {
+    if (!stunConfig) return;
+    const newServers = stunConfig.servers.filter((_, i) => i !== idx);
+    if (newServers.length === 0) {
+      alert("Cannot remove all STUN servers — at least one required.");
+      return;
+    }
+    try {
+      await invoke("set_stun_servers", { servers: newServers });
+      setStunConfig({ ...stunConfig, servers: newServers });
+    } catch (e) {
+      alert("Failed to remove STUN server: " + e);
+    }
+  };
+
+  const handleResetStunDefaults = async () => {
+    const defaults = [
+      "stun.l.google.com:19302",
+      "stun1.l.google.com:19302",
+      "stun.cloudflare.com:3478",
+      "stun.nextcloud.com:3478",
+    ];
+    try {
+      await invoke("set_stun_servers", { servers: defaults });
+      setStunConfig(stunConfig ? { ...stunConfig, servers: defaults } : null);
+    } catch (e) {
+      alert("Failed to reset STUN servers: " + e);
+    }
+  };
+
+  const handlePrivateModeToggle = async () => {
+    const newVal = !privateMode;
+    try {
+      await invoke("set_private_mode", { enabled: newVal });
+      setPrivateMode(newVal);
+    } catch (e) {
+      console.error("Failed to set private mode:", e);
+    }
+  };
+
+  const handleConnectivityCheck = async () => {
+    try {
+      const result = await invoke<any>("check_connectivity");
+      setConnectivityResult(result);
+      // Refresh diagnostics after
+      const diag = await invoke<NatTypeInfo>("get_network_diagnostics");
+      setNetworkDiagnostics(diag);
+    } catch (e) {
+      alert("Connectivity check failed: " + e);
     }
   };
 
@@ -591,20 +697,21 @@ function App() {
           </button>
         </div>
         <div className="content-area settings-content">
-          {/* Network / STUN */}
+          {/* ─── Public IP & Connectivity ─── */}
           <div className="settings-section">
-            <h3>Network</h3>
+            <h3>Public IP & Connectivity</h3>
             <div className="settings-row">
               <div className="settings-label">
-                <strong>Public IP</strong>
+                <strong>Public Address</strong>
                 <span className="settings-desc">
                   Discovered via STUN — needed for invites that work across the
-                  internet.
+                  internet. Queries all configured STUN servers in parallel for
+                  consensus.
                 </span>
               </div>
               <div className="settings-value">
                 {publicIp ? (
-                  <span className="mono-value">{publicIp}</span>
+                  <span className="mono-value" id="public-ip-display">{publicIp}</span>
                 ) : (
                   <span className="text-muted">Not discovered</span>
                 )}
@@ -614,18 +721,178 @@ function App() {
                   disabled={stunLoading}
                   id="stun-discover-btn"
                 >
-                  {stunLoading ? "..." : "Discover"}
+                  {stunLoading ? "..." : "STUN Discover"}
                 </button>
               </div>
             </div>
 
-            {/* Tor */}
+            {/* Connectivity Check */}
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Connectivity Check</strong>
+                <span className="settings-desc">
+                  Verify your listening port is reachable from the internet.
+                  Symmetric NAT will show as reachable for outbound but warn
+                  about inbound limitations.
+                </span>
+              </div>
+              <div className="settings-value">
+                <button
+                  className="secondary"
+                  onClick={handleConnectivityCheck}
+                  id="connectivity-check-btn"
+                >
+                  Check Connectivity
+                </button>
+              </div>
+            </div>
+            {connectivityResult && (
+              <div className={`connectivity-result ${connectivityResult.reachable ? "success" : "warning"}`}>
+                <strong>
+                  {connectivityResult.reachable ? "✅ Reachable" : "⚠️ Limited Reachability"}
+                </strong>
+                <div className="connectivity-details">
+                  <div>NAT Type: <code>{connectivityResult.nat_type}</code></div>
+                  {connectivityResult.behind_symmetric_nat && (
+                    <div className="nat-warning">
+                      ⚠️ Symmetric NAT detected — inbound connections may fail without a TURN relay.
+                    </div>
+                  )}
+                  {connectivityResult.public_addr && (
+                    <div>Public IP: <code>{connectivityResult.public_addr}</code></div>
+                  )}
+                  <div>Local IPs: {connectivityResult.host_addrs?.join(", ") || "none"}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ─── STUN Server Configuration ─── */}
+          <div className="settings-section" id="stun-servers-section">
+            <h3>STUN Servers</h3>
+            <p className="settings-desc">
+              STUN servers are used to discover your public IP address.
+              Configure multiple servers for redundancy and cross-verification.
+            </p>
+            {stunConfig && (
+              <>
+                <div className="stun-server-list">
+                  {stunConfig.servers.map((s, i) => (
+                    <div key={i} className="stun-server-item">
+                      <span className="mono-value">{s}</span>
+                      <button
+                        className="icon-btn danger"
+                        onClick={() => handleRemoveStunServer(i)}
+                        title="Remove server"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="stun-server-add">
+                  <input
+                    placeholder="host:port (e.g., stun.example.com:3478)"
+                    value={stunServerInput}
+                    onChange={(e) => setStunServerInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddStunServer()}
+                    id="stun-server-input"
+                  />
+                  <button className="secondary" onClick={handleAddStunServer} id="add-stun-server-btn">
+                    Add
+                  </button>
+                  <button className="secondary" onClick={handleResetStunDefaults} id="reset-stun-btn">
+                    Reset Defaults
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ─── Network Diagnostics ─── */}
+          {networkDiagnostics && (
+            <div className="settings-section" id="network-diagnostics-section">
+              <h3>Network Diagnostics</h3>
+              <div className="diagnostics-grid">
+                <div className="diagnostic-item">
+                  <span className="diagnostic-label">NAT Type</span>
+                  <span className="diagnostic-value">{networkDiagnostics.nat_type}</span>
+                </div>
+                <div className="diagnostic-item">
+                  <span className="diagnostic-label">Candidates</span>
+                  <span className="diagnostic-value">{networkDiagnostics.candidates?.length || 0}</span>
+                </div>
+                <div className="diagnostic-item">
+                  <span className="diagnostic-label">STUN Servers</span>
+                  <span className="diagnostic-value">
+                    <div className="stun-health-list">
+                      {networkDiagnostics.stun_servers?.map((s: any, i: number) => (
+                        <div key={i} className={`stun-health-item ${s.reachable ? "ok" : "fail"}`}>
+                          <span>{s.reachable ? "✅" : "❌"}</span>
+                          <code>{s.server}</code>
+                          {s.rtt_ms && <span className="rtt">{s.rtt_ms}ms</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </span>
+                </div>
+                {networkDiagnostics.candidates && networkDiagnostics.candidates.length > 0 && (
+                  <div className="diagnostic-item full-width">
+                    <span className="diagnostic-label">All Candidates (sorted by priority)</span>
+                    <div className="candidate-list">
+                      {networkDiagnostics.candidates.map((c: any, i: number) => (
+                        <div key={i} className={`candidate-item type-${c.candidate_type}`}>
+                          <span className="candidate-type">
+                            {c.candidate_type === 0 ? "🏠 Host" :
+                             c.candidate_type === 1 ? "🌐 SRFLX" :
+                             c.candidate_type === 2 ? "🔄 PRFLX" : "🔄 Relay"}
+                          </span>
+                          <code>{c.address}</code>
+                          <span className="candidate-priority">prio: {c.priority}</span>
+                          {i === 0 && <span className="candidate-active">← Active</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Privacy ─── */}
+          <div className="settings-section">
+            <h3>Privacy</h3>
+            <div className="settings-row">
+              <div className="settings-label">
+                <strong>Private Mode</strong>
+                <span className="settings-desc">
+                  When enabled, your public IP will NOT be included in invite
+                  links. Only local network addresses will be shared.
+                  Peers outside your local network will not be able to connect,
+                  but your IP remains hidden.
+                </span>
+              </div>
+              <div className="settings-value">
+                <button
+                  className={privateMode ? "danger" : "secondary"}
+                  onClick={handlePrivateModeToggle}
+                  id="private-mode-toggle"
+                >
+                  {privateMode ? "Disable Private Mode" : "Enable Private Mode"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Tor ─── */}
+          <div className="settings-section">
+            <h3>Tor Routing</h3>
             <div className="settings-row">
               <div className="settings-label">
                 <strong>Tor Routing</strong>
                 <span className="settings-desc">
                   Route all outgoing connections through Tor SOCKS5 proxy
-                  (127.0.0.1:9050).
+                  (127.0.0.1:9050). Inbound connections still use direct TCP.
                 </span>
               </div>
               <div className="settings-value">
