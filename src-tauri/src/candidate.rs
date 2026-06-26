@@ -104,11 +104,12 @@ fn compute_priority(candidate_type: CandidateType, local_pref: u32) -> u32 {
 /// Returns a list of `NetworkCandidate` with type=Host, sorted by priority.
 pub fn gather_host_candidates() -> Vec<NetworkCandidate> {
     let addrs = stun::gather_host_candidates();
+    let total = addrs.len();
     let mut candidates: Vec<NetworkCandidate> = addrs
         .into_iter()
         .enumerate()
         .map(|(i, addr)| {
-            let local_pref = ((addrs.len() - i) * 10) as u32; // Prefer earlier entries
+            let local_pref = ((total - i) * 10) as u32; // Prefer earlier entries
             NetworkCandidate {
                 address: addr.to_string(),
                 candidate_type: CandidateType::Host,

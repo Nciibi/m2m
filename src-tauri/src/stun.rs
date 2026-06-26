@@ -630,7 +630,14 @@ pub fn classify_nat(result: &StunMultiResult) -> NatType {
         let first = result.results[0].public_addr;
         // If the public IP is a private range, there's definitely a NAT
         // and it's probably symmetric for TCP purposes.
-        if first.ip().is_private() || first.ip().is_loopback() {
+        let is_private = match first.ip() {
+            std::net::IpAddr::V4(v4) => {
+                let o = v4.octets();
+                o[0] == 10 || (o[0] == 172 && o[1] >= 16 && o[1] <= 31) || (o[0] == 192 && o[1] == 168)
+            }
+            std::net::IpAddr::V6(_) => false,
+        };
+        if is_private || first.ip().is_loopback() {
             // Server returned a private IP — this shouldn't happen with
             // proper STUN servers, but if it does, we can't trust it.
             NatType::Unknown

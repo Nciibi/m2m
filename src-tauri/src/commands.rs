@@ -963,7 +963,7 @@ fn spawn_receive_loop(
                                             }
                                         } else {
                                             let hash_valid = if let Some(ref mut file) = transfer.temp_file {
-                                                use std::io::Read;
+                                                use std::io::{Read, Seek};
                                                 let mut buf = Vec::with_capacity(transfer.total_size as usize);
                                                 match file.seek(std::io::SeekFrom::Start(0))
                                                     .and_then(|_| file.read_to_end(&mut buf))
