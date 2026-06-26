@@ -947,8 +947,6 @@ fn spawn_receive_loop(
                                     let mut transfers = state.incoming_transfers.write().await;
                                     if let Some(mut transfer) = transfers.remove(&complete.transfer_id) {
                                         let transfer_id = complete.transfer_id.clone();
-
-                                        // Verify all chunks were received (bitmask fully set).
                                         let all_received = transfer.chunks_received == transfer.total_chunks
                                             && transfer.chunks_bitmask.iter().all(|&b| b);
 
@@ -956,81 +954,70 @@ fn spawn_receive_loop(
                                             tracing::warn!(
                                                 received = transfer.chunks_received,
                                                 total = transfer.total_chunks,
-                                                "file transfer incomplete — missing chunks"
+                                                "file transfer incomplete - missing chunks"
                                             );
-                                            // Clean up temp file, then exit handler.
                                             drop(transfer.temp_file);
                                             if let Some(ref path) = transfer.temp_path {
                                                 let _ = std::fs::remove_file(path);
                                             }
                                         } else {
-                                        // All chunks received — verify hash against temp file.
-                                        // This is the ONE time we buffer the full file in memory;
-                                        // it's unavoidable for hash verification, but the file
-                                        // has already been streamed to disk as it arrived.
-                                        let hash_valid = if let Some(ref mut file) = transfer.temp_file {
-                                            use std::io::Read;
-                                            let mut buf = Vec::with_capacity(transfer.total_size as usize);
-                                            match file.seek(std::io::SeekFrom::Start(0))
-                                                .and_then(|_| file.read_to_end(&mut buf))
-                                            {
-                                                Ok(_) => {
-                                                    let hash = sodiumoxide::crypto::hash::sha256::hash(&buf);
-                                                    hash.0.to_vec() == transfer.file_hash
+                                            let hash_valid = if let Some(ref mut file) = transfer.temp_file {
+                                                use std::io::Read;
+                                                let mut buf = Vec::with_capacity(transfer.total_size as usize);
+                                                match file.seek(std::io::SeekFrom::Start(0))
+                                                    .and_then(|_| file.read_to_end(&mut buf))
+                                                {
+                                                    Ok(_) => {
+                                                        let hash = sodiumoxide::crypto::hash::sha256::hash(&buf);
+                                                        hash.0.to_vec() == transfer.file_hash
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::warn!(error = %e, "failed to read temp file for hash verification");
+                                                        false
+                                                    }
                                                 }
-                                                Err(e) => {
-                                                    tracing::warn!(error = %e, "failed to read temp file for hash verification");
-                                                    false
-                                                }
-                                            }
-                                        } else {
-                                            false
-                                        };
-
-                                        if hash_valid {
-                                            // Build final path with sanitized filename.
-                                            let safe_name = network::sanitize_filename(&transfer.filename)
-                                                .unwrap_or_else(|| format!("download_{}", transfer_id));
-
-                                            let final_path = if transfer.save_path.as_os_str().is_empty() {
-                                                std::path::PathBuf::from(&safe_name)
-                                            } else if transfer.save_path.is_dir() {
-                                                transfer.save_path.join(&safe_name)
-                                            } else {
-                                                // save_path is a full file path — use it directly.
-                                                transfer.save_path.clone()
-                                            };
-
-                                            // Rename temp file to final destination.
-                                            // This is atomic on the same filesystem.
-                                            let rename_ok = if let (Some(ref temp_path), Some(ref mut file)) =
-                                                (transfer.temp_path.as_ref(), transfer.temp_file.as_mut())
-                                            {
-                                                // Close the file first so rename can work on Windows.
-                                                drop(file); // Close the File handle
-                                                std::fs::rename(temp_path, &final_path).is_ok()
                                             } else {
                                                 false
                                             };
 
-                                            if rename_ok {
-                                                let _ = app_handle.emit("m2m://file-complete", serde_json::json!({
-                                                    "transfer_id": transfer_id,
-                                                    "filename": safe_name,
-                                                    "path": final_path.to_string_lossy(),
-                                                }));
+                                            if hash_valid {
+                                                let safe_name = network::sanitize_filename(&transfer.filename)
+                                                    .unwrap_or_else(|| format!("download_{}", transfer_id));
+                                                let final_path = if transfer.save_path.as_os_str().is_empty() {
+                                                    std::path::PathBuf::from(&safe_name)
+                                                } else if transfer.save_path.is_dir() {
+                                                    transfer.save_path.join(&safe_name)
+                                                } else {
+                                                    transfer.save_path.clone()
+                                                };
+
+                                                let rename_ok = if let (Some(ref temp_path), Some(ref mut file)) =
+                                                    (transfer.temp_path.as_ref(), transfer.temp_file.as_mut())
+                                                {
+                                                    drop(file);
+                                                    std::fs::rename(temp_path, &final_path).is_ok()
+                                                } else {
+                                                    false
+                                                };
+
+                                                if rename_ok {
+                                                    let _ = app_handle.emit("m2m://file-complete", serde_json::json!({
+                                                        "transfer_id": transfer_id,
+                                                        "filename": safe_name,
+                                                        "path": final_path.to_string_lossy(),
+                                                    }));
+                                                } else {
+                                                    tracing::warn!("failed to rename temp file - cleaning up");
+                                                    if let Some(ref path) = transfer.temp_path {
+                                                        let _ = std::fs::remove_file(path);
+                                                    }
+                                                }
                                             } else {
-                                                tracing::warn!("failed to rename temp file — cleaning up");
-                                                // Clean up temp file on failure
+                                                tracing::warn!("file hash verification failed - deleting corrupted temp file");
+                                                drop(transfer.temp_file);
                                                 if let Some(ref path) = transfer.temp_path {
                                                     let _ = std::fs::remove_file(path);
                                                 }
-                                            }
-                                        } else {
-                                            tracing::warn!("file hash verification failed — deleting corrupted temp file");
-                                            drop(transfer.temp_file);
-                                            if let Some(ref path) = transfer.temp_path {
-                                                let _ = std::fs::remove_file(path);
                                             }
                                         }
                                     }
