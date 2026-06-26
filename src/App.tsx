@@ -80,6 +80,7 @@ function App() {
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
   const [vaultError, setVaultError] = useState("");
+  const [passphraseStrength, setPassphraseStrength] = useState({ percent: 0, label: "", class: "" });
   const [vaultInitialized, setVaultInitialized] = useState(false);
 
   // Settings state
@@ -275,6 +276,12 @@ function App() {
     }
     if (!vaultInitialized && !passphraseConfirm) {
       setVaultError("Please confirm your passphrase.");
+      return;
+    }
+    // Frontend entropy check mirrors the backend check.
+    const est = estimateEntropy(passphrase);
+    if (est < 40) {
+      setVaultError(`Passphrase too weak: ~${Math.round(est)} bits. Use a longer passphrase (aim for 60+).`);
       return;
     }
     try {
