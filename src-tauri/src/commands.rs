@@ -9,10 +9,11 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
+use crate::candidate::{self, NetworkCandidate};
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
-use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData};
+use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
 use crate::state::{AppState, IncomingFileTransfer, PeerConnection};
 use crate::storage::{self, KeyStore};
