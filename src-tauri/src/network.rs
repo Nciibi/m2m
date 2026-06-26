@@ -352,9 +352,8 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
 
     // Set TCP_NODELAY to disable Nagle's algorithm for lower latency messaging.
     // Keepalive is handled by the application-layer heartbeat protocol instead.
-    if let Ok(std_stream) = stream.into_std() {
+    if let Ok(std_stream) = stream.try_into_std() {
         let _ = std_stream.set_nodelay(true);
-        stream = TcpStream::from_std(std_stream).map_err(NetworkError::Io)?;
     }
 
     Ok(stream)

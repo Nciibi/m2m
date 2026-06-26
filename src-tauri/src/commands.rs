@@ -1610,12 +1610,14 @@ pub async fn discover_public_ip(
         .map(|a| a.to_string())
         .unwrap_or_else(|| "no consensus".to_string());
 
+    // Capture values before the tracing macro to avoid Send issues.
+    let nat_type_str = state.nat_type.read().await.to_string();
     tracing::info!(
         servers = result.responding_servers,
         total = result.total_servers,
         consensus = result.consensus,
         public_ip = %addr,
-        nat_type = %{*state.nat_type.read().await},
+        nat_type = %nat_type_str,
         "STUN discovery completed"
     );
 
