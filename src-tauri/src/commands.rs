@@ -570,7 +570,7 @@ pub async fn send_message(
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
-            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), key)
+            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), &**key)
                 .unwrap_or_default();
             let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
             let _ = store.store_message(
@@ -717,7 +717,7 @@ fn spawn_receive_loop(
                                         let sk = state.storage_key.read().await;
                                         let ms = state.message_store.lock().await;
                                         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
-                                            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), key)
+                                            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), &**key)
                                                 .unwrap_or_default();
                                             let _ = store.ensure_conversation(&peer_key_hex, &hex::decode(&peer_key_hex).unwrap_or_default());
                                             let _ = store.store_message(
