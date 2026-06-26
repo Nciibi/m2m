@@ -19,6 +19,7 @@ use crate::state::{AppState, IncomingFileTransfer, PeerConnection};
 use crate::storage::{self, KeyStore};
 use crate::stun;
 use crate::tor;
+use zeroize::Zeroizing;
 
 use serde::{Deserialize, Serialize};
 
@@ -984,13 +985,15 @@ pub async fn load_messages(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
+    let key_ref: &[u8; 32] = &**key;
+
     let stored = store
         .load_messages(&peer_key_hex, limit.unwrap_or(100))
         .map_err(|e| format!("failed to load messages: {e}"))?;
 
     let mut messages = Vec::with_capacity(stored.len());
     for m in stored {
-        let content = crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, &**key)
+        let content = crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key_ref)
             .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
             .unwrap_or_else(|_| "[encrypted]".to_string());
         messages.push(ChatMessage {
@@ -1294,13 +1297,14 @@ pub async fn unlock_vault(
 
             {
                 let mut sk_lock = state.storage_key.write().await;
-                *sk_lock = Some(storage_key);
+                *sk_lock = Some(Zeroizing::new(storage_key));
             }
 
             IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
                 .map_err(|e| format!("failed to reconstruct identity: {e}"))?
         } else {
             // Case 2: Legacy migration — decrypt with legacy key, re-encrypt with Argon2id
+            tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
             let legacy_key = derive_storage_key(&pub_bytes);
             let sk_bytes = crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key)
                 .map_err(|e| format!("failed to decrypt legacy identity: {e}"))?;
@@ -1322,7 +1326,7 @@ pub async fn unlock_vault(
 
             {
                 let mut sk_lock = state.storage_key.write().await;
-                *sk_lock = Some(new_key);
+                *sk_lock = Some(Zeroizing::new(new_key));
             }
 
             IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
@@ -1349,7 +1353,7 @@ pub async fn unlock_vault(
 
         {
             let mut sk_lock = state.storage_key.write().await;
-            *sk_lock = Some(storage_key);
+            *sk_lock = Some(Zeroizing::new(storage_key));
         }
 
         kp
