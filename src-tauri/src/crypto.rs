@@ -242,9 +242,9 @@ impl SessionKeys {
     /// Construction: new_tx_key = SHA256(old_tx_key || ratchet_context)
     /// This is the HKDF-Expand step using SHA256 as the PRF.
     pub fn ratchet_tx(&mut self) {
-        let mut input = Vec::with_capacity(32 + 16);
+        let mut input = Vec::with_capacity(32 + 14);
         input.extend_from_slice(&self.tx_key);
-        input.extend_from_slice(b"m2m-ratchet-tx-v1");
+        input.extend_from_slice(b"m2m-ratchet-v1");
         let hash = sha256::hash(&input);
         self.tx_key.zeroize();
         self.tx_key.copy_from_slice(&hash.0[..32]);
@@ -253,9 +253,9 @@ impl SessionKeys {
     /// Ratchet the receiving key forward after decrypting a message.
     /// Mirror of ratchet_tx for the receive direction.
     pub fn ratchet_rx(&mut self) {
-        let mut input = Vec::with_capacity(32 + 16);
+        let mut input = Vec::with_capacity(32 + 14);
         input.extend_from_slice(&self.rx_key);
-        input.extend_from_slice(b"m2m-ratchet-rx-v1");
+        input.extend_from_slice(b"m2m-ratchet-v1");
         let hash = sha256::hash(&input);
         self.rx_key.zeroize();
         self.rx_key.copy_from_slice(&hash.0[..32]);

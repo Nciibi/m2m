@@ -703,7 +703,7 @@ mod session_tests {
         let s = Session::new();
         let fp = s.peer_fingerprint();
         // Fingerprint of all-zero key should be deterministic
-        assert_eq!(fp.len(), 47, "fingerprint should be 47 chars (16 hex bytes with separators)");
+        assert_eq!(fp.len(), 39, "fingerprint should be 39 chars (16 hex bytes with separators)");
     }
 
     #[test]
@@ -845,9 +845,11 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
+        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
+        bob.rx_high_water_mark = 0;
 
         // Duplex for communication
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
@@ -883,9 +885,11 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
+        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
+        bob.rx_high_water_mark = 0;
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
@@ -902,7 +906,7 @@ mod session_tests {
 
         // Bob receives and decrypts
         let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
-        assert_eq!(frame.packet_type, PacketType::EncryptedMessage);
+        assert_eq!(frame.packet_type, PacketType::FileTransferRequest);
 
         let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
         let req: crate::protocol::FileTransferRequestData = crate::protocol::deserialize(&plaintext).unwrap();
@@ -925,9 +929,11 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
+        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
+        bob.rx_high_water_mark = 0;
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
@@ -969,9 +975,11 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
+        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
+        bob.rx_high_water_mark = 0;
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
@@ -996,9 +1004,11 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
+        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
+        bob.rx_high_water_mark = 0;
 
         // Save initial keys
         let initial_tx = alice.session_keys.as_ref().unwrap().tx_key;

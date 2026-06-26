@@ -426,3 +426,224 @@ pub async fn send_error<W: AsyncWrite + Unpin>(
     let body = protocol::serialize(&msg)?;
     write_frame(writer, PacketType::Error, &body).await
 }
+
+#[cfg(test)]
+mod network_tests {
+    use super::*;
+
+    // ═══════════════════════════════════════════════════════════
+    // sanitize_filename — path traversal and injection defence
+    // ═══════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_sanitize_valid_filenames() {
+        assert_eq!(sanitize_filename("report.pdf"), Some("report.pdf".into()));
+        assert_eq!(sanitize_filename("my file.txt"), Some("my file.txt".into()));
+        assert_eq!(sanitize_filename("archive_2024-01.tar"), Some("archive_2024-01.tar".into()));
+    }
+
+    #[test]
+    fn test_sanitize_rejects_empty() {
+        assert_eq!(sanitize_filename(""), None);
+        assert_eq!(sanitize_filename("   "), None); // spaces only → trimmed to empty
+    }
+
+    #[test]
+    fn test_sanitize_rejects_dots() {
+        assert_eq!(sanitize_filename("."), None);
+        assert_eq!(sanitize_filename(".."), None);
+    }
+
+    #[test]
+    fn test_sanitize_path_traversal_unix() {
+        // Path separators are stripped, dots remain but the result is just "etcpasswd"
+        assert_eq!(sanitize_filename("../../../etc/passwd"), Some("......etcpasswd".into()));
+        // The key assertion: no path separators survive
+        let result = sanitize_filename("../../../etc/passwd").unwrap();
+        assert!(!result.contains('/'));
+        assert!(!result.contains('\\'));
+    }
+
+    #[test]
+    fn test_sanitize_path_traversal_windows() {
+        let result = sanitize_filename("..\\..\\..\\Windows\\System32\\cmd.exe").unwrap();
+        assert!(!result.contains('\\'));
+        assert!(!result.contains('/'));
+    }
+
+    #[test]
+    fn test_sanitize_windows_reserved_names() {
+        assert_eq!(sanitize_filename("NUL"), None);
+        assert_eq!(sanitize_filename("nul"), None);
+        assert_eq!(sanitize_filename("CON"), None);
+        assert_eq!(sanitize_filename("con"), None);
+        assert_eq!(sanitize_filename("PRN"), None);
+        assert_eq!(sanitize_filename("prn"), None);
+    }
+
+    #[test]
+    fn test_sanitize_strips_control_chars() {
+        // Control characters like \0, \n, \r should be stripped
+        let result = sanitize_filename("file\x00name\n.txt");
+        assert_eq!(result, Some("filename.txt".into()));
+    }
+
+    #[test]
+    fn test_sanitize_strips_unicode() {
+        // Non-ASCII characters should be stripped for safety
+        let result = sanitize_filename("файл.txt");
+        assert_eq!(result, Some(".txt".into()));
+    }
+
+    #[test]
+    fn test_sanitize_truncates_long_filenames() {
+        let long_name = "a".repeat(300) + ".txt";
+        let result = sanitize_filename(&long_name).unwrap();
+        assert!(result.len() <= MAX_FILENAME_LEN);
+        assert_eq!(result.len(), MAX_FILENAME_LEN);
+    }
+
+    #[test]
+    fn test_sanitize_preserves_extensions() {
+        assert_eq!(sanitize_filename("photo.jpg"), Some("photo.jpg".into()));
+        assert_eq!(sanitize_filename("backup.tar.gz"), Some("backup.tar.gz".into()));
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ConnectionLimiter — rate limiting and DoS protection
+    // ═══════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_limiter_allows_under_limit() {
+        let limiter = ConnectionLimiter::new();
+        let ip: IpAddr = "10.0.0.1".parse().unwrap();
+        for _ in 0..MAX_CONNECTIONS_PER_IP {
+            assert!(limiter.check(ip), "should allow connections under per-IP limit");
+        }
+    }
+
+    #[test]
+    fn test_limiter_rejects_over_per_ip_limit() {
+        let limiter = ConnectionLimiter::new();
+        let ip: IpAddr = "10.0.0.2".parse().unwrap();
+        // Fill up the per-IP quota
+        for _ in 0..MAX_CONNECTIONS_PER_IP {
+            assert!(limiter.check(ip));
+        }
+        // The next one should be rejected
+        assert!(!limiter.check(ip), "should reject connections over per-IP limit");
+    }
+
+    #[test]
+    fn test_limiter_different_ips_independent() {
+        let limiter = ConnectionLimiter::new();
+        let ip1: IpAddr = "10.0.0.1".parse().unwrap();
+        let ip2: IpAddr = "10.0.0.2".parse().unwrap();
+
+        // Fill IP1's quota
+        for _ in 0..MAX_CONNECTIONS_PER_IP {
+            limiter.check(ip1);
+        }
+        // IP2 should still be accepted
+        assert!(limiter.check(ip2), "different IPs should have independent limits");
+    }
+
+    #[test]
+    fn test_limiter_global_cap() {
+        let limiter = ConnectionLimiter::new();
+        // Simulate MAX_TOTAL_CONNECTIONS active connections
+        for _ in 0..MAX_TOTAL_CONNECTIONS {
+            limiter.increment();
+        }
+        let ip: IpAddr = "10.0.0.99".parse().unwrap();
+        assert!(!limiter.check(ip), "should reject at global capacity");
+
+        // Decrement one — should allow again
+        limiter.decrement();
+        assert!(limiter.check(ip), "should allow after decrement");
+    }
+
+    #[test]
+    fn test_limiter_increment_decrement() {
+        let limiter = ConnectionLimiter::new();
+        assert_eq!(limiter.active_count(), 0);
+        limiter.increment();
+        limiter.increment();
+        assert_eq!(limiter.active_count(), 2);
+        limiter.decrement();
+        assert_eq!(limiter.active_count(), 1);
+        limiter.decrement();
+        assert_eq!(limiter.active_count(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Frame read/write roundtrip via tokio duplex
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_write_read_frame_roundtrip() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        let body = b"test payload data";
+        write_frame(&mut writer, PacketType::EncryptedMessage, body).await.unwrap();
+
+        let frame = read_frame_impl(&mut reader).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::EncryptedMessage);
+        assert_eq!(frame.body, body);
+    }
+
+    #[tokio::test]
+    async fn test_write_read_empty_frame() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        write_frame(&mut writer, PacketType::Heartbeat, &[]).await.unwrap();
+
+        let frame = read_frame_impl(&mut reader).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::Heartbeat);
+        assert!(frame.body.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_write_read_multiple_frames() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        write_frame(&mut writer, PacketType::Heartbeat, &[]).await.unwrap();
+        write_frame(&mut writer, PacketType::EncryptedMessage, b"msg1").await.unwrap();
+        write_frame(&mut writer, PacketType::Disconnect, b"bye").await.unwrap();
+
+        let f1 = read_frame_impl(&mut reader).await.unwrap();
+        assert_eq!(f1.packet_type, PacketType::Heartbeat);
+
+        let f2 = read_frame_impl(&mut reader).await.unwrap();
+        assert_eq!(f2.packet_type, PacketType::EncryptedMessage);
+        assert_eq!(f2.body, b"msg1");
+
+        let f3 = read_frame_impl(&mut reader).await.unwrap();
+        assert_eq!(f3.packet_type, PacketType::Disconnect);
+        assert_eq!(f3.body, b"bye");
+    }
+
+    #[tokio::test]
+    async fn test_read_frame_detects_closed_connection() {
+        let (writer, mut reader) = tokio::io::duplex(65536);
+        // Drop the writer immediately — simulates peer disconnect
+        drop(writer);
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_write_read_large_frame() {
+        let (mut writer, mut reader) = tokio::io::duplex(1024 * 1024);
+
+        // 256 KB payload (within MAX_FRAME_SIZE)
+        let body = vec![0xAB; 256 * 1024];
+        write_frame(&mut writer, PacketType::FileTransferChunk, &body).await.unwrap();
+
+        let frame = read_frame_impl(&mut reader).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::FileTransferChunk);
+        assert_eq!(frame.body.len(), body.len());
+        assert_eq!(frame.body, body);
+    }
+}

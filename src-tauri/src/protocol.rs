@@ -369,3 +369,298 @@ pub fn build_frame(packet_type: PacketType, body: &[u8]) -> Result<Vec<u8>, Prot
     frame.extend_from_slice(body);
     Ok(frame)
 }
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+
+    // ─── PacketType parsing ─────────────────────────────────────
+
+    #[test]
+    fn test_all_valid_packet_types_roundtrip() {
+        let valid: &[(u8, PacketType)] = &[
+            (0x01, PacketType::HandshakeInit),
+            (0x02, PacketType::HandshakeResponse),
+            (0x03, PacketType::HandshakeComplete),
+            (0x10, PacketType::EncryptedMessage),
+            (0x11, PacketType::FileTransferRequest),
+            (0x12, PacketType::FileTransferChunk),
+            (0x13, PacketType::FileTransferComplete),
+            (0x14, PacketType::FileTransferAccept),
+            (0x15, PacketType::FileTransferReject),
+            (0x20, PacketType::Heartbeat),
+            (0x21, PacketType::HeartbeatAck),
+            (0x30, PacketType::Disconnect),
+            (0x31, PacketType::Error),
+            (0x40, PacketType::ConversationMeta),
+        ];
+        for &(byte, expected) in valid {
+            let parsed = PacketType::from_byte(byte).unwrap();
+            assert_eq!(parsed, expected, "from_byte(0x{byte:02X}) failed");
+            assert_eq!(parsed.to_byte(), byte, "to_byte() roundtrip failed for 0x{byte:02X}");
+        }
+    }
+
+    #[test]
+    fn test_unknown_packet_type_rejected() {
+        let invalid_bytes: &[u8] = &[0x00, 0x04, 0x0F, 0x16, 0x22, 0x32, 0x41, 0x50, 0xFF];
+        for &byte in invalid_bytes {
+            assert!(
+                PacketType::from_byte(byte).is_err(),
+                "byte 0x{byte:02X} should be rejected as unknown"
+            );
+        }
+    }
+
+    // ─── Version validation ─────────────────────────────────────
+
+    #[test]
+    fn test_valid_version() {
+        assert!(validate_version(PROTOCOL_VERSION).is_ok());
+    }
+
+    #[test]
+    fn test_reserved_versions_rejected() {
+        // 0x00, 0xFE, 0xFF are reserved
+        assert!(matches!(validate_version(0x00), Err(ProtocolError::ReservedVersion(0x00))));
+        assert!(matches!(validate_version(0xFE), Err(ProtocolError::ReservedVersion(0xFE))));
+        assert!(matches!(validate_version(0xFF), Err(ProtocolError::ReservedVersion(0xFF))));
+    }
+
+    #[test]
+    fn test_unsupported_version_rejected() {
+        // Anything that's not reserved and not PROTOCOL_VERSION
+        assert!(matches!(validate_version(0x02), Err(ProtocolError::UnsupportedVersion(0x02))));
+        assert!(matches!(validate_version(0x10), Err(ProtocolError::UnsupportedVersion(0x10))));
+    }
+
+    // ─── Frame size validation ──────────────────────────────────
+
+    #[test]
+    fn test_frame_size_minimum_boundary() {
+        assert!(validate_frame_size(MIN_FRAME_SIZE).is_ok());
+        assert!(validate_frame_size(MIN_FRAME_SIZE - 1).is_err());
+    }
+
+    #[test]
+    fn test_frame_size_maximum_boundary() {
+        assert!(validate_frame_size(MAX_FRAME_SIZE).is_ok());
+        assert!(validate_frame_size(MAX_FRAME_SIZE + 1).is_err());
+    }
+
+    #[test]
+    fn test_frame_size_zero_rejected() {
+        assert!(matches!(
+            validate_frame_size(0),
+            Err(ProtocolError::FrameTooSmall { size: 0, min: MIN_FRAME_SIZE })
+        ));
+    }
+
+    #[test]
+    fn test_frame_size_overflow_rejected() {
+        assert!(matches!(
+            validate_frame_size(u32::MAX),
+            Err(ProtocolError::FrameTooLarge { .. })
+        ));
+    }
+
+    // ─── build_frame structure ──────────────────────────────────
+
+    #[test]
+    fn test_build_frame_structure() {
+        let body = b"hello";
+        let frame = build_frame(PacketType::EncryptedMessage, body).unwrap();
+
+        // Frame layout: [4B length] [1B version] [1B type] [body]
+        assert_eq!(frame.len(), 4 + 1 + 1 + body.len());
+
+        // Length prefix = payload length (version + type + body)
+        let payload_len = u32::from_be_bytes([frame[0], frame[1], frame[2], frame[3]]);
+        assert_eq!(payload_len as usize, 1 + 1 + body.len());
+
+        // Version byte
+        assert_eq!(frame[4], PROTOCOL_VERSION);
+
+        // Packet type byte
+        assert_eq!(frame[5], PacketType::EncryptedMessage.to_byte());
+
+        // Body bytes
+        assert_eq!(&frame[6..], body);
+    }
+
+    #[test]
+    fn test_build_frame_empty_body() {
+        let frame = build_frame(PacketType::Heartbeat, &[]).unwrap();
+        // Minimum valid frame: 4B length + 1B version + 1B type
+        assert_eq!(frame.len(), 6);
+        let payload_len = u32::from_be_bytes([frame[0], frame[1], frame[2], frame[3]]);
+        assert_eq!(payload_len, MIN_FRAME_SIZE);
+    }
+
+    #[test]
+    fn test_build_frame_all_packet_types() {
+        // Every packet type should produce a valid frame
+        let types = [
+            PacketType::HandshakeInit,
+            PacketType::HandshakeResponse,
+            PacketType::HandshakeComplete,
+            PacketType::EncryptedMessage,
+            PacketType::FileTransferRequest,
+            PacketType::FileTransferChunk,
+            PacketType::FileTransferComplete,
+            PacketType::FileTransferAccept,
+            PacketType::FileTransferReject,
+            PacketType::Heartbeat,
+            PacketType::HeartbeatAck,
+            PacketType::Disconnect,
+            PacketType::Error,
+            PacketType::ConversationMeta,
+        ];
+        for pt in types {
+            let frame = build_frame(pt, b"test");
+            assert!(frame.is_ok(), "build_frame failed for {:?}", pt);
+        }
+    }
+
+    // ─── Serialization roundtrips ───────────────────────────────
+
+    #[test]
+    fn test_serialize_deserialize_disconnect() {
+        let msg = DisconnectMessage {
+            reason: DisconnectReason::UserInitiated,
+        };
+        let bytes = serialize(&msg).unwrap();
+        let decoded: DisconnectMessage = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.reason, DisconnectReason::UserInitiated);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_error_message() {
+        let msg = ErrorMessage {
+            code: ErrorCode::RateLimitExceeded,
+            description: "too many connections".to_string(),
+        };
+        let bytes = serialize(&msg).unwrap();
+        let decoded: ErrorMessage = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.code, ErrorCode::RateLimitExceeded);
+        assert_eq!(decoded.description, "too many connections");
+    }
+
+    #[test]
+    fn test_serialize_deserialize_encrypted_envelope() {
+        let env = EncryptedEnvelope {
+            nonce: vec![0xAA; 24],
+            counter: 42,
+            ciphertext: vec![0xBB; 128],
+        };
+        let bytes = serialize(&env).unwrap();
+        let decoded: EncryptedEnvelope = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.nonce, env.nonce);
+        assert_eq!(decoded.counter, 42);
+        assert_eq!(decoded.ciphertext, env.ciphertext);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_message_body_text() {
+        let body = MessageBody::Text {
+            id: "msg-001".to_string(),
+            content: "Hello, world! 🔒".to_string(),
+        };
+        let bytes = serialize(&body).unwrap();
+        let decoded: MessageBody = deserialize(&bytes).unwrap();
+        match &decoded {
+            MessageBody::Text { id, content } => {
+                assert_eq!(id, "msg-001");
+                assert_eq!(content, "Hello, world! 🔒");
+            }
+            other => panic!("expected Text, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_serialize_deserialize_file_transfer_request() {
+        let req = FileTransferRequestData {
+            transfer_id: "xfer-001".to_string(),
+            filename: "document.pdf".to_string(),
+            total_size: 1_048_576,
+            total_chunks: 16,
+            file_hash: vec![0xCC; 32],
+        };
+        let bytes = serialize(&req).unwrap();
+        let decoded: FileTransferRequestData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.transfer_id, "xfer-001");
+        assert_eq!(decoded.filename, "document.pdf");
+        assert_eq!(decoded.total_size, 1_048_576);
+        assert_eq!(decoded.total_chunks, 16);
+        assert_eq!(decoded.file_hash.len(), 32);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_conversation_meta() {
+        let meta = ConversationMetaData {
+            my_display_name: "Alice".to_string(),
+            your_display_name: "Bob".to_string(),
+        };
+        let bytes = serialize(&meta).unwrap();
+        let decoded: ConversationMetaData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.my_display_name, "Alice");
+        assert_eq!(decoded.your_display_name, "Bob");
+    }
+
+    #[test]
+    fn test_deserialize_garbage_rejected() {
+        let garbage = vec![0xFF, 0x00, 0x01, 0x02];
+        let result: Result<DisconnectMessage, _> = deserialize(&garbage);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_serialize_deserialize_handshake_with_candidates() {
+        let init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: [0xAA; 32],
+            identity_pub: [0xBB; 32],
+            timestamp: 1719446400,
+            signature: vec![0xCC; 64],
+            candidates: vec![
+                WireCandidate { address: "192.168.1.5:12345".to_string(), candidate_type: 0 },
+                WireCandidate { address: "1.2.3.4:54321".to_string(), candidate_type: 1 },
+            ],
+        };
+        let bytes = serialize(&init).unwrap();
+        let decoded: HandshakeInit = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.version, PROTOCOL_VERSION);
+        assert_eq!(decoded.candidates.len(), 2);
+        assert_eq!(decoded.candidates[0].address, "192.168.1.5:12345");
+        assert_eq!(decoded.candidates[1].candidate_type, 1);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_handshake_no_candidates() {
+        // Candidates are optional (skip_serializing_if = Vec::is_empty)
+        let init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: [0xAA; 32],
+            identity_pub: [0xBB; 32],
+            timestamp: 1719446400,
+            signature: vec![0xCC; 64],
+            candidates: vec![],
+        };
+        let bytes = serialize(&init).unwrap();
+        let decoded: HandshakeInit = deserialize(&bytes).unwrap();
+        assert!(decoded.candidates.is_empty());
+    }
+
+    // ─── Constants sanity checks ────────────────────────────────
+
+    #[test]
+    fn test_protocol_constants_sane() {
+        assert!(MAX_FRAME_SIZE >= MIN_FRAME_SIZE);
+        assert!(MAX_TEXT_MESSAGE_SIZE < MAX_FRAME_SIZE as usize);
+        assert!(MAX_FILE_CHUNK_SIZE < MAX_FRAME_SIZE as usize);
+        assert!(MAX_SESSION_DURATION_SECS > 0);
+        assert!(MAX_INVITE_VALIDITY_SECS > 0);
+        assert!(CLOCK_SKEW_TOLERANCE_SECS > 0);
+        assert!(LENGTH_PREFIX_SIZE == 4);
+    }
+}

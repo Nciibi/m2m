@@ -322,10 +322,16 @@ fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
-/// Decode a peer hex key silently returning [0u8; 32] on failure.
-/// Only use when the caller discards errors anyway (store operations).
-fn decode_peer_key_or_zero(hex_str: &str) -> [u8; 32] {
-    decode_peer_key(hex_str).unwrap_or([0u8; 32])
+/// Decode a peer hex key, logging an error and returning `None` on failure.
+/// Prevents silent database corruption from malformed hex strings.
+fn decode_peer_key_logged(hex_str: &str) -> Option<[u8; 32]> {
+    match decode_peer_key(hex_str) {
+        Ok(key) => Some(key),
+        Err(e) => {
+            tracing::error!(hex_len = hex_str.len(), error = %e, "decode_peer_key failed — skipping store operation");
+            None
+        }
+    }
 }
 
 /// Resolve the local (non-loopback) IP address used for internet connectivity.
@@ -534,12 +540,12 @@ async fn handle_incoming_connection(
 
     tracing::info!(peer = %peer_key_hex, "peer connected and authenticated");
 
-    // Upsert peer in key store
-    {
+    // Upsert peer in key store (skip if peer key hex is malformed)
+    if let Some(peer_key_bytes) = decode_peer_key_logged(&peer_key_hex) {
         let ks = state.key_store.lock().await;
         if let Some(ref store) = *ks {
             let _ = store.upsert_peer(
-                &decode_peer_key_or_zero(&peer_key_hex),
+                &peer_key_bytes,
                 &peer_fingerprint,
                 None,
             );
@@ -678,13 +684,20 @@ pub async fn send_message(
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
-            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), &**key)
-                .unwrap_or_default();
-            let _ = store.ensure_conversation(&peer_key_hex, &decode_peer_key_or_zero(&peer_key_hex));
-            let _ = store.store_message(
-                &msg_id, &peer_key_hex, "sent",
-                &encrypted, &nonce, now as i64,
-            );
+            match crypto_encrypt_storage(content.as_bytes(), &**key) {
+                Ok((nonce, encrypted)) => {
+                    if let Some(peer_bytes) = decode_peer_key_logged(&peer_key_hex) {
+                        let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
+                        let _ = store.store_message(
+                            &msg_id, &peer_key_hex, "sent",
+                            &encrypted, &nonce, now as i64,
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to encrypt message for storage — message NOT persisted");
+                }
+            }
         }
     }
 
@@ -825,13 +838,20 @@ fn spawn_receive_loop(
                                         let sk = state.storage_key.read().await;
                                         let ms = state.message_store.lock().await;
                                         if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
-                                            let (nonce, encrypted) = crypto_encrypt_storage(content.as_bytes(), &**key)
-                                                .unwrap_or_default();
-                                            let _ = store.ensure_conversation(&peer_key_hex, &decode_peer_key_or_zero(&peer_key_hex));
-                                            let _ = store.store_message(
-                                                id, &peer_key_hex, "received",
-                                                &encrypted, &nonce, now as i64,
-                                            );
+                                            match crypto_encrypt_storage(content.as_bytes(), &**key) {
+                                                Ok((nonce, encrypted)) => {
+                                                    if let Some(peer_bytes) = decode_peer_key_logged(&peer_key_hex) {
+                                                        let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
+                                                        let _ = store.store_message(
+                                                            id, &peer_key_hex, "received",
+                                                            &encrypted, &nonce, now as i64,
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!(error = %e, "failed to encrypt received message for storage");
+                                                }
+                                            }
                                         }
                                     }
 
