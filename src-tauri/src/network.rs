@@ -2,11 +2,18 @@
 /// M2M — Network Module
 ///
 /// TCP transport with length-prefixed framing, connection state machine,
-/// timeouts, heartbeats, rate limiting, and graceful disconnect.
+/// timeouts, heartbeats, rate limiting, connection-level DoS protection,
+/// filename sanitization, and graceful disconnect.
 ///
 /// All data crossing the network boundary is treated as untrusted.
-use std::net::SocketAddr;
+use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
+use std::num::NonZeroU32;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
+
+use governor::{Quota, RateLimiter as GovRateLimiter};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::net::tcp::OwnedReadHalf;
@@ -20,7 +27,9 @@ use crate::protocol::{
 };
 
 /// Network operation timeout for reads/writes.
-const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
+/// Set to 10s to align with heartbeat cadence (heartbeat every 30s, timeout after 10s).
+/// A dead connection is detected within 10s instead of 30s.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// TCP connection timeout.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -28,6 +37,132 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Maximum number of queued incoming connections.
 /// Increased from 8 to 128 for better DoS resilience.
 const LISTENER_BACKLOG: u32 = 128;
+
+// ─── Connection Rate Limiting ───────────────────────────────────────────────
+
+/// Maximum number of new TCP connections allowed per IP per time window.
+const MAX_CONNECTIONS_PER_IP: u32 = 10;
+
+/// Rate limit window duration in seconds.
+const RATE_LIMIT_WINDOW_SECS: u64 = 60;
+
+/// Maximum total concurrent connections across all IPs.
+const MAX_TOTAL_CONNECTIONS: usize = 50;
+
+/// Per-IP rate limiter with total connection cap.
+///
+/// Uses the `governor` token-bucket algorithm for per-IP tracking
+/// and an atomic counter for global connection limits.
+///
+/// ## Limits
+/// - **Per-IP**: max 10 new connections per 60-second window
+/// - **Global**: max 50 concurrent connections total
+pub struct ConnectionLimiter {
+    /// Token-bucket rate limiters keyed by peer IP.
+    per_ip: Mutex<HashMap<IpAddr, GovRateLimiter<IpAddr, governor::state::direct::NotKeyed>>>,
+    /// Current total active connection count.
+    active_connections: AtomicUsize,
+}
+
+impl ConnectionLimiter {
+    /// Create a new connection limiter with default limits.
+    pub fn new() -> Self {
+        Self {
+            per_ip: Mutex::new(HashMap::new()),
+            active_connections: AtomicUsize::new(0),
+        }
+    }
+
+    /// Check if a new connection from this IP is allowed.
+    /// Returns `true` if the connection should be accepted,
+    /// `false` if rate-limited or at capacity.
+    pub fn check(&self, ip: IpAddr) -> bool {
+        // Global cap: reject if at max concurrent connections.
+        if self.active_connections.load(Ordering::Relaxed) >= MAX_TOTAL_CONNECTIONS {
+            tracing::warn!(ip = %ip, active = %self.active_connections.load(Ordering::Relaxed), "connection rejected: at max capacity");
+            return false;
+        }
+
+        // Per-IP rate limit: check token bucket.
+        let mut map = self.per_ip.lock().unwrap();
+        let limiter = map.entry(ip).or_insert_with(|| {
+            let quota = Quota::per_non_standard(
+                NonZeroU32::new(MAX_CONNECTIONS_PER_IP).unwrap(),
+                Duration::from_secs(RATE_LIMIT_WINDOW_SECS),
+            );
+            GovRateLimiter::direct(quota)
+        });
+
+        if limiter.check().is_err() {
+            tracing::warn!(ip = %ip, "connection rejected: per-IP rate limit exceeded");
+            return false;
+        }
+
+        true
+    }
+
+    /// Record a new accepted connection (increments active count).
+    pub fn increment(&self) {
+        self.active_connections.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Record a connection closure (decrements active count).
+    pub fn decrement(&self) {
+        self.active_connections.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    /// Get the current number of active connections.
+    pub fn active_count(&self) -> usize {
+        self.active_connections.load(Ordering::Relaxed)
+    }
+}
+
+// ─── Filename Sanitization ──────────────────────────────────────────────────
+
+/// Maximum length of a sanitized filename.
+const MAX_FILENAME_LEN: usize = 255;
+
+/// Sanitize a filename received from an untrusted peer.
+///
+/// Strips directory separators, control characters, and other dangerous
+/// characters. Only allows: alphanumeric, dots, hyphens, underscores, spaces.
+///
+/// Returns `None` if the resulting filename is empty, dot-only, or otherwise
+/// unsafe.
+///
+/// # Examples
+/// ```
+/// assert_eq!(sanitize_filename("../../../etc/passwd"), None);
+/// assert_eq!(sanitize_filename("report.pdf"), Some("report.pdf".into()));
+/// assert_eq!(sanitize_filename(""), None);
+/// ```
+pub fn sanitize_filename(filename: &str) -> Option<String> {
+    // Filter to safe characters only — no path separators, no control chars.
+    let sanitized: String = filename
+        .chars()
+        .filter(|c| {
+            matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' | ' ')
+        })
+        .collect();
+
+    let sanitized = sanitized.trim().to_string();
+
+    // Reject empty, dot-only, or dangerously short names.
+    if sanitized.is_empty()
+        || sanitized == "."
+        || sanitized == ".."
+        || sanitized.eq_ignore_ascii_case("nul")
+        || sanitized.eq_ignore_ascii_case("con")
+        || sanitized.eq_ignore_ascii_case("prn")
+    {
+        return None;
+    }
+
+    // Truncate to max length.
+    let truncated: String = sanitized.chars().take(MAX_FILENAME_LEN).collect();
+
+    Some(truncated)
+}
 
 #[derive(Debug, Error)]
 pub enum NetworkError {

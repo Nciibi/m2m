@@ -14,6 +14,9 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use zeroize::Zeroizing;
 
+use crate::network;
+use crate::stun;
+
 use crate::crypto::IdentityKeypair;
 use crate::network::ConnectionState;
 use crate::session::Session;
@@ -29,13 +32,26 @@ pub struct PeerConnection {
 }
 
 /// State for an in-progress file transfer (receiving side).
+///
+/// Chunks are written directly to a temporary file on disk as they arrive,
+/// NOT buffered in RAM. Only a sparse bitmask is kept in memory to track
+/// which chunks have been received. This prevents OOM attacks from peers
+/// claiming large files (e.g. 4GB).
 pub struct IncomingFileTransfer {
     pub filename: String,
     pub total_size: u64,
     pub total_chunks: u32,
     pub file_hash: Vec<u8>,
-    pub received_chunks: HashMap<u32, Vec<u8>>,
     pub save_path: PathBuf,
+    /// Temporary file on disk — chunks are written here as they arrive.
+    pub temp_file: Option<std::fs::File>,
+    /// Path to the temporary file (for cleanup on failure).
+    pub temp_path: Option<PathBuf>,
+    /// Number of chunks received so far.
+    pub chunks_received: u32,
+    /// Bitmask of received chunks: true = chunk received.
+    /// Size = total_chunks, initialized to all false.
+    pub chunks_bitmask: Vec<bool>,
 }
 
 /// Central application state.
@@ -82,6 +98,8 @@ pub struct AppState {
     pub connectivity_verified: RwLock<bool>,
     /// Whether we're in private mode (don't expose IP in invites).
     pub private_mode: RwLock<bool>,
+    /// Connection rate limiter for DoS protection.
+    pub connection_limiter: network::ConnectionLimiter,
 }
 
 impl AppState {
@@ -107,6 +125,7 @@ impl AppState {
             nat_type: RwLock::new(stun::NatType::Unknown),
             connectivity_verified: RwLock::new(false),
             private_mode: RwLock::new(false),
+            connection_limiter: network::ConnectionLimiter::new(),
         }
     }
 

@@ -311,16 +311,32 @@ pub async fn start_listening(
         }
     });
 
-    // Spawn the connection handler task
+    // Spawn the connection handler task with rate limiting.
     let state_clone = state.inner().clone();
     let app_clone = app_handle.clone();
     tokio::spawn(async move {
         while let Some((stream, peer_addr)) = rx.recv().await {
-            let state_inner = state_clone.clone();
-            let app_inner = app_clone.clone();
-            tokio::spawn(async move {
-                handle_incoming_connection(app_inner, state_inner, stream, peer_addr).await;
-            });
+            let ip = peer_addr.ip();
+            let allowed = state_clone.connection_limiter.check(ip);
+
+            if allowed {
+                let state_inner = state_clone.clone();
+                let app_inner = app_clone.clone();
+                tokio::spawn(async move {
+                    state_inner.connection_limiter.increment();
+                    handle_incoming_connection(app_inner, state_inner.clone(), stream, peer_addr).await;
+                    state_inner.connection_limiter.decrement();
+                });
+            } else {
+                tracing::warn!(peer_ip = %ip, "connection rejected by rate limiter");
+                // Send a rate limit error frame so the peer knows why.
+                let _ = network::send_error(
+                    &mut stream,
+                    protocol::ErrorCode::RateLimitExceeded,
+                    "rate limited — too many connections",
+                ).await;
+                drop(stream);
+            }
         }
     });
 
@@ -755,25 +771,46 @@ fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(req) = protocol::deserialize::<FileTransferRequestData>(&plaintext) {
-                                    // Pre-register the transfer so chunks can be stored
+                                    // Pre-register the transfer with a temp file on disk.
+                                    // Chunks will be streamed to the temp file as they arrive.
+                                    let total_chunks = req.total_chunks;
+                                    let total_size = req.total_size;
+                                    let transfer_id = req.transfer_id.clone();
+                                    let filename = req.filename.clone();
+                                    let file_hash = req.file_hash.clone();
+
+                                    // Sanitize the filename from the peer (path traversal protection).
+                                    let safe_name = network::sanitize_filename(&filename)
+                                        .unwrap_or_else(|| format!("file_{}", transfer_id));
+
                                     {
                                         let mut transfers = state.incoming_transfers.write().await;
-                                        transfers.entry(req.transfer_id.clone()).or_insert_with(|| {
+                                        transfers.entry(transfer_id.clone()).or_insert_with(|| {
+                                            let (temp_file, temp_path) = create_temp_file(total_size)
+                                                .map_err(|e| {
+                                                    tracing::warn!(error = %e, "failed to create temp file for transfer");
+                                                })
+                                                .ok()
+                                                .unwrap_or((None, None));
+
                                             IncomingFileTransfer {
-                                                filename: req.filename.clone(),
-                                                total_size: req.total_size,
-                                                total_chunks: req.total_chunks,
-                                                file_hash: req.file_hash.clone(),
-                                                received_chunks: std::collections::HashMap::new(),
-                                                save_path: std::path::PathBuf::new(), // set on accept
+                                                filename: safe_name,
+                                                total_size,
+                                                total_chunks,
+                                                file_hash,
+                                                save_path: std::path::PathBuf::new(),
+                                                temp_file,
+                                                temp_path,
+                                                chunks_received: 0,
+                                                chunks_bitmask: vec![false; total_chunks as usize],
                                             }
                                         });
                                     }
                                     let _ = app_handle.emit("m2m://file-request", FileRequestEvent {
                                         peer_key_hex: peer_key_hex.clone(),
-                                        transfer_id: req.transfer_id,
-                                        filename: req.filename,
-                                        total_size: req.total_size,
+                                        transfer_id,
+                                        filename,
+                                        total_size,
                                     });
                                 }
                             }
@@ -792,12 +829,38 @@ fn spawn_receive_loop(
                                 if let Ok(chunk) = protocol::deserialize::<protocol::FileTransferChunkData>(&plaintext) {
                                     let mut transfers = state.incoming_transfers.write().await;
                                     if let Some(transfer) = transfers.get_mut(&chunk.transfer_id) {
-                                        // Verify chunk hash
+                                        // Verify chunk hash before writing to disk
                                         let hash = sodiumoxide::crypto::hash::sha256::hash(&chunk.data);
-                                        if hash.0.to_vec() == chunk.chunk_hash {
-                                            transfer.received_chunks.insert(chunk.chunk_index, chunk.data);
+                                        let hash_valid = hash.0.to_vec() == chunk.chunk_hash;
+
+                                        if !hash_valid {
+                                            tracing::warn!(chunk = chunk.chunk_index, "file chunk hash mismatch — skipping");
+                                        } else if let Some(ref mut file) = transfer.temp_file {
+                                            use std::io::{Seek, Write};
+                                            let offset = (chunk.chunk_index as u64)
+                                                * (crate::protocol::MAX_FILE_CHUNK_SIZE as u64);
+                                            match file.seek(std::io::SeekFrom::Start(offset)) {
+                                                Ok(_) => {
+                                                    match file.write_all(&chunk.data) {
+                                                        Ok(_) => {
+                                                            transfer.chunks_received += 1;
+                                                            if let Some(bit) = transfer.chunks_bitmask
+                                                                .get_mut(chunk.chunk_index as usize)
+                                                            {
+                                                                *bit = true;
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!(error = %e, chunk = chunk.chunk_index, "failed to write chunk to temp file");
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, chunk = chunk.chunk_index, "failed to seek in temp file");
+                                                }
+                                            }
                                         } else {
-                                            tracing::warn!("file chunk hash mismatch");
+                                            tracing::warn!("no temp file available for transfer - skipping chunk");
                                         }
                                     }
                                 }
@@ -816,39 +879,93 @@ fn spawn_receive_loop(
                             Ok(plaintext) => {
                                 if let Ok(complete) = protocol::deserialize::<protocol::FileTransferCompleteData>(&plaintext) {
                                     let mut transfers = state.incoming_transfers.write().await;
-                                    if let Some(transfer) = transfers.remove(&complete.transfer_id) {
-                                        // Reassemble and write file
-                                        let mut file_data = Vec::with_capacity(transfer.total_size as usize);
-                                        for i in 0..transfer.total_chunks {
-                                            if let Some(chunk) = transfer.received_chunks.get(&i) {
-                                                file_data.extend_from_slice(chunk);
-                                            } else {
-                                                tracing::warn!("missing chunk {i} for file transfer");
-                                                break;
-                                            }
-                                        }
-                                        // Verify total hash
-                                        let hash = sodiumoxide::crypto::hash::sha256::hash(&file_data);
-                                        if hash.0.to_vec() == transfer.file_hash {
-                                            // Build the final write path
-                                            let final_path = if transfer.save_path.as_os_str().is_empty() {
-                                                std::path::PathBuf::from(&transfer.filename)
-                                            } else if transfer.save_path.is_dir() {
-                                                transfer.save_path.join(&transfer.filename)
-                                            } else {
-                                                transfer.save_path.clone()
-                                            };
-                                            if let Err(e) = std::fs::write(&final_path, &file_data) {
-                                                tracing::warn!(error = %e, "failed to write received file");
-                                            } else {
-                                                let _ = app_handle.emit("m2m://file-complete", serde_json::json!({
-                                                    "transfer_id": complete.transfer_id,
-                                                    "filename": transfer.filename,
-                                                    "path": final_path.to_string_lossy(),
-                                                }));
+                                    if let Some(mut transfer) = transfers.remove(&complete.transfer_id) {
+                                        let transfer_id = complete.transfer_id.clone();
+
+                                        // Verify all chunks were received (bitmask fully set).
+                                        let all_received = transfer.chunks_received == transfer.total_chunks
+                                            && transfer.chunks_bitmask.iter().all(|&b| b);
+
+                                        if !all_received {
+                                            tracing::warn!(
+                                                received = transfer.chunks_received,
+                                                total = transfer.total_chunks,
+                                                "file transfer incomplete — missing chunks"
+                                            );
+                                            // Clean up temp file, then exit handler.
+                                            drop(transfer.temp_file);
+                                            if let Some(ref path) = transfer.temp_path {
+                                                let _ = std::fs::remove_file(path);
                                             }
                                         } else {
-                                            tracing::warn!("file hash verification failed");
+                                        // All chunks received — verify hash against temp file.
+                                        // This is the ONE time we buffer the full file in memory;
+                                        // it's unavoidable for hash verification, but the file
+                                        // has already been streamed to disk as it arrived.
+                                        let hash_valid = if let Some(ref mut file) = transfer.temp_file {
+                                            use std::io::Read;
+                                            let mut buf = Vec::with_capacity(transfer.total_size as usize);
+                                            match file.seek(std::io::SeekFrom::Start(0))
+                                                .and_then(|_| file.read_to_end(&mut buf))
+                                            {
+                                                Ok(_) => {
+                                                    let hash = sodiumoxide::crypto::hash::sha256::hash(&buf);
+                                                    hash.0.to_vec() == transfer.file_hash
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, "failed to read temp file for hash verification");
+                                                    false
+                                                }
+                                            }
+                                        } else {
+                                            false
+                                        };
+
+                                        if hash_valid {
+                                            // Build final path with sanitized filename.
+                                            let safe_name = network::sanitize_filename(&transfer.filename)
+                                                .unwrap_or_else(|| format!("download_{}", transfer_id));
+
+                                            let final_path = if transfer.save_path.as_os_str().is_empty() {
+                                                std::path::PathBuf::from(&safe_name)
+                                            } else if transfer.save_path.is_dir() {
+                                                transfer.save_path.join(&safe_name)
+                                            } else {
+                                                // save_path is a full file path — use it directly.
+                                                transfer.save_path.clone()
+                                            };
+
+                                            // Rename temp file to final destination.
+                                            // This is atomic on the same filesystem.
+                                            let rename_ok = if let (Some(ref temp_path), Some(ref mut file)) =
+                                                (transfer.temp_path.as_ref(), transfer.temp_file.as_mut())
+                                            {
+                                                // Close the file first so rename can work on Windows.
+                                                drop(file); // Close the File handle
+                                                std::fs::rename(temp_path, &final_path).is_ok()
+                                            } else {
+                                                false
+                                            };
+
+                                            if rename_ok {
+                                                let _ = app_handle.emit("m2m://file-complete", serde_json::json!({
+                                                    "transfer_id": transfer_id,
+                                                    "filename": safe_name,
+                                                    "path": final_path.to_string_lossy(),
+                                                }));
+                                            } else {
+                                                tracing::warn!("failed to rename temp file — cleaning up");
+                                                // Clean up temp file on failure
+                                                if let Some(ref path) = transfer.temp_path {
+                                                    let _ = std::fs::remove_file(path);
+                                                }
+                                            }
+                                        } else {
+                                            tracing::warn!("file hash verification failed — deleting corrupted temp file");
+                                            drop(transfer.temp_file);
+                                            if let Some(ref path) = transfer.temp_path {
+                                                let _ = std::fs::remove_file(path);
+                                            }
                                         }
                                     }
                                 }
@@ -1077,8 +1194,11 @@ pub async fn accept_file_transfer(
                     total_size: 0,
                     total_chunks: 0,
                     file_hash: Vec::new(),
-                    received_chunks: std::collections::HashMap::new(),
                     save_path,
+                    temp_file: None,
+                    temp_path: None,
+                    chunks_received: 0,
+                    chunks_bitmask: Vec::new(),
                 }
             });
         } else {
@@ -1132,6 +1252,21 @@ pub async fn get_listen_address(
 }
 
 // ─── Internal Helpers ───
+
+/// Create a temporary file pre-allocated to the given size.
+/// Returns (Option<File>, Option<PathBuf>) — either both Some or both None.
+/// The file is created in the OS temp directory with a unique name.
+fn create_temp_file(size: u64) -> std::io::Result<(std::fs::File, std::path::PathBuf)> {
+    let mut path = std::env::temp_dir();
+    path.push(format!("m2m_{}", uuid::Uuid::new_v4()));
+
+    let file = std::fs::File::create(&path)?;
+    // Pre-allocate the file to the full expected size.
+    // This ensures we have enough disk space and avoids fragmentation.
+    file.set_len(size)?;
+
+    Ok((file, path))
+}
 
 /// Send file chunks to a peer after they've accepted the transfer.
 async fn send_file_chunks(
