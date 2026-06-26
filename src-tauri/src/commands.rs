@@ -440,11 +440,36 @@ pub async fn connect_to_peer(
         .as_ref()
         .ok_or("identity not initialized")?;
 
+    // Gather our local candidates to share with the peer during handshake.
+    let config = state.stun_config.read().await;
+    let stun_result = stun::discover_public_addrs(&config).await.ok();
+    drop(config);
+
+    let host_candidates = candidate::gather_host_candidates();
+    let reflexive_candidates = stun_result
+        .as_ref()
+        .map(|r| candidate::gather_reflexive_candidates(r))
+        .unwrap_or_default();
+
+    let mut all = host_candidates;
+    all.extend(reflexive_candidates);
+    all.sort_by(|a, b| b.priority.cmp(&a.priority));
+    let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
+        address: c.address.clone(),
+        candidate_type: c.candidate_type as u8,
+    }).collect();
+
+    // Update state with gathered candidates
+    {
+        let mut cand_state = state.candidates.write().await;
+        *cand_state = all;
+    }
+
     // We need a mutable TcpStream for the handshake
     let mut stream = stream;
     let mut session = Session::new();
     session
-        .handshake_as_initiator(&mut stream, kp, &signed.payload.identity_pub)
+        .handshake_as_initiator(&mut stream, kp, &signed.payload.identity_pub, wire_candidates)
         .await
         .map_err(|e| format!("handshake failed: {e}"))?;
 
