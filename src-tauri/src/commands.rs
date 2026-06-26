@@ -335,7 +335,32 @@ async fn handle_incoming_connection(
             }
         };
 
-        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame).await {
+        // Gather our local candidates to share with the peer during handshake.
+        let config = state.stun_config.read().await;
+        let stun_result = stun::discover_public_addrs(&config).await.ok();
+        drop(config);
+
+        let host_candidates = candidate::gather_host_candidates();
+        let reflexive_candidates = stun_result
+            .as_ref()
+            .map(|r| candidate::gather_reflexive_candidates(r))
+            .unwrap_or_default();
+
+        let mut all = host_candidates;
+        all.extend(reflexive_candidates);
+        all.sort_by(|a, b| b.priority.cmp(&a.priority));
+        let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
+            address: c.address.clone(),
+            candidate_type: c.candidate_type as u8,
+        }).collect();
+
+        // Update state with gathered candidates
+        {
+            let mut cand_state = state.candidates.write().await;
+            *cand_state = all;
+        }
+
+        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates).await {
             tracing::warn!(error = %e, "handshake failed for incoming connection");
             let _ = network::send_error(
                 &mut stream,
