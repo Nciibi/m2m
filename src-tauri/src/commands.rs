@@ -1778,7 +1778,7 @@ pub async fn export_conversation(
     // Serialize the JSON, then encrypt the entire export with the storage key
     let export_json = serde_json::to_vec_pretty(&export_data)
         .map_err(|e| format!("serialization failed: {e}"))?;
-    let (nonce, ciphertext) = crypto_encrypt_storage(&export_json, key)
+    let (nonce, ciphertext) = crypto_encrypt_storage(&export_json, &**key)
         .map_err(|e| format!("encryption failed: {e}"))?;
 
     // Build the final file: nonce (24 bytes) || ciphertext
