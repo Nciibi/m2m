@@ -12,6 +12,7 @@ use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
+use zeroize::Zeroizing;
 
 use crate::crypto::IdentityKeypair;
 use crate::network::ConnectionState;
@@ -60,8 +61,10 @@ pub struct AppState {
     /// Key store (initialised when identity is loaded).
     pub key_store: Mutex<Option<storage::KeyStore>>,
     /// The storage encryption key (derived from passphrase or identity).
-    /// Held in memory only for the lifetime of the app.
-    pub storage_key: RwLock<Option<[u8; 32]>>,
+    /// Wrapped in Zeroizing to ensure automatic zeroization on drop/move.
+    /// NOTE: This does NOT prevent the key from being paged to swap.
+    /// For full protection, the OS-level memory must be mlock()'d.
+    pub storage_key: RwLock<Option<Zeroizing<[u8; 32]>>>,
     /// Whether the vault has been unlocked with a passphrase.
     pub vault_unlocked: RwLock<bool>,
     /// Whether a vault passphrase has been set (first-run detection).
