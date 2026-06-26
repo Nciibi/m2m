@@ -670,7 +670,7 @@ fn is_global_unicast(ip: std::net::IpAddr) -> bool {
                 && !v6.is_unspecified()
                 && !v6.is_multicast()
                 && !v6.is_unique_local()
-                && !v6.is_link_local()
+                && !v6.is_unicast_link_local()
         }
     }
 }

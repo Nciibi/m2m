@@ -852,12 +852,13 @@ fn spawn_receive_loop(
                                     {
                                         let mut transfers = state.incoming_transfers.write().await;
                                         transfers.entry(transfer_id.clone()).or_insert_with(|| {
-                                            let (temp_file, temp_path) = create_temp_file(total_size)
-                                                .map_err(|e| {
+                                            let (temp_file, temp_path) = match create_temp_file(total_size) {
+                                                Ok((f, p)) => (Some(f), Some(p)),
+                                                Err(e) => {
                                                     tracing::warn!(error = %e, "failed to create temp file for transfer");
-                                                })
-                                                .ok()
-                                                .unwrap_or((None, None));
+                                                    (None, None)
+                                                }
+                                            };
 
                                             IncomingFileTransfer {
                                                 filename: safe_name,
@@ -865,8 +866,8 @@ fn spawn_receive_loop(
                                                 total_chunks,
                                                 file_hash,
                                                 save_path: std::path::PathBuf::new(),
-                                                temp_file,
-                                                temp_path,
+                                                temp_file: temp_file,
+                                                temp_path: temp_path,
                                                 chunks_received: 0,
                                                 chunks_bitmask: vec![false; total_chunks as usize],
                                             }
