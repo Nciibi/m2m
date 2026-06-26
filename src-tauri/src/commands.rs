@@ -394,6 +394,8 @@ pub async fn start_listening(
                     state_inner.connection_limiter.decrement();
                 });
             } else {
+                // Need a mutable reference for send_error
+                let mut stream = stream;
                 tracing::warn!(peer_ip = %ip, "connection rejected by rate limiter");
                 // Send a rate limit error frame so the peer knows why.
                 let _ = network::send_error(

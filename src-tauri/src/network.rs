@@ -350,14 +350,10 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
             )),
         })?;
 
-    // Enable TCP keepalive with OS defaults to maintain NAT bindings.
-    // This prevents NAT gateways from dropping the mapping due to inactivity.
+    // Set TCP_NODELAY to disable Nagle's algorithm for lower latency messaging.
+    // Keepalive is handled by the application-layer heartbeat protocol instead.
     if let Ok(std_stream) = stream.into_std() {
         let _ = std_stream.set_nodelay(true);
-        // Set keepalive (may not be available on all platforms/Rust versions)
-        if let Err(_) = std_stream.set_keepalive(Some(std::time::Duration::from_secs(30))) {
-            tracing::debug!("could not enable TCP keepalive on this platform");
-        }
         stream = TcpStream::from_std(std_stream).map_err(NetworkError::Io)?;
     }
 
