@@ -229,6 +229,7 @@ pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResul
         }
     }
 
+    let responding_servers = results.len();
     if results.is_empty() {
         return Err(StunError::AllServersFailed);
     }
@@ -269,7 +270,7 @@ pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResul
         consensus_addr,
         consensus,
         total_servers,
-        responding_servers: results.len(),
+        responding_servers,
     })
 }
 

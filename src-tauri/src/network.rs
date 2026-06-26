@@ -13,7 +13,6 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use governor;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::net::tcp::OwnedReadHalf;
@@ -51,15 +50,15 @@ const MAX_TOTAL_CONNECTIONS: usize = 50;
 
 /// Per-IP rate limiter with total connection cap.
 ///
-/// Uses the `governor` token-bucket algorithm for per-IP tracking
-/// and an atomic counter for global connection limits.
+/// Uses a sliding window counter for per-IP tracking and an atomic
+/// counter for global connection limits.
 ///
 /// ## Limits
 /// - **Per-IP**: max 10 new connections per 60-second window
 /// - **Global**: max 50 concurrent connections total
 pub struct ConnectionLimiter {
-    /// Token-bucket rate limiters keyed by peer IP.
-    per_ip: Mutex<HashMap<IpAddr, governor::RateLimiter<governor::state::direct::NotKeyed>>>,
+    /// Connection timestamps per IP (sliding window counters).
+    per_ip: Mutex<HashMap<IpAddr, Vec<std::time::Instant>>>,
     /// Current total active connection count.
     active_connections: AtomicUsize,
 }
@@ -83,20 +82,23 @@ impl ConnectionLimiter {
             return false;
         }
 
-        // Per-IP rate limit: check token bucket.
+        // Per-IP rate limit: sliding window counter.
         let mut map = self.per_ip.lock().unwrap();
-        let limiter = map.entry(ip).or_insert_with(|| {
-            let quota = governor::Quota::per_minute(
-                NonZeroU32::new(MAX_CONNECTIONS_PER_IP).unwrap(),
-            );
-            governor::RateLimiter::direct(quota)
-        });
+        let entries = map.entry(ip).or_insert_with(Vec::new);
+        let now = std::time::Instant::now();
+        let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
 
-        if limiter.check().is_err() {
-            tracing::warn!(ip = %ip, "connection rejected: per-IP rate limit exceeded");
+        // Remove entries outside the window.
+        entries.retain(|t| now.duration_since(*t) < window);
+
+        // Check if rate limited.
+        if entries.len() >= MAX_CONNECTIONS_PER_IP as usize {
+            tracing::warn!(ip = %ip, count = entries.len(), "connection rejected: per-IP rate limit exceeded");
             return false;
         }
 
+        // Record this connection attempt.
+        entries.push(now);
         true
     }
 
@@ -351,7 +353,7 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     // Enable TCP keepalive with OS defaults to maintain NAT bindings.
     // This prevents NAT gateways from dropping the mapping due to inactivity.
     if let Ok(std_stream) = stream.into_std() {
-        let _ = std_stream.set_keepalive(true);
+        let _ = std_stream.set_keepalive(Some(std::time::Duration::from_secs(30)));
         let _ = std_stream.set_nodelay(true);
         stream = TcpStream::from_std(std_stream).map_err(NetworkError::Io)?;
     }
