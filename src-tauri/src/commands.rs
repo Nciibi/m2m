@@ -990,7 +990,7 @@ pub async fn load_messages(
 
     let mut messages = Vec::with_capacity(stored.len());
     for m in stored {
-        let content = crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
+        let content = crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, &**key)
             .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
             .unwrap_or_else(|_| "[encrypted]".to_string());
         messages.push(ChatMessage {
@@ -1614,12 +1614,13 @@ pub async fn list_conversations(
 
         // Try to decrypt the last message for a preview
         let last_message_preview = if let Some(ref key) = *sk {
+            let key_ref: &[u8; 32] = &**key;
             store
                 .load_messages(&c.id, 1)
                 .ok()
                 .and_then(|msgs| msgs.into_iter().last())
                 .and_then(|m| {
-                    crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
+                    crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key_ref)
                         .ok()
                         .map(|bytes| {
                             let text = String::from_utf8_lossy(&bytes).to_string();
