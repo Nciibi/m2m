@@ -993,6 +993,23 @@ function App() {
                       </button>
                     </div>
                   )}
+                  {/* Tor inbound warning: shown when Tor is enabled but private mode is off */}
+                  {networkSettings?.tor_enabled && !privateMode && generatedInvite && (
+                    <div className="tor-warning-banner" id="tor-inbound-warning">
+                      <div className="tor-warning-icon">⚠️</div>
+                      <div className="tor-warning-content">
+                        <strong>Tor Inbound Warning</strong>
+                        <p>
+                          Tor is enabled for <em>outbound</em> connections, but this invite
+                          contains your real IP address. Inbound connections will bypass Tor
+                          and reveal your location.
+                        </p>
+                        <button className="secondary" onClick={handlePrivateModeToggle} id="enable-private-mode-from-warning">
+                          Enable Private Mode
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Join Card */}
