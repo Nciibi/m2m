@@ -481,7 +481,7 @@ pub async fn connect_to_peer(
         .parse()
         .map_err(|e| format!("invalid address in invite: {e}"))?;
 
-    tracing::info!(invite_address = %addr, address_hint = %signed.payload.address_hint, "connecting to peer from invite");
+    tracing::debug!(invite_address = %addr, address_hint = %signed.payload.address_hint, "connecting to peer from invite");
 
     let stream = network::connect(addr)
         .await
