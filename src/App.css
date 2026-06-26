@@ -506,7 +506,7 @@ input::placeholder {
 .fingerprint-label {
   display: block;
   color: var(--text-muted);
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;

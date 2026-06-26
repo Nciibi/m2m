@@ -229,11 +229,17 @@ pub async fn create_invite(
 
     let validity_secs = validity_minutes.saturating_mul(60);
 
-    tracing::info!(
-        private_mode = private_mode,
-        address_hint = %actual_address,
-        "generating invite"
-    );
+    // ─── Tor Inbound Warning ───
+    // When Tor is enabled but private mode is off, the invite contains
+    // the user's real IP address. Inbound connections will bypass Tor
+    // entirely, defeating the purpose of Tor for privacy.
+    if crate::tor::is_enabled() && !private_mode {
+        tracing::warn!(
+            "Tor is enabled for outbound connections, but this invite contains \
+             your real IP address. Inbound connections will bypass Tor and reveal \
+             your public IP. Enable Private Mode to exclude the IP from invites."
+        );
+    }
 
     identity::create_invite(kp, &actual_address, validity_secs, one_time)
         .map_err(|e| format!("invite creation failed: {e}"))
