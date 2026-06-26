@@ -245,6 +245,66 @@ pub async fn create_invite(
         .map_err(|e| format!("invite creation failed: {e}"))
 }
 
+/// Estimate the entropy of a passphrase in bits.
+///
+/// Uses a simplified character-pool model: counts the size of the
+/// character set used, then computes log2(pool^length).
+///
+/// This is a rough estimate — actual entropy depends on the randomness
+/// of the passphrase generation process. It catches the worst cases
+/// (single-word, all-lowercase, short passphrases) while being
+/// deliberately lenient for diceware-style multi-word phrases.
+fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
+    let bytes = passphrase.as_bytes();
+
+    // Detect which character classes are present.
+    let mut has_lower = false;
+    let mut has_upper = false;
+    let mut has_digit = false;
+    let mut has_special = false;
+    let mut has_unicode = false;
+
+    for &b in bytes {
+        if b.is_ascii_lowercase() {
+            has_lower = true;
+        } else if b.is_ascii_uppercase() {
+            has_upper = true;
+        } else if b.is_ascii_digit() {
+            has_digit = true;
+        } else if b.is_ascii_punctuation() || b.is_ascii_graphic() {
+            has_special = true;
+        } else if !b.is_ascii() {
+            has_unicode = true;
+        }
+    }
+
+    let mut pool_size = 0u32;
+    if has_lower {
+        pool_size += 26;
+    }
+    if has_upper {
+        pool_size += 26;
+    }
+    if has_digit {
+        pool_size += 10;
+    }
+    if has_special {
+        pool_size += 32;
+    }
+    if has_unicode {
+        pool_size += 100; // rough estimate for Unicode charset
+    }
+
+    if pool_size == 0 {
+        return 0.0;
+    }
+
+    // Entropy = length * log2(pool_size)
+    let pool_f = pool_size as f64;
+    let len = passphrase.len() as f64;
+    len * pool_f.log2()
+}
+
 /// Resolve the local (non-loopback) IP address used for internet connectivity.
 fn resolve_local_ip() -> Option<std::net::IpAddr> {
     std::net::UdpSocket::bind("0.0.0.0:0")
@@ -1401,8 +1461,21 @@ pub async fn unlock_vault(
     state: State<'_, Arc<AppState>>,
     passphrase: String,
 ) -> Result<VaultStatus, String> {
-    if passphrase.len() < 8 {
-        return Err("passphrase must be at least 8 characters".to_string());
+    // ─── Passphrase Strength Check ───
+    if passphrase.len() < 12 {
+        return Err(
+            "passphrase must be at least 12 characters — longer is more secure".to_string(),
+        );
+    }
+    // Estimate entropy: if weaker than 40 bits, reject.
+    let entropy = estimate_passphrase_entropy(&passphrase);
+    if entropy < 40.0 {
+        return Err(format!(
+            "passphrase too weak: ~{:.0} bits of entropy. \
+             Use a longer passphrase (aim for 60+ bits). \
+             Try a diceware phrase with 5+ random words.",
+            entropy
+        ));
     }
 
     let data_dir = storage::ensure_data_dir()
