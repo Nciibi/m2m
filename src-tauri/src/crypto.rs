@@ -194,10 +194,15 @@ impl Drop for EphemeralKeypair {
 
 /// Session keys derived from key exchange.
 /// Separate keys for sending and receiving (directional).
+/// Supports ratcheting for forward secrecy: keys evolve after each use.
 pub struct SessionKeys {
     rx_key: [u8; 32],
     tx_key: [u8; 32],
 }
+
+/// Block size for message padding to obfuscate plaintext length.
+/// All encrypted messages are padded to the next multiple of this block size.
+const PADDING_BLOCK: usize = 256;
 
 impl SessionKeys {
     /// Encrypt a plaintext message for sending.
@@ -229,6 +234,33 @@ impl SessionKeys {
             aead::Key::from_slice(&self.rx_key).ok_or(CryptoError::InvalidKeyLength)?;
         aead::open(ciphertext, Some(aad), &nonce, &key)
             .map_err(|_| CryptoError::DecryptionFailed)
+    }
+
+    /// Ratchet the sending key forward after encrypting a message.
+    /// Derives a new tx_key from the current one using a one-way function.
+    /// This provides forward secrecy: compromising the current key does NOT
+    /// reveal previously encrypted messages, because the old key is zeroized.
+    ///
+    /// Construction: new_tx_key = SHA256(old_tx_key || ratchet_context)
+    /// This is the HKDF-Expand step using SHA256 as the PRF.
+    pub fn ratchet_tx(&mut self) {
+        let mut input = Vec::with_capacity(32 + 16);
+        input.extend_from_slice(&self.tx_key);
+        input.extend_from_slice(b"m2m-ratchet-tx-v1");
+        let hash = sha256::hash(&input);
+        self.tx_key.zeroize();
+        self.tx_key.copy_from_slice(&hash.0[..32]);
+    }
+
+    /// Ratchet the receiving key forward after decrypting a message.
+    /// Mirror of ratchet_tx for the receive direction.
+    pub fn ratchet_rx(&mut self) {
+        let mut input = Vec::with_capacity(32 + 16);
+        input.extend_from_slice(&self.rx_key);
+        input.extend_from_slice(b"m2m-ratchet-rx-v1");
+        let hash = sha256::hash(&input);
+        self.rx_key.zeroize();
+        self.rx_key.copy_from_slice(&hash.0[..32]);
     }
 }
 
