@@ -4,8 +4,6 @@
 /// Provides structured network candidates (host, server-reflexive)
 /// with prioritization for ICE-Lite connectivity establishment.
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-
 use crate::stun;
 
 // ─── Candidate Types ────────────────────────────────────────────────────────

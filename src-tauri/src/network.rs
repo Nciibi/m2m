@@ -34,6 +34,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum number of queued incoming connections.
 /// Increased from 8 to 128 for better DoS resilience.
+#[allow(dead_code)]
 const LISTENER_BACKLOG: u32 = 128;
 
 // ─── Connection Rate Limiting ───────────────────────────────────────────────
@@ -112,6 +113,7 @@ impl ConnectionLimiter {
     }
 
     /// Get the current number of active connections.
+    #[allow(dead_code)]
     pub fn active_count(&self) -> usize {
         self.active_connections.load(Ordering::Relaxed)
     }
@@ -180,8 +182,10 @@ pub enum NetworkError {
     #[error("protocol error: {0}")]
     Protocol(#[from] protocol::ProtocolError),
     #[error("connection in invalid state: {0}")]
+    #[allow(dead_code)]
     InvalidState(String),
     #[error("rate limit exceeded")]
+    #[allow(dead_code)]
     RateLimitExceeded,
 }
 
@@ -192,12 +196,14 @@ pub enum ConnectionState {
     /// No active connection.
     Disconnected,
     /// TCP connection in progress.
+    #[allow(dead_code)]
     Connecting,
     /// TCP connected, performing cryptographic handshake.
     Handshaking,
     /// Handshake complete, encrypted communication active.
     Established,
     /// Graceful disconnect in progress.
+    #[allow(dead_code)]
     Disconnecting,
 }
 
@@ -215,6 +221,8 @@ impl std::fmt::Display for ConnectionState {
 
 /// A raw frame read from the wire.
 pub struct RawFrame {
+    /// Protocol version.
+    #[allow(dead_code)]
     pub version: u8,
     pub packet_type: PacketType,
     pub body: Vec<u8>,
@@ -356,7 +364,8 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     Ok(stream)
 }
 
-/// Send a heartbeat packet.
+/// Send a heartbeat packet (reserved for future heartbeating).
+#[allow(dead_code)]
 pub async fn send_heartbeat(stream: &mut TcpStream) -> Result<(), NetworkError> {
     write_frame(stream, PacketType::Heartbeat, &[]).await
 }

@@ -10,7 +10,6 @@ use zeroize::Zeroize;
 
 use crate::crypto::{self, EphemeralKeypair, IdentityKeypair, SessionKeys};
 use crate::network::{self, ConnectionState, RawFrame};
-use crate::candidate;
 use crate::protocol::{
     self, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
     MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
