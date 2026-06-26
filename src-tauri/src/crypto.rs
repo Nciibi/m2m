@@ -280,3 +280,151 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
 pub fn init() -> Result<(), CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::InitFailed)
 }
+
+// ─── Message Padding ────────────────────────────────────────────────────────
+
+/// Pad a plaintext message to obfuscate its true length on the wire.
+///
+/// Scheme: [original data] [random padding bytes] [pad_len as u8]
+/// Where total = len(original) + pad_len + 1 is a multiple of PADDING_BLOCK.
+/// pad_len ranges from 0 to 255.
+///
+/// This prevents traffic analysis from determining message content type
+/// by size — all encrypted messages appear to be multiples of PADDING_BLOCK.
+///
+/// # Arguments
+/// * `plaintext` - The message to pad
+///
+/// # Returns
+/// Padded message: [`plaintext` | `padding` | `pad_len`]
+pub fn pad_message(plaintext: &[u8]) -> Vec<u8> {
+    let block = PADDING_BLOCK as u32;
+    // Calculate padding needed: (len + pad_len + 1) % block == 0
+    let needed = (plaintext.len() as u32 + 1) % block;
+    // We want: (plaintext.len() + pad_len + 1) % block == 0
+    // So pad_len = (block - (plaintext.len() + 1) % block) % block
+    let pad_len = if needed == 0 { 0 } else { block - needed };
+
+    let mut padded = Vec::with_capacity(plaintext.len() + pad_len as usize + 1);
+    padded.extend_from_slice(plaintext);
+    // Fill padding with random bytes for obfuscation
+    padded.extend(random_bytes(pad_len as usize));
+    padded.push(pad_len as u8);
+    padded
+}
+
+/// Remove padding from a padded message.
+///
+/// Reads the last byte to determine pad length, strips padding and the
+/// length byte, returning only the original plaintext.
+///
+/// # Arguments
+/// * `padded` - The padded message
+///
+/// # Returns
+/// Original plaintext, or CryptoError if padding is invalid
+pub fn unpad_message(padded: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    if padded.is_empty() {
+        return Err(CryptoError::DecryptionFailed);
+    }
+    let pad_len = padded[padded.len() - 1] as usize;
+    // Validate: pad_len + 1 bytes must fit within the message
+    // pad_len can be 0-255, so pad_len + 1 is 1-256
+    if pad_len >= padded.len() {
+        // pad_len can't be >= the entire message (need at least 1 byte of data)
+        return Err(CryptoError::DecryptionFailed);
+    }
+    let original_len = padded.len() - 1 - pad_len;
+    Ok(padded[..original_len].to_vec())
+}
+
+/// Create a `Zeroizing` wrapper around a 32-byte key.
+/// This ensures the key is automatically zeroized when dropped.
+pub fn protected_key(key: [u8; 32]) -> zeroize::Zeroizing<[u8; 32]> {
+    zeroize::Zeroizing::new(key)
+}
+
+#[cfg(test)]
+mod crypto_tests {
+    use super::*;
+
+    #[test]
+    fn test_pad_unpad_roundtrip() {
+        let test_cases = vec![
+            b"" as &[u8],
+            b"a",
+            b"hello",
+            b"hello world this is a test message that is longer",
+            &[0u8; 127],
+            &[0u8; 128],
+            &[0u8; 255],
+            &[0u8; 256],
+            &[0u8; 511],
+            &[0u8; 512],
+            &[0u8; 1000],
+        ];
+        for input in test_cases {
+            let padded = pad_message(input);
+            let unpadded = unpad_message(&padded).unwrap();
+            assert_eq!(input, &unpadded[..], "roundtrip failed for len={}", input.len());
+            // Verify padding meets block alignment
+            // padded = input + pad_bytes + [pad_len]
+            // total should be input.len() + pad_len + 1
+            let pad_len = padded[padded.len() - 1] as usize;
+            assert_eq!(padded.len(), input.len() + pad_len + 1,
+                "padding length mismatch for len={}", input.len());
+        }
+    }
+
+    #[test]
+    fn test_padding_hides_length() {
+        // Messages of different lengths should produce same-length ciphertexts
+        // when they're in the same padding block
+        let short = pad_message(b"hi");
+        let long = pad_message(b"hello world this is a longer message");
+        // After padding, both should be aligned to PADDING_BLOCK
+        assert_eq!(short.len() % PADDING_BLOCK, 0,
+            "short message padding not aligned: len={}", short.len());
+        assert_eq!(long.len() % PADDING_BLOCK, 0,
+            "long message padding not aligned: len={}", long.len());
+    }
+
+    #[test]
+    fn test_invalid_unpad_rejected() {
+        // Empty message
+        assert!(unpad_message(b"").is_err());
+        // Message with pad_len = 255 but only 10 bytes total
+        let mut bad = vec![0u8; 10];
+        bad[9] = 255;
+        assert!(unpad_message(&bad).is_err());
+    }
+
+    #[test]
+    fn test_ratchet_changes_key() {
+        use sodiumoxide::randombytes;
+        let rx = randombytes::randombytes(32);
+        let tx = randombytes::randombytes(32);
+        let mut rx_arr = [0u8; 32];
+        let mut tx_arr = [0u8; 32];
+        rx_arr.copy_from_slice(&rx);
+        tx_arr.copy_from_slice(&tx);
+
+        let mut keys = SessionKeys {
+            rx_key: rx_arr,
+            tx_key: tx_arr,
+        };
+
+        let old_tx = keys.tx_key;
+        let old_rx = keys.rx_key;
+
+        keys.ratchet_tx();
+        assert_ne!(keys.tx_key, old_tx, "tx key must change after ratchet");
+        assert_eq!(keys.rx_key, old_rx, "rx key must NOT change when ratcheting tx");
+
+        keys.ratchet_rx();
+        assert_ne!(keys.rx_key, old_rx, "rx key must change after ratchet");
+
+        // Verify the old key is zeroed
+        // (We can't directly check because old_tx is a copy, but the field was zeroed)
+    }
+}
