@@ -62,14 +62,25 @@ pub struct Session {
 
 impl Session {
     /// Create a new session in the initial state.
+    /// Uses a random initial counter to prevent cross-session replay attacks.
+    /// Each session starts with a different counter value, so messages from
+    /// a previous session cannot be replayed into a new session.
     pub fn new() -> Self {
+        // Generate a random initial counter — prevents replay across sessions.
+        let initial_counter = {
+            let mut buf = [0u8; 8];
+            let rand_bytes = crate::crypto::random_bytes(8);
+            buf.copy_from_slice(&rand_bytes);
+            u64::from_be_bytes(buf)
+        };
+
         Self {
             state: ConnectionState::Disconnected,
             peer_identity_pub: [0u8; 32],
             peer_verified: false,
             session_keys: None,
-            tx_counter: 0,
-            rx_high_water_mark: 0,
+            tx_counter: initial_counter,
+            rx_high_water_mark: initial_counter,
             established_at: 0,
             peer_candidates: Vec::new(),
             our_candidates: Vec::new(),
@@ -294,6 +305,8 @@ impl Session {
     }
 
     /// Encrypt a payload and send it as an EncryptedMessage.
+    /// Applies KDF ratchet after encryption for forward secrecy.
+    /// Pads plaintext to obfuscate message length on the wire.
     async fn send_encrypted<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
@@ -301,17 +314,26 @@ impl Session {
     ) -> Result<(), SessionError> {
         let keys = self
             .session_keys
-            .as_ref()
+            .as_mut()
             .ok_or(SessionError::InvalidState)?;
 
         self.tx_counter += 1;
+
+        // Pad plaintext to obfuscate true length
+        let padded = crate::crypto::pad_message(plaintext);
 
         // AAD = packet_type || counter (binds the ciphertext to its context)
         let mut aad = Vec::with_capacity(9);
         aad.push(PacketType::EncryptedMessage.to_byte());
         aad.extend_from_slice(&self.tx_counter.to_be_bytes());
 
-        let (nonce, ciphertext) = keys.encrypt(plaintext, &aad)?;
+        let (nonce, ciphertext) = keys.encrypt(&padded, &aad)?;
+
+        // ═══ Forward Secrecy Ratchet ═══
+        // Evolve the sending key AFTER encrypting this message.
+        // If this session key is compromised in the future, only THIS
+        // message can be decrypted — all previous messages are safe.
+        keys.ratchet_tx();
 
         let envelope = EncryptedEnvelope {
             nonce,
@@ -325,6 +347,9 @@ impl Session {
     }
 
     /// Receive and decrypt an encrypted message.
+    /// Removes padding after decryption, then ratchets the receiving key.
+    /// This provides forward secrecy: past messages stay safe even if
+    /// the current session key is compromised.
     pub fn decrypt_message(&mut self, frame: &RawFrame) -> Result<MessageBody, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
@@ -343,7 +368,7 @@ impl Session {
 
         let keys = self
             .session_keys
-            .as_ref()
+            .as_mut()
             .ok_or(SessionError::InvalidState)?;
 
         // AAD must match what the sender used
@@ -351,9 +376,18 @@ impl Session {
         aad.push(PacketType::EncryptedMessage.to_byte());
         aad.extend_from_slice(&envelope.counter.to_be_bytes());
 
-        let plaintext = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
+        let padded = keys.decrypt(&envelope.ciphertext, &envelope.nonce, &aad)?;
 
-        // Update high water mark only after successful decryption
+        // Remove padding to recover original plaintext
+        let plaintext = crate::crypto::unpad_message(&padded)?;
+
+        // ═══ Forward Secrecy Ratchet ═══
+        // Evolve the receiving key AFTER successful decryption.
+        // The sender ratcheted their tx_key after encrypting; we ratchet
+        // our rx_key (which mirrors their tx_key) after decrypting.
+        keys.ratchet_rx();
+
+        // Update high water mark only after successful decryption + ratchet
         self.rx_high_water_mark = envelope.counter;
 
         let body: MessageBody = protocol::deserialize(&plaintext)?;
