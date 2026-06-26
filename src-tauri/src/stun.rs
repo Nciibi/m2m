@@ -297,12 +297,8 @@ async fn query_single_server(
     // ── Bind ephemeral UDP socket ──
     let socket = UdpSocket::bind("0.0.0.0:0").await.map_err(StunError::Io)?;
 
-    // Set socket timeout via the tokio equivalent — we handle it via the
-    // outer timeout, but set a 1s read timeout on the socket as a safeguard.
-    let _ = socket
-        .set_read_timeout(Some(std::time::Duration::from_secs(
-            query_timeout.as_secs().max(1),
-        )));
+    // Socket timeout is handled entirely by the outer tokio::time::timeout
+    // wrapping the recv_from call. No need for set_read_timeout here.
 
     // ── Generate random 12-byte transaction ID (RFC 8489 §6) ──
     let transaction_id: [u8; 12] = rand::random();

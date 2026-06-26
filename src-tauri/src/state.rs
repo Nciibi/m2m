@@ -21,7 +21,6 @@ use crate::crypto::IdentityKeypair;
 use crate::network::ConnectionState;
 use crate::session::Session;
 use crate::storage;
-use crate::stun;
 
 /// Peer connection handle, holding the write half and session state.
 /// The read half is consumed by the receive loop task.

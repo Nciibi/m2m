@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use governor::{Quota, RateLimiter as GovRateLimiter};
+use governor;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::net::tcp::OwnedReadHalf;
@@ -59,7 +59,7 @@ const MAX_TOTAL_CONNECTIONS: usize = 50;
 /// - **Global**: max 50 concurrent connections total
 pub struct ConnectionLimiter {
     /// Token-bucket rate limiters keyed by peer IP.
-    per_ip: Mutex<HashMap<IpAddr, GovRateLimiter<IpAddr, governor::state::direct::NotKeyed>>>,
+    per_ip: Mutex<HashMap<IpAddr, governor::RateLimiter<governor::state::direct::NotKeyed>>>,
     /// Current total active connection count.
     active_connections: AtomicUsize,
 }
@@ -86,11 +86,10 @@ impl ConnectionLimiter {
         // Per-IP rate limit: check token bucket.
         let mut map = self.per_ip.lock().unwrap();
         let limiter = map.entry(ip).or_insert_with(|| {
-            let quota = Quota::per_non_standard(
+            let quota = governor::Quota::per_minute(
                 NonZeroU32::new(MAX_CONNECTIONS_PER_IP).unwrap(),
-                Duration::from_secs(RATE_LIMIT_WINDOW_SECS),
             );
-            GovRateLimiter::direct(quota)
+            governor::RateLimiter::direct(quota)
         });
 
         if limiter.check().is_err() {
