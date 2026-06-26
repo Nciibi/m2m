@@ -1394,6 +1394,48 @@ input::placeholder {
   border-radius: 8px;
 }
 
+/* ─── Tor Warning Banner ─── */
+.tor-warning-banner {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-md);
+  align-items: flex-start;
+  animation: msgSlide 0.3s ease-out;
+}
+
+.tor-warning-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.tor-warning-content {
+  flex: 1;
+}
+
+.tor-warning-content strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--warning);
+  margin-bottom: 4px;
+}
+
+.tor-warning-content p {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 10px 0;
+}
+
+.tor-warning-content button {
+  font-size: 0.78rem;
+  padding: 6px 14px;
+}
+
 /* ─── Settings section descriptions ─── */
 .settings-content > .settings-section > .settings-desc {
   display: block;

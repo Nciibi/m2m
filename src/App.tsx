@@ -892,7 +892,9 @@ function App() {
                 <strong>Tor Routing</strong>
                 <span className="settings-desc">
                   Route all outgoing connections through Tor SOCKS5 proxy
-                  (127.0.0.1:9050). Inbound connections still use direct TCP.
+                  (127.0.0.1:9050). <strong>Inbound connections still use direct TCP</strong> —
+                  your real IP is visible to anyone you connect with.
+                  Enable Private Mode to exclude your IP from invites.
                 </span>
               </div>
               <div className="settings-value">
