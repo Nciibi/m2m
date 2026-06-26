@@ -78,13 +78,16 @@ impl Session {
 
     /// Execute the handshake as the initiator (client).
     /// We already know the peer's identity from the invite.
+    /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
     pub async fn handshake_as_initiator(
         &mut self,
         stream: &mut TcpStream,
         identity: &IdentityKeypair,
         expected_peer_pub: &[u8; 32],
+        local_candidates: Vec<WireCandidate>,
     ) -> Result<(), SessionError> {
         self.state = ConnectionState::Handshaking;
+        self.our_candidates = local_candidates.clone();
 
         // Generate ephemeral keypair for this session
         let ephemeral = EphemeralKeypair::generate();
@@ -97,13 +100,14 @@ impl Session {
 
         let signature = identity.sign(&sign_data);
 
-        // Send HandshakeInit
+        // Send HandshakeInit with our network candidates
         let init = HandshakeInit {
             version: PROTOCOL_VERSION,
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
             timestamp: now,
             signature,
+            candidates: local_candidates,
         };
         let init_bytes = protocol::serialize(&init)?;
         network::write_frame(stream, PacketType::HandshakeInit, &init_bytes).await?;
@@ -158,13 +162,16 @@ impl Session {
         let complete_bytes = protocol::serialize(&complete)?;
         network::write_frame(stream, PacketType::HandshakeComplete, &complete_bytes).await?;
 
+        // Store peer candidates for ICE-Lite
+        self.peer_candidates = response.candidates;
+
         // Session established
         self.peer_identity_pub = response.identity_pub;
         self.session_keys = Some(session_keys);
         self.established_at = now_unix_secs();
         self.state = ConnectionState::Established;
 
-        tracing::info!("session established as initiator");
+        tracing::info!(peer = %self.peer_fingerprint(), candidates = %self.peer_candidates.len(), "session established as initiator");
         Ok(())
     }
 
