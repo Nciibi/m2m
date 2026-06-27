@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button, Input, ToastContainer } from "../components/ui";
 import type { Toast as ToastType } from "../types";
 import { estimateEntropy } from "../utils";
