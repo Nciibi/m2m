@@ -3,7 +3,7 @@ import { type CSSProperties, type ReactNode } from "react";
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info";
 
 interface BadgeProps {
-  children: string;
+  children: ReactNode;
   variant?: BadgeVariant;
   /** If true, shows a pulsing dot before the text */
   dot?: boolean;
