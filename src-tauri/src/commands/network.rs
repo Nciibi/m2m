@@ -301,7 +301,7 @@ async fn handle_incoming_connection(
         let ipv6_candidates = candidate::gather_ipv6_candidates();
         let reflexive_candidates = stun_result
             .as_ref()
-            .map(|r| candidate::gather_reflexive_candidates(r))
+            .map(candidate::gather_reflexive_candidates)
             .unwrap_or_default();
 
         let mut all = host_candidates;
@@ -430,7 +430,7 @@ pub async fn connect_to_peer(
     let ipv6_candidates = candidate::gather_ipv6_candidates();
     let reflexive_candidates = stun_result
         .as_ref()
-        .map(|r| candidate::gather_reflexive_candidates(r))
+        .map(candidate::gather_reflexive_candidates)
         .unwrap_or_default();
 
     let mut all = host_candidates;
