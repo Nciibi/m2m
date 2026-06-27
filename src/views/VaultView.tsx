@@ -189,7 +189,6 @@ export default function VaultView({
                 setPassphrase("");
                 setVaultError("");
               }}
-              ref={inputRef as any}
             />
             <button
               onClick={() => setShowPassphrase(!showPassphrase)}
