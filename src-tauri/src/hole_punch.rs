@@ -187,24 +187,23 @@ impl ConnectionManager {
         let mut last_error = ConnectionError::AllFailed(total);
         while let Ok(Some(result)) = time::timeout_at(time::Instant::from(deadline), set.join_next()).await {
             match result {
-                Ok(Some(Ok(Ok(strategy_result)))) => {
-                    // ── Winner! Cancel everything else ──
-                    set.shutdown().await;
-                    return Ok(strategy_result);
+                // Task returned Ok value (a strategy result or error).
+                Ok(task_result) => {
+                    match task_result {
+                        // Strategy succeeded.
+                        Ok(strategy_result) => {
+                            set.shutdown().await;
+                            return Ok(strategy_result);
+                        }
+                        // Strategy returned an error.
+                        Err(e) => {
+                            last_error = e;
+                            tracing::debug!(error = %last_error, "connection attempt failed");
+                        }
+                    }
                 }
-                Ok(Some(Ok(Err(e)))) => {
-                    last_error = e;
-                    tracing::debug!(error = %last_error, "connection attempt failed");
-                }
-                Ok(Some(Err(_))) => {
-                    // Task panicked — treat as failure.
-                }
-                Ok(None) => break, // All tasks completed, none succeeded.
-                Err(_) => {
-                    tracing::warn!("strategy race deadline exceeded");
-                    last_error = ConnectionError::TimedOut(OVERALL_TIMEOUT);
-                    break;
-                }
+                // Task panicked.
+                Err(_join_err) => {}
             }
         }
 
