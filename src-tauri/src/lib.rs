@@ -20,6 +20,7 @@ mod crypto;
 mod hole_punch;
 mod identity;
 mod network;
+mod port_mapping;
 mod protocol;
 mod session;
 mod state;

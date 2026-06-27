@@ -14,6 +14,7 @@ use crate::hole_punch;
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
+use crate::port_mapping;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
 use crate::state::{AppState, IncomingFileTransfer, PeerConnection};
@@ -246,12 +247,58 @@ pub async fn create_invite(
         );
     }
 
+    // ─── Try NAT port mapping (UPnP / NAT-PMP / PCP) ───
+    // If the router supports port mapping protocols we can obtain a
+    // guaranteed public address. This is more reliable than STUN's
+    // UDP-only discovery and gives the peer a direct TCP path.
+    let port_mapping = if !private_mode {
+        match crate::port_mapping::PortMapper::add_port_mapping(
+            listen_addr.port(),
+            3600, // 1 hour — the router may grant less
+        )
+        .await
+        {
+            Ok(mapping) => {
+                tracing::info!(
+                    protocol = mapping.protocol,
+                    external = %mapping.external_addr,
+                    "NAT port mapping obtained"
+                );
+                Some(mapping)
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "NAT port mapping unavailable");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let invite_candidates: Vec<protocol::WireCandidate> = {
         let candidates_state = state.candidates.read().await;
-        candidates_state.iter().map(|c| protocol::WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-        }).collect()
+        let mut all: Vec<protocol::WireCandidate> = candidates_state
+            .iter()
+            .map(|c| protocol::WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+            })
+            .collect();
+
+        // If we obtained a NAT port mapping, add it as a high-priority
+        // candidate (type 4 = port-mapped).
+        if let Some(ref pm) = port_mapping {
+            let addr_str = pm.external_addr.to_string();
+            // Deduplicate against existing candidates.
+            if !all.iter().any(|c| c.address == addr_str) {
+                all.push(protocol::WireCandidate {
+                    address: addr_str,
+                    candidate_type: 4, // port-mapped
+                });
+            }
+        }
+
+        all
     };
     identity::create_invite(kp, &actual_address, validity_secs, one_time, invite_candidates)
         .map_err(|e| format!("invite creation failed: {e}"))
@@ -345,7 +392,7 @@ fn decode_peer_key_logged(hex_str: &str) -> Option<[u8; 32]> {
 }
 
 /// Resolve the local (non-loopback) IP address used for internet connectivity.
-fn resolve_local_ip() -> Option<std::net::IpAddr> {
+pub fn resolve_local_ip() -> Option<std::net::IpAddr> {
     std::net::UdpSocket::bind("0.0.0.0:0")
         .and_then(|socket| {
             socket.connect("8.8.8.8:80")?;

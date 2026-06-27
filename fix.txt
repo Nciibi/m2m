@@ -1,5 +1,282 @@
+1. Gateway discovery
 
+This is the biggest issue.
 
+Right now you guess
+
+192.168.1.1
+
+192.168.0.1
+
+10.0.0.1
+
+and then probe them.
+
+That works surprisingly often.
+
+But...
+
+It isn't how operating systems discover gateways.
+
+Instead use the system routing table.
+
+Linux
+
+ip route
+
+Windows
+
+GetAdaptersAddresses()
+
+or
+
+GetIpForwardTable2()
+
+macOS
+
+route get default
+
+Those APIs tell you the actual default gateway.
+
+No guessing required.
+
+2. UPnP XML parsing
+
+You do
+
+String
+
+↓
+
+find("<controlURL>")
+
+It works...
+
+but XML isn't guaranteed to look exactly like that.
+
+Routers sometimes have
+
+<controlURL>
+
+...
+
+</controlURL>
+
+or namespaces.
+
+I'd eventually use a lightweight XML parser.
+
+Not because your code is bad—
+
+because routers are weird.
+
+3. HTTP parser
+
+Same thing.
+
+You're doing
+
+find("\r\n\r\n")
+
+and manual parsing.
+
+Again...
+
+works...
+
+until a router sends
+
+Transfer-Encoding: chunked
+
+or compressed XML.
+
+4. PCP
+
+This one is important.
+
+Your comments say
+
+24 byte request
+
+but the actual PCP MAP message defined in RFC 6887 is considerably larger because it includes fields such as the client IP address, a mandatory 96-bit nonce, protocol, ports, and external address. The request layout in your implementation is simplified.
+
+For many home routers this may work if they're tolerant, but it won't be interoperable with every PCP implementation.
+
+If you want RFC-compliant PCP, you'll eventually want to build the packet exactly as specified.
+
+5. NAT-PMP
+
+Much closer.
+
+I didn't notice any major architectural problems there.
+
+6. No lease renewal
+
+Routers give you
+
+Lifetime
+
+↓
+
+3600 seconds
+
+Eventually
+
+Expired
+
+Connection gone.
+
+M2M should automatically
+
+Timer
+
+↓
+
+Renew
+
+↓
+
+Renew
+
+↓
+
+Renew
+
+before expiration.
+
+Otherwise a long-running messenger will silently lose its mapping.
+
+7. ConnectionManager integration
+
+Eventually I'd do
+
+Application
+
+↓
+
+PortMapper
+
+↓
+
+returns
+
+PortMapping
+
+Then immediately create a candidate
+
+WireCandidate {
+    address: mapping.external_addr,
+    candidate_type: CandidateType::PortMapped
+}
+
+Instead of pretending it's
+
+Server Reflexive
+
+I'd actually introduce
+
+CandidateType::PortMapped
+
+because it's different.
+
+Server Reflexive
+
+↓
+
+Discovered
+
+PortMapped
+
+↓
+
+Router explicitly opened
+
+That's a stronger candidate.
+
+8. Async renewal task
+
+I'd add
+
+PortMappingHandle
+
+↓
+
+spawn renewal task
+
+↓
+
+refresh every
+
+lifetime / 2
+
+Then ConnectionManager never thinks about leases.
+
+9. Parallel discovery
+
+Instead of
+
+Gateway
+
+↓
+
+PCP
+
+↓
+
+wait
+
+↓
+
+NAT-PMP
+
+↓
+
+wait
+
+↓
+
+UPnP
+
+I'd probably race them.
+
+PCP ----------\
+
+NAT-PMP ------- > First success wins
+
+UPnP ----------/
+
+Routers usually only support one anyway.
+
+That makes startup feel instant.
+
+The architecture I'd aim for
+ConnectionManager
+        │
+        ▼
+Candidate Gatherer
+        │
+        ├── Host
+        ├── IPv6
+        ├── STUN
+        ├── PortMapper
+        └── Relay
+        │
+        ▼
+Candidate Prioritizer
+        │
+        ▼
+Connectivity Checker
+        │
+        ▼
+Winner
+        │
+        ▼
+Noise Handshake
+        │
+        ▼
+Double Ratchet
+
+Notice that PortMapper is a candidate source, not the connection itself. Its job is simply to make you reachable and contribute a high-quality candidate.
 
 
 
