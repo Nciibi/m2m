@@ -79,6 +79,11 @@ pub enum Strategy {
     /// Highest success rate, lowest latency.
     DirectTcp { peer: SocketAddr },
 
+    /// Direct TCP to an IPv6 global unicast candidate (type=5).
+    /// IPv6 addresses are routable without NAT, so this is a simple
+    /// TCP connect — but we keep it separate for latency tracking.
+    Ipv6Direct { peer: SocketAddr },
+
     /// Direct TCP to a port-mapped address obtained via UPnP/NAT-PMP/PCP.
     /// These are router-confirmed forwarding rules, so direct TCP connect
     /// is the most reliable transport-agnostic strategy for them.
@@ -100,6 +105,7 @@ impl Strategy {
     pub fn name(&self) -> &'static str {
         match self {
             Strategy::DirectTcp { .. } => "host",
+            Strategy::Ipv6Direct { .. } => "ipv6",
             Strategy::PortMapped { .. } => "port-mapped",
             Strategy::TcpHolePunch { .. } => "srflx",
             Strategy::TcpRelay { .. } => "relay",
@@ -151,10 +157,11 @@ impl ConnectionManager {
     /// | Priority | Candidate type | Strategy          |
     /// |----------|----------------|-------------------|
     /// | 1        | Host (0)       | `DirectTcp`       |
-    /// | 2        | Port mapped    | `PortMapped`      |
-    /// | 3        | Srflx (1)      | `TcpHolePunch`    |
-    /// | 4        | Prflx (2)      | `TcpHolePunch`    |
-    /// | 5        | Relay (3)      | `TcpRelay` (TBD)  |
+    /// | 2        | IPv6 (5)       | `Ipv6Direct`      |
+    /// | 3        | Port mapped    | `PortMapped`      |
+    /// | 4        | Srflx (1)      | `TcpHolePunch`    |
+    /// | 5        | Prflx (2)      | `TcpHolePunch`    |
+    /// | 6        | Relay (3)      | `TcpRelay` (TBD)  |
     ///
     /// `DirectTcp` candidates are tried sequentially (fast per-attempt
     /// timeout). `TcpHolePunch` candidates are race-tested against a
@@ -173,12 +180,13 @@ impl ConnectionManager {
 
         // ── Build strategy list, sorted by candidate priority ──
         // Candidate types ordered by expected reliability:
-        //   host (0) → port-mapped (4) → srflx (1) → prflx (2) → relay (3)
+        //   host (0) → ipv6 (5) → port-mapped (4) → srflx (1) → prflx (2) → relay (3)
         let mut strategies: Vec<Strategy> = Vec::with_capacity(peer_candidates.len());
         for c in peer_candidates {
             if let Ok(addr) = c.address.parse::<SocketAddr>() {
                 let s = match c.candidate_type {
                     0 => Strategy::DirectTcp { peer: addr },
+                    5 => Strategy::Ipv6Direct { peer: addr },
                     4 => Strategy::PortMapped { peer: addr },
                     1 | 2 => Strategy::TcpHolePunch { peer: addr },
                     3 => Strategy::TcpRelay { peer: addr },
@@ -202,6 +210,30 @@ impl ConnectionManager {
                 match tcp_connect_timeout(*peer, CANDIDATE_TIMEOUT).await {
                     Ok(stream) => {
                         tracing::info!(target = %peer, latency = ?start.elapsed(), "host direct TCP succeeded");
+                        return Ok(StrategyResult {
+                            stream,
+                            remote_addr: *peer,
+                            role: Role::Initiator,
+                            strategy_name: s.name(),
+                            latency: start.elapsed(),
+                        });
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }
+
+        // ── Phase 1.2: IPv6 global unicast — direct TCP ──
+        // IPv6 addresses are directly routable (no NAT), so this is a
+        // simple connect. Prioritised above port-mapped and srflx because
+        // the direct path avoids NAT traversal entirely.
+        for s in &strategies {
+            if let Strategy::Ipv6Direct { peer } = s {
+                let start = Instant::now();
+                tracing::debug!(target = %peer, strategy = %s.name(), "phase-1.2 IPv6 direct");
+                match tcp_connect_timeout(*peer, CANDIDATE_TIMEOUT).await {
+                    Ok(stream) => {
+                        tracing::info!(target = %peer, latency = ?start.elapsed(), "IPv6 direct TCP succeeded");
                         return Ok(StrategyResult {
                             stream,
                             remote_addr: *peer,

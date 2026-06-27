@@ -540,12 +540,14 @@ async fn handle_incoming_connection(
         drop(config);
 
         let host_candidates = candidate::gather_host_candidates();
+        let ipv6_candidates = candidate::gather_ipv6_candidates();
         let reflexive_candidates = stun_result
             .as_ref()
             .map(|r| candidate::gather_reflexive_candidates(r))
             .unwrap_or_default();
 
         let mut all = host_candidates;
+        all.extend(ipv6_candidates);
         all.extend(reflexive_candidates);
         all.sort_by(|a, b| b.priority.cmp(&a.priority));
         let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {

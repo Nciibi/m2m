@@ -1,284 +1,318 @@
-1. Gateway discovery
+Why do we even need STUN?
 
-This is the biggest issue.
+The entire reason STUN exists is because of NAT.
 
-Right now you guess
+With IPv4:
 
-192.168.1.1
+Alice
 
-192.168.0.1
+192.168.1.10
 
-10.0.0.1
+is hidden behind
 
-and then probe them.
+203.0.113.50
 
-That works surprisingly often.
+The router translates everything.
 
-But...
+That translation is NAT.
 
-It isn't how operating systems discover gateways.
+NAT is what makes P2P difficult.
 
-Instead use the system routing table.
+IPv6 has no NAT (normally)
 
-Linux
+Instead every device gets its own public address.
 
-ip route
+Example:
 
-Windows
+Alice
 
-GetAdaptersAddresses()
+2001:db8:1234:5678::42
+
+Bob
+
+2001:db8:abcd:100::9
+
+Those addresses are globally routable.
+
+Alice can directly send packets to Bob.
+
+Bob can directly send packets to Alice.
+
+No translation.
+
+What does the network look like?
+
+IPv4
+
+Alice
+   │
+Router (NAT)
+   │
+Internet
+   │
+Router (NAT)
+   │
+Bob
+
+IPv6
+
+Alice
+   │
+Internet
+   │
+Bob
+
+Much simpler.
+
+Does that mean no router?
+
+No.
+
+The router still exists.
+
+Alice
+   │
+Router
+   │
+Internet
+
+But the router is routing, not rewriting addresses.
+
+Is it always open?
+
+Not necessarily.
+
+Many IPv6 routers have a firewall.
+
+Example
+
+Internet
+
+↓
+
+Router
+
+↓
+
+DROP
 
 or
 
-GetIpForwardTable2()
-
-macOS
-
-route get default
-
-Those APIs tell you the actual default gateway.
-
-No guessing required.
-
-2. UPnP XML parsing
-
-You do
-
-String
+Internet
 
 ↓
 
-find("<controlURL>")
-
-It works...
-
-but XML isn't guaranteed to look exactly like that.
-
-Routers sometimes have
-
-<controlURL>
-
-...
-
-</controlURL>
-
-or namespaces.
-
-I'd eventually use a lightweight XML parser.
-
-Not because your code is bad—
-
-because routers are weird.
-
-3. HTTP parser
-
-Same thing.
-
-You're doing
-
-find("\r\n\r\n")
-
-and manual parsing.
-
-Again...
-
-works...
-
-until a router sends
-
-Transfer-Encoding: chunked
-
-or compressed XML.
-
-4. PCP
-
-This one is important.
-
-Your comments say
-
-24 byte request
-
-but the actual PCP MAP message defined in RFC 6887 is considerably larger because it includes fields such as the client IP address, a mandatory 96-bit nonce, protocol, ports, and external address. The request layout in your implementation is simplified.
-
-For many home routers this may work if they're tolerant, but it won't be interoperable with every PCP implementation.
-
-If you want RFC-compliant PCP, you'll eventually want to build the packet exactly as specified.
-
-5. NAT-PMP
-
-Much closer.
-
-I didn't notice any major architectural problems there.
-
-6. No lease renewal
-
-Routers give you
-
-Lifetime
+Router
 
 ↓
 
-3600 seconds
+ALLOW
 
-Eventually
+So having IPv6 doesn't guarantee incoming connections are allowed, but when they are, you don't need NAT traversal.
 
-Expired
+How M2M should use IPv6
 
-Connection gone.
+Suppose Alice starts M2M.
 
-M2M should automatically
+The app gathers local addresses.
 
-Timer
+Instead of only
 
-↓
+192.168.1.20
 
-Renew
+it also gets
 
-↓
+2001:db8:1234::42
 
-Renew
-
-↓
-
-Renew
-
-before expiration.
-
-Otherwise a long-running messenger will silently lose its mapping.
-
-7. ConnectionManager integration
-
-Eventually I'd do
-
-Application
-
-↓
-
-PortMapper
-
-↓
-
-returns
-
-PortMapping
-
-Then immediately create a candidate
-
-WireCandidate {
-    address: mapping.external_addr,
-    candidate_type: CandidateType::PortMapped
-}
-
-Instead of pretending it's
-
-Server Reflexive
-
-I'd actually introduce
-
-CandidateType::PortMapped
-
-because it's different.
-
-Server Reflexive
-
-↓
-
-Discovered
-
-PortMapped
-
-↓
-
-Router explicitly opened
-
-That's a stronger candidate.
-
-8. Async renewal task
-
-I'd add
-
-PortMappingHandle
-
-↓
-
-spawn renewal task
-
-↓
-
-refresh every
-
-lifetime / 2
-
-Then ConnectionManager never thinks about leases.
-
-9. Parallel discovery
+Then create a candidate.
 
 Instead of
 
-Gateway
+CandidateType::Host
+
+I'd create
+
+Host IPv4
+
+Host IPv6
+
+or
+
+WireCandidate {
+    address: "[2001:db8:1234::42]:9000",
+    candidate_type: HostIPv6,
+}
+
+When Alice creates an invite
+
+instead of
+
+{
+    "host":"192.168.1.20:9000"
+}
+
+she sends
+
+{
+    "host_v4":"192.168.1.20:9000",
+    "host_v6":"[2001:db8:1234::42]:9000"
+}
+
+Bob receives
+
+Host IPv4
+
+Host IPv6
+
+STUN
+
+Relay
+
+Now ConnectionManager races them.
+
+Connection race
+
+Instead of
+
+IPv4
 
 ↓
 
-PCP
+Wait
 
 ↓
 
-wait
+IPv6
+
+do
+
+IPv6 --------\
+
+IPv4 ---------> First success
+
+Relay -------/
+
+This is essentially the same idea as the "Happy Eyeballs" algorithm used by modern browsers and operating systems.
+
+If IPv6 works
+
+Done.
+
+If not
+
+IPv4 continues.
+
+Detecting IPv6
+
+Rust makes this easy.
+
+Instead of only asking for IPv4 addresses
+
+local_ip()
+
+iterate all interfaces.
+
+You'll get
+
+127.0.0.1
+
+192.168.1.20
+
+fe80::....
+
+2001:db8::....
+
+Ignore
+
+fe80::
+
+Those are link-local.
+
+They only work on the local LAN.
+
+Use
+
+2000::/3
+
+which are Global Unicast Addresses.
+
+Listening
+
+Instead of
+
+TcpListener::bind("0.0.0.0:9000")
+
+listen on
+
+"[::]:9000"
+
+or create both an IPv4 and IPv6 listener, depending on platform behavior.
+
+On many operating systems, an IPv6 socket can also accept IPv4 connections (dual-stack), but on others you'll need two listeners.
+
+Invite example
+
+Current
+
+{
+  "host":"192.168.1.20:9000",
+  "srflx":"203.0.113.10:54321"
+}
+
+Future
+
+{
+  "host_v4":"192.168.1.20:9000",
+
+  "host_v6":"[2001:db8::42]:9000",
+
+  "srflx":"203.0.113.10:54321",
+
+  "relay":"relay://..."
+}
+Candidate priority
+
+I'd make IPv6 one of the highest priorities.
+
+Example
+
+Candidate	Priority
+LAN IPv4	100
+IPv6 Global	95
+UPnP / PCP	90
+STUN	80
+Hole Punch	70
+Relay	10
+
+Because if both peers have working global IPv6, it's a direct connection with no NAT traversal overhead.
+
+What if only one peer has IPv6?
+
+Suppose
+
+Alice
+
+IPv6 ✅
+
+Bob
+
+IPv6 ❌
+
+The IPv6 attempt fails.
+
+ConnectionManager immediately tries
+
+STUN
 
 ↓
 
-NAT-PMP
+Hole Punch
 
 ↓
 
-wait
+Relay
 
-↓
-
-UPnP
-
-I'd probably race them.
-
-PCP ----------\
-
-NAT-PMP ------- > First success wins
-
-UPnP ----------/
-
-Routers usually only support one anyway.
-
-That makes startup feel instant.
-
-The architecture I'd aim for
-ConnectionManager
-        │
-        ▼
-Candidate Gatherer
-        │
-        ├── Host
-        ├── IPv6
-        ├── STUN
-        ├── PortMapper
-        └── Relay
-        │
-        ▼
-Candidate Prioritizer
-        │
-        ▼
-Connectivity Checker
-        │
-        ▼
-Winner
-        │
-        ▼
-Noise Handshake
-        │
-        ▼
-Double Ratchet
-
-Notice that PortMapper is a candidate source, not the connection itself. Its job is simply to make you reachable and contribute a high-quality candidate.
-
-
+No user interaction.
 
 Phase 1 — LAN
 

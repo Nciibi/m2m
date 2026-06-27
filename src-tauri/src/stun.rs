@@ -607,6 +607,51 @@ pub fn gather_host_candidates() -> Vec<SocketAddr> {
     candidates
 }
 
+/// Gather IPv6 host candidates: discover local non-loopback global unicast
+/// IPv6 addresses that can reach the internet.
+///
+/// Uses a similar UDP socket trick as `gather_host_candidates` but probes
+/// against IPv6 DNS servers. This discovers:
+/// - Global unicast IPv6 addresses (directly routable on the IPv6 internet)
+/// - Unique local addresses (fc00::/7) which can be used for site-local
+///   communication (lower priority)
+///
+/// IPv6 is special: global unicast addresses are typically directly routable
+/// without NAT traversal, making this the most reliable path after IPv4 LAN.
+pub fn gather_ipv6_candidates() -> Vec<SocketAddr> {
+    let mut candidates: Vec<SocketAddr> = Vec::new();
+    let mut seen_ips: HashSet<std::net::IpAddr> = HashSet::new();
+
+    // Probe against IPv6-capable DNS servers.
+    let probes: &[(&str, u16)] = &[
+        ("2001:4860:4860::8888", 53),  // Google DNS
+        ("2606:4700:4700::1111", 53),  // Cloudflare DNS
+        ("2620:fe::fe", 53),           // Quad9 DNS
+    ];
+
+    for &(ip, port) in probes {
+        // Bind to IPv6 ANY address.
+        if let Ok(socket) = std::net::UdpSocket::bind("[::]:0") {
+            let addr_str = format!("[{}]:{}", ip, port);
+            if socket.connect(&addr_str).is_ok() {
+                if let Ok(local) = socket.local_addr() {
+                    let local_ip = local.ip();
+                    if !local_ip.is_loopback()
+                        && !local_ip.is_unspecified()
+                        && !local_ip.is_multicast()
+                        && !local_ip.is_link_local()
+                        && seen_ips.insert(local_ip)
+                    {
+                        candidates.push(local);
+                    }
+                }
+            }
+        }
+    }
+
+    candidates
+}
+
 /// Attempt to classify the NAT type based on STUN behaviour.
 ///
 /// This uses a heuristic: if multiple STUN servers all report the same

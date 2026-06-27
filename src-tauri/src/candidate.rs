@@ -21,6 +21,10 @@ pub enum CandidateType {
     PeerReflexive = 2,
     /// A candidate obtained from a TURN relay server.
     Relay = 3,
+    /// A candidate obtained from binding to an IPv6 interface.
+    /// IPv6 global unicast addresses are typically directly routable,
+    /// making this the most reliable path after IPv4 LAN.
+    Ipv6 = 5,
 }
 
 impl std::fmt::Display for CandidateType {
@@ -30,6 +34,7 @@ impl std::fmt::Display for CandidateType {
             CandidateType::ServerReflexive => write!(f, "srflx"),
             CandidateType::PeerReflexive => write!(f, "prflx"),
             CandidateType::Relay => write!(f, "relay"),
+            CandidateType::Ipv6 => write!(f, "ipv6"),
         }
     }
 }
@@ -71,19 +76,24 @@ pub struct NetworkDiagnostics {
 ///
 /// Type preferences:
 ///   Host: 126
-///   Server-Reflexive: 100
+///   IPv6: 115   (below LAN host, above srflx — IPv6 is routable but may have higher latency)
 ///   Peer-Reflexive: 110
+///   Server-Reflexive: 100
+///   Port-mapped: 95  (UPnP/NAT-PMP/PCP — reliably forwarded but via NAT)
 ///   Relay: 0
 const TYPE_PREF_HOST: u32 = 126;
-const TYPE_PREF_SRFLX: u32 = 100;
+const TYPE_PREF_IPV6: u32 = 115;
 const TYPE_PREF_PRFLX: u32 = 110;
+const TYPE_PREF_SRFLX: u32 = 100;
+const TYPE_PREF_PORT_MAPPED: u32 = 95;
 const TYPE_PREF_RELAY: u32 = 0;
 
 fn compute_priority(candidate_type: CandidateType, local_pref: u32) -> u32 {
     let type_pref = match candidate_type {
         CandidateType::Host => TYPE_PREF_HOST,
-        CandidateType::ServerReflexive => TYPE_PREF_SRFLX,
+        CandidateType::Ipv6 => TYPE_PREF_IPV6,
         CandidateType::PeerReflexive => TYPE_PREF_PRFLX,
+        CandidateType::ServerReflexive => TYPE_PREF_SRFLX,
         CandidateType::Relay => TYPE_PREF_RELAY,
     };
     (type_pref << 24) | ((local_pref & 0xFF) << 8) | 1 // component_id = 1 for RTP/RTCP, 1 for our single stream
@@ -112,6 +122,33 @@ pub fn gather_host_candidates() -> Vec<NetworkCandidate> {
         .collect();
 
     // Sort by priority descending
+    candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+    candidates
+}
+
+/// Gather IPv6 host candidates.
+///
+/// Discovers local global-unicast IPv6 addresses. These are directly routable
+/// on the IPv6 internet without NAT (most residential ISPs already provide
+/// IPv6 connectivity), making this a high-reliability path.
+pub fn gather_ipv6_candidates() -> Vec<NetworkCandidate> {
+    let addrs = stun::gather_ipv6_candidates();
+    let total = addrs.len();
+    let mut candidates: Vec<NetworkCandidate> = addrs
+        .into_iter()
+        .enumerate()
+        .map(|(i, addr)| {
+            let local_pref = ((total - i) * 10) as u32;
+            NetworkCandidate {
+                address: addr.to_string(),
+                candidate_type: CandidateType::Ipv6,
+                priority: compute_priority(CandidateType::Ipv6, local_pref),
+                foundation: format!("ipv6-{}", i),
+                base_address: Some(addr.to_string()),
+            }
+        })
+        .collect();
+
     candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
     candidates
 }
