@@ -288,11 +288,23 @@ pub async fn create_invite(
         // candidate (type 4 = port-mapped).
         if let Some(ref pm) = port_mapping {
             let addr_str = pm.external_addr.to_string();
-            // Deduplicate against existing candidates.
             if !all.iter().any(|c| c.address == addr_str) {
                 all.push(protocol::WireCandidate {
                     address: addr_str,
-                    candidate_type: 4, // port-mapped
+                    candidate_type: 4,
+                });
+            }
+        }
+
+        // Append user-configured manual port forwards as type 4 candidates.
+        let mf = state.manual_forwards.read().await;
+        for fwd in mf.iter() {
+            if fwd.listen_port == listen_addr.port()
+                && !all.iter().any(|c| c.address == fwd.public_addr)
+            {
+                all.push(protocol::WireCandidate {
+                    address: fwd.public_addr.clone(),
+                    candidate_type: 4,
                 });
             }
         }
