@@ -16,7 +16,7 @@ use crate::identity;
 use crate::network;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
-use crate::state::{AppState, IncomingFileTransfer, PeerConnection};
+use crate::state::{AppState, IncomingFileTransfer, ManualForward, PeerConnection};
 use crate::storage::{self, KeyStore};
 use crate::stun;
 use crate::tor;
