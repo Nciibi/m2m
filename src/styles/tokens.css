@@ -1,33 +1,43 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   M2M Design Tokens
+   M2M Design Tokens — S+ Edition
    Every visual property in one place. No magic values in component CSS.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ─── Colors: Backgrounds ─── */
+  /* ─── Colors: Canvas & Depth ─── */
   --color-bg-dark: #030408;
   --color-bg-surface: rgba(15, 16, 25, 0.75);
   --color-bg-card: rgba(25, 26, 40, 0.55);
-  --color-bg-input: rgba(255, 255, 255, 0.05);
-  --color-bg-input-focus: rgba(255, 255, 255, 0.1);
-  --color-bg-hover: rgba(255, 255, 255, 0.08);
-  --color-bg-active: rgba(255, 255, 255, 0.12);
-  --color-bg-overlay: rgba(0, 0, 0, 0.7);
-  --color-bg-tooltip: rgba(20, 22, 35, 0.95);
+  --color-bg-elevated: rgba(30, 32, 48, 0.65);
+  --color-bg-input: rgba(255, 255, 255, 0.04);
+  --color-bg-input-focus: rgba(255, 255, 255, 0.08);
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(255, 255, 255, 0.1);
+  --color-bg-overlay: rgba(0, 0, 0, 0.65);
+  --color-bg-tooltip: rgba(20, 22, 35, 0.97);
+  --color-bg-modal-backdrop: rgba(0, 0, 0, 0.6);
+
+  /* ─── Canvas Gradient (applied at body level) ─── */
+  --canvas-gradient:
+    radial-gradient(ellipse 60% 40% at 5% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 35% at 95% 100%, rgba(16, 185, 129, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(139, 92, 246, 0.04) 0%, transparent 60%);
 
   /* ─── Colors: Borders ─── */
-  --color-border-default: rgba(255, 255, 255, 0.08);
+  --color-border-default: rgba(255, 255, 255, 0.06);
   --color-border-active: rgba(129, 140, 248, 0.6);
-  --color-border-strong: rgba(255, 255, 255, 0.15);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
   --color-border-accent: rgba(129, 140, 248, 0.2);
 
-  /* ─── Colors: Accent ─── */
+  /* ─── Colors: Accent (Indigo) ─── */
   --color-accent: #6366f1;
   --color-accent-bright: #c7d2fe;
   --color-accent-dim: #4f46e5;
   --color-accent-glow: rgba(99, 102, 241, 0.3);
   --color-accent-glow-strong: rgba(99, 102, 241, 0.5);
-  --color-accent-glow-subtle: rgba(99, 102, 241, 0.12);
+  --color-accent-glow-subtle: rgba(99, 102, 241, 0.1);
+  --color-accent-gradient: linear-gradient(135deg, #6366f1, #4f46e5);
+  --color-accent-gradient-warm: linear-gradient(135deg, #818cf8, #6366f1);
 
   /* ─── Colors: Text ─── */
   --color-text-primary: #f8fafc;
@@ -39,21 +49,29 @@
 
   /* ─── Colors: Semantic ─── */
   --color-success: #10b981;
+  --color-success-bright: #a7f3d0;
   --color-success-glow: rgba(16, 185, 129, 0.25);
-  --color-success-bg: rgba(16, 185, 129, 0.12);
+  --color-success-bg: rgba(16, 185, 129, 0.1);
   --color-danger: #ef4444;
-  --color-danger-glow: rgba(239, 68, 68, 0.25);
-  --color-danger-bg: rgba(239, 68, 68, 0.12);
+  --color-danger-bright: #fca5a5;
+  --color-danger-glow: rgba(239, 68, 68, 0.2);
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
   --color-warning: #f59e0b;
-  --color-warning-glow: rgba(245, 158, 11, 0.25);
-  --color-warning-bg: rgba(245, 158, 11, 0.12);
+  --color-warning-bright: #fde68a;
+  --color-warning-glow: rgba(245, 158, 11, 0.2);
+  --color-warning-bg: rgba(245, 158, 11, 0.1);
   --color-info: #6366f1;
-  --color-info-glow: rgba(99, 102, 241, 0.25);
-  --color-info-bg: rgba(99, 102, 241, 0.12);
+  --color-info-glow: rgba(99, 102, 241, 0.2);
+  --color-info-bg: rgba(99, 102, 241, 0.1);
 
   /* ─── Glass Effects ─── */
+  --glass-blur-sm: blur(20px);
   --glass-blur: blur(40px);
+  --glass-blur-lg: blur(60px);
   --glass-saturate: saturate(200%);
+
+  /* ─── Edge Light (top highlight for cards) ─── */
+  --edge-light: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
 
   /* ─── Spacing Scale (4px base) ─── */
   --space-xxs: 4px;
@@ -77,10 +95,10 @@
   --text-3xl: 1.5rem;
   --text-4xl: 2rem;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto',
     'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
     'Helvetica Neue', sans-serif;
-  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas',
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas',
     'Monaco', 'Menlo', monospace;
 
   --font-weight-normal: 400;
@@ -114,12 +132,31 @@
 
   --shadow-accent: 0 4px 12px rgba(99, 102, 241, 0.2);
   --shadow-accent-strong: 0 8px 24px rgba(99, 102, 241, 0.4);
+  --shadow-accent-glow: 0 0 30px rgba(99, 102, 241, 0.15);
   --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
+  --shadow-bubble-sent: 0 4px 15px rgba(99, 102, 241, 0.3);
+  --shadow-bubble-received: 0 4px 15px rgba(0, 0, 0, 0.2);
+  --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-toast: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  --shadow-app-shell:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 10px 40px -10px rgba(0, 0, 0, 0.7),
+    0 0 100px -20px rgba(99, 102, 241, 0.15);
+
   /* ─── Transitions ─── */
-  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-base: 300ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-smooth: 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --transition-fast: 150ms var(--ease-out-expo);
+  --transition-base: 300ms var(--ease-out-expo);
+  --transition-smooth: 500ms var(--ease-out-expo);
+  --transition-slow: 800ms var(--ease-out-expo);
+  --transition-spring: 500ms var(--ease-out-back);
 
   /* ─── Z-Index Scale ─── */
   --z-base: 1;
@@ -130,6 +167,6 @@
   /* ─── Scrollbar ─── */
   --scrollbar-width: 6px;
   --scrollbar-track: transparent;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.06);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
 }
