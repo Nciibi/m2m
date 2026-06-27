@@ -1,7 +1,5 @@
 //! Shared helper functions used across command modules.
 
-use zeroize::Zeroizing;
-
 /// Decode a 64-char hex string into a 32-byte peer key.
 /// Returns an error if the hex string is malformed or wrong length.
 pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
