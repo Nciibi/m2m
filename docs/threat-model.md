@@ -132,8 +132,8 @@
 
 ## 7. Known Limitations
 
-1. **No forward secrecy per-message**: The MVP uses session-level key derivation. Per-message ratcheting (Double Ratchet) is a future enhancement.
-2. **No traffic analysis protection**: Packet timing and sizes may leak metadata to a network observer. Padding is a future enhancement.
-3. **No deniability**: Messages are authenticated, which means they are provably authored. Deniable authentication is a future consideration.
-4. **Single device**: No multi-device sync. The identity key exists on one machine.
-5. **IP exposure**: Direct TCP connections reveal IP addresses to the peer. Tor/VPN usage is the user's responsibility.
+1. **Per-message ratchet is SHA-256 not Double Ratchet**: The current ratchet provides forward secrecy (compromising `tx_key_N` does not reveal earlier messages), but it does not provide self-healing (compromising `tx_key_N` does reveal all future messages until the next DH exchange). A full Double Ratchet (X3DH + DH ratchet) is planned for Phase 1.
+2. **No deniability**: Messages are authenticated, which means they are provably authored. Deniable authentication is a future consideration.
+3. **Single device**: No multi-device sync. The identity key exists on one machine.
+4. **IP exposure**: Direct TCP connections reveal IP addresses to the peer. Tor/VPN usage is the user's responsibility.
+5. **No mlock()**: Session keys are zeroized on drop but may be paged to disk. Full `mlock()` protection is planned for Phase 4.
