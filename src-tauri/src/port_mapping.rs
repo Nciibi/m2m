@@ -143,6 +143,7 @@ impl PortMapper {
     ///
     /// Best-effort — logs failures but does not propagate them to the caller
     /// (the mapping will eventually expire on the router anyway).
+    #[allow(dead_code)]
     pub async fn remove_port_mapping(mapping: &PortMapping) {
         match mapping.protocol {
             "nat-pmp" => {
@@ -173,6 +174,7 @@ impl PortMapper {
     ///
     /// Returns a handle that can be used to cancel the renewal loop (e.g. on
     /// app shutdown).
+    #[allow(dead_code)]
     pub fn spawn_renewal(mapping: Arc<PortMapping>) -> tokio::sync::watch::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(());
 
@@ -522,6 +524,7 @@ async fn nat_pmp_map_tcp(
 }
 
 /// Remove a NAT-PMP TCP mapping by requesting lifetime=0 for the external port.
+#[allow(dead_code)]
 async fn nat_pmp_remove_tcp(external_port: u16) -> Result<(), PortMapError> {
     let gateway = match discover_gateway().await {
         Some(g) => g,
@@ -688,6 +691,7 @@ async fn pcp_map_tcp(
 }
 
 /// Remove a PCP mapping by requesting lifetime=0.
+#[allow(dead_code)]
 async fn pcp_remove_tcp(
     internal_port: u16,
     external_port: u16,
@@ -753,6 +757,7 @@ const SOAP_ADD_PORT: &str = r#"<?xml version="1.0"?>
 </s:Envelope>"#;
 
 /// UPnP action template for `DeletePortMapping`.
+#[allow(dead_code)]
 const SOAP_DELETE_PORT: &str = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
             s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
@@ -810,7 +815,7 @@ async fn upnp_discover() -> Result<UpnpService, PortMapError> {
             for line in resp.lines() {
                 let lower = line.to_lowercase();
                 if lower.starts_with("location:") {
-                    if let Some(url) = line.splitn(2, ':').nth(1) {
+                    if let Some(url) = line.split_once(':').map(|x| x.1) {
                         location_url = Some(url.trim().to_string());
                         break;
                     }
@@ -889,7 +894,7 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
         for line in hdrs.lines() {
             let lower_line = line.to_lowercase();
             if lower_line.starts_with(&lower_name) {
-                if let Some(val) = line.splitn(2, ':').nth(1) {
+                if let Some(val) = line.split_once(':').map(|x| x.1) {
                     return Some(val.trim().to_string());
                 }
             }
