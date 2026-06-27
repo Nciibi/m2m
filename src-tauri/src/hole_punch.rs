@@ -185,7 +185,7 @@ impl ConnectionManager {
 
         // Collect results. First success wins; log failures but keep going.
         let mut last_error = ConnectionError::AllFailed(total);
-        while let Ok(Some(result)) = time::timeout_at(deadline.into(), set.join_next()).await {
+        while let Ok(Some(result)) = time::timeout_at(time::Instant::from(deadline), set.join_next()).await {
             match result {
                 Ok(Some(Ok(Ok(strategy_result)))) => {
                     // ── Winner! Cancel everything else ──
