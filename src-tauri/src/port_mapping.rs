@@ -469,19 +469,23 @@ const PCP_TIMEOUT: Duration = Duration::from_secs(3);
 ///  34-49    Requested External IP (16 bytes, zero = any)
 /// ```
 const PCP_MAP_REQUEST_SIZE: usize = 50;
-const PCP_HEADER_SIZE: usize = 24;
-
 /// PCP MAP request field offsets (0‑based from start of packet).
 const PCP_OFF_OP: usize = 1;
 const PCP_OFF_RESULT: usize = 3;
 const PCP_OFF_LIFETIME: usize = 4;
+// Constants used by future PCP features (ECHO REQUEST, THIRD PARTY, etc.).
+#[allow(dead_code)]
+const PCP_HEADER_SIZE: usize = 24;
+#[allow(dead_code)]
 const PCP_OFF_CLIENT_IP: usize = 8;
-const PCP_OFF_BODY_RESERVED: usize = 24; // 3 bytes
+#[allow(dead_code)]
+const PCP_OFF_BODY_RESERVED: usize = 24;
+#[allow(dead_code)]
+const PCP_OFF_RESERVED2: usize = 28;
 const PCP_OFF_PROTOCOL: usize = 27;
-const PCP_OFF_RESERVED2: usize = 28; // 2 bytes
 const PCP_OFF_INT_PORT: usize = 30;
 const PCP_OFF_EXT_PORT: usize = 32;
-const PCP_OFF_EXT_IP: usize = 34; // 16 bytes
+const PCP_OFF_EXT_IP: usize = 34;
 
 fn build_pcp_map_request(lifetime_secs: u32, internal_port: u16, external_port: u16) -> [u8; PCP_MAP_REQUEST_SIZE] {
     let mut req = [0u8; PCP_MAP_REQUEST_SIZE];
@@ -864,7 +868,7 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
 /// Returns the trimmed content between the opening and closing tags.
 fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
     // Match opening tag: <tagName> or <ns:tagName> or <tagName > (with attributes).
-    let open_patterns = [
+    let _open_patterns = [
         format!("<{}>", tag_name),
         format!("<{} ", tag_name),  // with attribute(s)
         format!("<{}:", tag_name),  // wait, that's backward — ns:tag, not tag:ns
@@ -882,7 +886,7 @@ fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
     // Find start by searching for "tag_name>"
     if let Some(start) = xml.find(&start_marker) {
         // Rewind to find the opening '<'
-        let open_begin = xml[..start].rfind('<')?;
+        let _open_begin = xml[..start].rfind('<')?;
         let content_start = start + start_marker.len();
         let remaining = &xml[content_start..];
 
@@ -939,7 +943,7 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
     // Find the WANIPConnection service and extract its controlURL.
     // Use the robust XML tag extractor which handles whitespace, multiline,
     // and namespace prefixes like <ns:controlURL>.
-    let service_type = extract_xml_tag(&body, "serviceType")
+    let _service_type = extract_xml_tag(&body, "serviceType")
         .and_then(|t| {
             if t.contains("WANIPConnection") { Some(()) } else { None }
         })
