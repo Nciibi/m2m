@@ -15,14 +15,13 @@ use crate::crypto;
 use crate::hole_punch;
 use crate::identity;
 use crate::network;
-use crate::protocol::{self, FileTransferRequestData, PacketType, ConversationMetaData, WireCandidate};
+use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
 use crate::state::{AppState, PeerConnection, IncomingFileTransfer};
-use crate::storage;
 use crate::stun;
 
 use super::util;
-use super::{ConnectionEvent, ConnectionInfo, FileRequestEvent, FileTransferInfo, InviteInfo, MessageEvent, ChatMessage};
+use super::{ConnectionEvent, ConnectionInfo, FileRequestEvent, InviteInfo, MessageEvent, ChatMessage};
 
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address

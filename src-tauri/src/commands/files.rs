@@ -10,7 +10,6 @@ use tauri::State;
 use crate::protocol;
 use crate::state::{AppState, PeerConnection};
 
-use super::util;
 use super::FileTransferInfo;
 
 /// Initiate a file transfer to a peer.

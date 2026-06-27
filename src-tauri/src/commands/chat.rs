@@ -4,12 +4,11 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::protocol::{self, PacketType, MessageBody, ConversationMetaData};
+use crate::protocol::{self};
 use crate::state::{AppState, PeerConnection};
-use crate::storage;
 
 use super::util;
-use super::{ChatMessage, ConversationListItem, MessageEvent};
+use super::{ChatMessage, ConversationListItem};
 
 /// Send a text message to a connected peer.
 #[tauri::command]

@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use tauri::{State, Emitter};
+use tauri::State;
 use zeroize::Zeroizing;
 
 use crate::crypto::{self, IdentityKeypair};
