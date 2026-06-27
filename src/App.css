@@ -514,6 +514,93 @@ input::placeholder {
   font-weight: 500;
 }
 
+/* ─── Chat Message Textarea ─── */
+.message-input {
+  flex: 1;
+  font-size: 1rem;
+  padding: 14px 20px;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  line-height: 1.5;
+  max-height: 120px;
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-inner);
+}
+
+.message-input:focus {
+  border-color: var(--color-border-active);
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+}
+
+.message-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.char-count-warning {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  white-space: nowrap;
+}
+
+/* ─── Scroll-to-bottom FAB ─── */
+.scroll-to-bottom-fab {
+  position: absolute;
+  bottom: 80px;
+  right: 32px;
+  z-index: var(--z-base);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.15);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px var(--color-accent-glow);
+  animation: fabAppear 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: var(--transition-fast);
+  font-family: inherit;
+}
+
+.scroll-to-bottom-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--color-accent-glow-strong);
+}
+
+/* ─── Date Separator ─── */
+.date-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 12px;
+  padding: 0 8px;
+}
+
+.date-separator::before,
+.date-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-default);
+}
+
+.date-separator span {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 /* ─── Chat Area ─── */
 .messages {
   flex: 1;
@@ -632,6 +719,7 @@ input::placeholder {
   gap: 12px;
   align-items: center;
   background: rgba(0, 0, 0, 0.3);
+  position: relative;  /* for scroll-to-bottom FAB positioning */
 }
 
 .input-area input {

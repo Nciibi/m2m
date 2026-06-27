@@ -68,6 +68,10 @@ dashmap = "6"
 # SOCKS5 proxy for Tor integration
 tokio-socks = "0.5"
 
+[[example]]
+name = "generate-identity"
+path = "examples/generate-identity.rs"
+
 [features]
 default = []
 

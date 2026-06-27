@@ -7,9 +7,12 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import "./styles/tokens.css";
+import "./styles/theme.css";
+import "./styles/animations.css";
 import "./App.css";
 
-import { useToast } from "./toast";
+import { useToast } from "./hooks/useToast";
 import SetupView from "./views/SetupView";
 import VaultView from "./views/VaultView";
 import HubView from "./views/HubView";
@@ -76,6 +79,24 @@ function App() {
 
   // Notification permission
   const [notifPermission, setNotifPermission] = useState(false);
+
+  // Theme
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Set data-theme attribute on mount + respond to system preference
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const update = (e: MediaQueryListEvent | MediaQueryList) => {
+      setTheme(e.matches ? "light" : "dark");
+    };
+    update(mq);
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   // ==================== Handlers (declared before use) ====================
 

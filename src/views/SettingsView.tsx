@@ -1,4 +1,10 @@
-import { ToastContainer } from "../toast";
+import { useState } from "react";
+import {
+  Button,
+  Input,
+  Badge,
+  ToastContainer,
+} from "../components/ui";
 import type {
   Toast,
   IdentityInfo,
@@ -54,49 +60,70 @@ export default function SettingsView({
   onTorToggle,
   setStunServerInput,
 }: Props) {
+  const [ipCopied, setIpCopied] = useState(false);
+  const [fpCopied, setFpCopied] = useState(false);
+
   return (
     <div className="app-container">
       <div className="header">
         <h1>
           <span>⚙️</span> Settings
         </h1>
-        <button
-          className="secondary"
-          onClick={onBackToHub}
-          id="back-to-hub-btn"
-        >
+        <Button variant="secondary" compact onClick={onBackToHub} id="back-to-hub-btn">
           ← Back
-        </button>
+        </Button>
       </div>
+
       <div className="content-area settings-content">
-        {/* Public IP & Connectivity */}
+        {/* ═══ Public IP & Connectivity ═══ */}
         <div className="settings-section">
           <h3>Public IP & Connectivity</h3>
+
           <div className="settings-row">
             <div className="settings-label">
               <strong>Public Address</strong>
               <span className="settings-desc">
-                Discovered via STUN — needed for invites that work across the
-                internet. Queries all configured STUN servers in parallel for
-                consensus.
+                Discovered via STUN — needed for invites that work across the internet.
+                Queries all configured STUN servers in parallel for consensus.
               </span>
             </div>
             <div className="settings-value">
               {publicIp ? (
                 <span className="mono-value" id="public-ip-display">
                   {publicIp}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(publicIp);
+                      setIpCopied(true);
+                      setTimeout(() => setIpCopied(false), 2000);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      marginLeft: 8,
+                      fontFamily: "inherit",
+                      fontSize: "0.85rem",
+                    }}
+                    aria-label="Copy IP address"
+                  >
+                    {ipCopied ? "✅" : "📋"}
+                  </button>
                 </span>
               ) : (
                 <span className="text-muted">Not discovered</span>
               )}
-              <button
-                className="secondary"
+              <Button
+                variant="secondary"
+                compact
                 onClick={onStunDiscover}
                 disabled={stunLoading}
                 id="stun-discover-btn"
+                loading={stunLoading}
               >
-                {stunLoading ? "..." : "STUN Discover"}
-              </button>
+                STUN Discover
+              </Button>
             </div>
           </div>
 
@@ -108,15 +135,17 @@ export default function SettingsView({
               </span>
             </div>
             <div className="settings-value">
-              <button
-                className="secondary"
+              <Button
+                variant="secondary"
+                compact
                 onClick={onConnectivityCheck}
                 id="connectivity-check-btn"
               >
                 Check Connectivity
-              </button>
+              </Button>
             </div>
           </div>
+
           {connectivityResult && (
             <div
               className={`connectivity-result ${
@@ -152,7 +181,7 @@ export default function SettingsView({
           )}
         </div>
 
-        {/* STUN Servers */}
+        {/* ═══ STUN Servers ═══ */}
         <div className="settings-section" id="stun-servers-section">
           <h3>STUN Servers</h3>
           <p className="settings-desc">
@@ -165,44 +194,40 @@ export default function SettingsView({
                 {stunConfig.servers.map((s, i) => (
                   <div key={i} className="stun-server-item">
                     <span className="mono-value">{s}</span>
-                    <button
-                      className="icon-btn danger"
+                    <Button
+                      variant="icon"
+                      compact
                       onClick={() => onRemoveStunServer(i)}
-                      title="Remove server"
+                      aria-label={`Remove STUN server ${s}`}
+                      style={{ padding: "2px 6px", minWidth: "auto", fontSize: "var(--text-sm)" }}
                     >
                       ✕
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
               <div className="stun-server-add">
-                <input
+                <Input
                   placeholder="host:port (e.g., stun.example.com:3478)"
                   value={stunServerInput}
                   onChange={(e) => setStunServerInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && onAddStunServer()}
                   id="stun-server-input"
+                  mono
+                  compact
                 />
-                <button
-                  className="secondary"
-                  onClick={onAddStunServer}
-                  id="add-stun-server-btn"
-                >
+                <Button variant="secondary" compact onClick={onAddStunServer} id="add-stun-server-btn">
                   Add
-                </button>
-                <button
-                  className="secondary"
-                  onClick={onResetStunDefaults}
-                  id="reset-stun-btn"
-                >
+                </Button>
+                <Button variant="secondary" compact onClick={onResetStunDefaults} id="reset-stun-btn">
                   Reset Defaults
-                </button>
+                </Button>
               </div>
             </>
           )}
         </div>
 
-        {/* Network Diagnostics */}
+        {/* ═══ Network Diagnostics ═══ */}
         {networkDiagnostics && (
           <div className="settings-section" id="network-diagnostics-section">
             <h3>Network Diagnostics</h3>
@@ -210,7 +235,17 @@ export default function SettingsView({
               <div className="diagnostic-item">
                 <span className="diagnostic-label">NAT Type</span>
                 <span className="diagnostic-value">
-                  {networkDiagnostics.nat_type}
+                  <Badge
+                    variant={
+                      networkDiagnostics.nat_type === "symmetric" ? "warning"
+                      : networkDiagnostics.nat_type === "blocked" ? "danger"
+                      : networkDiagnostics.nat_type === "unknown" ? "default"
+                      : "success"
+                    }
+                    compact
+                  >
+                    {networkDiagnostics.nat_type}
+                  </Badge>
                 </span>
               </div>
               <div className="diagnostic-item">
@@ -219,7 +254,7 @@ export default function SettingsView({
                   {networkDiagnostics.candidates?.length || 0}
                 </span>
               </div>
-              <div className="diagnostic-item">
+              <div className="diagnostic-item full-width">
                 <span className="diagnostic-label">STUN Servers</span>
                 <span className="diagnostic-value">
                   <div className="stun-health-list">
@@ -279,32 +314,34 @@ export default function SettingsView({
           </div>
         )}
 
-        {/* Privacy */}
+        {/* ═══ Privacy ═══ */}
         <div className="settings-section">
           <h3>Privacy</h3>
           <div className="settings-row">
             <div className="settings-label">
               <strong>Private Mode</strong>
               <span className="settings-desc">
-                When enabled, your public IP will NOT be included in invite
-                links. Only local network addresses will be shared.
+                When enabled, your public IP will NOT be included in invite links.
+                Only local network addresses will be shared.
               </span>
             </div>
             <div className="settings-value">
-              <button
-                className={privateMode ? "danger" : "secondary"}
+              <Badge variant={privateMode ? "success" : "default"} compact dot>
+                {privateMode ? "Enabled" : "Disabled"}
+              </Badge>
+              <Button
+                variant={privateMode ? "danger" : "secondary"}
+                compact
                 onClick={onPrivateModeToggle}
                 id="private-mode-toggle"
               >
-                {privateMode
-                  ? "Disable Private Mode"
-                  : "Enable Private Mode"}
-              </button>
+                {privateMode ? "Disable Private Mode" : "Enable Private Mode"}
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* Tor */}
+        {/* ═══ Tor Routing ═══ */}
         <div className="settings-section">
           <h3>Tor Routing</h3>
           <div className="settings-row">
@@ -316,40 +353,57 @@ export default function SettingsView({
               </span>
             </div>
             <div className="settings-value">
-              <span
-                className={`tor-status ${
-                  networkSettings?.tor_reachable
-                    ? "reachable"
-                    : "unreachable"
-                }`}
+              <Badge
+                variant={networkSettings?.tor_reachable ? "success" : "default"}
+                compact
+                dot={!!networkSettings?.tor_reachable}
               >
                 {networkSettings?.tor_reachable
                   ? "Proxy reachable"
                   : "Proxy not found"}
-              </span>
-              <button
-                className={
-                  networkSettings?.tor_enabled ? "danger" : "secondary"
-                }
+              </Badge>
+              <Button
+                variant={networkSettings?.tor_enabled ? "danger" : "secondary"}
+                compact
                 onClick={onTorToggle}
                 id="tor-toggle-btn"
               >
-                {networkSettings?.tor_enabled
-                  ? "Disable Tor"
-                  : "Enable Tor"}
-              </button>
+                {networkSettings?.tor_enabled ? "Disable Tor" : "Enable Tor"}
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* Identity */}
+        {/* ═══ Identity ═══ */}
         <div className="settings-section">
           <h3>Identity</h3>
           <div className="fingerprint-box" id="settings-fingerprint">
-            <span className="fingerprint-label">
-              Your Identity Fingerprint
+            <span className="fingerprint-label">Your Identity Fingerprint</span>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {identity?.fingerprint}
+              <Button
+                variant="ghost"
+                compact
+                onClick={() => {
+                  if (identity?.fingerprint) {
+                    navigator.clipboard.writeText(identity.fingerprint);
+                    setFpCopied(true);
+                    setTimeout(() => setFpCopied(false), 2000);
+                  }
+                }}
+                aria-label="Copy fingerprint"
+                style={{ fontSize: "var(--text-sm)", padding: "2px 6px" }}
+              >
+                {fpCopied ? "✅" : "📋"}
+              </Button>
             </span>
-            {identity?.fingerprint}
           </div>
         </div>
 
@@ -358,6 +412,7 @@ export default function SettingsView({
           M2M Secure Messenger v0.1.0 — End-to-End Encrypted
         </div>
       </div>
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
