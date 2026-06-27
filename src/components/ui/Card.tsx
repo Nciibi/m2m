@@ -49,7 +49,7 @@ export default function Card({
     transition: "var(--transition-base)",
     position: "relative",
     overflow: "hidden",
-    boxShadow: "var(--shadow-md)",
+    boxShadow: "var(--shadow-card)",
     cursor: clickable ? "pointer" : undefined,
     ...(clickable && {
       ":hover": {
