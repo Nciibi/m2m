@@ -1,22 +1,17 @@
-import { type ButtonHTMLAttributes, type ReactNode } from "react";
+import { type ButtonHTMLAttributes, type ReactNode, useState } from "react";
 import LoadingSpinner from "./LoadingSpinner";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Visual variant */
   variant?: "default" | "secondary" | "danger" | "ghost" | "icon";
-  /** Show a loading spinner instead of children */
   loading?: boolean;
-  /** Icon displayed before text (not for icon variant) */
   icon?: ReactNode;
-  /** Full-width button */
   fullWidth?: boolean;
-  /** Small size (fits in tight spaces) */
   compact?: boolean;
 }
 
 const variantStyles: Record<string, React.CSSProperties> = {
   default: {
-    background: "linear-gradient(135deg, var(--color-accent), var(--color-accent-dim))",
+    background: "var(--color-accent-gradient)",
     color: "white",
     border: "1px solid rgba(255,255,255,0.1)",
     boxShadow: "var(--shadow-accent)",
@@ -30,7 +25,7 @@ const variantStyles: Record<string, React.CSSProperties> = {
   danger: {
     background: "transparent",
     color: "var(--color-danger)",
-    border: "1px solid rgba(239,68,68,0.3)",
+    border: "1px solid rgba(239,68,68,0.25)",
     boxShadow: "none",
   },
   ghost: {
@@ -46,14 +41,17 @@ const variantStyles: Record<string, React.CSSProperties> = {
     boxShadow: "none",
     padding: "10px",
     minWidth: "42px",
+    minHeight: "42px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: "var(--radius-lg)",
+    fontSize: "var(--text-xl)",
   },
 };
 
 /**
- * Unified button component with variants, loading state, and decorative shine effect.
+ * Unified button component with variants, loading state, and shine sweep effect.
  */
 export default function Button({
   variant = "default",
@@ -66,13 +64,19 @@ export default function Button({
   style,
   ...rest
 }: ButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   const baseStyle: React.CSSProperties = {
     fontFamily: "inherit",
     fontSize: compact ? "var(--text-base)" : "var(--text-md)",
     fontWeight: 600,
     cursor: disabled || loading ? "not-allowed" : "pointer",
-    padding: compact ? "7px 14px" : variant === "icon" ? "10px" : "12px 24px",
-    borderRadius: "var(--radius-lg)",
+    padding: compact
+      ? "7px 14px"
+      : variant === "icon"
+        ? "10px"
+        : "12px 24px",
+    borderRadius: variant === "icon" ? "var(--radius-lg)" : "var(--radius-lg)",
     transition: "var(--transition-base)",
     position: "relative",
     overflow: "hidden",
@@ -80,7 +84,7 @@ export default function Button({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    opacity: disabled ? 0.5 : 1,
+    opacity: disabled ? 0.45 : 1,
     width: fullWidth ? "100%" : undefined,
     ...variantStyles[variant],
     ...style,
@@ -91,31 +95,33 @@ export default function Button({
       style={baseStyle}
       disabled={disabled || loading}
       onMouseEnter={(e) => {
+        setIsHovered(true);
         if (!disabled && !loading) {
-          const target = e.currentTarget;
+          const t = e.currentTarget;
           if (variant === "default") {
-            target.style.transform = "translateY(-2px)";
-            target.style.boxShadow = "var(--shadow-accent-strong)";
+            t.style.transform = "translateY(-2px)";
+            t.style.boxShadow = "var(--shadow-accent-strong)";
           } else if (variant === "secondary" || variant === "ghost") {
-            target.style.background = "var(--color-bg-hover)";
-            target.style.color = "var(--color-text-primary)";
+            t.style.background = "var(--color-bg-hover)";
+            t.style.color = "var(--color-text-primary)";
           } else if (variant === "danger") {
-            target.style.background = "var(--color-danger-bg)";
+            t.style.background = "var(--color-danger-bg)";
           } else if (variant === "icon") {
-            target.style.background = "var(--color-bg-hover)";
-            target.style.borderColor = "var(--color-border-active)";
-            target.style.color = "var(--color-text-primary)";
+            t.style.background = "var(--color-bg-hover)";
+            t.style.borderColor = "var(--color-border-active)";
+            t.style.color = "var(--color-text-primary)";
           }
         }
       }}
       onMouseLeave={(e) => {
-        const target = e.currentTarget;
-        target.style.transform = "";
+        setIsHovered(false);
+        const t = e.currentTarget;
+        t.style.transform = "";
         const base = variantStyles[variant];
-        target.style.boxShadow = base.boxShadow as string || "";
-        target.style.background = base.background as string || "";
-        target.style.color = base.color as string || "";
-        target.style.borderColor = base.border as string || "";
+        t.style.boxShadow = (base.boxShadow as string) || "";
+        t.style.background = (base.background as string) || "";
+        t.style.color = (base.color as string) || "";
+        t.style.borderColor = (base.border as string) || "";
       }}
       onMouseDown={(e) => {
         if (!disabled && !loading) {
@@ -128,26 +134,28 @@ export default function Button({
         <LoadingSpinner size="sm" />
       ) : (
         <>
-          {icon && <span style={{ fontSize: "1.1rem", lineHeight: 1 }}>{icon}</span>}
+          {icon && (
+            <span style={{ fontSize: "1.1rem", lineHeight: 1 }}>
+              {icon}
+            </span>
+          )}
           {children}
         </>
       )}
-      {/* Shine sweep effect (only on default variant) */}
+      {/* Shine sweep on default variant */}
       {variant === "default" && !disabled && !loading && (
         <span
-          className="btn-shine"
           style={{
             position: "absolute",
             top: 0,
-            left: "-100%",
+            left: isHovered ? "100%" : "-100%",
             right: 0,
             bottom: 0,
-            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)",
+            background:
+              "linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)",
             transition: "left 0.5s",
             pointerEvents: "none",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.left = "100%"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.left = "-100%"; }}
         />
       )}
     </button>
