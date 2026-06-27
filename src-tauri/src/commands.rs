@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::candidate;
+use crate::hole_punch;
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
@@ -214,7 +215,9 @@ pub async fn create_invite(
         let pip = state.public_ip.read().await;
         match *pip {
             Some(public_addr) => {
-                SocketAddr::new(public_addr.ip(), listen_addr.port()).to_string()
+                // Use the FULL STUN-discovered address (IP:port) - the STUN
+                // port is what the NAT maps, so the peer must connect to it.
+                public_addr.to_string()
             }
             None => {
                 if listen_addr.ip().is_unspecified() {
@@ -243,7 +246,14 @@ pub async fn create_invite(
         );
     }
 
-    identity::create_invite(kp, &actual_address, validity_secs, one_time)
+    let invite_candidates: Vec<protocol::WireCandidate> = {
+        let candidates_state = state.candidates.read().await;
+        candidates_state.iter().map(|c| protocol::WireCandidate {
+            address: c.address.clone(),
+            candidate_type: c.candidate_type as u8,
+        }).collect()
+    };
+    identity::create_invite(kp, &actual_address, validity_secs, one_time, invite_candidates)
         .map_err(|e| format!("invite creation failed: {e}"))
 }
 
@@ -566,15 +576,17 @@ pub async fn connect_to_peer(
     let signed = identity::validate_invite(&invite_str)
         .map_err(|e| format!("invite invalid: {e}"))?;
 
-    let addr: SocketAddr = signed
-        .payload
-        .address_hint
-        .parse()
-        .map_err(|e| format!("invalid address in invite: {e}"))?;
-
-    tracing::debug!(invite_address = %addr, address_hint = %signed.payload.address_hint, "connecting to peer from invite");
-
-    let stream = network::connect(addr)
+    let peer_addrs = hole_punch::extract_candidates_from_invite(
+        &signed.payload.address_hint,
+        &signed.payload.candidates,
+    );
+    for &addr in &peer_addrs {
+        let _ = hole_punch::udp_prelude(addr).await;
+    }
+    let wire_candidates: Vec<protocol::WireCandidate> = peer_addrs.iter().map(|a|
+        protocol::WireCandidate { address: a.to_string(), candidate_type: 1 }
+    ).collect();
+    let (stream, connected_addr) = hole_punch::connect_with_candidates(&wire_candidates)
         .await
         .map_err(|e| format!("connection failed: {e}"))?;
 
@@ -625,7 +637,7 @@ pub async fn connect_to_peer(
     let conn = PeerConnection {
         write_half,
         session,
-        remote_addr: addr,
+        remote_addr: connected_addr,
     };
 
     let mut conns = state.connections.write().await;

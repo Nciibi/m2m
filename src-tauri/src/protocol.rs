@@ -337,6 +337,9 @@ pub struct InvitePayload {
     pub expires_at: u64,
     pub nonce: Vec<u8>,
     pub flags: u8,
+    /// Network candidates for ICE-Lite connectivity (host, srflx).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<WireCandidate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

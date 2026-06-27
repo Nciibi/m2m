@@ -17,6 +17,7 @@
 mod candidate;
 mod commands;
 mod crypto;
+mod hole_punch;
 mod identity;
 mod network;
 mod protocol;

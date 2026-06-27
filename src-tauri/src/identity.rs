@@ -56,6 +56,7 @@ pub fn create_invite(
     address_hint: &str,
     validity_secs: u64,
     one_time: bool,
+    candidates: Vec<crate::protocol::WireCandidate>,
 ) -> Result<String, IdentityError> {
     if address_hint.len() > MAX_ADDRESS_HINT_LENGTH {
         return Err(IdentityError::AddressHintTooLong);
@@ -80,6 +81,7 @@ pub fn create_invite(
         expires_at: now + validity_secs,
         nonce,
         flags,
+        candidates,
     };
 
     // Serialize payload for signing

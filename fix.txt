@@ -1,0 +1,228 @@
+The biggest issue
+
+Look at your "hole punch".
+
+tcp_hole_punch(addr)
+
+Inside it you do
+
+TcpStream::connect_timeout(...)
+
+That's just a normal TCP connect.
+
+Nothing more.
+
+Real TCP hole punching requires both peers to do something simultaneously.
+
+What should happen
+
+Suppose Alice and Bob exchanged candidates.
+
+Instead of this
+
+Alice
+
+connect(Bob)
+
+and Bob just waits,
+
+both should do
+
+Alice
+connect(Bob)
+
+Bob
+connect(Alice)
+
+at almost exactly the same time.
+
+This is called
+
+Simultaneous Open
+
+Your current flow
+
+Your function is
+
+Alice
+
+connect()
+
+↓
+
+wait
+
+↓
+
+timeout
+
+Meanwhile Bob might simply be
+
+accept()
+
+This is not hole punching.
+
+It's a normal outgoing TCP connection.
+
+What M2M should do
+
+When both users accept an invite
+
+Both should launch
+
+Task 1
+
+listen()
+
+AND
+
+Task 2
+
+connect()
+
+simultaneously.
+
+Like
+
+tokio::join!(
+    listener.accept(),
+    connect_to_peer(...)
+);
+
+or
+
+tokio::select! {
+    stream = listener.accept() => ...
+    stream = connect() => ...
+}
+
+Whoever succeeds first wins.
+
+Another missing piece
+
+Hole punching only works if both peers know
+
+START NOW
+
+Your code currently has no synchronization.
+
+It just loops
+
+try host
+
+↓
+
+try srflx
+
+↓
+
+try hole punch
+
+But the remote side has no idea you're trying.
+
+Usually the signalling channel says
+
+READY
+
+3...
+
+2...
+
+1...
+
+CONNECT
+
+Or both sides begin immediately after exchanging ICE candidates.
+
+UDP Prelude
+
+You wrote
+
+udp_prelude()
+
+This is interesting.
+
+But...
+
+TCP and UDP use different NAT mappings on almost all NATs.
+
+Meaning
+
+UDP mapping
+
+≠
+
+TCP mapping
+
+So sending
+
+UDP packet
+
+usually does not help TCP hole punching.
+
+There are a few NAT implementations where it can help, but it is not something you should rely on. Most TCP hole punching implementations do not use this technique.
+
+What's missing from ICE
+
+Real ICE also measures
+
+RTT
+Candidate priority
+Connectivity checks
+Candidate nomination
+
+Your implementation currently says
+
+Host
+
+↓
+
+SRFLX
+
+↓
+
+Punch
+
+↓
+
+Done
+
+That's more like ICE-Lite.
+
+Which is perfectly reasonable for M2M.
+
+I would redesign it like this
+Invite exchanged
+        │
+        ▼
+Exchange ICE candidates
+        │
+        ▼
+Both peers send READY
+        │
+        ▼
+Both simultaneously
+    listen()
+    connect()
+        │
+        ▼
+Race all candidates
+        │
+        ▼
+First successful socket wins
+        │
+        ▼
+Cancel remaining attempts
+
+This simultaneous "listen + connect" behavior is the key difference between ordinary connection attempts and actual TCP hole punching.
+
+Overall assessment
+
+I'd rate this implementation:
+
+Architecture: ★★★★★ (9/10) — the phases and candidate handling are clean.
+Code quality: ★★★★★ (9.5/10) — well organized and readable.
+Actual TCP hole punching: ★★☆☆☆ (4/10) — because it lacks true simultaneous-open coordination and synchronization between peers.
+ICE implementation: ★★★☆☆ (6/10) — a good ICE-Lite foundation, but not a full ICE state machine.
+
+The good news is that you're much closer than it looks. You already have the candidate model, prioritization, and connection framework. The main missing ingredient is coordinating both peers so they attempt outgoing connections while also accepting incoming ones at the same time. That's what turns this from "multiple connection attempts" into genuine TCP hole punching.
