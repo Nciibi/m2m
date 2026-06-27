@@ -39,6 +39,8 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
+use std::sync::Arc;
+
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::time;
 
@@ -159,6 +161,113 @@ impl PortMapper {
             }
             other => tracing::warn!(protocol = other, "don't know how to remove this mapping"),
         }
+    }
+
+    /// Spawn a background task that automatically renews a port mapping
+    /// before the router's lifetime expires.
+    ///
+    /// The renewal fires at 75% of the mapping's `lifetime_secs` and retries
+    /// up to 3 times with exponential backoff before giving up (the mapping
+    /// will be re-created on the next invite anyway).
+    ///
+    /// Returns a handle that can be used to cancel the renewal loop (e.g. on
+    /// app shutdown).
+    pub fn spawn_renewal(mapping: Arc<PortMapping>) -> tokio::sync::watch::Sender<()> {
+        let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(());
+
+        // Compute renewal interval as 75% of the granted lifetime.
+        let interval = Duration::from_secs(
+            (mapping.lifetime_secs as f64 * 0.75) as u64,
+        );
+
+        // Don't bother renewing if the lifetime is ridiculously short.
+        if interval < Duration::from_secs(30) {
+            tracing::warn!(
+                lifetime = mapping.lifetime_secs,
+                "mapping lifetime too short for automatic renewal"
+            );
+            return cancel_tx;
+        }
+
+        let mapping = mapping.clone();
+        tokio::spawn(async move {
+            loop {
+                // Wait for the renewal interval or cancellation.
+                tokio::select! {
+                    _ = time::sleep(interval) => {}
+                    _ = cancel_rx.changed() => {
+                        tracing::debug!("port mapping renewal cancelled");
+                        return;
+                    }
+                }
+
+                // Renew with up to 3 retries.
+                let mut retries = 0u32;
+                loop {
+                    tracing::info!(
+                        protocol = mapping.protocol,
+                        external = %mapping.external_addr,
+                        attempt = retries + 1,
+                        "renewing port mapping"
+                    );
+
+                    let result = match mapping.protocol {
+                        "nat-pmp" => {
+                            // NAT-PMP: re-request with the same internal port.
+                            let gw = match discover_gateway().await {
+                                Some(g) => g,
+                                None => {
+                                    tracing::warn!("cannot discover gateway for NAT-PMP renewal");
+                                    break;
+                                }
+                            };
+                            nat_pmp_map_tcp(gw, mapping.internal_port, mapping.lifetime_secs).await
+                        }
+                        "pcp" => {
+                            let gw = match discover_gateway().await {
+                                Some(g) => g,
+                                None => {
+                                    tracing::warn!("cannot discover gateway for PCP renewal");
+                                    break;
+                                }
+                            };
+                            pcp_map_tcp(gw, mapping.internal_port, mapping.lifetime_secs).await
+                        }
+                        "upnp-igd" => {
+                            upnp_map_tcp(mapping.internal_port, mapping.lifetime_secs).await
+                        }
+                        other => {
+                            tracing::warn!(protocol = other, "don't know how to renew this mapping");
+                            break;
+                        }
+                    };
+
+                    match result {
+                        Ok(_) => {
+                            tracing::info!(
+                                protocol = mapping.protocol,
+                                "port mapping renewed successfully"
+                            );
+                            break;
+                        }
+                        Err(e) => {
+                            retries += 1;
+                            if retries >= 3 {
+                                tracing::error!(
+                                    error = %e,
+                                    "port mapping renewal failed after 3 retries"
+                                );
+                                break;
+                            }
+                            tracing::warn!(error = %e, retry = retries, "renewal attempt failed, retrying");
+                            time::sleep(Duration::from_secs(2u64.pow(retries))).await;
+                        }
+                    }
+                }
+            }
+        });
+
+        cancel_tx
     }
 }
 
@@ -395,15 +504,19 @@ async fn nat_pmp_map_tcp(
             result
         )));
     }
-    let ext_port = u16::from_be_bytes([buf[8], buf[9]]);
+    let ext_port = u16::from_be_bytes([buf[10], buf[11]]);
+    let mapped_lifetime = u32::from_be_bytes([buf[12], buf[13], buf[14], buf[15]]);
 
     // Get the router's WAN IP via a separate public-address request.
     let public_ip = nat_pmp_public_address(&gw).await?;
+
+    tracing::debug!(ext_port = ext_port, lifetime = mapped_lifetime, "NAT-PMP mapping granted");
 
     Ok(PortMapping {
         protocol: "nat-pmp",
         internal_port,
         external_addr: SocketAddr::new(public_ip, ext_port),
+        lifetime_secs: mapped_lifetime,
     })
 }
 
@@ -569,6 +682,7 @@ async fn pcp_map_tcp(
         protocol: "pcp",
         internal_port,
         external_addr: SocketAddr::new(ext_ip, external_port),
+        lifetime_secs: mapped_lifetime,
     })
 }
 
@@ -1047,6 +1161,7 @@ async fn upnp_map_tcp(
             protocol: "upnp-igd",
             internal_port,
             external_addr: SocketAddr::new(public_ip, internal_port),
+            lifetime_secs: _lifetime_secs,
         })
     } else if status_code == 500 && resp_str.contains("ConflictInMappingEntry") {
         Err(PortMapError::Upnp("port already mapped (conflict)".into()))
@@ -1255,6 +1370,7 @@ mod port_mapping_tests {
             protocol: "nat-pmp",
             internal_port: 9000,
             external_addr: "1.2.3.4:54321".parse().unwrap(),
+            lifetime_secs: 3600,
         };
         let d = format!("{:?}", m);
         assert!(d.contains("nat-pmp"));
