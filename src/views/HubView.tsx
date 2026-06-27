@@ -101,6 +101,7 @@ export default function HubView({
 
 function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity }: any) {
   const [generating, setGenerating] = useState(false);
+  const [fpCopied, setFpCopied] = useState(false);
   const handleGenerate = async () => { setGenerating(true); try { await onGenerateInvite(); } finally { setGenerating(false); } };
 
   return (
@@ -115,7 +116,7 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
                 <span className="invite-output__text">{generatedInvite}</span>
               </div>
               <button className={`btn btn--icon`} onClick={onCopyInvite} id="copy-invite-btn" aria-label="Copy invite" style={{ borderColor: copied ? "rgba(16,185,129,0.3)" : undefined, background: copied ? "var(--color-success-bg)" : undefined }}>
-                {copied ? <CheckIcon size={18} color="var(--color-success)" /> : <CopyIcon size={18} />}
+                {copied ? <span className="copied-pop"><CheckIcon size={18} /></span> : <CopyIcon size={18} />}
               </button>
             </div>
           )}
@@ -147,8 +148,14 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
           <span className="fingerprint-label">Your Identity Fingerprint</span>
           <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-xs)" }}>
             {identity?.fingerprint}
-            <button className="btn btn--ghost" onClick={() => identity?.fingerprint && navigator.clipboard.writeText(identity.fingerprint)} aria-label="Copy" style={{ padding: "4px 8px", minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-xs)" }}>
-              <CopyIcon size={14} />
+            <button className="btn btn--ghost" onClick={() => {
+              if (identity?.fingerprint) {
+                navigator.clipboard.writeText(identity.fingerprint);
+                setFpCopied(true);
+                setTimeout(() => setFpCopied(false), 2000);
+              }
+            }} aria-label="Copy" style={{ padding: "4px 8px", minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-xs)" }}>
+              {fpCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
             </button>
           </span>
         </div>

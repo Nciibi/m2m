@@ -75,7 +75,7 @@ export default function VaultView({
           </span>
         </p>
 
-        <div className="vault-form" key={shakeKey}>
+        <div className={`vault-form ${vaultError ? "vault-form--shake" : ""}`} key={shakeKey}>
           <div style={{ position: "relative" }}>
             <Input
               id="vault-passphrase"

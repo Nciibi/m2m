@@ -63,7 +63,7 @@ export default function SettingsView({
                   {publicIp}
                   <button onClick={() => { navigator.clipboard.writeText(publicIp); setIpCopied(true); setTimeout(() => setIpCopied(false), 2000); }}
                     aria-label="Copy IP" className="input__clear" style={{ display: "inline-flex" }}>
-                    {ipCopied ? <CheckIcon size={14} color="var(--color-success)" /> : <CopyIcon size={14} />}
+                    {ipCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
                   </button>
                 </span>
               ) : <span className="text-muted">Not discovered</span>}
@@ -201,7 +201,7 @@ export default function SettingsView({
               {identity?.fingerprint}
               <button onClick={() => { if (identity?.fingerprint) { navigator.clipboard.writeText(identity.fingerprint); setFpCopied(true); setTimeout(() => setFpCopied(false), 2000); } }}
                 aria-label="Copy fingerprint" className="btn btn--ghost" style={{ padding: "4px 8px", minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-xs)" }}>
-                {fpCopied ? <CheckIcon size={14} color="var(--color-success)" /> : <CopyIcon size={14} />}
+                {fpCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
               </button>
             </span>
           </div>

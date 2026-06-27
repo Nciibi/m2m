@@ -151,8 +151,8 @@ export default function ChatView({
 
       {/* FAB */}
       {scrolledUp && (
-        <button className="msg-send-btn" onClick={() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); setScrolledUp(false); }}
-          aria-label="Scroll to bottom" style={{ position: "absolute", bottom: 80, right: 32, zIndex: 1, width: 40, height: 40, borderRadius: "50%", padding: 0, minWidth: 40, minHeight: 40 }}>
+        <button className="scroll-fab" onClick={() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); setScrolledUp(false); }}
+          aria-label="Scroll to bottom">
           <ArrowDownIcon size={20} />
         </button>
       )}
