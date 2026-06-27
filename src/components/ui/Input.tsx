@@ -1,4 +1,5 @@
 import { type InputHTMLAttributes, type ReactNode, useRef } from "react";
+import { CloseIcon, SearchIcon } from "./Icons";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   /** Icon displayed at the left of the input */
@@ -13,12 +14,13 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   compact?: boolean;
   /** Monospace font (for fingerprints, invite codes) */
   mono?: boolean;
-  /** Wrapper style for the container */
+  /** Wrapper style */
   wrapperStyle?: React.CSSProperties;
 }
 
 /**
- * Styled input with icon adornment, error state, and clearable support.
+ * Premium input with focus glow, icon support, clearable, error state.
+ * No browser default focus rings — all custom.
  */
 export default function Input({
   icon,
@@ -38,76 +40,90 @@ export default function Input({
   const hasValue =
     value !== undefined && value !== null && String(value).length > 0;
 
-  const containerStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    width: "100%",
-    ...wrapperStyle,
-  };
-
-  const inputWrapperStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    background: "var(--color-bg-input)",
-    border: `1px solid ${error ? "var(--color-danger)" : "var(--color-border-default)"}`,
-    borderRadius: "var(--radius-md)",
-    padding: compact ? "6px 12px" : "10px 16px",
-    transition: "var(--transition-fast)",
-    position: "relative",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    flex: 1,
-    background: "none",
-    border: "none",
-    outline: "none",
-    color: "var(--color-text-primary)",
-    fontSize: compact ? "var(--text-base)" : "var(--text-md)",
-    fontFamily: mono ? "var(--font-mono)" : "var(--font-sans)",
-    padding: 0,
-    width: "100%",
-  };
-
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    const wrapper = e.currentTarget.parentElement;
-    if (wrapper) {
-      wrapper.style.borderColor = "var(--color-border-active)";
-      wrapper.style.background = "var(--color-bg-input-focus)";
-      wrapper.style.boxShadow = "0 0 0 3px var(--color-accent-glow)";
-    }
-  };
-
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const wrapper = e.currentTarget.parentElement;
-    if (wrapper) {
-      wrapper.style.borderColor = error
-        ? "var(--color-danger)"
-        : "var(--color-border-default)";
-      wrapper.style.background = "var(--color-bg-input)";
-      wrapper.style.boxShadow = "none";
-    }
-  };
-
   return (
-    <div style={containerStyle}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        width: "100%",
+        ...wrapperStyle,
+      }}
+    >
       <div
-        style={inputWrapperStyle}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: error
+            ? "var(--color-danger-bg)"
+            : "var(--color-bg-input)",
+          border: `1px solid ${
+            error ? "var(--color-danger)" : "var(--color-border-default)"
+          }`,
+          borderRadius: "var(--radius-md)",
+          padding: compact ? "6px 12px" : "10px 16px",
+          transition: "border-color 150ms ease, background 150ms ease, box-shadow 150ms ease",
+          position: "relative",
+        }}
         className="input-wrapper"
+        onMouseDown={(e) => {
+          // Click on wrapper focuses the input
+          if (e.target === e.currentTarget) {
+            inputRef.current?.focus();
+          }
+        }}
       >
         {icon && (
-          <span style={{ color: "var(--color-text-muted)", fontSize: "1rem", lineHeight: 1, flexShrink: 0 }}>
+          <span
+            style={{
+              color: "var(--color-text-muted)",
+              fontSize: 0,
+              lineHeight: 1,
+              flexShrink: 0,
+              display: "flex",
+            }}
+          >
             {icon}
           </span>
         )}
         <input
           ref={inputRef}
-          style={inputStyle}
+          style={{
+            flex: 1,
+            background: "none",
+            border: "none",
+            outline: "none",
+            boxShadow: "none",
+            color: "var(--color-text-primary)",
+            fontSize: compact ? "var(--text-base)" : "var(--text-md)",
+            fontFamily: mono ? "var(--font-mono)" : "var(--font-sans)",
+            padding: 0,
+            width: "100%",
+            WebkitAppearance: "none",
+          }}
           value={value}
           onChange={onChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onFocus={(e) => {
+            const wrapper = e.currentTarget.parentElement;
+            if (wrapper) {
+              wrapper.style.borderColor = "var(--color-border-active)";
+              wrapper.style.background = "var(--color-bg-input-focus)";
+              wrapper.style.boxShadow = "0 0 0 3px var(--color-accent-glow)";
+            }
+          }}
+          onBlur={(e) => {
+            const wrapper = e.currentTarget.parentElement;
+            if (wrapper) {
+              wrapper.style.borderColor = error
+                ? "var(--color-danger)"
+                : "var(--color-border-default)";
+              wrapper.style.background = error
+                ? "var(--color-danger-bg)"
+                : "var(--color-bg-input)";
+              wrapper.style.boxShadow = "none";
+            }
+          }}
           {...rest}
         />
         {clearable && hasValue && onClear && (
@@ -123,21 +139,24 @@ export default function Input({
               border: "none",
               color: "var(--color-text-muted)",
               cursor: "pointer",
-              padding: 0,
-              fontSize: "1rem",
+              padding: 4,
               lineHeight: 1,
               flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               fontFamily: "inherit",
+              borderRadius: "var(--radius-xs)",
+              transition: "color 150ms ease",
             }}
             aria-label="Clear input"
           >
-            ✕
+            <CloseIcon size={16} />
           </button>
         )}
       </div>
       {error && (
         <span
-          className="input-error"
           style={{
             fontSize: "var(--text-sm)",
             color: "var(--color-danger)",
