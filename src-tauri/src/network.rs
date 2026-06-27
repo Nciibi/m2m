@@ -31,6 +31,7 @@ use crate::protocol::{
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// TCP connection timeout.
+#[allow(dead_code)]
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum number of queued incoming connections.
@@ -90,7 +91,7 @@ impl ConnectionLimiter {
         // Per-IP rate limit: DashMap shard-level locking (not global).
         let now = Instant::now();
         let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
-        let mut entry = self.per_ip.entry(ip).or_insert_with(VecDeque::new);
+        let mut entry = self.per_ip.entry(ip).or_default();
 
         // Drain expired entries from the front.
         while let Some(&t) = entry.front() {
@@ -182,6 +183,7 @@ pub enum NetworkError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("connection timeout")]
+    #[allow(dead_code)]
     ConnectionTimeout,
     #[error("read timeout")]
     ReadTimeout,
@@ -366,6 +368,7 @@ pub async fn start_listener(
 /// Connect to a remote peer with timeout.
 /// Routes through Tor SOCKS5 proxy when Tor is enabled, otherwise direct TCP.
 /// Enables TCP keepalive to maintain NAT bindings and detect silent peer disconnects.
+#[allow(dead_code)]
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     tracing::debug!(target_addr = %addr, tor_enabled = crate::tor::is_enabled(), "attempting TCP connection");
     let result = time::timeout(CONNECT_TIMEOUT, crate::tor::connect(addr)).await;

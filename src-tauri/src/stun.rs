@@ -386,7 +386,7 @@ fn parse_binding_response(
         });
     }
 
-    if &data[4..8] != &STUN_MAGIC_COOKIE.to_be_bytes() {
+    if data[4..8] != STUN_MAGIC_COOKIE.to_be_bytes() {
         return Err(StunError::InvalidResponse {
             server: "?".to_string(),
         });

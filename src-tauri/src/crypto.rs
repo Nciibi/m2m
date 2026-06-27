@@ -283,9 +283,7 @@ pub fn init() -> Result<(), CryptoError> {
 
 /// NOTE: Fixed `pad_message`/`unpad_message` have been replaced by the
 /// exponential-tier `pad_message_variable`/`unpad_message_variable` above.
-
-// ─── Variable Padding (Exponential Tiers) ──────────────────────────────────
-
+///
 /// Exponential padding thresholds.
 /// Short messages are padded aggressively, long messages less so.
 /// File chunks get minimal padding (they're already close to chunk size).

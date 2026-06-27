@@ -55,6 +55,7 @@ pub struct PortMapping {
     /// One of "pcp", "nat-pmp", "upnp-igd".
     pub protocol: &'static str,
     /// The internal port we bound on this machine.
+    #[allow(dead_code)]
     pub internal_port: u16,
     /// The public (WAN) IP and port the router forwards to us.
     /// This is what remote peers connect to.
