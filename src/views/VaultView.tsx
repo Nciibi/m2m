@@ -27,7 +27,6 @@ export default function VaultView({
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showTips, setShowTips] = useState(false);
-  const [isUnlocking, setIsUnlocking] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [passphraseStrength, setPassphraseStrength] = useState({
     percent: 0,
@@ -84,13 +83,11 @@ export default function VaultView({
       return;
     }
     setLoading(true);
-    setIsUnlocking(true);
     try {
       await onUnlock(passphrase);
     } catch (e: any) {
       setVaultError(String(e));
       setShakeKey((k) => k + 1);
-      setIsUnlocking(false);
     } finally {
       setLoading(false);
     }
@@ -106,25 +103,24 @@ export default function VaultView({
   return (
     <div className="app-container">
       <div className="centered-view">
-        {/* Animated vault icon */}
+        {/* Animated vault icon — no class, only inline to avoid conflicting animations */}
         <div
-          className="setup-icon"
           style={{
             width: 80,
             height: 80,
             borderRadius: "var(--radius-xl)",
             fontSize: "2.2rem",
-            background: isUnlocking
-              ? "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(251,191,36,0.2))"
-              : "linear-gradient(135deg, rgba(251,191,36,0.2), rgba(99,102,241,0.15))",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "linear-gradient(135deg, rgba(251,191,36,0.2), rgba(99,102,241,0.15))",
             border: "1px solid rgba(251,191,36,0.2)",
-            boxShadow: isUnlocking
-              ? "0 0 40px rgba(99,102,241,0.2)"
-              : "0 0 30px rgba(251,191,36,0.1)",
             animation: loading
               ? "unlockBounce 0.6s var(--ease-out-back)"
               : "pulseRing 3s var(--ease-in-out) infinite",
             transition: "background 0.5s",
+            position: "relative",
+            marginBottom: "var(--space-xs)",
           }}
         >
           {loading ? "🔓" : "🔐"}

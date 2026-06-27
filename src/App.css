@@ -44,11 +44,13 @@ body {
   color: white;
 }
 
-/* ─── Focus Ring (global) ─── */
-*:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
-  border-radius: var(--radius-sm);
+/* ─── Focus Ring (global — only for keyboard nav on non-input elements) ─── */
+a:focus-visible,
+button:focus-visible:not(.no-focus-ring),
+[tabindex]:focus-visible:not(input):not(textarea):not(select) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
 /* ─── App Shell — Edge-Lit Glass Card ─── */
@@ -468,22 +470,6 @@ body {
   background: var(--color-bg-hover);
   border-color: var(--color-border-active);
   color: var(--color-text-primary);
-}
-
-/* ─── Setup Icon (shared by Setup and Vault views) ─── */
-.setup-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-lg);
-  background: var(--color-accent-glow);
-  border: 1px solid var(--color-border-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  margin-bottom: var(--space-xs);
-  animation: pulseRing 2s var(--ease-in-out) infinite;
-  position: relative;
 }
 
 /* ─── Loading Dots ─── */

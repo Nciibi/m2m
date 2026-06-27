@@ -14,14 +14,16 @@ export default function SetupView({ toasts, removeToast }: Props) {
   return (
     <div className="app-container">
       <div className="centered-view">
-        {/* Premium animated lock icon */}
+        {/* Premium animated lock icon — pure inline, no class conflicts */}
         <div
-          className="setup-icon"
           style={{
             width: 80,
             height: 80,
             borderRadius: "var(--radius-xl)",
             fontSize: "2.2rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             background: "var(--color-accent-gradient)",
             border: "1px solid rgba(255,255,255,0.15)",
             boxShadow: "var(--shadow-accent-strong), 0 0 60px rgba(99,102,241,0.15)",
@@ -31,7 +33,7 @@ export default function SetupView({ toasts, removeToast }: Props) {
           <span style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))" }}>
             🔑
           </span>
-          {/* Outer glow ring */}
+          {/* Outer glow ring — only ONE pulseRing source */}
           <div
             style={{
               position: "absolute",
