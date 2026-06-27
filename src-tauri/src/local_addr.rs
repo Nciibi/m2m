@@ -8,7 +8,10 @@
 /// STUN, port-mapping, and connection-manager modules each call into here
 /// when they need to know the local interface(s) to bind or advertise.
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
+
+#[cfg(test)]
+use std::net::Ipv6Addr;
 
 // ─── IPv4 Host Candidates ──────────────────────────────────────────────────
 

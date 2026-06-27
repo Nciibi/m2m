@@ -3,8 +3,6 @@
 /// ICE-Lite candidate types and gathering logic.
 /// Provides structured network candidates (host, server-reflexive)
 /// with prioritization for ICE-Lite connectivity establishment.
-use std::net::SocketAddr;
-
 use serde::{Deserialize, Serialize};
 use crate::local_addr;
 use crate::stun;
@@ -162,6 +160,10 @@ pub fn gather_ipv6_candidates() -> Vec<NetworkCandidate> {
 pub fn gather_reflexive_candidates(
     multi_result: &stun::StunMultiResult,
 ) -> Vec<NetworkCandidate> {
+    let base = local_addr::gather_host_candidates()
+        .first()
+        .map(|a| a.to_string());
+
     multi_result
         .results
         .iter()
@@ -169,18 +171,16 @@ pub fn gather_reflexive_candidates(
             let addr_str = result.public_addr.to_string();
             // Deduplicate: skip if same address from different servers
             // (consensus means they're all the same anyway)
-            stun::gather_host_candidates()
-                .first()
-                .map(|host| {
-                    let local_pref = if multi_result.consensus { 100 } else { 80 };
-                    NetworkCandidate {
-                        address: addr_str.clone(),
-                        candidate_type: CandidateType::ServerReflexive,
-                        priority: compute_priority(CandidateType::ServerReflexive, local_pref),
-                        foundation: format!("srflx-{}", addr_str),
-                        base_address: Some(host.to_string()),
-                    }
-                })
+            base.as_ref().map(|host| {
+                let local_pref = if multi_result.consensus { 100 } else { 80 };
+                NetworkCandidate {
+                    address: addr_str.clone(),
+                    candidate_type: CandidateType::ServerReflexive,
+                    priority: compute_priority(CandidateType::ServerReflexive, local_pref),
+                    foundation: format!("srflx-{}", addr_str),
+                    base_address: Some(host.clone()),
+                }
+            })
         })
         .collect()
 }
