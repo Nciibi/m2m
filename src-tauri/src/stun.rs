@@ -8,7 +8,6 @@
 /// - NAT type classification based on STUN behavior
 /// - Server health monitoring
 /// - Host candidate discovery
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::UdpSocket;
@@ -565,92 +564,7 @@ pub async fn check_all_servers(config: &StunConfig) -> Vec<StunServerHealth> {
     results
 }
 
-// ─── Host Candidate Discovery ──────────────────────────────────────────────
-
-/// Gather host candidates: discover local non-loopback IPs that can reach
-/// the internet.
-///
-/// Uses a UDP socket trick that works across all major OSes without
-/// requiring external crate dependencies for interface enumeration:
-/// connecting to a public IP tells us which local IP the kernel would
-/// use as the source.
-pub fn gather_host_candidates() -> Vec<SocketAddr> {
-    let mut candidates: Vec<SocketAddr> = Vec::new();
-    let mut seen_ips: HashSet<std::net::IpAddr> = HashSet::new();
-
-    // Try multiple well-known public addresses to handle split-tunnel VPNs
-    // and multi-homed hosts correctly.
-    let probes = &[
-        ("8.8.8.8", 80u16),
-        ("1.1.1.1", 443u16),
-        ("208.67.222.222", 53u16),
-    ];
-
-    for &(ip, port) in probes {
-        if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-            let addr_str = format!("{}:{}", ip, port);
-            if socket.connect(&addr_str).is_ok() {
-                if let Ok(local) = socket.local_addr() {
-                    let local_ip = local.ip();
-                    if !local_ip.is_loopback()
-                        && !local_ip.is_unspecified()
-                        && !local_ip.is_multicast()
-                        && seen_ips.insert(local_ip)
-                    {
-                        candidates.push(local);
-                    }
-                }
-            }
-        }
-    }
-
-    candidates
-}
-
-/// Gather IPv6 host candidates: discover local non-loopback global unicast
-/// IPv6 addresses that can reach the internet.
-///
-/// Uses a similar UDP socket trick as `gather_host_candidates` but probes
-/// against IPv6 DNS servers. This discovers:
-/// - Global unicast IPv6 addresses (directly routable on the IPv6 internet)
-/// - Unique local addresses (fc00::/7) which can be used for site-local
-///   communication (lower priority)
-///
-/// IPv6 is special: global unicast addresses are typically directly routable
-/// without NAT traversal, making this the most reliable path after IPv4 LAN.
-pub fn gather_ipv6_candidates() -> Vec<SocketAddr> {
-    let mut candidates: Vec<SocketAddr> = Vec::new();
-    let mut seen_ips: HashSet<std::net::IpAddr> = HashSet::new();
-
-    // Probe against IPv6-capable DNS servers.
-    let probes: &[(&str, u16)] = &[
-        ("2001:4860:4860::8888", 53),  // Google DNS
-        ("2606:4700:4700::1111", 53),  // Cloudflare DNS
-        ("2620:fe::fe", 53),           // Quad9 DNS
-    ];
-
-    for &(ip, port) in probes {
-        // Bind to IPv6 ANY address.
-        if let Ok(socket) = std::net::UdpSocket::bind("[::]:0") {
-            let addr_str = format!("[{}]:{}", ip, port);
-            if socket.connect(&addr_str).is_ok() {
-                if let Ok(local) = socket.local_addr() {
-                    let local_ip = local.ip();
-                    if !local_ip.is_loopback()
-                        && !local_ip.is_unspecified()
-                        && !local_ip.is_multicast()
-                        && !local_ip.is_link_local()
-                        && seen_ips.insert(local_ip)
-                    {
-                        candidates.push(local);
-                    }
-                }
-            }
-        }
-    }
-
-    candidates
-}
+// ─── NAT Classification ─────────────────────────────────────────────────────
 
 /// Attempt to classify the NAT type based on STUN behaviour.
 ///
@@ -667,7 +581,7 @@ pub fn classify_nat(result: &StunMultiResult) -> NatType {
 
     // Check if any public IP differs. For symmetric NATs, each STUN server
     // would see a different source port (and possibly IP).
-    let unique_ips: HashSet<std::net::IpAddr> =
+    let unique_ips: std::collections::HashSet<std::net::IpAddr> =
         result.results.iter().map(|r| r.public_addr.ip()).collect();
 
     if unique_ips.len() > 1 {
@@ -825,13 +739,6 @@ mod tests {
         data[8..20].copy_from_slice(&recv_txn);
         let result = parse_binding_response(&data, &sent_txn);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_host_candidate_gathering() {
-        let candidates = gather_host_candidates();
-        // Should at least not panic
-        assert!(candidates.len() <= 10, "sanity: shouldn't find dozens of IPs");
     }
 
     #[test]

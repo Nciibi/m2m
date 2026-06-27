@@ -3,7 +3,10 @@
 /// ICE-Lite candidate types and gathering logic.
 /// Provides structured network candidates (host, server-reflexive)
 /// with prioritization for ICE-Lite connectivity establishment.
+use std::net::SocketAddr;
+
 use serde::{Deserialize, Serialize};
+use crate::local_addr;
 use crate::stun;
 
 // ─── Candidate Types ────────────────────────────────────────────────────────
@@ -85,6 +88,7 @@ const TYPE_PREF_HOST: u32 = 126;
 const TYPE_PREF_IPV6: u32 = 115;
 const TYPE_PREF_PRFLX: u32 = 110;
 const TYPE_PREF_SRFLX: u32 = 100;
+#[allow(dead_code)]
 const TYPE_PREF_PORT_MAPPED: u32 = 95;
 const TYPE_PREF_RELAY: u32 = 0;
 
@@ -104,7 +108,7 @@ fn compute_priority(candidate_type: CandidateType, local_pref: u32) -> u32 {
 /// Gather all host candidates by probing local interfaces.
 /// Returns a list of `NetworkCandidate` with type=Host, sorted by priority.
 pub fn gather_host_candidates() -> Vec<NetworkCandidate> {
-    let addrs = stun::gather_host_candidates();
+    let addrs = local_addr::gather_host_candidates();
     let total = addrs.len();
     let mut candidates: Vec<NetworkCandidate> = addrs
         .into_iter()
@@ -132,7 +136,7 @@ pub fn gather_host_candidates() -> Vec<NetworkCandidate> {
 /// on the IPv6 internet without NAT (most residential ISPs already provide
 /// IPv6 connectivity), making this a high-reliability path.
 pub fn gather_ipv6_candidates() -> Vec<NetworkCandidate> {
-    let addrs = stun::gather_ipv6_candidates();
+    let addrs = local_addr::gather_ipv6_candidates();
     let total = addrs.len();
     let mut candidates: Vec<NetworkCandidate> = addrs
         .into_iter()

@@ -19,6 +19,7 @@ mod commands;
 mod crypto;
 mod hole_punch;
 mod identity;
+mod local_addr;
 mod network;
 mod port_mapping;
 mod protocol;

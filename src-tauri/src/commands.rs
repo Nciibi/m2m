@@ -1845,7 +1845,7 @@ pub async fn check_connectivity(
         .map_err(|e| format!("STUN discovery failed for connectivity check: {e}"))?;
 
     let nat_type = stun::classify_nat(&multi_result);
-    let host_addrs: Vec<String> = stun::gather_host_candidates()
+    let host_addrs: Vec<String> = crate::local_addr::gather_host_candidates()
         .iter()
         .map(|a| a.to_string())
         .collect();
@@ -1896,7 +1896,7 @@ pub async fn get_network_diagnostics(
 
     let stun_servers = stun::check_all_servers(&config).await;
 
-    let host_addrs: Vec<String> = stun::gather_host_candidates()
+    let host_addrs: Vec<String> = crate::local_addr::gather_host_candidates()
         .iter()
         .map(|a| a.to_string())
         .collect();
