@@ -13,70 +13,76 @@
   }
 }
 
-/* ─── App Entrance ─── */
+/* ─── App Entrance (Card slides up 20px + fades in, 800ms) ─── */
 @keyframes appEntrance {
   from { opacity: 0; transform: translateY(20px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ─── Message Slide ─── */
+/* ─── Message Slide (rises 8px + fades in, 400ms, staggered) ─── */
 @keyframes msgSlide {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Message Received (slide + glow flash) ─── */
+/* ─── Message Received (slide + subtle accent glow flash, 500ms) ─── */
 @keyframes msgReceived {
   0%   { opacity: 0; transform: translateY(10px); box-shadow: 0 0 0 var(--color-accent-glow); }
   40%  { box-shadow: 0 0 25px var(--color-accent-glow-strong); }
   100% { opacity: 1; transform: translateY(0); box-shadow: var(--shadow-bubble-received); }
 }
 
-/* ─── Loading Dots ─── */
+/* ─── Loading Dots (staggered bounce) ─── */
 @keyframes dotBounce {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
   40%           { transform: scale(1); opacity: 1; }
 }
 
-/* ─── Pulse Ring (setup + vault views) ─── */
+/* ─── Pulse Ring (setup + vault views — sonar effect) ─── */
 @keyframes pulseRing {
   0%   { box-shadow: 0 0 0 0 var(--color-accent-glow); }
   50%  { box-shadow: 0 0 24px 6px var(--color-accent-glow); }
   100% { box-shadow: 0 0 0 0 var(--color-accent-glow); }
 }
 
-/* ─── Pulse (generic) ─── */
+/* ─── Sonar Ring (expanding circles of indigo glow) ─── */
+@keyframes sonarRing {
+  0%   { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ─── Pulse (generic opacity pulsation) ─── */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.6; }
 }
 
-/* ─── Pulse Dot (connection status) ─── */
+/* ─── Pulse Dot (connection status — opacity 1→0.5→1, 2s infinite) ─── */
 @keyframes pulseDot {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.6; transform: scale(0.85); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
 }
 
-/* ─── Connect Pulse ─── */
+/* ─── Connect Pulse (success glow) ─── */
 @keyframes connectPulse {
   0%   { box-shadow: 0 0 0 0 var(--color-success-glow); }
   50%  { box-shadow: 0 0 12px 4px var(--color-success-glow); }
   100% { box-shadow: 0 0 0 0 var(--color-success-glow); }
 }
 
-/* ─── Toast Slide In ─── */
+/* ─── Toast Slide In (slides from right, 300ms) ─── */
 @keyframes toastSlideIn {
   from { opacity: 0; transform: translateX(100%) scale(0.9); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 
-/* ─── Toast Progress Bar ─── */
+/* ─── Toast Progress Bar (shrinks from 100% to 0%) ─── */
 @keyframes toastProgress {
   from { width: 100%; }
   to   { width: 0%; }
 }
 
-/* ─── Modal ─── */
+/* ─── Modal (backdrop fades 200ms + content scales up, 300ms) ─── */
 @keyframes modalFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -87,7 +93,7 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
-/* ─── Shake (error feedback) ─── */
+/* ─── Shake (error feedback — 4-6px lateral, 400ms) ─── */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20%      { transform: translateX(-6px); }
@@ -96,13 +102,13 @@
   80%      { transform: translateX(4px); }
 }
 
-/* ─── Shimmer (loading / progress) ─── */
+/* ─── Shimmer (loading / progress / button shine sweep) ─── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
-/* ─── Clipboard "Copied!" Pop ─── */
+/* ─── Clipboard "Copied!" Pop (scale 0.5→1.1→1, 300ms) ─── */
 @keyframes popIn {
   0%   { transform: scale(0.5); opacity: 0; }
   70%  { transform: scale(1.1); }
@@ -114,16 +120,16 @@
   100% { transform: scale(0.8); opacity: 0; }
 }
 
-/* ─── Lock Unlock Animation ─── */
+/* ─── Lock Unlock Animation (bounces + rotates ±5°, 600ms) ─── */
 @keyframes unlockBounce {
   0%   { transform: scale(1) rotate(0); }
-  25%  { transform: scale(1.08) rotate(-4deg); }
+  25%  { transform: scale(1.08) rotate(-5deg); }
   50%  { transform: scale(1.12) rotate(0); }
-  75%  { transform: scale(1.08) rotate(4deg); }
+  75%  { transform: scale(1.08) rotate(5deg); }
   100% { transform: scale(1) rotate(0); }
 }
 
-/* ─── View Transitions ─── */
+/* ─── View Transitions (content slides 30px in direction of travel, 500ms) ─── */
 @keyframes slideInRight {
   from { transform: translateX(30px); opacity: 0; }
   to   { transform: translateX(0); opacity: 1; }
@@ -134,10 +140,15 @@
   to   { transform: translateX(0); opacity: 1; }
 }
 
-/* ─── Scroll-to-bottom FAB ─── */
-@keyframes fabAppear {
+@keyframes slideInUp {
   from { transform: translateY(20px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
+}
+
+/* ─── Scroll-to-bottom FAB ─── */
+@keyframes fabAppear {
+  from { transform: translateY(20px) scale(0.8); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 /* ─── Spinner ─── */
@@ -161,4 +172,28 @@
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-4px); }
+}
+
+/* ─── Shine Sweep (button hover — sweeps left→right, 500ms) ─── */
+@keyframes shineSweep {
+  0%   { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* ─── Status Badge Transition (badge bg + border color, 300ms) ─── */
+@keyframes statusFlash {
+  0%   { opacity: 0.6; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ─── Glow Breathe (subtle ambient glow for idle states) ─── */
+@keyframes glowBreathe {
+  0%, 100% { box-shadow: 0 0 20px var(--color-accent-glow-subtle); }
+  50%      { box-shadow: 0 0 35px var(--color-accent-glow); }
+}
+
+/* ─── Tab Indicator Slide ─── */
+@keyframes tabSlide {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
