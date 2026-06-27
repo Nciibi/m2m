@@ -580,15 +580,26 @@ pub async fn connect_to_peer(
         &signed.payload.address_hint,
         &signed.payload.candidates,
     );
-    for &addr in &peer_addrs {
-        let _ = hole_punch::udp_prelude(addr).await;
-    }
-    let wire_candidates: Vec<protocol::WireCandidate> = peer_addrs.iter().map(|a|
-        protocol::WireCandidate { address: a.to_string(), candidate_type: 1 }
-    ).collect();
-    let (stream, connected_addr) = hole_punch::connect_with_candidates(&wire_candidates)
+
+    tracing::debug!(
+        address_hint = %signed.payload.address_hint,
+        peer_candidates = peer_addrs.len(),
+        "connecting to peer with hole-punch race"
+    );
+
+    // Get our listener address so we can race accept vs connect.
+    let listen_addr = *state.listen_addr.read().await;
+
+    // ── TCP Hole Punch: race accept vs connect simultaneously ──
+    // Both peers race listener.accept() against connect(peer_candidates).
+    // Whichever succeeds first determines our handshake role.
+    let hole_punch::HolePunchResult {
+        mut stream,
+        role,
+        remote_addr,
+    } = hole_punch::race_accept_or_connect(&peer_addrs, listen_addr)
         .await
-        .map_err(|e| format!("connection failed: {e}"))?;
+        .map_err(|e| format!("connection failed (tried {} candidates): {e}", peer_addrs.len()))?;
 
     let identity = state.identity.read().await;
     let kp = identity
@@ -609,7 +620,7 @@ pub async fn connect_to_peer(
     let mut all = host_candidates;
     all.extend(reflexive_candidates);
     all.sort_by(|a, b| b.priority.cmp(&a.priority));
-    let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
+    let our_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
         address: c.address.clone(),
         candidate_type: c.candidate_type as u8,
     }).collect();
@@ -620,13 +631,48 @@ pub async fn connect_to_peer(
         *cand_state = all;
     }
 
-    // We need a mutable TcpStream for the handshake
-    let mut stream = stream;
+    let expected_peer_pub = signed.payload.identity_pub;
     let mut session = Session::new();
-    session
-        .handshake_as_initiator(&mut stream, kp, &signed.payload.identity_pub, wire_candidates)
-        .await
-        .map_err(|e| format!("handshake failed: {e}"))?;
+
+    match role {
+        hole_punch::Role::Initiator => {
+            // ── We connected to the peer ──
+            // Normal initiator flow: we send HandshakeInit first.
+            tracing::debug!("hole-punch role: Initiator (outgoing connect won)");
+            session
+                .handshake_as_initiator(
+                    &mut stream,
+                    kp,
+                    &expected_peer_pub,
+                    our_candidates,
+                )
+                .await
+                .map_err(|e| format!("initiator handshake failed: {e}"))?;
+        }
+        hole_punch::Role::Responder => {
+            // ── Peer connected to us ──
+            // Read the HandshakeInit the peer already sent, then respond.
+            tracing::debug!("hole-punch role: Responder (incoming accept won)");
+            let frame = network::read_frame(&mut stream)
+                .await
+                .map_err(|e| format!("failed to read initial frame: {e}"))?;
+            if frame.packet_type != protocol::PacketType::HandshakeInit {
+                return Err(format!(
+                    "expected HandshakeInit, got {:?}",
+                    frame.packet_type
+                ));
+            }
+            session
+                .handshake_as_responder(&mut stream, kp, &frame, our_candidates)
+                .await
+                .map_err(|e| format!("responder handshake failed: {e}"))?;
+
+            // Verify the peer's identity matches the invite.
+            if session.peer_identity_pub != expected_peer_pub {
+                return Err("peer identity does not match invite".to_string());
+            }
+        }
+    }
 
     let peer_fingerprint = session.peer_fingerprint();
     let peer_key_hex = hex::encode(session.peer_identity_pub);
@@ -637,7 +683,7 @@ pub async fn connect_to_peer(
     let conn = PeerConnection {
         write_half,
         session,
-        remote_addr: connected_addr,
+        remote_addr,
     };
 
     let mut conns = state.connections.write().await;
