@@ -32,7 +32,7 @@ pub async fn send_file(
 
     let file_data = std::fs::read(path).map_err(|e| format!("failed to read file: {e}"))?;
     let file_hash = sodiumoxide::crypto::hash::sha256::hash(&file_data);
-    let total_chunks = ((total_size as usize + protocol::MAX_FILE_CHUNK_SIZE - 1) / protocol::MAX_FILE_CHUNK_SIZE) as u32;
+    let total_chunks = (total_size as usize).div_ceil(protocol::MAX_FILE_CHUNK_SIZE) as u32;
     let transfer_id = uuid::Uuid::new_v4().to_string();
 
     // Store for later chunk sending

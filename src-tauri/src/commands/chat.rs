@@ -50,7 +50,7 @@ pub async fn send_message(
     if history {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
-        if let (Some(ref store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
             match util::crypto_encrypt_storage(content.as_bytes(), key) {
                 Ok((nonce, encrypted)) => {
                     if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
