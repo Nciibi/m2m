@@ -57,6 +57,10 @@ pub struct PortMapping {
     /// The public (WAN) IP and port the router forwards to us.
     /// This is what remote peers connect to.
     pub external_addr: SocketAddr,
+    /// The lifetime the router granted, in seconds.
+    /// Renewal should happen at ~75% of this interval.
+    #[allow(dead_code)]
+    pub lifetime_secs: u32,
 }
 
 /// Errors from port-mapping attempts.
