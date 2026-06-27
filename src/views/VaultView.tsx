@@ -29,7 +29,6 @@ export default function VaultView({
   const [showTips, setShowTips] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [passphraseStrength, setPassphraseStrength] = useState({
     percent: 0,
     bits: 0,
