@@ -55,6 +55,25 @@ pub struct IncomingFileTransfer {
     pub chunks_bitmask: Vec<bool>,
 }
 
+/// A port forwarding rule the user configured manually on their router.
+///
+/// Unlike UPnP/NAT-PMP/PCP (which M2M creates programmatically), a manual
+/// forward is created by the user in their router's admin panel. M2M stores
+/// it, includes it in invites as a reliable candidate, and never tries to
+/// remove or renew it — the user manages its lifecycle themselves.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ManualForward {
+    /// The public IP:port that remote peers should connect to.
+    /// This is what the router is forwarding to us.
+    pub public_addr: String,
+    /// The local TCP port our listener is bound to.
+    pub listen_port: u16,
+    /// Optional human label (e.g. "Home router", "Office pfSense").
+    pub label: String,
+    /// Arbitrary sort order (lower = higher priority).
+    pub order: u32,
+}
+
 /// Central application state.
 pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
@@ -102,6 +121,9 @@ pub struct AppState {
     pub private_mode: RwLock<bool>,
     /// Connection rate limiter for DoS protection.
     pub connection_limiter: network::ConnectionLimiter,
+    /// User-configured manual port forwards (stored in state, not persisted).
+    /// The UI manages this list; each entry becomes a candidate in invites.
+    pub manual_forwards: RwLock<Vec<ManualForward>>,
 }
 
 impl AppState {
