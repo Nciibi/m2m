@@ -593,13 +593,22 @@ pub async fn connect_to_peer(
     // ── TCP Hole Punch: race accept vs connect simultaneously ──
     // Both peers race listener.accept() against connect(peer_candidates).
     // Whichever succeeds first determines our handshake role.
-    let hole_punch::HolePunchResult {
+    let hole_punch::StrategyResult {
         mut stream,
         role,
         remote_addr,
-    } = hole_punch::race_accept_or_connect(&peer_addrs, listen_addr)
+        strategy_name,
+        latency,
+    } = hole_punch::ConnectionManager::connect(&peer_addrs, listen_addr)
         .await
         .map_err(|e| format!("connection failed (tried {} candidates): {e}", peer_addrs.len()))?;
+
+    tracing::info!(
+        strategy = strategy_name,
+        latency = ?latency,
+        peer = %remote_addr,
+        "connection established via connection manager"
+    );
 
     let identity = state.identity.read().await;
     let kp = identity

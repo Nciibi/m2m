@@ -1,228 +1,255 @@
-The biggest issue
 
-Look at your "hole punch".
 
-tcp_hole_punch(addr)
 
-Inside it you do
 
-TcpStream::connect_timeout(...)
 
-That's just a normal TCP connect.
+Phase 1 — LAN
 
-Nothing more.
+If both users are on the same Wi-Fi:
 
-Real TCP hole punching requires both peers to do something simultaneously.
+Alice 192.168.1.20
+       │
+       │
+Bob   192.168.1.25
 
-What should happen
+Instant connection.
 
-Suppose Alice and Bob exchanged candidates.
+Fastest possible.
 
-Instead of this
+No STUN.
 
-Alice
+No relay.
 
-connect(Bob)
+Phase 2 — IPv6
 
-and Bob just waits,
-
-both should do
+If both have global IPv6:
 
 Alice
-connect(Bob)
-
+  │
+Internet
+  │
 Bob
-connect(Alice)
 
-at almost exactly the same time.
+Direct.
 
-This is called
+No NAT traversal.
 
-Simultaneous Open
+Phase 3 — UPnP / NAT-PMP / PCP
 
-Your current flow
+Ask the router
 
-Your function is
+Open port 5000.
 
-Alice
+If successful
 
-connect()
+Direct connection.
 
-↓
+Phase 4 — STUN
 
-wait
+Discover
 
-↓
+203.0.113.12:50321
 
-timeout
+Exchange candidates.
 
-Meanwhile Bob might simply be
+Phase 5 — ICE
 
-accept()
+Try
 
-This is not hole punching.
+Host
+IPv6
+Server Reflexive
+Peer Reflexive
 
-It's a normal outgoing TCP connection.
+Run all of them.
 
-What M2M should do
+Phase 6 — TCP Hole Punch
 
-When both users accept an invite
-
-Both should launch
-
-Task 1
+Both peers
 
 listen()
 
 AND
 
-Task 2
-
 connect()
 
-simultaneously.
+at the same time.
 
-Like
+Phase 7 — Relay
 
-tokio::join!(
-    listener.accept(),
-    connect_to_peer(...)
-);
+Only now
 
-or
+Alice → Relay → Bob
+Don't do this
+Choose connection method:
 
-tokio::select! {
-    stream = listener.accept() => ...
-    stream = connect() => ...
-}
+1. LAN
+2. STUN
+3. Relay
+4. Hole Punch
+5. IPv6
 
-Whoever succeeds first wins.
+Almost nobody knows what those mean.
 
-Another missing piece
+Even network engineers wouldn't want to do this every time.
 
-Hole punching only works if both peers know
+Instead
 
-START NOW
+Have an "Auto" mode.
 
-Your code currently has no synchronization.
+Connection
 
-It just loops
+☑ Automatic
 
-try host
+Then an advanced section
+
+Advanced
+
+☑ Enable IPv6
+
+☑ Enable STUN
+
+☑ Enable Hole Punching
+
+☑ Enable Relay Fallback
+
+☑ Enable UPnP
+
+☑ Force Relay
+
+☑ Disable Relay
+
+Only power users ever open this.    
+
+Better yet: race multiple methods
+
+Instead of
+
+LAN
 
 ↓
 
-try srflx
+Wait 5 sec
 
 ↓
 
-try hole punch
+STUN
 
-But the remote side has no idea you're trying.
+↓
 
-Usually the signalling channel says
+Wait 5 sec
 
-READY
+↓
 
-3...
+Relay
 
-2...
+run many methods in parallel.
 
-1...
+LAN -------------------------┐
+IPv6 ------------------------│
+STUN ------------------------│
+Hole Punch ------------------│
+UPnP ------------------------│
+                             ▼
+                    First one wins
 
-CONNECT
+This is called a Happy Eyeballs-style strategy (similar to how browsers race IPv4 and IPv6).
 
-Or both sides begin immediately after exchanging ICE candidates.
+When one succeeds
 
-UDP Prelude
+Cancel all the others.
 
-You wrote
+This makes connections feel much faster.
 
-udp_prelude()
 
-This is interesting.
 
-But...
 
-TCP and UDP use different NAT mappings on almost all NATs.
 
-Meaning
 
-UDP mapping
 
-≠
 
-TCP mapping
+Missing candidate types
 
-So sending
+Right now your code only considers addresses.
 
-UDP packet
-
-usually does not help TCP hole punching.
-
-There are a few NAT implementations where it can help, but it is not something you should rely on. Most TCP hole punching implementations do not use this technique.
-
-What's missing from ICE
-
-Real ICE also measures
-
-RTT
-Candidate priority
-Connectivity checks
-Candidate nomination
-
-Your implementation currently says
+Eventually you'll want to support:
 
 Host
+↓
+
+IPv6
 
 ↓
 
-SRFLX
+Server Reflexive
 
 ↓
 
-Punch
+Peer Reflexive
 
 ↓
 
-Done
+Relay
 
-That's more like ICE-Lite.
+Each with a priority.
 
-Which is perfectly reasonable for M2M.
+The big thing M2M should become
 
-I would redesign it like this
-Invite exchanged
+I actually wouldn't call this module hole_punch.rs anymore.
+
+I'd build a full Connection Manager.
+
+Connection Manager
         │
         ▼
-Exchange ICE candidates
+Gather Candidates
         │
         ▼
-Both peers send READY
+Prioritize
         │
         ▼
-Both simultaneously
-    listen()
-    connect()
+Run Strategies
         │
         ▼
-Race all candidates
+Choose Winner
         │
         ▼
-First successful socket wins
+Cancel Others
         │
         ▼
-Cancel remaining attempts
+Begin Encryption Handshake
 
-This simultaneous "listen + connect" behavior is the key difference between ordinary connection attempts and actual TCP hole punching.
+Inside the strategies you'd have:
 
-Overall assessment
+LAN Strategy
 
-I'd rate this implementation:
+IPv6 Strategy
 
-Architecture: ★★★★★ (9/10) — the phases and candidate handling are clean.
-Code quality: ★★★★★ (9.5/10) — well organized and readable.
-Actual TCP hole punching: ★★☆☆☆ (4/10) — because it lacks true simultaneous-open coordination and synchronization between peers.
-ICE implementation: ★★★☆☆ (6/10) — a good ICE-Lite foundation, but not a full ICE state machine.
+UPnP Strategy
 
-The good news is that you're much closer than it looks. You already have the candidate model, prioritization, and connection framework. The main missing ingredient is coordinating both peers so they attempt outgoing connections while also accepting incoming ones at the same time. That's what turns this from "multiple connection attempts" into genuine TCP hole punching.
+STUN Strategy
+
+TCP Hole Punch Strategy
+
+Relay Strategy
+
+Each strategy reports
+
+Success
+
+Latency
+
+Connection Type
+
+The manager chooses the first successful direct connection, or falls back to a relay only if every direct method fails.
+
+Overall
+
+Compared to your previous version:
+
+Previous: 7/10
+This version: 9/10
+
+The remaining gap isn't in the TCP logic itself—it's in evolving from a single hole-punch function into a complete ICE-like connection manager.
+
+If M2M is intended to be a flagship secure P2P messenger, that's the architecture I'd aim for. It scales naturally as you add IPv6, UPnP, STUN, TCP hole punching, relay support, and future transports without turning one module into a large collection of special cases.
