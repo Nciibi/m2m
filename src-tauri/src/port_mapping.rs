@@ -1067,7 +1067,7 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
     // Find the WANIPConnection service and extract its controlURL.
     // Use the robust XML tag extractor which handles whitespace, multiline,
     // and namespace prefixes like <ns:controlURL>.
-    let _service_type = extract_xml_tag(&body, "serviceType")
+    extract_xml_tag(&body, "serviceType")
         .and_then(|t| {
             if t.contains("WANIPConnection") { Some(()) } else { None }
         })
@@ -1183,6 +1183,7 @@ async fn upnp_map_tcp(
 }
 
 /// Remove a UPnP TCP port mapping.
+#[allow(dead_code)]
 async fn upnp_remove_tcp(
     _internal_port: u16,
     external_port: u16,
@@ -1319,7 +1320,7 @@ fn extract_host(url: &str) -> Option<&str> {
     let rest = url
         .strip_prefix("http://")
         .or_else(|| url.strip_prefix("https://"))?;
-    Some(rest.split('/').next()?)
+    rest.split('/').next()
 }
 
 /// Safely truncate a string for error messages.

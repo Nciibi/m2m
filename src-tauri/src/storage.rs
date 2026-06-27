@@ -170,6 +170,7 @@ impl KeyStore {
 
     /// Load the stored identity (public key + encrypted private key + nonce).
     /// The caller must decrypt the private key using their passphrase-derived key.
+    #[allow(clippy::type_complexity)]
     pub fn load_identity(&self) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT public_key, encrypted_private_key, private_key_nonce FROM identity WHERE id = 1",
