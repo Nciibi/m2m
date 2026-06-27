@@ -133,7 +133,7 @@ pub async fn reject_file_transfer(
 }
 
 /// Send file chunks to a peer after they've accepted the transfer.
-async fn send_file_chunks(
+pub(super) async fn send_file_chunks(
     state: Arc<AppState>,
     peer_key_hex: &str,
     transfer_id: &str,

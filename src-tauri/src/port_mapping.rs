@@ -1095,7 +1095,7 @@ async fn upnp_map_tcp(
     let service = upnp_discover().await?;
 
     // Learn our internal client IP.
-    let client_ip = crate::commands::resolve_local_ip()
+    let client_ip = crate::commands::util::resolve_local_ip()
         .ok_or_else(|| PortMapError::Upnp("cannot determine local IP".into()))?;
 
     // Build the SOAP AddPortMapping request.
