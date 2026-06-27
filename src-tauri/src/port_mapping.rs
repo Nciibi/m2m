@@ -742,9 +742,11 @@ async fn upnp_map_tcp(
 
     // Parse the host and port from the control URL.
     let (host, port) = parse_url_host_port(&service.control_url)?;
-    let addr = format!("{}:{}", host, port);
+    let sock_addr: SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(&addr))
+    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
         .await
         .map_err(|_| PortMapError::Upnp("connection to IGD timed out".into()))?
         .map_err(PortMapError::Io)?;
