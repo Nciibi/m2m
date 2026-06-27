@@ -10,7 +10,9 @@ import {
 import "./styles/tokens.css";
 import "./styles/theme.css";
 import "./styles/animations.css";
-import "./App.css";
+import "./styles/reset.css";
+import "./styles/layout.css";
+import "./styles/components.css";
 
 import { useToast } from "./hooks/useToast";
 import SetupView from "./views/SetupView";
@@ -34,9 +36,7 @@ function App() {
   const { toasts, addToast, removeToast } = useToast();
 
   // ─── Core State ───
-  const [view, setView] = useState<
-    "setup" | "vault" | "hub" | "chat" | "settings"
-  >("setup");
+  const [view, setView] = useState<"setup" | "vault" | "hub" | "chat" | "settings">("setup");
   const [identity, setIdentity] = useState<IdentityInfo | null>(null);
   const [connection, setConnection] = useState<ConnectionInfo | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -47,12 +47,10 @@ function App() {
   const [vaultInitialized, setVaultInitialized] = useState(false);
 
   // Settings state
-  const [networkSettings, setNetworkSettings] =
-    useState<NetworkSettings | null>(null);
+  const [networkSettings, setNetworkSettings] = useState<NetworkSettings | null>(null);
   const [publicIp, setPublicIp] = useState<string | null>(null);
   const [stunLoading, setStunLoading] = useState(false);
-  const [networkDiagnostics, setNetworkDiagnostics] =
-    useState<NatTypeInfo | null>(null);
+  const [networkDiagnostics, setNetworkDiagnostics] = useState<NatTypeInfo | null>(null);
   const [stunConfig, setStunConfig] = useState<StunConfig | null>(null);
   const [stunServerInput, setStunServerInput] = useState("");
   const [privateMode, setPrivateMode] = useState(false);
@@ -60,11 +58,9 @@ function App() {
 
   // Multi-conversation state
   const [conversations, setConversations] = useState<ConversationEntry[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
-  // Naming state (for invite validation)
+  // Naming state
   const [inviteToConnect, setInviteToConnect] = useState("");
   const [inviteValid, setInviteValid] = useState(false);
   const [namingMyName, setNamingMyName] = useState("");
@@ -73,7 +69,7 @@ function App() {
   // Invite generation
   const [generatedInvite, setGeneratedInvite] = useState("");
 
-  // Per-conversation retention
+  // Retention
   const [retentionPolicy, setRetentionPolicy] = useState("none");
   const [retentionDuration, setRetentionDuration] = useState<string>("86400");
 
@@ -83,7 +79,6 @@ function App() {
   // Theme
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-  // Set data-theme attribute on mount + respond to system preference
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     const update = (e: MediaQueryListEvent | MediaQueryList) => {
@@ -98,7 +93,7 @@ function App() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // ==================== Handlers (declared before use) ====================
+  // ==================== Handlers ====================
 
   const handleSendMessage = async (content: string) => {
     if (!connection?.peer_key_hex) return;
@@ -122,9 +117,7 @@ function App() {
   const handleDisconnect = async () => {
     if (!connection?.peer_key_hex) return;
     try {
-      await invoke("disconnect_peer", {
-        peerKeyHex: connection.peer_key_hex,
-      });
+      await invoke("disconnect_peer", { peerKeyHex: connection.peer_key_hex });
       setView("hub");
       setConnection(null);
       setMessages([]);
@@ -136,25 +129,16 @@ function App() {
   const handleSendFile = async () => {
     if (!connection?.peer_key_hex) return;
     try {
-      const selected = await open({
-        multiple: false,
-        title: "Select file to send",
-      });
+      const selected = await open({ multiple: false, title: "Select file to send" });
       if (!selected) return;
       const filePath = typeof selected === "string" ? selected : selected;
-      await invoke("send_file", {
-        peerKeyHex: connection.peer_key_hex,
-        filePath,
-      });
-      const filename =
-        typeof filePath === "string"
-          ? filePath.split(/[\\/]/).pop()
-          : "file";
+      await invoke("send_file", { peerKeyHex: connection.peer_key_hex, filePath });
+      const filename = typeof filePath === "string" ? filePath.split(/[\\/]/).pop() : "file";
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now().toString(),
-          content: `📎 File request sent: ${filename}`,
+          content: `File request sent: ${filename}`,
           direction: "sent",
           timestamp: Math.floor(Date.now() / 1000),
         },
@@ -183,10 +167,7 @@ function App() {
     }
   };
 
-  const handleSetRetention = async (
-    policy: string,
-    durationSecs: number | null
-  ) => {
+  const handleSetRetention = async (policy: string, durationSecs: number | null) => {
     if (!activeConversationId) return;
     try {
       await invoke("set_conversation_retention", {
@@ -230,11 +211,7 @@ function App() {
     try {
       await invoke("start_listening", { address: "0.0.0.0:0" });
       const address = await invoke<string>("get_listen_address");
-      const invite = await invoke<string>("create_invite", {
-        address,
-        validityMinutes: 60,
-        oneTime: true,
-      });
+      const invite = await invoke<string>("create_invite", { address, validityMinutes: 60, oneTime: true });
       setGeneratedInvite(invite);
     } catch (e) {
       addToast(String(e), "error", 6000);
@@ -243,16 +220,13 @@ function App() {
 
   const copyInvite = () => {
     navigator.clipboard.writeText(generatedInvite);
-    // Brief visual feedback handled by the button in HubView
   };
 
   const handleConnect = async () => {
     if (!inviteToConnect) return;
     setIsConnecting(true);
     try {
-      const info = await invoke<ConnectionInfo>("connect_to_peer", {
-        inviteStr: inviteToConnect,
-      });
+      const info = await invoke<ConnectionInfo>("connect_to_peer", { inviteStr: inviteToConnect });
       setConnection(info);
       setActiveConversationId(info.peer_key_hex || null);
       if (info.peer_key_hex && (namingMyName || namingTheirName)) {
@@ -264,9 +238,7 @@ function App() {
       }
       setView("chat");
       try {
-        const history = await invoke<ChatMessage[]>("load_messages", {
-          peerKeyHex: info.peer_key_hex,
-        });
+        const history = await invoke<ChatMessage[]>("load_messages", { peerKeyHex: info.peer_key_hex });
         setMessages(history);
       } catch (e) {
         console.error("Failed to load history", e);
@@ -290,9 +262,7 @@ function App() {
       peer_key_hex: conv.peer_key_hex,
     });
     try {
-      const history = await invoke<ChatMessage[]>("load_messages", {
-        peerKeyHex: conv.peer_key_hex,
-      });
+      const history = await invoke<ChatMessage[]>("load_messages", { peerKeyHex: conv.peer_key_hex });
       setMessages(history);
     } catch (e) {
       console.error("Failed to load history", e);
@@ -329,10 +299,7 @@ function App() {
     if (!stunConfig) return;
     const newServers = stunConfig.servers.filter((_, i) => i !== idx);
     if (newServers.length === 0) {
-      addToast(
-        "Cannot remove all STUN servers — at least one required.",
-        "warning"
-      );
+      addToast("Cannot remove all STUN servers — at least one required.", "warning");
       return;
     }
     try {
@@ -344,17 +311,10 @@ function App() {
   };
 
   const handleResetStunDefaults = async () => {
-    const defaults = [
-      "stun.l.google.com:19302",
-      "stun1.l.google.com:19302",
-      "stun.cloudflare.com:3478",
-      "stun.nextcloud.com:3478",
-    ];
+    const defaults = ["stun.l.google.com:19302", "stun1.l.google.com:19302", "stun.cloudflare.com:3478", "stun.nextcloud.com:3478"];
     try {
       await invoke("set_stun_servers", { servers: defaults });
-      setStunConfig(
-        stunConfig ? { ...stunConfig, servers: defaults } : null
-      );
+      setStunConfig(stunConfig ? { ...stunConfig, servers: defaults } : null);
     } catch (e) {
       addToast("Failed to reset STUN servers: " + e, "error");
     }
@@ -401,13 +361,10 @@ function App() {
     }
   };
 
-  const handleDeleteConversation = () => {
-    loadConversations();
-  };
+  const handleDeleteConversation = () => { loadConversations(); };
 
   // ==================== Effects ====================
 
-  // Request notification permission on mount
   useEffect(() => {
     async function setupNotifications() {
       let granted = await isPermissionGranted();
@@ -420,7 +377,6 @@ function App() {
     setupNotifications();
   }, []);
 
-  // Initialize and check identity
   useEffect(() => {
     async function checkIdentity() {
       try {
@@ -441,18 +397,11 @@ function App() {
     checkIdentity();
   }, []);
 
-  // Event listeners
   useEffect(() => {
     const unlistenMsg = listen<any>("m2m://message", (event) => {
       setMessages((prev) => [...prev, event.payload.message]);
-      if (
-        notifPermission &&
-        event.payload.message.direction === "received"
-      ) {
-        sendNotification({
-          title: "M2M — New Message",
-          body: event.payload.message.content.slice(0, 100),
-        });
+      if (notifPermission && event.payload.message.direction === "received") {
+        sendNotification({ title: "M2M — New Message", body: event.payload.message.content.slice(0, 100) });
       }
     });
 
@@ -468,18 +417,13 @@ function App() {
         setActiveConversationId(event.payload.peer_key_hex);
         setView("chat");
         try {
-          const history = await invoke<ChatMessage[]>("load_messages", {
-            peerKeyHex: event.payload.peer_key_hex,
-          });
+          const history = await invoke<ChatMessage[]>("load_messages", { peerKeyHex: event.payload.peer_key_hex });
           setMessages(history);
         } catch (e) {
           console.error("Failed to load history", e);
         }
         if (notifPermission) {
-          sendNotification({
-            title: "M2M — Peer Connected",
-            body: "Encrypted session established",
-          });
+          sendNotification({ title: "M2M — Peer Connected", body: "Encrypted session established" });
         }
       } else if (stateStr === "disconnected") {
         setView("hub");
@@ -487,45 +431,25 @@ function App() {
         setMessages([]);
         setActiveConversationId(null);
       }
-      try {
-        const c =
-          await invoke<ConversationEntry[]>("list_conversations");
-        setConversations(c);
-      } catch {}
+      try { setConversations(await invoke<ConversationEntry[]>("list_conversations")); } catch {}
     });
 
-    const unlistenConvMeta = listen<any>(
-      "m2m://conversation-meta",
-      async () => {
-        try {
-          const c =
-            await invoke<ConversationEntry[]>("list_conversations");
-          setConversations(c);
-        } catch {}
-      }
-    );
+    const unlistenConvMeta = listen<any>("m2m://conversation-meta", async () => {
+      try { setConversations(await invoke<ConversationEntry[]>("list_conversations")); } catch {}
+    });
 
     const unlistenFileReq = listen<any>("m2m://file-request", (event) => {
       setFileRequests((prev) => [...prev, event.payload]);
       if (notifPermission) {
-        sendNotification({
-          title: "M2M — File Transfer",
-          body: `Incoming file: ${event.payload.filename}`,
-        });
+        sendNotification({ title: "M2M — File Transfer", body: `Incoming file: ${event.payload.filename}` });
       }
     });
 
-    const unlistenFileComp = listen<any>(
-      "m2m://file-complete",
-      (event) => {
-        if (notifPermission) {
-          sendNotification({
-            title: "M2M — File Received",
-            body: `Saved to: ${event.payload.path}`,
-          });
-        }
+    const unlistenFileComp = listen<any>("m2m://file-complete", (event) => {
+      if (notifPermission) {
+        sendNotification({ title: "M2M — File Received", body: `Saved to: ${event.payload.path}` });
       }
-    );
+    });
 
     return () => {
       unlistenMsg.then((f) => f());
@@ -536,37 +460,24 @@ function App() {
     };
   }, [notifPermission]);
 
-  // Load conversations when hub is visible
   useEffect(() => {
-    if (view === "hub") {
-      loadConversations();
-    }
+    if (view === "hub") loadConversations();
   }, [view]);
 
-  // Validate invite input
   useEffect(() => {
     if (inviteToConnect.length > 30) {
       invoke<any>("validate_invite", { inviteStr: inviteToConnect })
-        .then((info) => {
-          if (info.valid) setInviteValid(true);
-        })
+        .then((info) => { if (info.valid) setInviteValid(true); })
         .catch(() => setInviteValid(false));
     } else {
       setInviteValid(false);
     }
   }, [inviteToConnect]);
 
-  // Keyboard Shortcuts (scoped to App-level concerns)
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && view === "chat") {
-        e.preventDefault();
-        setView("hub");
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
-        e.preventDefault();
-        if (view !== "settings") openSettings();
-      }
+      if (e.key === "Escape" && view === "chat") { e.preventDefault(); setView("hub"); }
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") { e.preventDefault(); if (view !== "settings") openSettings(); }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -576,7 +487,6 @@ function App() {
   switch (view) {
     case "setup":
       return <SetupView toasts={toasts} removeToast={removeToast} />;
-
     case "vault":
       return (
         <VaultView
@@ -586,7 +496,6 @@ function App() {
           removeToast={removeToast}
         />
       );
-
     case "settings":
       return (
         <SettingsView
@@ -612,7 +521,6 @@ function App() {
           setStunServerInput={setStunServerInput}
         />
       );
-
     case "hub":
       return (
         <HubView
@@ -639,7 +547,6 @@ function App() {
           privateMode={privateMode}
         />
       );
-
     case "chat":
       return (
         <ChatView
@@ -664,7 +571,6 @@ function App() {
           setRetentionDuration={setRetentionDuration}
         />
       );
-
     default:
       return <SetupView toasts={toasts} removeToast={removeToast} />;
   }

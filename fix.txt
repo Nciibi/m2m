@@ -1,4 +1,12 @@
 
+
+
+correct-horse-battery-staple-secure-passphrase-2026
+
+
+
+
+
 Phase 1 — LAN
 
 If both users are on the same Wi-Fi:

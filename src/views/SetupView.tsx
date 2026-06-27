@@ -1,5 +1,5 @@
 import { ToastContainer } from "../components/ui";
-import { KeyIcon, LockIcon } from "../components/ui/Icons";
+import { KeyIcon } from "../components/ui/Icons";
 import type { Toast as ToastType } from "../types";
 
 interface Props {
@@ -7,83 +7,30 @@ interface Props {
   removeToast: (id: string) => void;
 }
 
-/**
- * Splash screen shown while Tauri initializes the secure enclave.
- * Premium animated lock icon with depth and pulse ring.
- */
 export default function SetupView({ toasts, removeToast }: Props) {
   return (
-    <div className="app-container">
+    <div className="app-shell">
       <div className="centered-view">
-        {/* Premium animated lock icon */}
-        <div
-          style={{
-            width: 80,
-            height: 80,
-            borderRadius: "var(--radius-xl)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--color-accent-gradient)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            boxShadow: "var(--shadow-accent-strong), 0 0 60px rgba(99,102,241,0.15)",
-            position: "relative",
-            marginBottom: "var(--space-xs)",
-          }}
-        >
+        <div className="setup-icon">
           <KeyIcon size={36} color="white" />
-          {/* Outer glow ring */}
-          <div
-            style={{
-              position: "absolute",
-              inset: -8,
-              borderRadius: "var(--radius-2xl)",
-              border: "2px solid rgba(99,102,241,0.15)",
-              animation: "pulseRing 2.5s ease-in-out infinite",
-              pointerEvents: "none",
-            }}
-          />
+          <div className="setup-icon__glow" />
         </div>
 
-        <h2 style={{ marginTop: "var(--space-xl)" }}>
+        <h2 className="centered-view__title" style={{ marginTop: "var(--space-xl)" }}>
           Initializing Secure Enclave
         </h2>
 
-        <p
-          style={{
-            maxWidth: 380,
-            textAlign: "center",
-            lineHeight: 1.7,
-            margin: "var(--space-xs) 0 var(--space-lg)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
+        <p className="centered-view__desc" style={{ margin: "var(--space-xs) 0 var(--space-lg)" }}>
           Generating Ed25519 identity keys.
           <br />
           They never leave your device.
         </p>
 
-        {/* Premium loading dots */}
         <div className="loading-dots" role="status" aria-label="Generating keys">
-          <span />
-          <span />
-          <span />
+          <span /><span /><span />
         </div>
 
-        {/* Crypto stack badge */}
-        <div
-          style={{
-            marginTop: "var(--space-2xl)",
-            padding: "var(--space-xs) var(--space-lg)",
-            background: "var(--color-bg-card)",
-            borderRadius: "var(--radius-full)",
-            border: "1px solid var(--color-border-default)",
-            fontSize: "var(--text-xs)",
-            color: "var(--color-text-muted)",
-            fontFamily: "var(--font-mono)",
-            letterSpacing: "0.02em",
-          }}
-        >
+        <div className="crypto-badge">
           Ed25519 · X25519 · XChaCha20-Poly1305
         </div>
       </div>
