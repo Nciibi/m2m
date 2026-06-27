@@ -50,8 +50,8 @@ pub async fn send_message(
     if history {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
-        if let (Some(ref store), Some(ref key)) = (ms.as_ref(), sk.as_ref()) {
-            match util::crypto_encrypt_storage(content.as_bytes(), &**key) {
+        if let (Some(ref store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            match util::crypto_encrypt_storage(content.as_bytes(), key) {
                 Ok((nonce, encrypted)) => {
                     if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
                         let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
@@ -88,15 +88,13 @@ pub async fn load_messages(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
-    let key_ref: &[u8; 32] = &**key;
-
     let stored = store
         .load_messages(&peer_key_hex, limit.unwrap_or(100))
         .map_err(|e| format!("failed to load messages: {e}"))?;
 
     let mut messages = Vec::with_capacity(stored.len());
     for m in stored {
-        let content = util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key_ref)
+        let content = util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
             .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
             .unwrap_or_else(|_| "[encrypted]".to_string());
         messages.push(ChatMessage {
@@ -133,14 +131,13 @@ pub async fn list_conversations(
         let is_online = conns.contains_key(&c.id);
 
         // Try to decrypt the last message for a preview
-        let last_message_preview = if let Some(ref key) = *sk {
-            let key_ref: &[u8; 32] = &**key;
+        let last_message_preview = if let Some(key) = sk.as_ref() {
             store
                 .load_messages(&c.id, 1)
                 .ok()
                 .and_then(|msgs| msgs.into_iter().last())
                 .and_then(|m| {
-                    util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key_ref)
+                    util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
                         .ok()
                         .map(|bytes| {
                             let text = String::from_utf8_lossy(&bytes).to_string();
@@ -298,7 +295,7 @@ pub async fn export_conversation(
     // Serialize the JSON, then encrypt the entire export with the storage key
     let export_json = serde_json::to_vec_pretty(&export_data)
         .map_err(|e| format!("serialization failed: {e}"))?;
-    let (nonce, ciphertext) = util::crypto_encrypt_storage(&export_json, &**key)
+    let (nonce, ciphertext) = util::crypto_encrypt_storage(&export_json, key)
         .map_err(|e| format!("encryption failed: {e}"))?;
 
     // Build the final file: nonce (24 bytes) || ciphertext
