@@ -39,7 +39,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
-use tokio::net::UdpSocket;
+use tokio::net::{TcpStream, UdpSocket};
 use tokio::time;
 
 use thiserror::Error;
@@ -220,7 +220,7 @@ async fn discover_gateway() -> Option<IpAddr> {
             Err(_) => continue,
         };
         tracing::info!(gateway = %gw, public_ip = %probe, "gateway discovered");
-        return Some(IpAddr::V4(probe));
+        return Some(probe);
     }
 
     // Last resort: try the candidate list as-is (the probe above would have
