@@ -165,8 +165,10 @@ impl AppState {
         let reflexive_candidates =
             crate::candidate::gather_reflexive_candidates(&multi);
         let host_candidates = crate::candidate::gather_host_candidates();
+        let ipv6_candidates = crate::candidate::gather_ipv6_candidates();
 
         let mut all_candidates = host_candidates;
+        all_candidates.extend(ipv6_candidates);
         all_candidates.extend(reflexive_candidates);
         all_candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
 
