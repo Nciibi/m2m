@@ -14,7 +14,6 @@ use crate::hole_punch;
 use crate::crypto::{self, IdentityKeypair};
 use crate::identity;
 use crate::network;
-use crate::port_mapping;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
 use crate::state::{AppState, IncomingFileTransfer, PeerConnection};

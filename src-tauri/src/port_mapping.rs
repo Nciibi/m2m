@@ -160,79 +160,143 @@ impl PortMapper {
 
 // ─── Gateway Discovery ──────────────────────────────────────────────────────
 
-/// Common default-gateway addresses to try in /24 and /16 subnets.
-const COMMON_GATEWAYS: &[[u8; 4]] = &[
-    [192, 168, 0, 1],
-    [192, 168, 1, 1],
-    [192, 168, 1, 254],
-    [10, 0, 0, 1],
-    [10, 0, 1, 1],
-    [172, 16, 0, 1],
-    [192, 168, 0, 254],
-    [10, 0, 0, 138],
-    [192, 168, 2, 1],
-    [192, 168, 100, 1],
-];
-
-/// Discover the local gateway/router IP by probing common addresses.
+/// Discover the default gateway using the system routing table.
 ///
-/// Strategy:
-/// 1. Connect a UDP socket to a public IP to learn our local interface IP.
-/// 2. If the local IP is on a known subnet, try the .1 and .254 suffixes on
-///    that /24, plus a handful of other common gateway addresses.
-/// 3. Send a NAT-PMP public-address request (op=0) to each candidate — the
-///    first to respond is the real gateway.
+/// Strategy (tried in order):
+/// 1. **Linux** — parse `/proc/net/route` (no process spawning needed).
+/// 2. **macOS** — run `route -n get default` and parse the output.
+/// 3. **Windows** — run `route print 0.0.0.0` and parse the output.
+/// 4. **Fallback** — probe common gateway addresses (last resort).
+///
+/// Returns the gateway's LAN IP address.
 async fn discover_gateway() -> Option<IpAddr> {
-    // Learn our local interface IP by binding to port 0 and "connecting"
-    // to a public IP (the socket doesn't actually send anything).
+    // ── Strategy 1: Linux /proc/net/route ──
+    // Format (header + one line per route):
+    //   Iface   Destination  Gateway      Flags ...
+    //   eth0    00000000     0123A8C0     ...
+    // The default route has Destination=00000000.
+    // The gateway is in hex, reversed byte order.
+    if let Ok(route) = std::fs::read_to_string("/proc/net/route") {
+        for line in route.lines().skip(1) {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() >= 3 && fields[1] == "00000000" {
+                if let Ok(gw) = parse_hex_ipv4(fields[2]) {
+                    tracing::debug!(gateway = %gw, source = "/proc/net/route");
+                    return Some(IpAddr::V4(gw));
+                }
+            }
+        }
+    }
+
+    // ── Strategy 2: macOS / BSD `route -n get default` ──
+    // Output line: "gateway: 192.168.1.1"
+    if let Ok(output) = std::process::Command::new("route")
+        .args(["-n", "get", "default"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let line = line.trim();
+                if let Some(val) = line.strip_prefix("gateway:") {
+                    if let Ok(ip) = val.trim().parse::<IpAddr>() {
+                        tracing::debug!(gateway = %ip, source = "route -n get default");
+                        return Some(ip);
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Strategy 3: Windows `route print 0.0.0.0` ──
+    // Output lines look like:
+    //   0.0.0.0          0.0.0.0    192.168.1.1    192.168.1.5     25
+    if cfg!(target_os = "windows") {
+        if let Ok(output) = std::process::Command::new("route")
+            .args(["print", "0.0.0.0"])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let fields: Vec<&str> = line.split_whitespace().collect();
+                    if fields.len() >= 3 && fields[0] == "0.0.0.0" {
+                        if let Ok(ip) = fields[2].parse::<IpAddr>() {
+                            tracing::debug!(gateway = %ip, source = "route print");
+                            return Some(ip);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Strategy 4: Fallback (probe common gateways via NAT-PMP) ──
+    discover_gateway_fallback().await
+}
+
+/// Parse an IPv4 address from `/proc/net/route` hex format.
+///
+/// The gateway is stored as a little‑endian hex string without leading "0x".
+/// Example: `0123A8C0` → `192.168.1.1`
+fn parse_hex_ipv4(hex: &str) -> Result<Ipv4Addr, ()> {
+    let val = u32::from_str_radix(hex, 16).map_err(|_| ())?;
+    let octets = val.to_le_bytes();
+    Ok(Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3]))
+}
+
+/// Fallback gateway discovery: probe common addresses (last resort).
+///
+/// 1. Determine the local interface IP by binding a UDP socket.
+/// 2. Try `.1` and `.254` on the same /24 subnet.
+/// 3. Append a list of well-known gateway addresses.
+/// 4. Send a NAT-PMP public-address request to each — the first to
+///    respond is confirmed as the real gateway.
+/// 5. If no response, return the first unverified candidate anyway.
+async fn discover_gateway_fallback() -> Option<IpAddr> {
+    // Learn our local interface IP.
     let local_ip = {
         let sock = UdpSocket::bind("0.0.0.0:0").await.ok()?;
         sock.connect("8.8.8.8:53").await.ok()?;
         sock.local_addr().ok()?.ip()
     };
 
+    let common: &[[u8; 4]] = &[
+        [192, 168, 0, 1], [192, 168, 1, 1], [192, 168, 1, 254],
+        [10, 0, 0, 1], [10, 0, 1, 1], [172, 16, 0, 1],
+        [192, 168, 0, 254], [10, 0, 0, 138],
+    ];
+
     let candidates: Vec<Ipv4Addr> = if let IpAddr::V4(v4) = local_ip {
         let octets = v4.octets();
-        // Add subnet-specific probes first.
         let mut list = vec![
             Ipv4Addr::new(octets[0], octets[1], octets[2], 1),
             Ipv4Addr::new(octets[0], octets[1], octets[2], 254),
         ];
-        // Append common fallback gateways.
-        for gw in COMMON_GATEWAYS {
-            let addr = Ipv4Addr::new(gw[0], gw[1], gw[2], gw[3]);
-            if !list.contains(&addr) {
-                list.push(addr);
+        for gw in common {
+            let a = Ipv4Addr::new(gw[0], gw[1], gw[2], gw[3]);
+            if !list.contains(&a) {
+                list.push(a);
             }
         }
         list
     } else {
-        COMMON_GATEWAYS
-            .iter()
-            .map(|o| Ipv4Addr::new(o[0], o[1], o[2], o[3]))
-            .collect()
+        common.iter().map(|o| Ipv4Addr::new(o[0], o[1], o[2], o[3])).collect()
     };
 
     for gw in &candidates {
         let addr = SocketAddr::new(IpAddr::V4(*gw), 5351);
-        let probe = match nat_pmp_public_address(&addr).await {
-            Ok(ip) => ip,
-            Err(_) => continue,
-        };
-        tracing::info!(gateway = %gw, public_ip = %probe, "gateway discovered");
-        return Some(probe);
+        if let Ok(probe) = nat_pmp_public_address(&addr).await {
+            tracing::info!(gateway = %gw, public_ip = %probe, "gateway discovered via NAT-PMP probe");
+            return Some(probe);
+        }
     }
 
-    // Last resort: try the candidate list as-is (the probe above would have
-    // returned the public IP; if it failed, we can't verify any of them).
-    // Return the first subnet-based candidate anyway so callers can attempt
-    // the mapping protocols — they might succeed even if our probe didn't.
-    for gw in &candidates {
-        tracing::warn!(gateway = %gw, "using unverified gateway — NAT-PMP probe failed");
-        return Some(IpAddr::V4(*gw));
-    }
-
-    None
+    // Last resort: return first candidate even without verification.
+    candidates.first().map(|&gw| {
+        tracing::warn!(gateway = %gw, "using unverified gateway");
+        IpAddr::V4(gw)
+    })
 }
 
 // ─── NAT-PMP (RFC 6886) ─────────────────────────────────────────────────────
@@ -374,7 +438,7 @@ async fn nat_pmp_remove_tcp(external_port: u16) -> Result<(), PortMapError> {
 
 // ─── PCP (RFC 6887) ─────────────────────────────────────────────────────────
 
-/// PCP version.
+/// PCP version (RFC 6887).
 const PCP_VERSION: u8 = 2;
 
 /// Opcode: MAP.
@@ -386,10 +450,57 @@ const PCP_SUCCESS: u8 = 0;
 /// PCP request/response timeout.
 const PCP_TIMEOUT: Duration = Duration::from_secs(3);
 
-/// PCP MAP request for TCP.
+/// Build an RFC 6887 §12.1 compliant MAP request for the given internal port.
 ///
-/// PCP uses a 24-byte request (with 12-byte authentication nonce that we
-/// zero-fill for simplicity — many home routers accept this).
+/// Packet layout (24‑byte header + 26‑byte MAP body = 50 bytes total):
+///
+/// ```text
+///  Bytes    Field
+///  0        Version (2)
+///  1        Opcode (1 = MAP)
+///  2-3      Reserved
+///  4-7      Requested Lifetime
+///  8-23     Client IP (16 bytes, zero = let router decide)
+///  24-26    Reserved (MAP body)
+///  27       Protocol (6 = TCP)
+///  28-29    Reserved
+///  30-31    Internal Port (big-endian)
+///  32-33    Suggested External Port (0 = let router choose)
+///  34-49    Requested External IP (16 bytes, zero = any)
+/// ```
+const PCP_MAP_REQUEST_SIZE: usize = 50;
+const PCP_HEADER_SIZE: usize = 24;
+
+/// PCP MAP request field offsets (0‑based from start of packet).
+const PCP_OFF_OP: usize = 1;
+const PCP_OFF_RESULT: usize = 3;
+const PCP_OFF_LIFETIME: usize = 4;
+const PCP_OFF_CLIENT_IP: usize = 8;
+const PCP_OFF_BODY_RESERVED: usize = 24; // 3 bytes
+const PCP_OFF_PROTOCOL: usize = 27;
+const PCP_OFF_RESERVED2: usize = 28; // 2 bytes
+const PCP_OFF_INT_PORT: usize = 30;
+const PCP_OFF_EXT_PORT: usize = 32;
+const PCP_OFF_EXT_IP: usize = 34; // 16 bytes
+
+fn build_pcp_map_request(lifetime_secs: u32, internal_port: u16, external_port: u16) -> [u8; PCP_MAP_REQUEST_SIZE] {
+    let mut req = [0u8; PCP_MAP_REQUEST_SIZE];
+    req[0] = PCP_VERSION;
+    req[PCP_OFF_OP] = PCP_OP_MAP;
+    req[PCP_OFF_LIFETIME..PCP_OFF_LIFETIME + 4].copy_from_slice(&lifetime_secs.to_be_bytes());
+    req[PCP_OFF_PROTOCOL] = 6; // IPPROTO_TCP
+    req[PCP_OFF_INT_PORT..PCP_OFF_INT_PORT + 2].copy_from_slice(&internal_port.to_be_bytes());
+    req[PCP_OFF_EXT_PORT..PCP_OFF_EXT_PORT + 2].copy_from_slice(&external_port.to_be_bytes());
+    // Body reserved, client IP, reserved2, and external IP are already zeroed.
+    req
+}
+
+/// PCP MAP request (RFC 6887 §12.1).
+///
+/// Builds a 50‑byte MAP request packet. The 96‑bit authentication nonce
+/// is zero‑filled (implicitly — the `[]` initialiser sets all bytes to
+/// zero). Many residential routers accept this; enterprise gateways may
+/// require a proper nonce exchange (ECHO REQUEST / ECHO RESPONSE).
 async fn pcp_map_tcp(
     gateway: IpAddr,
     internal_port: u16,
@@ -399,34 +510,23 @@ async fn pcp_map_tcp(
     let sock = UdpSocket::bind("0.0.0.0:0").await?;
     sock.connect(gw).await?;
 
-    // Build a PCP MAP request (24 bytes for simplest case).
-    // Request: [ver, op, reserved=1B, lifetime=4B, client_ip=16B (zero),
-    //           nonce=12B (zero), protocol=1B, reserved=1B, int_port=2B,
-    //           ext_port=2B, ext_ip=16B (zero)]
-    let mut req = [0u8; 36];
-    req[0] = PCP_VERSION;
-    req[1] = PCP_OP_MAP;
-    req[4..8].copy_from_slice(&lifetime_secs.to_be_bytes());
-    // client_ip: all zeros = let the router decide
-    // nonce: all zeros = no authentication
-    req[24] = 6; // IPPROTO_TCP
-    req[28..30].copy_from_slice(&internal_port.to_be_bytes());
-    // ext_port = 0 = let router choose
-    // ext_ip = zeros = let router choose
-
+    let req = build_pcp_map_request(lifetime_secs, internal_port, 0);
     sock.send(&req).await?;
 
-    let mut buf = [0u8; 64];
+    let mut buf = [0u8; PCP_MAP_REQUEST_SIZE];
     let n = time::timeout(PCP_TIMEOUT, sock.recv(&mut buf))
         .await
         .map_err(|_| PortMapError::Pcp("MAP request timed out".into()))?
         .map_err(PortMapError::Io)?;
 
-    if n < 36 {
-        return Err(PortMapError::Pcp(format!("short response: {} bytes", n)));
+    if n < PCP_MAP_REQUEST_SIZE {
+        return Err(PortMapError::Pcp(format!(
+            "short response: {} bytes (expected {})",
+            n, PCP_MAP_REQUEST_SIZE
+        )));
     }
 
-    let result = buf[3];
+    let result = buf[PCP_OFF_RESULT];
     if result != PCP_SUCCESS {
         return Err(PortMapError::Pcp(format!(
             "router rejected PCP mapping: result code {}",
@@ -434,12 +534,26 @@ async fn pcp_map_tcp(
         )));
     }
 
-    let mapped_lifetime = u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
-    let external_port = u16::from_be_bytes([buf[28], buf[29]]);
-    let ext_ip = IpAddr::V4(Ipv4Addr::new(buf[30], buf[31], buf[32], buf[33]));
+    let mapped_lifetime = u32::from_be_bytes([
+        buf[PCP_OFF_LIFETIME],
+        buf[PCP_OFF_LIFETIME + 1],
+        buf[PCP_OFF_LIFETIME + 2],
+        buf[PCP_OFF_LIFETIME + 3],
+    ]);
+    let external_port = u16::from_be_bytes([
+        buf[PCP_OFF_EXT_PORT],
+        buf[PCP_OFF_EXT_PORT + 1],
+    ]);
+    let ext_ip = IpAddr::V4(Ipv4Addr::new(
+        buf[PCP_OFF_EXT_IP],
+        buf[PCP_OFF_EXT_IP + 1],
+        buf[PCP_OFF_EXT_IP + 2],
+        buf[PCP_OFF_EXT_IP + 3],
+    ));
 
     tracing::debug!(
         lifetime = mapped_lifetime,
+        external = %SocketAddr::new(ext_ip, external_port),
         "PCP mapping granted"
     );
 
@@ -463,25 +577,23 @@ async fn pcp_remove_tcp(
     let sock = UdpSocket::bind("0.0.0.0:0").await?;
     sock.connect(SocketAddr::new(gateway, 5351)).await?;
 
-    let mut req = [0u8; 36];
-    req[0] = PCP_VERSION;
-    req[1] = PCP_OP_MAP;
-    req[4..8].copy_from_slice(&0u32.to_be_bytes()); // lifetime = 0 → remove
-    req[24] = 6; // IPPROTO_TCP
-    req[28..30].copy_from_slice(&internal_port.to_be_bytes());
-    req[30..32].copy_from_slice(&external_port.to_be_bytes());
+    // Lifetime = 0 signals deletion.
+    let req = build_pcp_map_request(0, internal_port, external_port);
     sock.send(&req).await?;
 
-    let mut buf = [0u8; 64];
+    let mut buf = [0u8; PCP_MAP_REQUEST_SIZE];
     let n = time::timeout(PCP_TIMEOUT, sock.recv(&mut buf))
         .await
         .map_err(|_| PortMapError::Pcp("remove timed out".into()))?
         .map_err(PortMapError::Io)?;
-    if n < 4 {
+    if n < PCP_HEADER_SIZE {
         return Err(PortMapError::Pcp("short remove response".into()));
     }
-    if buf[3] != PCP_SUCCESS {
-        return Err(PortMapError::Pcp(format!("remove failed: result={}", buf[3])));
+    if buf[PCP_OFF_RESULT] != PCP_SUCCESS {
+        return Err(PortMapError::Pcp(format!(
+            "remove failed: result={}",
+            buf[PCP_OFF_RESULT]
+        )));
     }
     Ok(())
 }
@@ -597,14 +709,208 @@ async fn upnp_discover() -> Result<UpnpService, PortMapError> {
     Ok(UpnpService { control_url })
 }
 
+/// Read an HTTP response body from a stream, handling both Content-Length
+/// and Transfer-Encoding: chunked, plus plain `Connection: close` fallback.
+///
+/// Returns the response status code and body bytes.
+async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut R,
+) -> Result<(u16, Vec<u8>), PortMapError> {
+    use tokio::io::AsyncReadExt;
+
+    let mut buf = [0u8; 4096];
+    let mut header_bytes = Vec::with_capacity(2048);
+
+    // ── Read until headers are complete (double CRLF or double LF) ──
+    loop {
+        let n = time::timeout(Duration::from_secs(5), reader.read(&mut buf))
+            .await
+            .map_err(|_| PortMapError::Upnp("HTTP header read timed out".into()))?
+            .map_err(PortMapError::Io)?;
+        if n == 0 {
+            break;
+        }
+        header_bytes.extend_from_slice(&buf[..n]);
+        let hdrs = String::from_utf8_lossy(&header_bytes);
+        if hdrs.contains("\r\n\r\n") || hdrs.contains("\n\n") {
+            break;
+        }
+        if header_bytes.len() > 8192 {
+            return Err(PortMapError::Upnp("HTTP headers too large".into()));
+        }
+    }
+
+    let hdrs = String::from_utf8_lossy(&header_bytes);
+
+    // ── Parse status line ──
+    // "HTTP/1.1 200 OK\r\n..."
+    let status = hdrs
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|code| code.parse::<u16>().ok())
+        .unwrap_or(0);
+
+    // Find header/body boundary.
+    let body_start = if let Some(pos) = hdrs.find("\r\n\r\n") {
+        pos + 4
+    } else if let Some(pos) = hdrs.find("\n\n") {
+        pos + 2
+    } else {
+        0
+    };
+
+    // Helper to get a header value (case-insensitive).
+    let get_header = |name: &str| -> Option<String> {
+        let lower_name = name.to_lowercase();
+        for line in hdrs.lines() {
+            let lower_line = line.to_lowercase();
+            if lower_line.starts_with(&lower_name) {
+                if let Some(val) = line.splitn(2, ':').nth(1) {
+                    return Some(val.trim().to_string());
+                }
+            }
+        }
+        None
+    };
+
+    let mut body: Vec<u8> = header_bytes[body_start..].to_vec();
+
+    // ── Determine how to read the body ──
+    if let Some(te) = get_header("Transfer-Encoding") {
+        if te.to_lowercase().contains("chunked") {
+            // Chunked transfer encoding.
+            loop {
+                let mut line_buf = Vec::with_capacity(128);
+                loop {
+                    let mut byte = [0u8; 1];
+                    if reader.read(&mut byte).await.unwrap_or(0) == 0 {
+                        break;
+                    }
+                    if byte[0] == b'\n' {
+                        break;
+                    }
+                    if byte[0] != b'\r' {
+                        line_buf.push(byte[0]);
+                    }
+                }
+                if line_buf.is_empty() {
+                    break;
+                }
+                let chunk_size_str = String::from_utf8_lossy(&line_buf);
+                let chunk_size = usize::from_str_radix(chunk_size_str.trim(), 16)
+                    .map_err(|_| PortMapError::Upnp("invalid chunk size".into()))?;
+                if chunk_size == 0 {
+                    break; // End of chunks
+                }
+                let mut chunk = vec![0u8; chunk_size];
+                let mut read_total = 0;
+                while read_total < chunk_size {
+                    let n = reader.read(&mut chunk[read_total..]).await
+                        .map_err(PortMapError::Io)?;
+                    if n == 0 {
+                        break;
+                    }
+                    read_total += n;
+                }
+                body.extend_from_slice(&chunk);
+                // Consume trailing CRLF.
+                let mut trail = [0u8; 2];
+                let _ = reader.read(&mut trail).await;
+            }
+            return Ok((status, body));
+        }
+    }
+
+    if let Some(cl) = get_header("Content-Length") {
+        let remaining: usize = cl.parse().unwrap_or(0);
+        let to_read = remaining.saturating_sub(body.len());
+        let mut rest = vec![0u8; to_read];
+        let mut read_total = 0;
+        while read_total < to_read {
+            let n = reader.read(&mut rest[read_total..]).await
+                .map_err(PortMapError::Io)?;
+            if n == 0 {
+                break;
+            }
+            read_total += n;
+        }
+        body.extend_from_slice(&rest[..read_total]);
+    } else {
+        // No Content-Length and no chunked — read until connection close.
+        let mut chunk = vec![0u8; 4096];
+        loop {
+            let n = time::timeout(Duration::from_secs(5), reader.read(&mut chunk))
+                .await
+                .map_err(|_| PortMapError::Upnp("HTTP body read timed out".into()))?
+                .map_err(PortMapError::Io)?;
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..n]);
+            if body.len() > 256 * 1024 {
+                break;
+            }
+        }
+    }
+
+    Ok((status, body))
+}
+
+/// Extract the text content of an XML tag, ignoring whitespace, line breaks,
+/// and namespace prefixes.
+///
+/// Searches for `<localName>` or `<ns:localName>…</...localName>` in `xml`.
+/// Returns the trimmed content between the opening and closing tags.
+fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
+    // Match opening tag: <tagName> or <ns:tagName> or <tagName > (with attributes).
+    let open_patterns = [
+        format!("<{}>", tag_name),
+        format!("<{} ", tag_name),  // with attribute(s)
+        format!("<{}:", tag_name),  // wait, that's backward — ns:tag, not tag:ns
+    ];
+    // Actually, namespace prefix is prefix:tag, so we need <prefix:tagName>
+    // Let me use a different approach: find </tagName> and work backwards.
+    // Or: find any tag that ends with 'tagName' in the closing.
+
+    // Simpler: look for <...tag_name followed by > or space or :>
+    // This handles: <controlURL>, <u:controlURL>, <controlURL xmlns="...">
+    let start_marker = format!("{}>", tag_name);
+    let close_marker = format!("</{}>", tag_name);
+    let also_close = format!("</{}:", tag_name); // Namespaced closing: </ns:tagName>
+
+    // Find start by searching for "tag_name>"
+    if let Some(start) = xml.find(&start_marker) {
+        // Rewind to find the opening '<'
+        let open_begin = xml[..start].rfind('<')?;
+        let content_start = start + start_marker.len();
+        let remaining = &xml[content_start..];
+
+        // Find closing tag.
+        let close_pos = remaining.find(&close_marker)
+            .or_else(|| remaining.find(&also_close))?;
+        let content = remaining[..close_pos].trim();
+        return Some(content.to_string());
+    }
+
+    None
+}
+
 /// Fetch and parse a UPnP device description XML to find the
 /// WANIPConnection service's control URL.
 async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapError> {
-    let (host, port) = parse_url_host_port(location_url)?;
+    let sock_addr: SocketAddr = location_url
+        .parse()
+        .or_else(|_| {
+            let (host, port) = parse_url_host_port(location_url)?;
+            format!("{}:{}", host, port)
+                .parse()
+                .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))
+        })?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect((host, port)))
+    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
         .await
-        .map_err(|_| PortMapError::Upnp("connection to lookup device description timed out".into()))?
+        .map_err(|_| PortMapError::Upnp("connection to device description timed out".into()))?
         .map_err(PortMapError::Io)?;
 
     // Determine the path from the URL for the GET request.
@@ -627,72 +933,30 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
     use tokio::io::AsyncWriteExt;
     stream.write_all(get_req.as_bytes()).await?;
 
-    // Read the full HTTP response.
-    use tokio::io::AsyncReadExt;
-    let mut response = Vec::new();
-    let mut buf = [0u8; 4096];
-    loop {
-        match stream.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => response.extend_from_slice(&buf[..n]),
-            Err(_) => break,
-        }
-        if response.len() > 32 * 1024 {
-            break; // Sanity cap
-        }
-    }
+    let (_status, body_bytes) = read_http_response_body(&mut stream).await?;
+    let body = String::from_utf8_lossy(&body_bytes);
 
-    // Split headers from body using double CRLF.
-    let response_str = String::from_utf8_lossy(&response);
-    let body = if let Some(pos) = response_str.find("\r\n\r\n") {
-        &response_str[pos + 4..]
-    } else {
-        &response_str
-    };
+    // Find the WANIPConnection service and extract its controlURL.
+    // Use the robust XML tag extractor which handles whitespace, multiline,
+    // and namespace prefixes like <ns:controlURL>.
+    let service_type = extract_xml_tag(&body, "serviceType")
+        .and_then(|t| {
+            if t.contains("WANIPConnection") { Some(()) } else { None }
+        })
+        .ok_or_else(|| {
+            PortMapError::Upnp("WANIPConnection service not found in device description".into())
+        })?;
 
-    // Parse the XML to find service:WANIPConnection:1 → controlURL.
-    // We do this with simple string scanning to avoid an XML dep entirely.
-    // UPnP XML is predictable enough for this to work reliably.
-    //
-    // We look for:
-    //   <service>
-    //     <serviceType>urn:schemas-upnp-org:service:WANIPConnection:1</serviceType>
-    //     <controlURL>...</controlURL>
-    //   </service>
+    let control_url = extract_xml_tag(&body, "controlURL")
+        .ok_or_else(|| {
+            PortMapError::Upnp("controlURL not found in WANIPConnection service".into())
+        })?;
 
-    // Find the WANIPConnection service block.
-    let service_marker = "urn:schemas-upnp-org:service:WANIPConnection:1";
-    let service_pos = body.find(service_marker).ok_or_else(|| {
-        PortMapError::Upnp("WANIPConnection service not found in device description".into())
-    })?;
-
-    // Look backwards for <service> and forwards for <controlURL>
-    let before_service = &body[..service_pos];
-    let service_start = before_service.rfind("<service>").ok_or_else(|| {
-        PortMapError::Upnp("malformed device description XML".into())
-    })?;
-
-    let after_type = &body[service_pos + service_marker.len()..];
-
-    // Find <controlURL> in the remaining service block
-    let control_start = after_type.find("<controlURL>").ok_or_else(|| {
-        PortMapError::Upnp("controlURL not found in service".into())
-    })?;
-
-    let after_control_start = &after_type[control_start + "<controlURL>".len()..];
-    let control_end = after_control_start.find("</controlURL>").ok_or_else(|| {
-        PortMapError::Upnp("unclosed controlURL tag".into())
-    })?;
-
-    let control_url = after_control_start[..control_end].trim().to_string();
-
-    // If the control URL is relative, resolve it against the base URL.
+    // Resolve relative URLs against the base URL.
     if control_url.starts_with('/') {
         let base = location_url.trim_end_matches('/');
-        // Strip path from base URL.
         if let Some(slash_pos) = base.rfind('/') {
-            let base_up_to_path = &base[..slash_pos];
-            Ok(format!("{}{}", base_up_to_path, control_url))
+            Ok(format!("{}{}", &base[..slash_pos], control_url))
         } else {
             Ok(format!("{}{}", base, control_url))
         }
@@ -754,33 +1018,15 @@ async fn upnp_map_tcp(
     use tokio::io::AsyncWriteExt;
     stream.write_all(http_req.as_bytes()).await?;
 
-    // Read the HTTP response.
-    use tokio::io::AsyncReadExt;
-    let mut response = Vec::new();
-    let mut buf = [0u8; 1024];
-    let mut read_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    // Read the full HTTP response using the robust reader.
+    let (status_code, response_body) = read_http_response_body(&mut stream).await?;
+    let resp_str = String::from_utf8_lossy(&response_body);
 
-    while tokio::time::Instant::now() < read_deadline {
-        let remaining = read_deadline - tokio::time::Instant::now();
-        match time::timeout(remaining, stream.read(&mut buf)).await {
-            Ok(Ok(0)) => break,
-            Ok(Ok(n)) => response.extend_from_slice(&buf[..n]),
-            Ok(Err(_)) => break,
-            Err(_) => break,
-        }
-        if response.windows(4).any(|w| w == b"\r\n\r\n") && response.len() > 1000 {
-            // Have headers, check for Content-Length
-            break;
-        }
-    }
-
-    let resp_str = String::from_utf8_lossy(&response);
-    if resp_str.contains("HTTP/1.1 200") || resp_str.contains("HTTP/1.0 200") {
-        // Success — get the external IP from the gateway.
-        // For UPnP, the external IP is usually the same as what STUN would reveal.
-        // We fall back to getting it from the response or using STUN's result.
+    if status_code == 200 {
+        // Success — get the external IP from the gateway via UPnP
+        // GetExternalIPAddress, or fall back to the local IP.
         let public_ip = gateway_wan_ip_via_upnp(&service).await
-            .unwrap_or_else(|_| discover_gateway_ip_via_stun().unwrap_or(client_ip));
+            .unwrap_or(client_ip);
 
         tracing::info!(
             internal = internal_port,
@@ -794,13 +1040,14 @@ async fn upnp_map_tcp(
             internal_port,
             external_addr: SocketAddr::new(public_ip, internal_port),
         })
-    } else if resp_str.contains("HTTP/1.1 500") && resp_str.contains("ConflictInMappingEntry") {
+    } else if status_code == 500 && resp_str.contains("ConflictInMappingEntry") {
         Err(PortMapError::Upnp("port already mapped (conflict)".into()))
-    } else if resp_str.contains("HTTP/1.1 500") {
+    } else if status_code == 500 {
         Err(PortMapError::Upnp(format!("SOAP error: {}", truncate_safe(&resp_str, 200))))
     } else {
         Err(PortMapError::Upnp(format!(
-            "unexpected HTTP response: {}",
+            "unexpected HTTP status {}: {}",
+            status_code,
             truncate_safe(&resp_str, 100)
         )))
     }
@@ -837,9 +1084,11 @@ async fn upnp_remove_tcp(
     );
 
     let (host, port) = parse_url_host_port(&service.control_url)?;
-    let addr = format!("{}:{}", host, port);
+    let sock_addr: SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(&addr))
+    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
         .await
         .map_err(|_| PortMapError::Upnp("connection timed out".into()))?
         .map_err(PortMapError::Io)?;
@@ -847,27 +1096,13 @@ async fn upnp_remove_tcp(
     use tokio::io::AsyncWriteExt;
     stream.write_all(http_req.as_bytes()).await?;
 
-    let mut response = String::new();
-    let mut buf = [0u8; 1024];
-    'read: for _ in 0..10 {
-        use tokio::io::AsyncReadExt;
-        match stream.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => {
-                response.push_str(&String::from_utf8_lossy(&buf[..n]));
-                if response.contains("\r\n\r\n") {
-                    break 'read;
-                }
-            }
-            Err(_) => break,
-        }
-    }
+    let (status_code, _body) = read_http_response_body(&mut stream).await?;
 
-    if response.contains("200 OK") {
+    if status_code == 200 {
         Ok(())
     } else {
         // Non-fatal: the mapping will expire eventually.
-        tracing::warn!(response = %truncate_safe(&response, 100), "UPnP remove returned non-200");
+        tracing::warn!(status = status_code, "UPnP remove returned non-200");
         Ok(())
     }
 }
@@ -903,39 +1138,24 @@ async fn gateway_wan_ip_via_upnp(service: &UpnpService) -> Result<IpAddr, PortMa
     );
 
     let (host, port) = parse_url_host_port(&service.control_url)?;
+    let sock_addr: SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect((host, port)))
+    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
         .await
         .map_err(|_| PortMapError::Upnp("connection to IGD timed out".into()))?
         .map_err(PortMapError::Io)?;
 
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncWriteExt;
     stream.write_all(http_req.as_bytes()).await?;
 
-    let mut response = Vec::new();
-    let mut buf = [0u8; 2048];
-    loop {
-        match stream.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => response.extend_from_slice(&buf[..n]),
-            Err(_) => break,
-        }
-        if response.len() > 4096 {
-            break;
-        }
-    }
+    let (_status, body_bytes) = read_http_response_body(&mut stream).await?;
+    let body = String::from_utf8_lossy(&body_bytes);
 
-    let resp_str = String::from_utf8_lossy(&response);
-    // Parse <NewExternalIPAddress>xxx.xxx.xxx.xxx</NewExternalIPAddress>
-    let start_tag = "<NewExternalIPAddress>";
-    let end_tag = "</NewExternalIPAddress>";
-    if let Some(start) = resp_str.find(start_tag) {
-        let after_start = &resp_str[start + start_tag.len()..];
-        if let Some(end) = after_start.find(end_tag) {
-            let ip_str = after_start[..end].trim();
-            if let Ok(ip) = ip_str.parse::<IpAddr>() {
-                return Ok(ip);
-            }
+    if let Some(ip_str) = extract_xml_tag(&body, "NewExternalIPAddress") {
+        if let Ok(ip) = ip_str.parse::<IpAddr>() {
+            return Ok(ip);
         }
     }
 
