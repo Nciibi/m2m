@@ -1168,11 +1168,6 @@ async fn gateway_wan_ip_via_upnp(service: &UpnpService) -> Result<IpAddr, PortMa
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/// Fallback: use the STUN-discovered public IP from the app state.
-fn discover_gateway_ip_via_stun() -> Result<IpAddr, PortMapError> {
-    Err(PortMapError::NoGateway)
-}
-
 /// Parse a URL like `http://192.168.1.1:5000/ctl/conn` into
 /// `(host, port)`.
 fn parse_url_host_port(url: &str) -> Result<(&str, u16), PortMapError> {
