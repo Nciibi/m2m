@@ -150,6 +150,7 @@ impl AppState {
             connectivity_verified: RwLock::new(false),
             private_mode: RwLock::new(false),
             connection_limiter: network::ConnectionLimiter::new(),
+            manual_forwards: RwLock::new(Vec::new()),
         }
     }
 
