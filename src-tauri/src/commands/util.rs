@@ -1,5 +1,17 @@
 //! Shared helper functions used across command modules.
 
+/// AAD context for key store encryption (identity keys, peer keys).
+/// Domain-separates keys.db ciphertext from messages.db ciphertext.
+pub const AAD_KEY_STORE: &[u8] = b"m2m-keys-v1";
+
+/// AAD context for message store encryption (chat history).
+/// Domain-separates messages.db ciphertext from keys.db ciphertext.
+pub const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
+
+/// AAD context for conversation export encryption.
+/// Domain-separates export files from on-disk storage.
+pub const AAD_EXPORT: &[u8] = b"m2m-export-v1";
+
 /// Decode a 64-char hex string into a 32-byte peer key.
 /// Returns an error if the hex string is malformed or wrong length.
 pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
