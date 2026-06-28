@@ -259,7 +259,8 @@ pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResul
         for r in &results {
             *ip_counts.entry(r.public_addr.ip()).or_insert(0) += 1;
         }
-        let (winning_ip, _count) = ip_counts.into_iter().max_by_key(|&(_, c)| c).unwrap();
+        let (winning_ip, _count) = ip_counts.into_iter().max_by_key(|&(_, c)| c)
+            .unwrap_or((std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0));
         // Return the first result matching the winning IP.
         results
             .iter()
