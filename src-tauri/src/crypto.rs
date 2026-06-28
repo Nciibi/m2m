@@ -795,6 +795,7 @@ pub fn unpad_message_variable(padded: &[u8]) -> Result<Vec<u8>, CryptoError> {
 #[cfg(test)]
 mod crypto_tests {
     use super::*;
+    use crate::protocol::PacketType;
 
     #[test]
     fn test_pad_unpad_roundtrip() {
