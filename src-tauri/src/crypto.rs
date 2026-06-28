@@ -420,7 +420,14 @@ fn x3dh_respond_raw(
 // ─── Double Ratchet ───────────────────────────────────────────────────────────
 
 /// A single-use message key derived from a chain key.
+/// Zeroized on drop to ensure key material doesn't linger in memory.
 pub struct MessageKey(pub [u8; 32]);
+
+impl Drop for MessageKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
 
 /// Double Ratchet state machine for per-message key evolution.
 ///
