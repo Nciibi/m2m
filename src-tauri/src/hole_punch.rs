@@ -374,6 +374,7 @@ pub fn extract_candidates_from_invite(
         result.push(WireCandidate {
             address: addr.to_string(),
             candidate_type: 1,
+            relay_id: None,
         });
     }
 
@@ -406,7 +407,7 @@ mod hole_punch_tests {
     #[test]
     fn test_with_structured_candidates() {
         let candidates = vec![
-            WireCandidate { address: "192.168.1.5:54321".into(), candidate_type: 0 },
+            WireCandidate { address: "192.168.1.5:54321".into(), candidate_type: 0, relay_id: None },
             WireCandidate { address: "5.6.7.8:9876".into(), candidate_type: 1 },
         ];
         let c = extract_candidates_from_invite("1.2.3.4:12345", &candidates);

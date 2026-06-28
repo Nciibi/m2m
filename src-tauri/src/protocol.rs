@@ -183,6 +183,11 @@ pub struct WireCandidate {
     pub address: String,
     /// Candidate type as u8: 0=host, 1=srflx, 2=prflx, 3=relay.
     pub candidate_type: u8,
+    /// Relay ID for type-3 (relay) candidates.
+    /// Set by the invite creator when registering with a relay server.
+    /// The connecting peer sends this to the relay to request bridging.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_id: Option<String>,
 }
 
 // --- Handshake Messages ---
@@ -626,8 +631,8 @@ mod protocol_tests {
             timestamp: 1719446400,
             signature: vec![0xCC; 64],
             candidates: vec![
-                WireCandidate { address: "192.168.1.5:12345".to_string(), candidate_type: 0 },
-                WireCandidate { address: "1.2.3.4:54321".to_string(), candidate_type: 1 },
+                WireCandidate { address: "192.168.1.5:12345".to_string(), candidate_type: 0, relay_id: None },
+                WireCandidate { address: "1.2.3.4:54321".to_string(), candidate_type: 1, relay_id: None },
             ],
         };
         let bytes = serialize(&init).unwrap();
