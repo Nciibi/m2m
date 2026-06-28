@@ -1093,6 +1093,9 @@ mod crypto_tests {
         let x3dh_alice = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
         let dh_ratchet_alice = EphemeralKeypair::generate();
         let dh_ratchet_bob = EphemeralKeypair::generate();
+        // Save pub key bytes before moving the keypairs
+        let alice_pub = dh_ratchet_alice.public_key_bytes();
+        let bob_pub = dh_ratchet_bob.public_key_bytes();
 
         let alice_dr = DoubleRatchet::new(
             X3DHSessionKeys {
@@ -1100,7 +1103,7 @@ mod crypto_tests {
                 chain_key: x3dh_alice.chain_key,
             },
             dh_ratchet_alice,
-            dh_ratchet_bob.public_key_bytes(),
+            bob_pub,
             true,
         );
 
@@ -1113,7 +1116,7 @@ mod crypto_tests {
                 chain_key: bob_x3dh.chain_key,
             },
             dh_ratchet_bob,
-            dh_ratchet_alice.public_key_bytes(),
+            alice_pub,
             false,
         );
 
