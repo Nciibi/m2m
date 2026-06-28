@@ -57,26 +57,26 @@ export default function VaultView({
   return (
     <div className="app-shell">
       <div className="centered-view">
-        <div className="vault-icon" style={{ animation: loading ? "unlockBounce 0.6s ease" : "pulseRing 3s ease infinite" }}>
+        <div className={`vault-icon ${loading ? "vault-icon--loading" : "vault-icon--idle"}`}>
           {loading ? <UnlockIcon size={36} color="var(--color-accent-bright)" /> : <LockIcon size={36} color="var(--color-accent-bright)" />}
         </div>
 
-        <h2 className="centered-view__title" style={{ marginTop: "var(--space-lg)" }}>
+        <h2 className="centered-view__title centered-view__title--spaced">
           {isFirstTime ? "Set Up Your Vault" : "Unlock Your Vault"}
         </h2>
 
-        <p className="centered-view__desc" style={{ marginBottom: "var(--space-xl)" }}>
+        <p className="centered-view__desc centered-view__desc--spaced">
           {isFirstTime
             ? "Choose a strong passphrase to encrypt your identity keys and message history."
             : "Enter your passphrase to decrypt your local data."}
           <br />
-          <span style={{ fontSize: "var(--text-sm)", color: "var(--color-text-muted)" }}>
+          <span className="text-muted text-sm">
             Minimum 12 chars · Argon2id
           </span>
         </p>
 
         <div className={`vault-form ${vaultError ? "vault-form--shake" : ""}`} key={shakeKey}>
-          <div style={{ position: "relative" }}>
+          <div className="input-wrap-relative">
             <Input
               id="vault-passphrase"
               type={showPassphrase ? "text" : "password"}
@@ -92,15 +92,14 @@ export default function VaultView({
             <button
               onClick={() => setShowPassphrase(!showPassphrase)}
               aria-label={showPassphrase ? "Hide" : "Show"}
-              className="input__clear"
-              style={{ position: "absolute", right: 44, top: "50%", transform: "translateY(-50%)", zIndex: 2, padding: 6, borderRadius: "var(--radius-xs)" }}
+              className="input__clear input__clear--absolute"
             >
               {showPassphrase ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
             </button>
           </div>
 
           {passphrase.length > 0 && (
-            <div style={{ width: "100%" }}>
+            <div className="strength-container">
               <div className="strength-bar">
                 <div className="strength-fill" style={{ width: `${strength.percent}%`, background: colorMap[strength.cls] || "transparent" }} />
               </div>
@@ -127,8 +126,7 @@ export default function VaultView({
 
           <button
             onClick={() => setShowTips(!showTips)}
-            className="input__clear"
-            style={{ alignSelf: "flex-start", fontSize: "var(--text-sm)", textDecoration: "underline", textUnderlineOffset: 2, padding: 0, border: "none" }}
+            className="input__clear tips-toggle"
           >
             {showTips ? "Hide tips" : "What makes a strong passphrase?"}
           </button>
@@ -150,9 +148,11 @@ export default function VaultView({
             <div className="vault-error">{vaultError}</div>
           )}
 
-          <Button id="vault-unlock-btn" onClick={handleUnlock} loading={loading} fullWidth style={{ marginTop: "var(--space-xs)" }}>
-            {isFirstTime ? "Create Vault" : "Unlock"}
-          </Button>
+          <div className="vault-submit-wrap">
+            <Button id="vault-unlock-btn" onClick={handleUnlock} loading={loading} fullWidth>
+              {isFirstTime ? "Create Vault" : "Unlock"}
+            </Button>
+          </div>
         </div>
       </div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />

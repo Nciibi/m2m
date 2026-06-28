@@ -125,6 +125,7 @@ pub async fn create_invite(
             .map(|c| protocol::WireCandidate {
                 address: c.address.clone(),
                 candidate_type: c.candidate_type as u8,
+                relay_id: None,
             })
             .collect();
 
