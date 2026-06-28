@@ -898,7 +898,7 @@ mod session_tests {
         let alice_keys = alice_eph
             .client_session_keys(&bob_eph.public_key_bytes())
             .unwrap();
-        let bob_keys = bob_eph
+        let _bob_keys = bob_eph
             .server_session_keys(&alice_eph.public_key_bytes())
             .unwrap();
         alice_keys
