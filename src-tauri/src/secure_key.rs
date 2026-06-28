@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_storage_key_drop_zeroizes() {
-        let mut key = [0xCDu8; 32];
+        let key = [0xCDu8; 32];
         {
             let sk = StorageKey::new(key);
             assert_eq!(sk.as_bytes(), &key);
