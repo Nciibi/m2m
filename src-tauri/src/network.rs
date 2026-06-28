@@ -732,16 +732,16 @@ mod network_tests {
     async fn test_read_frame_unsupported_version_rejected() {
         let (mut writer, mut reader) = tokio::io::duplex(65536);
 
-        // Craft a frame with unsupported version 0x02
+        // Craft a frame with unsupported version 0xFC
         let len = (2u32).to_be_bytes();
         writer.write_all(&len).await.unwrap();
-        writer.write_all(&[0x02, PacketType::EncryptedMessage.to_byte()]).await.unwrap();
+        writer.write_all(&[0xFC, PacketType::EncryptedMessage.to_byte()]).await.unwrap();
 
         let result = read_frame_impl(&mut reader).await;
         assert!(matches!(
             result,
-            Err(NetworkError::Protocol(protocol::ProtocolError::UnsupportedVersion(0x02)))
-        ), "expected UnsupportedVersion(0x02)");
+            Err(NetworkError::Protocol(protocol::ProtocolError::UnsupportedVersion(0xFC)))
+        ), "expected UnsupportedVersion(0xFC)");
     }
 
     #[tokio::test]

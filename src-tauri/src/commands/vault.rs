@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::crypto::{self, IdentityKeypair};
-use crate::secure_key::StorageKey;
 use crate::state::AppState;
 use crate::storage::{self, KeyStore};
 

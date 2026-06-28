@@ -6,36 +6,17 @@ import {
   ArrowLeftIcon, ShieldIcon, VerifiedIcon, LockIcon,
   SendIcon, AttachIcon, FileIcon, ArrowDownIcon,
 } from "../components/ui/Icons";
-import type { Toast as ToastData, ChatMessage, ConnectionInfo, FileRequest, IdentityInfo } from "../types";
+import { useM2M } from "../context/M2MContext";
+import type { ChatMessage } from "../types";
 
-interface Props {
-  connection: ConnectionInfo | null;
-  messages: ChatMessage[];
-  identity: IdentityInfo | null;
-  fileRequests: FileRequest[];
-  activeConversationId: string | null;
-  toasts: ToastData[];
-  removeToast: (id: string) => void;
-  addToast: (msg: string, type: ToastData["type"], duration?: number) => void;
-  onSendMessage: (content: string) => Promise<void>;
-  onSendFile: () => Promise<void>;
-  onVerify: () => Promise<void>;
-  onDisconnect: () => Promise<void>;
-  onBackToHub: () => void;
-  onExportConversation: () => Promise<void>;
-  onSetRetention: (policy: string, durationSecs: number | null) => void;
-  retentionPolicy: string;
-  setRetentionPolicy: (v: string) => void;
-  retentionDuration: string;
-  setRetentionDuration: (v: string) => void;
-}
-
-export default function ChatView({
-  connection, messages, identity, fileRequests, activeConversationId,
-  toasts, removeToast, addToast, onSendMessage, onSendFile,
-  onVerify, onDisconnect, onBackToHub, onExportConversation,
-  onSetRetention, retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
-}: Props) {
+export default function ChatView() {
+  const {
+    connection, messages, identity, fileRequests, activeConversationId,
+    toasts, removeToast, addToast, handleSendMessage, handleSendFile,
+    handleVerify, handleDisconnect, setView,
+    handleExportConversation, handleSetRetention,
+    retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
+  } = useM2M();
   const [text, setText] = useState("");
   const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
@@ -55,12 +36,14 @@ export default function ChatView({
     e.preventDefault();
     if (!text.trim() || sending) return;
     setSending(true);
-    try { await onSendMessage(text.trim().slice(0, 64 * 1024)); setText(""); } finally { setSending(false); }
+    try { await handleSendMessage(text.trim().slice(0, 64 * 1024)); setText(""); } finally { setSending(false); }
   };
 
   const fmt = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
   const grouped = groupByDate(messages);
+
+  const backToHub = () => setView("hub");
 
   return (
     <div className="app-shell">
@@ -73,9 +56,9 @@ export default function ChatView({
           Encrypted Session
         </h1>
         <div className="app-header__actions">
-          <Button variant="secondary" size="sm" onClick={onBackToHub}><ArrowLeftIcon size={16} /> Hub</Button>
+          <Button variant="secondary" size="sm" onClick={backToHub}><ArrowLeftIcon size={16} /> Hub</Button>
           <Badge variant={connection?.state === "established" ? "success" : "danger"} dot compact>{connection?.state || "unknown"}</Badge>
-          {connection?.state === "established" && <Button variant="danger" size="sm" onClick={onDisconnect} id="disconnect-btn">Disconnect</Button>}
+          {connection?.state === "established" && <Button variant="danger" size="sm" onClick={handleDisconnect} id="disconnect-btn">Disconnect</Button>}
         </div>
       </div>
 
@@ -115,7 +98,7 @@ export default function ChatView({
             <div className="retention-config__title">Conversation Policy</div>
             <div className="retention-row">
               <div className="select-wrap" style={{ width: 'auto' }}>
-                <select className="select--compact" value={retentionPolicy} onChange={e => { setRetentionPolicy(e.target.value); onSetRetention(e.target.value, e.target.value === "none" ? null : parseInt(retentionDuration, 10)); }}>
+                <select className="select--compact" value={retentionPolicy} onChange={e => { setRetentionPolicy(e.target.value); handleSetRetention(e.target.value, e.target.value === "none" ? null : parseInt(retentionDuration, 10)); }}>
                   <option value="none">No Expiration</option>
                   <option value="delete">Auto-Delete After</option>
                   <option value="export">Auto-Export After</option>
@@ -123,14 +106,14 @@ export default function ChatView({
               </div>
               {retentionPolicy !== "none" && (
                 <div className="select-wrap" style={{ width: 'auto' }}>
-                  <select className="select--compact" value={retentionDuration} onChange={e => { setRetentionDuration(e.target.value); onSetRetention(retentionPolicy, parseInt(e.target.value, 10)); }}>
+                  <select className="select--compact" value={retentionDuration} onChange={e => { setRetentionDuration(e.target.value); handleSetRetention(retentionPolicy, parseInt(e.target.value, 10)); }}>
                     <option value="3600">1 Hour</option>
                     <option value="86400">24 Hours</option>
                     <option value="604800">7 Days</option>
                   </select>
                 </div>
               )}
-              <Button variant="secondary" size="xs" onClick={onExportConversation}>Export Now</Button>
+              <Button variant="secondary" size="xs" onClick={handleExportConversation}>Export Now</Button>
             </div>
           </div>
         )}
@@ -163,11 +146,11 @@ export default function ChatView({
 
       {/* Input */}
       <form className="msg-input-area" onSubmit={submit}>
-        <button type="button" className="msg-attach-btn" onClick={onSendFile} id="send-file-btn" aria-label="Send file"><AttachIcon size={20} /></button>
+        <button type="button" className="msg-attach-btn" onClick={handleSendFile} id="send-file-btn" aria-label="Send file"><AttachIcon size={20} /></button>
         <div className="msg-input-wrap">
           <textarea id="message-input" placeholder="Type a secure message…" value={text}
             onChange={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; setText(e.target.value); }}
-            onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(e); } if (e.key === "Escape" && !text) onBackToHub(); }}
+            onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(e); } if (e.key === "Escape" && !text) backToHub(); }}
             rows={1} disabled={connection?.state !== "established"} />
           {text.length > 64 * 1024 * 0.9 && <span className="msg-input-limit">{text.length}/{64 * 1024}</span>}
         </div>
@@ -183,7 +166,7 @@ export default function ChatView({
 
       {/* Fingerprint Modal */}
       <Modal open={showFp} onClose={() => setShowFp(false)} title="Verify Peer Fingerprint"
-        footer={!connection?.peer_verified ? <Button onClick={async () => { await onVerify(); setShowFp(false); addToast("Peer verified", "success"); }}>Confirm Match & Verify</Button> : undefined}>
+        footer={!connection?.peer_verified ? <Button onClick={async () => { await handleVerify(); setShowFp(false); addToast("Peer verified", "success"); }}>Confirm Match & Verify</Button> : undefined}>
         <p className="fp-description">Compare fingerprints via a secure out-of-band channel.</p>
         <div className="fp-display">
           <div className="fp-side">

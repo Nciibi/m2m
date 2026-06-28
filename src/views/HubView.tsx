@@ -5,44 +5,22 @@ import {
   ShieldIcon, GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot,
 } from "../components/ui/Icons";
-import type { Toast, ConversationEntry, IdentityInfo, NetworkSettings } from "../types";
+import { useM2M } from "../context/M2MContext";
+import type { ConversationEntry } from "../types";
 
-interface Props {
-  identity: IdentityInfo | null;
-  toasts: Toast[];
-  removeToast: (id: string) => void;
-  generatedInvite: string;
-  inviteToConnect: string;
-  inviteValid: boolean;
-  namingMyName: string;
-  namingTheirName: string;
-  isConnecting: boolean;
-  onGenerateInvite: () => Promise<void>;
-  onCopyInvite: () => void;
-  setInviteToConnect: (v: string) => void;
-  onConnect: () => Promise<void>;
-  setNamingMyName: (v: string) => void;
-  setNamingTheirName: (v: string) => void;
-  onOpenChat: (conv: ConversationEntry) => void;
-  onOpenSettings: () => void;
-  onDeleteConversation: (id: string) => void;
-  conversations: ConversationEntry[];
-  networkSettings: NetworkSettings | null;
-  privateMode: boolean;
-}
-
-export default function HubView({
-  identity, toasts, removeToast, generatedInvite, inviteToConnect,
-  inviteValid, namingMyName, namingTheirName, isConnecting,
-  onGenerateInvite, onCopyInvite, setInviteToConnect, onConnect,
-  setNamingMyName, setNamingTheirName, onOpenChat, onOpenSettings,
-  onDeleteConversation, conversations, networkSettings, privateMode,
-}: Props) {
+export default function HubView() {
+  const {
+    identity, toasts, removeToast, generatedInvite, inviteToConnect,
+    inviteValid, namingMyName, namingTheirName, isConnecting,
+    handleGenerateInvite, copyInvite, setInviteToConnect, handleConnect,
+    setNamingMyName, setNamingTheirName, handleOpenChat, openSettings,
+    handleDeleteConversation, conversations, networkSettings, privateMode,
+  } = useM2M();
   const [tab, setTab] = useState<"connect" | "chats">("connect");
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
 
-  const handleCopy = () => { onCopyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const handleCopy = () => { copyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
   const filtered = conversations.filter(c => {
     if (!search) return true;
@@ -64,7 +42,7 @@ export default function HubView({
         </h1>
         <div className="app-header__actions">
           <Badge variant="default" compact><OfflineDot /> Offline</Badge>
-          <button className="btn btn--icon" onClick={onOpenSettings} id="settings-btn" aria-label="Settings"><GearIcon size={20} /></button>
+          <button className="btn btn--icon" onClick={openSettings} id="settings-btn" aria-label="Settings"><GearIcon size={20} /></button>
         </div>
       </div>
 
@@ -83,14 +61,14 @@ export default function HubView({
           <ConnectTab
             generatedInvite={generatedInvite} inviteToConnect={inviteToConnect}
             inviteValid={inviteValid} namingMyName={namingMyName} namingTheirName={namingTheirName}
-            isConnecting={isConnecting} onGenerateInvite={onGenerateInvite}
+            isConnecting={isConnecting} onGenerateInvite={handleGenerateInvite}
             onCopyInvite={handleCopy} copied={copied}
-            setInviteToConnect={setInviteToConnect} onConnect={onConnect}
+            setInviteToConnect={setInviteToConnect} onConnect={handleConnect}
             setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
             networkSettings={networkSettings} privateMode={privateMode} identity={identity}
           />
         ) : (
-          <ChatsTab conversations={filtered} onOpenChat={onOpenChat} onDeleteConversation={onDeleteConversation} search={search} setSearch={setSearch} />
+          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} />
         )}
       </div>
 

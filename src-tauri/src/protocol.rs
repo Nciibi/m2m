@@ -6,8 +6,12 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroize;
 
-/// Current protocol version.
-pub const PROTOCOL_VERSION: u8 = 0x01;
+/// Current protocol version (v0x02 — includes X3DH + Double Ratchet).
+pub const PROTOCOL_VERSION: u8 = 0x02;
+
+/// Legacy protocol version (v0x01 — pre-X3DH, SHA-256 KDF ratchet only).
+/// Accepted for backward compatibility with older peers.
+pub const PROTOCOL_VERSION_LEGACY: u8 = 0x01;
 
 /// Reserved version values that must never be used.
 const RESERVED_VERSIONS: [u8; 3] = [0x00, 0xFE, 0xFF];
@@ -31,12 +35,14 @@ pub const MIN_FRAME_SIZE: u32 = 2;
 /// Length prefix size in bytes.
 pub const LENGTH_PREFIX_SIZE: usize = 4;
 
-/// Heartbeat interval in seconds (reserved for heartbeating, wired to NETWORK_TIMEOUT).
-#[allow(dead_code)]
+/// Heartbeat interval in seconds.
+/// A heartbeat is sent every interval to keep the connection alive
+/// and detect silent disconnections.
 pub const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 /// Heartbeat timeout in seconds.
-#[allow(dead_code)]
+/// If no HeartbeatAck is received within this time, the connection
+/// is considered dead and will be cleaned up.
 pub const HEARTBEAT_TIMEOUT_SECS: u64 = 10;
 
 /// Maximum session duration in seconds (24 hours).
@@ -151,9 +157,19 @@ impl PacketType {
 }
 
 /// Validate a protocol version byte.
+///
+/// Accepts both the current version (0x02) and legacy version (0x01).
+/// Logs a deprecation notice when a legacy peer connects.
+/// Reserved versions (0x00, 0xFE, 0xFF) are always rejected.
 pub fn validate_version(version: u8) -> Result<(), ProtocolError> {
     if RESERVED_VERSIONS.contains(&version) {
         return Err(ProtocolError::ReservedVersion(version));
+    }
+    if version == PROTOCOL_VERSION_LEGACY {
+        tracing::warn!(
+            "peer using legacy protocol version 0x01 — consider upgrading"
+        );
+        return Ok(());
     }
     if version != PROTOCOL_VERSION {
         return Err(ProtocolError::UnsupportedVersion(version));
@@ -482,9 +498,21 @@ mod protocol_tests {
 
     #[test]
     fn test_unsupported_version_rejected() {
-        // Anything that's not reserved and not PROTOCOL_VERSION
-        assert!(matches!(validate_version(0x02), Err(ProtocolError::UnsupportedVersion(0x02))));
+        // Anything that's not reserved and not a known version
         assert!(matches!(validate_version(0x10), Err(ProtocolError::UnsupportedVersion(0x10))));
+        assert!(matches!(validate_version(0x03), Err(ProtocolError::UnsupportedVersion(0x03))));
+        assert!(matches!(validate_version(0xFD), Err(ProtocolError::UnsupportedVersion(0xFD))));
+    }
+
+    #[test]
+    fn test_legacy_version_accepted() {
+        // 0x01 is the legacy version — should be accepted with warning
+        assert!(validate_version(PROTOCOL_VERSION_LEGACY).is_ok());
+    }
+
+    #[test]
+    fn test_current_version_accepted() {
+        assert!(validate_version(PROTOCOL_VERSION).is_ok());
     }
 
     // ─── Frame size validation ──────────────────────────────────

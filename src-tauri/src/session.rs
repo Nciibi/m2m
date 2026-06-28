@@ -139,9 +139,9 @@ impl Session {
         let response: HandshakeResponse = protocol::deserialize(&response_frame.body)?;
 
         // Validate response version
-        if response.version != PROTOCOL_VERSION {
-            return Err(SessionError::HandshakeFailed("version mismatch".to_string()));
-        }
+        protocol::validate_version(response.version).map_err(|e| {
+            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
+        })?;
 
         // Verify peer's identity matches expected (from invite)
         if response.identity_pub != *expected_peer_pub {
@@ -205,10 +205,10 @@ impl Session {
         // Parse the HandshakeInit we already received
         let init: HandshakeInit = protocol::deserialize(&init_frame.body)?;
 
-        // Validate version
-        if init.version != PROTOCOL_VERSION {
-            return Err(SessionError::HandshakeFailed("version mismatch".to_string()));
-        }
+        // Validate init version
+        protocol::validate_version(init.version).map_err(|e| {
+            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
+        })?;
 
         // Verify initiator's signature
         let mut peer_sign_data = Vec::new();
@@ -339,9 +339,9 @@ impl Session {
         }
         let response: HandshakeResponse = protocol::deserialize(&resp_frame.body)?;
 
-        if response.version != PROTOCOL_VERSION {
-            return Err(SessionError::HandshakeFailed("version mismatch".to_string()));
-        }
+        protocol::validate_version(response.version).map_err(|e| {
+            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
+        })?;
         if response.identity_pub != *expected_peer_pub {
             return Err(SessionError::HandshakeFailed("peer identity mismatch".to_string()));
         }
@@ -400,9 +400,9 @@ impl Session {
 
         let init: HandshakeInit = protocol::deserialize(&init_frame.body)?;
 
-        if init.version != PROTOCOL_VERSION {
-            return Err(SessionError::HandshakeFailed("version mismatch".to_string()));
-        }
+        protocol::validate_version(init.version).map_err(|e| {
+            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
+        })?;
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&init.ephemeral_pub);
         sign_data.extend_from_slice(&init.x25519_identity_pub);
@@ -779,8 +779,33 @@ impl Session {
         Ok(())
     }
 
-    /// Decrypt an encrypted frame of any type (not just EncryptedMessage).
-    /// Removes padding after decryption, then ratchets the receiving key.
+    /// Send a heartbeat to keep the connection alive.
+    /// Heartbeats are unencrypted protocol-level keepalives.
+    pub async fn send_heartbeat<W: AsyncWrite + Unpin>(
+        &self,
+        stream: &mut W,
+    ) -> Result<(), SessionError> {
+        network::write_frame(stream, PacketType::Heartbeat, &[])
+            .await
+            .map_err(SessionError::Network)
+    }
+
+    /// Send a heartbeat acknowledgement.
+    pub async fn send_heartbeat_ack<W: AsyncWrite + Unpin>(
+        &self,
+        stream: &mut W,
+    ) -> Result<(), SessionError> {
+        network::write_frame(stream, PacketType::HeartbeatAck, &[])
+            .await
+            .map_err(SessionError::Network)
+    }
+
+    /// Check if a received frame is a heartbeat and handle it.
+    /// Returns true if the frame was a heartbeat (caller should not process further).
+    pub fn handle_heartbeat(&self, frame: &network::RawFrame) -> bool {
+        frame.packet_type == PacketType::Heartbeat
+            || frame.packet_type == PacketType::HeartbeatAck
+    }
     pub fn decrypt_typed_frame(&mut self, frame: &RawFrame) -> Result<Vec<u8>, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
@@ -1377,7 +1402,7 @@ mod session_tests {
         assert_eq!(frame.packet_type, PacketType::HandshakeInit);
 
         let bad_response = HandshakeResponse {
-            version: 0x02,
+            version: 0xFC,
             ephemeral_pub: [0xAA; 32],
             identity_pub: bob_pub,
             x25519_identity_pub: [0u8; 32],
@@ -1478,7 +1503,7 @@ mod session_tests {
 
         let eph = EphemeralKeypair::generate();
         let bad_init = HandshakeInit {
-            version: 0x02,
+            version: 0xFC,
             ephemeral_pub: eph.public_key_bytes(),
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],

@@ -762,6 +762,38 @@ pub fn spawn_receive_loop(
     mut read_half: tokio::net::tcp::OwnedReadHalf,
     peer_key_hex: String,
 ) {
+    let hb_peer = peer_key_hex.clone();
+    let hb_state = state.clone();
+    // Spawn a heartbeat worker: sends a Heartbeat every HEARTBEAT_INTERVAL_SECS
+    // and expects an ack within HEARTBEAT_TIMEOUT_SECS.
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(
+            std::time::Duration::from_secs(crate::protocol::HEARTBEAT_INTERVAL_SECS),
+        );
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            let conns = hb_state.connections.read().await;
+            if let Some(conn_arc) = conns.get(&hb_peer) {
+                let mut conn = conn_arc.lock().await;
+                match crate::network::write_frame(
+                    &mut conn.write_half,
+                    crate::protocol::PacketType::Heartbeat,
+                    &[],
+                ).await {
+                    Ok(_) => tracing::trace!(peer = %hb_peer, "heartbeat sent"),
+                    Err(e) => {
+                        tracing::info!(peer = %hb_peer, error = %e, "heartbeat failed — disconnecting");
+                        break;
+                    }
+                }
+            } else {
+                // Connection removed — stop heartbeat
+                break;
+            }
+        }
+    });
+
     tokio::spawn(async move {
         loop {
             // Read a frame from the peer's read half

@@ -152,10 +152,9 @@ pub fn validate_invite(invite_str: &str) -> Result<SignedInvite, IdentityError> 
     let signed: SignedInvite = protocol::deserialize(&invite_bytes)?;
 
     // Step 3: Check version
-    if signed.payload.version != PROTOCOL_VERSION {
+    if let Err(e) = protocol::validate_version(signed.payload.version) {
         return Err(IdentityError::InviteFormatInvalid(format!(
-            "unsupported version: {:#04x}",
-            signed.payload.version
+            "unsupported version: {e}"
         )));
     }
 
@@ -449,7 +448,7 @@ mod tests {
         // Craft an invite with wrong version manually
         let identity = make_identity();
         let payload = protocol::InvitePayload {
-            version: 0x02, // wrong version
+            version: 0xFC, // wrong version
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             signed_prekey: [0u8; 32],

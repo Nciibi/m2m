@@ -1,13 +1,9 @@
 import { ToastContainer } from "../components/ui";
-import type { ToastData } from "../components/ui/Toast";
 import { KeyIcon } from "../components/ui/Icons";
+import { useM2M } from "../context/M2MContext";
 
-interface Props {
-  toasts: ToastData[];
-  removeToast: (id: string) => void;
-}
-
-export default function SetupView({ toasts, removeToast }: Props) {
+export default function SetupView() {
+  const { toasts, removeToast } = useM2M();
   return (
     <div className="app-shell">
       <div className="centered-view">

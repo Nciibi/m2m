@@ -1,22 +1,11 @@
 import { useState, useEffect } from "react";
 import { Button, Input, ToastContainer } from "../components/ui";
 import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon } from "../components/ui/Icons";
-import type { Toast as ToastType } from "../types";
 import { estimateEntropy } from "../utils";
+import { useM2M } from "../context/M2MContext";
 
-interface Props {
-  vaultInitialized: boolean;
-  onUnlock: (passphrase: string) => Promise<void>;
-  toasts: ToastType[];
-  removeToast: (id: string) => void;
-}
-
-export default function VaultView({
-  vaultInitialized,
-  onUnlock,
-  toasts,
-  removeToast,
-}: Props) {
+export default function VaultView() {
+  const { vaultInitialized, handleUnlockVault, toasts, removeToast } = useM2M();
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
   const [vaultError, setVaultError] = useState("");
@@ -47,7 +36,7 @@ export default function VaultView({
     const est = estimateEntropy(passphrase);
     if (est < 40) { setVaultError(`Passphrase too weak: ~${Math.round(est)} bits. Use longer (aim for 60+).`); setShakeKey(k => k + 1); return; }
     setLoading(true);
-    try { await onUnlock(passphrase); }
+    try { await handleUnlockVault(passphrase); }
     catch (e: any) { setVaultError(String(e)); setShakeKey(k => k + 1); }
     finally { setLoading(false); }
   };
