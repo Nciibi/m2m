@@ -67,7 +67,7 @@ export default function ChatView({
       <div className="app-header">
         <h1 className="app-header__title">
           <span onClick={() => setShowFp(true)} title={connection?.peer_verified ? "Verified" : "Verify"}
-            style={{ display: "inline-flex", width: 28, height: 28, borderRadius: "var(--radius-sm)", alignItems: "center", justifyContent: "center", cursor: "pointer", background: connection?.peer_verified ? "var(--color-success-bg)" : "var(--color-warning-bg)" }}>
+            className={`app-header__icon-bg ${connection?.peer_verified ? 'app-header__icon-bg--success' : 'app-header__icon-bg--warning'}`}>
             {connection?.peer_verified ? <VerifiedIcon size={16} color="var(--color-success)" /> : <ShieldIcon size={16} color="var(--color-warning)" />}
           </span>
           Encrypted Session
@@ -114,17 +114,21 @@ export default function ChatView({
           <div className="retention-config">
             <div className="retention-config__title">Conversation Policy</div>
             <div className="retention-row">
-              <select value={retentionPolicy} onChange={e => { setRetentionPolicy(e.target.value); onSetRetention(e.target.value, e.target.value === "none" ? null : parseInt(retentionDuration, 10)); }}>
-                <option value="none">No Expiration</option>
-                <option value="delete">Auto-Delete After</option>
-                <option value="export">Auto-Export After</option>
-              </select>
-              {retentionPolicy !== "none" && (
-                <select value={retentionDuration} onChange={e => { setRetentionDuration(e.target.value); onSetRetention(retentionPolicy, parseInt(e.target.value, 10)); }}>
-                  <option value="3600">1 Hour</option>
-                  <option value="86400">24 Hours</option>
-                  <option value="604800">7 Days</option>
+              <div className="select-wrap" style={{ width: 'auto' }}>
+                <select className="select--compact" value={retentionPolicy} onChange={e => { setRetentionPolicy(e.target.value); onSetRetention(e.target.value, e.target.value === "none" ? null : parseInt(retentionDuration, 10)); }}>
+                  <option value="none">No Expiration</option>
+                  <option value="delete">Auto-Delete After</option>
+                  <option value="export">Auto-Export After</option>
                 </select>
+              </div>
+              {retentionPolicy !== "none" && (
+                <div className="select-wrap" style={{ width: 'auto' }}>
+                  <select className="select--compact" value={retentionDuration} onChange={e => { setRetentionDuration(e.target.value); onSetRetention(retentionPolicy, parseInt(e.target.value, 10)); }}>
+                    <option value="3600">1 Hour</option>
+                    <option value="86400">24 Hours</option>
+                    <option value="604800">7 Days</option>
+                  </select>
+                </div>
               )}
               <Button variant="secondary" size="xs" onClick={onExportConversation}>Export Now</Button>
             </div>
@@ -165,10 +169,10 @@ export default function ChatView({
             onChange={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; setText(e.target.value); }}
             onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(e); } if (e.key === "Escape" && !text) onBackToHub(); }}
             rows={1} disabled={connection?.state !== "established"} />
-          {text.length > 64 * 1024 * 0.9 && <span style={{ position: "absolute", right: 12, bottom: 6, fontSize: "var(--text-xs)", color: "var(--color-warning)" }}>{text.length}/{64 * 1024}</span>}
+          {text.length > 64 * 1024 * 0.9 && <span className="msg-input-limit">{text.length}/{64 * 1024}</span>}
         </div>
         <button type="submit" className="msg-send-btn" id="send-message-btn" disabled={!text.trim() || sending || connection?.state !== "established"}>
-          {sending ? <span style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", display: "inline-block", animation: "spin 0.6s linear infinite" }} /> : <SendIcon size={20} />}
+          {sending ? <span className="msg-send-spinner" /> : <SendIcon size={20} />}
         </button>
       </form>
 
@@ -180,7 +184,7 @@ export default function ChatView({
       {/* Fingerprint Modal */}
       <Modal open={showFp} onClose={() => setShowFp(false)} title="Verify Peer Fingerprint"
         footer={!connection?.peer_verified ? <Button onClick={async () => { await onVerify(); setShowFp(false); addToast("Peer verified", "success"); }}>Confirm Match & Verify</Button> : undefined}>
-        <p style={{ marginBottom: "var(--space-md)" }}>Compare fingerprints via a secure out-of-band channel.</p>
+        <p className="fp-description">Compare fingerprints via a secure out-of-band channel.</p>
         <div className="fp-display">
           <div className="fp-side">
             <div className="fp-side__title">You (Local)</div>
@@ -192,7 +196,7 @@ export default function ChatView({
             <div className="fp-grid">{connection?.peer_fingerprint?.split(":").map((g, i) => <span key={i} className="fp-grid__item">{g}</span>)}</div>
           </div>
         </div>
-        {connection?.peer_verified && <p style={{ textAlign: "center", color: "var(--color-success)", fontWeight: 600, marginTop: "var(--space-md)" }}>Peer verified</p>}
+        {connection?.peer_verified && <p className="fp-success">Peer verified</p>}
       </Modal>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -204,7 +208,7 @@ function formatMsg(content: string): React.ReactNode {
   const parts = content.split(/(`[^`]+`)/g);
   if (parts.length === 1) return content;
   return parts.map((p, i) => p.startsWith("`") && p.endsWith("`")
-    ? <code key={i} style={{ background: "rgba(0,0,0,0.25)", padding: "2px 6px", borderRadius: 4, fontFamily: "var(--font-mono)", fontSize: "0.85em" }}>{p.slice(1, -1)}</code>
+    ? <code key={i} className="msg-code-inline">{p.slice(1, -1)}</code>
     : p);
 }
 

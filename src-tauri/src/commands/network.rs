@@ -137,6 +137,7 @@ pub async fn create_invite(
                 all.push(protocol::WireCandidate {
                     address: addr_str,
                     candidate_type: 4,
+                    relay_id: None,
                 });
             }
         }
@@ -150,6 +151,7 @@ pub async fn create_invite(
                 all.push(protocol::WireCandidate {
                     address: fwd.public_addr.clone(),
                     candidate_type: 4,
+                    relay_id: None,
                 });
             }
         }

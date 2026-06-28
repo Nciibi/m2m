@@ -57,7 +57,7 @@ export default function HubView({
     <div className="app-shell">
       <div className="app-header">
         <h1 className="app-header__title">
-          <span style={{ display: "inline-flex", width: 32, height: 32, borderRadius: "var(--radius-sm)", background: "var(--color-accent-gradient)", alignItems: "center", justifyContent: "center", boxShadow: "var(--shadow-accent)" }}>
+          <span className="app-header__icon-bg app-header__icon-bg--accent">
             <ShieldIcon size={18} color="white" />
           </span>
           M2M
@@ -115,7 +115,7 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
               <div className="invite-output__field">
                 <span className="invite-output__text">{generatedInvite}</span>
               </div>
-              <button className={`btn btn--icon`} onClick={onCopyInvite} id="copy-invite-btn" aria-label="Copy invite" style={{ borderColor: copied ? "rgba(16,185,129,0.3)" : undefined, background: copied ? "var(--color-success-bg)" : undefined }}>
+              <button className={`btn btn--icon ${copied ? 'btn--icon-copied' : ''}`} onClick={onCopyInvite} id="copy-invite-btn" aria-label="Copy invite">
                 {copied ? <span className="copied-pop"><CheckIcon size={18} /></span> : <CopyIcon size={18} />}
               </button>
             </div>
@@ -146,15 +146,15 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
 
         <div className="fingerprint-box" id="fingerprint-display">
           <span className="fingerprint-label">Your Identity Fingerprint</span>
-          <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-xs)" }}>
+          <span className="fingerprint-value-row">
             {identity?.fingerprint}
-            <button className="btn btn--ghost" onClick={() => {
+            <button className="btn btn--ghost btn--icon-sm" onClick={() => {
               if (identity?.fingerprint) {
                 navigator.clipboard.writeText(identity.fingerprint);
                 setFpCopied(true);
                 setTimeout(() => setFpCopied(false), 2000);
               }
-            }} aria-label="Copy" style={{ padding: "4px 8px", minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-xs)" }}>
+            }} aria-label="Copy">
               {fpCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
             </button>
           </span>
@@ -168,7 +168,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
   return (
     <div className="conv-list">
       {conversations.length > 0 && (
-        <div style={{ paddingBottom: "var(--space-sm)" }}>
+        <div className="conv-search">
           <Input placeholder="Search conversations…" value={search} onChange={e => setSearch(e.target.value)} icon={<SearchIcon size={16} />} clearable onClear={() => setSearch("")} />
         </div>
       )}
@@ -181,10 +181,8 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
       ) : (
         conversations.map((c: any) => (
           <div key={c.id} className="conv-item" onClick={() => onOpenChat(c)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpenChat(c)}>
-            <div className="conv-avatar" style={{
+            <div className={`conv-avatar ${c.is_online ? 'conv-avatar--online' : 'conv-avatar--offline'}`} style={{
               background: `linear-gradient(135deg, ${hashToColor(c.peer_key_hex)}, ${hashToColor(c.peer_key_hex.slice(16))})`,
-              border: c.is_online ? "2px solid var(--color-success)" : "2px solid rgba(255,255,255,0.08)",
-              boxShadow: c.is_online ? "0 0 15px var(--color-success-glow)" : "0 4px 10px rgba(0,0,0,0.2)",
             }}>
               {(c.display_name || c.peer_display_name || c.peer_key_hex).charAt(0).toUpperCase()}
             </div>
@@ -197,7 +195,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             </div>
             <div className="conv-status">{c.is_online ? <OnlineDot /> : <OfflineDot />}</div>
             <div className="conv-actions">
-              <button className="btn btn--icon" style={{ padding: 6, minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-sm)" }}
+              <button className="btn btn--icon btn--icon-sm"
                 onClick={e => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }}
                 aria-label="Delete">
                 <TrashIcon size={16} />

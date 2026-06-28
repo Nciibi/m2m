@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon } from "../components/ui/Icons";
+import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, AlertTriangleIcon } from "../components/ui/Icons";
 import type { Toast, IdentityInfo, NetworkSettings, StunConfig, NatTypeInfo } from "../types";
 
 interface Props {
@@ -40,7 +40,7 @@ export default function SettingsView({
     <div className="app-shell">
       <div className="app-header">
         <h1 className="app-header__title">
-          <span style={{ display: "inline-flex", width: 32, height: 32, borderRadius: "var(--radius-sm)", background: "var(--color-bg-input)", border: "1px solid var(--color-border-default)", alignItems: "center", justifyContent: "center" }}>
+          <span className="app-header__icon-bg app-header__icon-bg--default">
             <GearIcon size={18} />
           </span>
           Settings
@@ -50,7 +50,7 @@ export default function SettingsView({
 
       <div className="app-content--scroll">
         {/* Public IP */}
-        <div style={{ marginBottom: "var(--space-2xl)" }}>
+        <div className="settings-section">
           <h3 className="section-header">Public IP & Connectivity</h3>
           <div className="settings-row">
             <div className="settings-label">
@@ -59,10 +59,10 @@ export default function SettingsView({
             </div>
             <div className="settings-value">
               {publicIp ? (
-                <span className="mono-value" id="public-ip-display">
+                <span className="mono-value mono-value--interactive" id="public-ip-display">
                   {publicIp}
                   <button onClick={() => { navigator.clipboard.writeText(publicIp); setIpCopied(true); setTimeout(() => setIpCopied(false), 2000); }}
-                    aria-label="Copy IP" className="input__clear" style={{ display: "inline-flex" }}>
+                    aria-label="Copy IP" className="input__clear">
                     {ipCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
                   </button>
                 </span>
@@ -91,16 +91,16 @@ export default function SettingsView({
         </div>
 
         {/* STUN Servers */}
-        <div style={{ marginBottom: "var(--space-2xl)" }}>
+        <div className="settings-section">
           <h3 className="section-header">STUN Servers</h3>
-          <p className="settings-label__desc" style={{ marginBottom: "var(--space-sm)" }}>Configure STUN servers for IP discovery.</p>
+          <p className="settings-label__desc settings-label__desc--spaced">Configure STUN servers for IP discovery.</p>
           {stunConfig && (
             <>
               <div className="stun-server-list">
                 {stunConfig.servers.map((s, i) => (
                   <div key={i} className="stun-server-item">
-                    <span className="mono-value" style={{ border: "none", background: "none", padding: 0 }}>{s}</span>
-                    <button className="btn btn--ghost" style={{ padding: 6, minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-xs)" }}
+                    <span className="mono-value mono-value--plain">{s}</span>
+                    <button className="btn btn--ghost btn--icon-sm"
                       onClick={() => onRemoveStunServer(i)} aria-label={`Remove ${s}`}><CloseIcon size={14} /></button>
                   </div>
                 ))}
@@ -116,7 +116,7 @@ export default function SettingsView({
 
         {/* Diagnostics */}
         {networkDiagnostics && (
-          <div style={{ marginBottom: "var(--space-2xl)" }}>
+          <div className="settings-section">
             <h3 className="section-header">Network Diagnostics</h3>
             <div className="diag-grid">
               <div className="diag-item">
@@ -133,8 +133,8 @@ export default function SettingsView({
                   {networkDiagnostics.stun_servers?.map((s: any, i: number) => (
                     <div key={i} className={`stun-health-item stun-health-item--${s.reachable ? "ok" : "fail"}`}>
                       <span>{s.reachable ? <CheckIcon size={14} color="var(--color-success)" /> : <CloseIcon size={14} color="var(--color-danger)" />}</span>
-                      <code style={{ flex: 1, fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>{s.server}</code>
-                      {s.rtt_ms && <span style={{ color: "var(--color-text-muted)", fontSize: "var(--text-xs)" }}>{s.rtt_ms}ms</span>}
+                      <code className="stun-health-item__server">{s.server}</code>
+                      {s.rtt_ms && <span className="stun-health-item__rtt">{s.rtt_ms}ms</span>}
                     </div>
                   ))}
                 </div>
@@ -142,13 +142,13 @@ export default function SettingsView({
               {networkDiagnostics.candidates?.length > 0 && (
                 <div className="diag-item diag-item--full">
                   <span className="diag-item__label">Candidates (by priority)</span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xxs)" }}>
+                  <div className="candidate-list">
                     {networkDiagnostics.candidates.map((c: any, i: number) => (
                       <div key={i} className={`candidate-item candidate-item--${c.candidate_type === 0 ? "host" : c.candidate_type === 1 ? "srflx" : c.candidate_type === 2 ? "prflx" : "relay"}`}>
                         <span className="candidate-type">{c.candidate_type === 0 ? "Host" : c.candidate_type === 1 ? "SRFLX" : c.candidate_type === 2 ? "PRFLX" : "Relay"}</span>
-                        <code style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)" }}>{c.address}</code>
-                        <span style={{ color: "var(--color-text-muted)", fontSize: "var(--text-xs)" }}>prio: {c.priority}</span>
-                        {i === 0 && <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-success)", background: "var(--color-success-bg)", padding: "1px 8px", borderRadius: "var(--radius-full)" }}>Active</span>}
+                        <code className="candidate-item__address">{c.address}</code>
+                        <span className="candidate-item__priority">prio: {c.priority}</span>
+                        {i === 0 && <span className="candidate-item__active">Active</span>}
                       </div>
                     ))}
                   </div>
@@ -159,7 +159,7 @@ export default function SettingsView({
         )}
 
         {/* Privacy */}
-        <div style={{ marginBottom: "var(--space-2xl)" }}>
+        <div className="settings-section">
           <h3 className="section-header">Privacy</h3>
           <div className="settings-row">
             <div className="settings-label">
@@ -174,7 +174,7 @@ export default function SettingsView({
         </div>
 
         {/* Tor */}
-        <div style={{ marginBottom: "var(--space-2xl)" }}>
+        <div className="settings-section">
           <h3 className="section-header">Tor Routing</h3>
           <div className="settings-row">
             <div className="settings-label">
@@ -193,21 +193,21 @@ export default function SettingsView({
         </div>
 
         {/* Identity */}
-        <div style={{ marginBottom: "var(--space-2xl)" }}>
+        <div className="settings-section">
           <h3 className="section-header">Identity</h3>
           <div className="fingerprint-box" id="settings-fingerprint">
             <span className="fingerprint-label">Your Identity Fingerprint</span>
-            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-xs)", flexWrap: "wrap" }}>
+            <span className="fingerprint-value-row">
               {identity?.fingerprint}
               <button onClick={() => { if (identity?.fingerprint) { navigator.clipboard.writeText(identity.fingerprint); setFpCopied(true); setTimeout(() => setFpCopied(false), 2000); } }}
-                aria-label="Copy fingerprint" className="btn btn--ghost" style={{ padding: "4px 8px", minWidth: "auto", minHeight: "auto", borderRadius: "var(--radius-xs)" }}>
+                aria-label="Copy fingerprint" className="btn btn--ghost btn--icon-sm">
                 {fpCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
               </button>
             </span>
           </div>
         </div>
 
-        <div style={{ textAlign: "center", padding: "var(--space-lg)", fontSize: "var(--text-xs)", color: "var(--color-text-muted)", borderTop: "1px solid var(--color-border-default)" }}>
+        <div className="settings-footer">
           M2M Secure Messenger v0.1.0 — End-to-End Encrypted
         </div>
       </div>
