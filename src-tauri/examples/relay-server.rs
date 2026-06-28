@@ -34,7 +34,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{oneshot, RwLock};
 use tokio::time;
@@ -362,14 +362,14 @@ async fn main() {
                 let auth = auth_token.clone();
                 tokio::spawn(async move {
                     // Read the first frame to determine client's intent
-                    match read_frame(&mut tokio::io::BufReader::new(stream).into_inner()).await {
+                    match read_frame(&mut stream).await {
                         Ok((msg_type, body)) => {
                             match msg_type {
                                 0x01 => handle_register(stream, peer_addr, body, state, &auth).await,
                                 0x02 => handle_connect(stream, peer_addr, body, state).await,
                                 other => {
                                     tracing::warn!(peer = %peer_addr, msg_type = other, "unknown request");
-                                    send_error(&mut stream, 6, &format!("unknown type {other}")).await;
+                                    let _ = send_error(&mut stream, 6, &format!("unknown type {other}")).await;
                                 }
                             }
                         }
