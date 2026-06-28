@@ -29,6 +29,13 @@ const MAX_ENCRYPT_SIZE: usize = 16 * 1024 * 1024;
 #[allow(dead_code)]
 const SESSION_KEY_CONTEXT: &[u8] = b"m2m-v1-session-key";
 
+/// Maximum number of out-of-order message keys to cache per DH ratchet phase.
+/// Follows the Signal Protocol's design: when messages arrive out of order,
+/// intermediate message keys are derived and cached instead of discarded.
+/// 2000 is the Signal-specified maximum — beyond this we reject to prevent
+/// memory exhaustion attacks.
+const MAX_SKIP: usize = 2000;
+
 #[derive(Debug, Error)]
 pub enum CryptoError {
     #[error("sodiumoxide initialization failed")]
@@ -439,6 +446,14 @@ impl Drop for MessageKey {
 /// Manages root key (DH ratchet) + sending/receiving chain keys.
 /// Chain keys advance via HKDF: each message derives a unique message key
 /// and produces a new chain key. DH ratchets periodically for break-in recovery.
+///
+/// ## Skipped message keys
+///
+/// Out-of-order messages within a chain are handled by caching the message key
+/// for each skipped message number in `skipped_keys`. When a message with a
+/// previously-skipped number arrives, its key is retrieved from the cache instead
+/// of re-derived (the chain has already advanced past it). The cache is capped at
+/// [`MAX_SKIP`] entries to prevent memory exhaustion.
 pub struct DoubleRatchet {
     root_key: [u8; 32],
     send_chain_key: Option<[u8; 32]>,
@@ -449,6 +464,11 @@ pub struct DoubleRatchet {
     our_ratchet_keypair: EphemeralKeypair,
     /// Peer's current DH ratchet public key.
     their_ratchet_pub: [u8; 32],
+    /// Message keys for out-of-order messages.
+    /// Keys are cached when deriving through a gap and consumed when
+    /// the corresponding message arrives. Capped at MAX_SKIP entries
+    /// to limit memory usage.
+    skipped_keys: HashMap<u64, [u8; 32]>,
 }
 
 impl DoubleRatchet {
