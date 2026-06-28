@@ -884,4 +884,362 @@ mod crypto_tests {
         // Verify the old key is zeroed
         // (We can't directly check because old_tx is a copy, but the field was zeroed)
     }
+
+    // ─── HKDF Tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_hkdf_extract_deterministic() {
+        let salt = b"test-salt-16b";
+        let ikm = b"input-key-material";
+        let prk1 = hkdf_extract(salt, ikm);
+        let prk2 = hkdf_extract(salt, ikm);
+        assert_eq!(prk1, prk2, "HKDF-Extract must be deterministic");
+    }
+
+    #[test]
+    fn test_hkdf_different_salt_different_prk() {
+        let prk1 = hkdf_extract(b"salt-A", b"ikm");
+        let prk2 = hkdf_extract(b"salt-B", b"ikm");
+        assert_ne!(prk1, prk2, "different salt should produce different PRK");
+    }
+
+    #[test]
+    fn test_hkdf_expand_deterministic() {
+        let prk = [0xABu8; 32];
+        let out1 = hkdf_expand(&prk, b"info", 32);
+        let out2 = hkdf_expand(&prk, b"info", 32);
+        assert_eq!(out1, out2, "HKDF-Expand must be deterministic");
+    }
+
+    #[test]
+    fn test_hkdf_expand_output_length() {
+        let prk = [0xABu8; 32];
+        for len in [1, 16, 32, 64, 128] {
+            let out = hkdf_expand(&prk, b"test", len);
+            assert_eq!(out.len(), len, "HKDF-Expand output length should be {len}");
+        }
+    }
+
+    #[test]
+    fn test_hkdf_full_roundtrip() {
+        let salt = b"m2m-hkdf-test";
+        let ikm = b"test-input-key-material";
+        let info = b"M2M-TEST";
+        let out = hkdf(salt, ikm, info, 32);
+        assert_eq!(out.len(), 32);
+        let out2 = hkdf(salt, ikm, info, 32);
+        assert_eq!(out, out2);
+    }
+
+    // ─── X3DH Tests ──────────────────────────────────────────
+
+    fn make_x3dh_bundle(ik_bob: &X25519IdentityKeypair) -> PrekeyBundle {
+        let spk = EphemeralKeypair::generate();
+        PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        }
+    }
+
+    #[test]
+    fn test_x3dh_initiate_and_respond_produce_same_key() {
+        let _ = init_sodiumoxide();
+        let ik_alice = X25519IdentityKeypair::generate();
+        let ik_bob = X25519IdentityKeypair::generate();
+        let ek_alice = EphemeralKeypair::generate();
+        let spk = EphemeralKeypair::generate();
+        let bundle = PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        };
+
+        let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
+        let bob_out = x3dh_respond(
+            &ik_bob, &spk, None,
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes(),
+        ).unwrap();
+
+        assert_eq!(alice_out.root_key, bob_out.root_key);
+        assert_eq!(alice_out.chain_key, bob_out.chain_key);
+    }
+
+    #[test]
+    fn test_x3dh_with_opk() {
+        let _ = init_sodiumoxide();
+        let ik_alice = X25519IdentityKeypair::generate();
+        let ik_bob = X25519IdentityKeypair::generate();
+        let ek_alice = EphemeralKeypair::generate();
+        let spk = EphemeralKeypair::generate();
+        let opk = EphemeralKeypair::generate();
+
+        let bundle = PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: Some(opk.public_key_bytes()),
+        };
+
+        let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
+        let bob_out = x3dh_respond(
+            &ik_bob, &spk, Some(&opk),
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes(),
+        ).unwrap();
+
+        assert_eq!(alice_out.root_key, bob_out.root_key);
+        assert_eq!(alice_out.chain_key, bob_out.chain_key);
+    }
+
+    #[test]
+    fn test_x3dh_wrong_identity_key_fails() {
+        let _ = init_sodiumoxide();
+        let ik_alice = X25519IdentityKeypair::generate();
+        let ik_bob = X25519IdentityKeypair::generate();
+        let ik_evil = X25519IdentityKeypair::generate();
+        let ek_alice = EphemeralKeypair::generate();
+        let spk = EphemeralKeypair::generate();
+
+        let bundle = PrekeyBundle {
+            identity_key: ik_evil.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        };
+
+        let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
+        let bob_out = x3dh_respond(
+            &ik_bob, &spk, None,
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes(),
+        ).unwrap();
+
+        assert_ne!(alice_out.root_key, bob_out.root_key);
+    }
+
+    #[test]
+    fn test_x3dh_wrong_signed_prekey_fails() {
+        let _ = init_sodiumoxide();
+        let ik_alice = X25519IdentityKeypair::generate();
+        let ik_bob = X25519IdentityKeypair::generate();
+        let ek_alice = EphemeralKeypair::generate();
+        let real_spk = EphemeralKeypair::generate();
+        let wrong_spk = EphemeralKeypair::generate();
+
+        let bundle = PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: real_spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        };
+
+        let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
+        let bob_out = x3dh_respond(
+            &ik_bob, &wrong_spk, None,
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes(),
+        ).unwrap();
+
+        assert_ne!(alice_out.root_key, bob_out.root_key);
+        assert_ne!(alice_out.chain_key, bob_out.chain_key);
+    }
+
+    #[test]
+    fn test_x3dh_without_opk_works() {
+        let _ = init_sodiumoxide();
+        let ik_alice = X25519IdentityKeypair::generate();
+        let ik_bob = X25519IdentityKeypair::generate();
+        let ek_alice = EphemeralKeypair::generate();
+        let spk = EphemeralKeypair::generate();
+
+        let bundle_no_opk = PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        };
+
+        let alice = x3dh_initiate(&ik_alice, &ek_alice, &bundle_no_opk).unwrap();
+        let bob = x3dh_respond(&ik_bob, &spk, None,
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes()).unwrap();
+        assert_eq!(alice.root_key, bob.root_key);
+        assert_eq!(alice.chain_key, bob.chain_key);
+    }
+
+    // ─── Double Ratchet Tests ────────────────────────────────
+
+    fn init_sodiumoxide() {
+        let _ = sodiumoxide::init();
+    }
+
+    fn make_dr_pair() -> (DoubleRatchet, DoubleRatchet) {
+        init_sodiumoxide();
+        let ik_alice = X25519IdentityKeypair::generate();
+        let ik_bob = X25519IdentityKeypair::generate();
+        let ek_alice = EphemeralKeypair::generate();
+        let spk = EphemeralKeypair::generate();
+        let bundle = PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        };
+        let x3dh_alice = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
+        let dh_ratchet_alice = EphemeralKeypair::generate();
+        let dh_ratchet_bob = EphemeralKeypair::generate();
+
+        let alice_dr = DoubleRatchet::new(
+            X3DHSessionKeys {
+                root_key: x3dh_alice.root_key,
+                chain_key: x3dh_alice.chain_key,
+            },
+            dh_ratchet_alice,
+            dh_ratchet_bob.public_key_bytes(),
+            true,
+        );
+
+        let bob_x3dh = x3dh_respond(&ik_bob, &spk, None,
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes()).unwrap();
+        let bob_dr = DoubleRatchet::new(
+            X3DHSessionKeys {
+                root_key: bob_x3dh.root_key,
+                chain_key: bob_x3dh.chain_key,
+            },
+            dh_ratchet_bob,
+            dh_ratchet_alice.public_key_bytes(),
+            false,
+        );
+
+        (alice_dr, bob_dr)
+    }
+
+    #[test]
+    fn test_dr_encrypt_decrypt_roundtrip() {
+        let (mut alice, _bob) = make_dr_pair();
+        let plaintext = b"Hello, Double Ratchet!";
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+        let (ratchet_key, msg_num, nonce, ciphertext) = alice
+            .encrypt(plaintext, &aad, false)
+            .unwrap();
+        let result = alice.decrypt(&ciphertext, &nonce, &aad, msg_num, ratchet_key.as_ref());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), plaintext);
+    }
+
+    #[test]
+    fn test_dr_sender_and_receiver_sync() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        for msg in [b"msg 1", b"msg 2", b"msg 3"] {
+            let (ratchet_key, msg_num, nonce, ciphertext) = alice
+                .encrypt(msg, &aad, false)
+                .unwrap();
+            let decrypted = bob.decrypt(&ciphertext, &nonce, &aad, msg_num, ratchet_key.as_ref())
+                .unwrap();
+            assert_eq!(&decrypted, msg);
+        }
+    }
+
+    #[test]
+    fn test_dh_ratchet_advances_keys() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        let (_, msg_num1, n1, c1) = alice.encrypt(b"before ratchet", &aad, false).unwrap();
+        let _ = bob.decrypt(&c1, &n1, &aad, msg_num1, None).unwrap();
+
+        let (rk, msg_num2, n2, c2) = alice.encrypt(b"after ratchet", &aad, true).unwrap();
+        assert!(rk.is_some());
+
+        let decrypted = bob.decrypt(&c2, &n2, &aad, msg_num2, rk.as_ref()).unwrap();
+        assert_eq!(&decrypted, b"after ratchet");
+    }
+
+    #[test]
+    fn test_message_number_gap() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        let results: Vec<_> = (0..3).map(|i| {
+            alice.encrypt(format!("msg {}", i).as_bytes(), &aad, false).unwrap()
+        }).collect();
+
+        let d0 = bob.decrypt(&results[0].2, &results[0].1, &aad,
+                            results[0].0.unwrap_or(0), None).unwrap();
+        assert_eq!(&d0, b"msg 0");
+
+        let d2 = bob.decrypt(&results[2].2, &results[2].1, &aad,
+                            results[2].0.unwrap_or(2), None).unwrap();
+        assert_eq!(&d2, b"msg 1");
+    }
+
+    #[test]
+    fn test_dr_multiple_ratchets() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        for i in 0..5 {
+            let do_ratchet = i % 2 == 0;
+            let (rk, msg_num, nonce, ciphertext) = alice
+                .encrypt(format!("msg {}", i).as_bytes(), &aad, do_ratchet)
+                .unwrap();
+            let decrypted = bob.decrypt(&ciphertext, &nonce, &aad, msg_num, rk.as_ref())
+                .unwrap();
+            assert_eq!(&decrypted, format!("msg {}", i).as_bytes());
+        }
+    }
+
+    #[test]
+    fn test_dr_should_ratchet_interval() {
+        let (mut dr, _) = make_dr_pair();
+        assert!(!dr.should_ratchet(100));
+
+        dr.send_message_number = 100;
+        assert!(dr.should_ratchet(100));
+        assert!(!dr.should_ratchet(200));
+        assert!(!dr.should_ratchet(0));
+    }
+
+    #[test]
+    fn test_dr_encrypt_no_send_chain_fails() {
+        let _ = init_sodiumoxide();
+        let x3dh = X3DHSessionKeys {
+            root_key: [0xAA; 32],
+            chain_key: [0xBB; 32],
+        };
+        let mut dr = DoubleRatchet::new(
+            x3dh,
+            EphemeralKeypair::generate(),
+            [0xCC; 32],
+            false,
+        );
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+        let result = dr.encrypt(b"test", &aad, false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_dr_decrypt_no_recv_chain_fails() {
+        let _ = init_sodiumoxide();
+        let x3dh = X3DHSessionKeys {
+            root_key: [0xAA; 32],
+            chain_key: [0xBB; 32],
+        };
+        let mut dr = DoubleRatchet::new(
+            x3dh,
+            EphemeralKeypair::generate(),
+            [0xCC; 32],
+            true,
+        );
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+        let result = dr.decrypt(b"ciphertext", b"nonce", &aad, 0, None);
+        assert!(result.is_err());
+    }
 }
