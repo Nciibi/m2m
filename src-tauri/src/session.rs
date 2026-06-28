@@ -997,7 +997,7 @@ mod session_tests {
         init_crypto();
         let mut s = Session::new();
         // No session keys, wrong state — operations should fail
-        let dummy: &[u8] = &[];
+        let _dummy: &[u8] = &[];
         let result = s.decrypt_message(&RawFrame {
             version: PROTOCOL_VERSION,
             packet_type: PacketType::EncryptedMessage,
@@ -1087,7 +1087,7 @@ mod session_tests {
         let eph2 = EphemeralKeypair::generate();
 
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1127,7 +1127,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1171,7 +1171,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1217,7 +1217,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1246,7 +1246,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
