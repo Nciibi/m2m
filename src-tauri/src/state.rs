@@ -81,6 +81,8 @@ pub struct AppState {
     pub identity: RwLock<Option<IdentityKeypair>>,
     /// X25519 identity keypair for X3DH key agreement.
     pub x25519_identity: RwLock<Option<crate::crypto::X25519IdentityKeypair>>,
+    /// Active signed prekey for the current invite (consumed by X3DH handshake).
+    pub active_signed_prekey: RwLock<Option<crate::crypto::EphemeralKeypair>>,
     /// Active peer connections, keyed by peer public key hex.
     pub connections: RwLock<HashMap<String, Arc<Mutex<PeerConnection>>>>,
     /// TCP listener address (if listening).
@@ -139,6 +141,7 @@ impl AppState {
         Self {
             identity: RwLock::new(None),
             x25519_identity: RwLock::new(None),
+            active_signed_prekey: RwLock::new(None),
             connections: RwLock::new(HashMap::new()),
             listen_addr: RwLock::new(None),
             incoming_tx: Mutex::new(None),

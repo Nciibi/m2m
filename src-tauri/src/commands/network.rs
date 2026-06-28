@@ -41,6 +41,20 @@ pub async fn create_invite(
         .as_ref()
         .ok_or("identity not initialized")?;
 
+    // ─── X3DH Prekey Bundle ───
+    let x25519 = state.x25519_identity.read().await;
+    let x25519_kp = x25519.as_ref()
+        .ok_or("X25519 identity not initialized")?;
+    // Generate a signed prekey for this invite
+    let spk = crate::crypto::EphemeralKeypair::generate();
+    let spk_pub = spk.public_key_bytes();
+    let spk_sig = kp.sign(&spk_pub);
+    // Store the signed prekey private key for incoming handshakes
+    {
+        let mut active_spk = state.active_signed_prekey.write().await;
+        *active_spk = Some(spk);
+    }
+
     let listen_addr: SocketAddr = address
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
@@ -210,8 +224,20 @@ pub async fn create_invite(
 
         all
     };
-    identity::create_invite(kp, &actual_address, validity_secs, one_time, invite_candidates)
-        .map_err(|e| format!("invite creation failed: {e}"))
+    identity::create_invite(
+        kp,
+        &actual_address,
+        validity_secs,
+        one_time,
+        invite_candidates,
+        Some(&crate::crypto::PrekeyBundle {
+            identity_key: x25519_kp.public_key_bytes(),
+            signed_prekey: spk_pub,
+            signed_prekey_sig: spk_sig,
+            one_time_prekey: None,
+        }),
+    )
+    .map_err(|e| format!("invite creation failed: {e}"))
 }
 
 /// Validate a received invite link.
@@ -325,7 +351,8 @@ async fn handle_incoming_connection(
         }
     };
 
-    if frame.packet_type != protocol::PacketType::HandshakeInit {
+    let is_x3dh = frame.packet_type == protocol::PacketType::X3DHHandshakeInit;
+    if !is_x3dh && frame.packet_type != protocol::PacketType::HandshakeInit {
         tracing::warn!("incoming connection sent non-handshake initial packet");
         let _ = network::send_error(
             &mut stream,
@@ -375,15 +402,43 @@ async fn handle_incoming_connection(
             *cand_state = all;
         }
 
-        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates).await {
-            tracing::warn!(error = %e, "handshake failed for incoming connection");
-            let _ = network::send_error(
-                &mut stream,
-                protocol::ErrorCode::HandshakeFailed,
-                "handshake failed",
-            )
-            .await;
-            return;
+        if is_x3dh {
+            // X3DH handshake path
+            let x25519 = state.x25519_identity.read().await;
+            let x25519_kp = match x25519.as_ref() {
+                Some(kp) => kp,
+                None => {
+                    tracing::error!("no X25519 identity for X3DH handshake");
+                    return;
+                }
+            };
+            let spk_lock = state.active_signed_prekey.read().await;
+            let spk = match spk_lock.as_ref() {
+                Some(spk) => spk,
+                None => {
+                    tracing::error!("no signed prekey for X3DH handshake");
+                    return;
+                }
+            };
+            if let Err(e) = session.handshake_as_responder_x3dh(
+                &mut stream, kp, x25519_kp, spk, &frame, wire_candidates,
+            ).await {
+                tracing::warn!(error = %e, "X3DH handshake failed for incoming connection");
+                let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, "x3dh handshake failed").await;
+                return;
+            }
+        } else {
+            // Legacy handshake path
+            if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates).await {
+                tracing::warn!(error = %e, "handshake failed for incoming connection");
+                let _ = network::send_error(
+                    &mut stream,
+                    protocol::ErrorCode::HandshakeFailed,
+                    "handshake failed",
+                )
+                .await;
+                return;
+            }
         }
     } // identity borrow dropped here
 
@@ -508,40 +563,73 @@ pub async fn connect_to_peer(
     let expected_peer_pub = signed.payload.identity_pub;
     let mut session = Session::new();
 
+    // Check if the invite contains an X3DH prekey bundle
+    let has_x3dh = signed.payload.x25519_identity_pub != [0u8; 32]
+        && signed.payload.signed_prekey != [0u8; 32]
+        && !signed.payload.signed_prekey_sig.is_empty();
+
+    if has_x3dh {
+        // Verify the signed prekey's Ed25519 signature
+        crate::crypto::verify_signature(
+            &expected_peer_pub,
+            &signed.payload.signed_prekey,
+            &signed.payload.signed_prekey_sig,
+        ).map_err(|_| "invalid signed prekey signature in invite".to_string())?;
+    }
+
+    let x25519 = state.x25519_identity.read().await;
+    let x25519_kp = x25519.as_ref();
+
     match role {
         hole_punch::Role::Initiator => {
-            // ── We connected to the peer ──
-            // Normal initiator flow: we send HandshakeInit first.
             tracing::debug!("hole-punch role: Initiator (outgoing connect won)");
-            session
-                .handshake_as_initiator(
-                    &mut stream,
-                    kp,
-                    &expected_peer_pub,
-                    our_candidates,
-                )
-                .await
-                .map_err(|e| format!("initiator handshake failed: {e}"))?;
+            if has_x3dh {
+                let xkp = x25519_kp.ok_or("X25519 key not initialized for X3DH")?;
+                let bundle = crate::crypto::PrekeyBundle {
+                    identity_key: signed.payload.x25519_identity_pub,
+                    signed_prekey: signed.payload.signed_prekey,
+                    signed_prekey_sig: signed.payload.signed_prekey_sig.clone(),
+                    one_time_prekey: signed.payload.one_time_prekey,
+                };
+                session
+                    .handshake_as_initiator_x3dh(
+                        &mut stream, kp, xkp, &expected_peer_pub, &bundle, our_candidates,
+                    )
+                    .await
+                    .map_err(|e| format!("X3DH initiator handshake failed: {e}"))?;
+            } else {
+                session
+                    .handshake_as_initiator(&mut stream, kp, &expected_peer_pub, our_candidates)
+                    .await
+                    .map_err(|e| format!("initiator handshake failed: {e}"))?;
+            }
         }
         hole_punch::Role::Responder => {
-            // ── Peer connected to us ──
-            // Read the HandshakeInit the peer already sent, then respond.
             tracing::debug!("hole-punch role: Responder (incoming accept won)");
             let frame = network::read_frame(&mut stream)
                 .await
                 .map_err(|e| format!("failed to read initial frame: {e}"))?;
-            if frame.packet_type != protocol::PacketType::HandshakeInit {
-                return Err(format!(
-                    "expected HandshakeInit, got {:?}",
-                    frame.packet_type
-                ));
-            }
-            session
-                .handshake_as_responder(&mut stream, kp, &frame, our_candidates)
-                .await
-                .map_err(|e| format!("responder handshake failed: {e}"))?;
 
-            // Verify the peer's identity matches the invite.
+            if frame.packet_type == protocol::PacketType::X3DHHandshakeInit {
+                let xkp = x25519_kp.ok_or("X25519 key not initialized for X3DH")?;
+                let spk_lock = state.active_signed_prekey.read().await;
+                let spk = spk_lock.as_ref()
+                    .ok_or("no signed prekey available for X3DH responder handshake")?;
+                session
+                    .handshake_as_responder_x3dh(
+                        &mut stream, kp, xkp, spk, &frame, our_candidates,
+                    )
+                    .await
+                    .map_err(|e| format!("X3DH responder handshake failed: {e}"))?;
+            } else if frame.packet_type == protocol::PacketType::HandshakeInit {
+                session
+                    .handshake_as_responder(&mut stream, kp, &frame, our_candidates)
+                    .await
+                    .map_err(|e| format!("responder handshake failed: {e}"))?;
+            } else {
+                return Err(format!("expected HandshakeInit or X3DHHandshakeInit, got {:?}", frame.packet_type));
+            }
+
             if session.peer_identity_pub != expected_peer_pub {
                 return Err("peer identity does not match invite".to_string());
             }

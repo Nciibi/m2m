@@ -51,12 +51,15 @@ fn now_unix_secs() -> u64 {
 /// - `address_hint`: IP:port or hostname:port where we're listening
 /// - `validity_secs`: how long the invite is valid
 /// - `one_time`: if true, invite can only be used once
+/// - `candidates`: network candidates for ICE-Lite
+/// - `prekey_bundle`: optional X3DH prekey bundle (identity_key, SPK, OPK)
 pub fn create_invite(
     identity: &IdentityKeypair,
     address_hint: &str,
     validity_secs: u64,
     one_time: bool,
     candidates: Vec<crate::protocol::WireCandidate>,
+    prekey_bundle: Option<&crate::crypto::PrekeyBundle>,
 ) -> Result<String, IdentityError> {
     if address_hint.len() > MAX_ADDRESS_HINT_LENGTH {
         return Err(IdentityError::AddressHintTooLong);
@@ -73,14 +76,17 @@ pub fn create_invite(
         flags |= INVITE_FLAG_ONE_TIME;
     }
 
-    // TODO: populate X3DH prekey fields from X25519 identity key (Phase 4)
+    let (x25519_pub, spk, spk_sig, opk) = match prekey_bundle {
+        Some(b) => (b.identity_key, b.signed_prekey, b.signed_prekey_sig.clone(), b.one_time_prekey),
+        None => ([0u8; 32], [0u8; 32], vec![], None),
+    };
     let payload = InvitePayload {
         version: PROTOCOL_VERSION,
         identity_pub: identity.public_key_bytes(),
-        x25519_identity_pub: identity.public_key_bytes(),
-        signed_prekey: identity.public_key_bytes(),
-        signed_prekey_sig: vec![],
-        one_time_prekey: None,
+        x25519_identity_pub: x25519_pub,
+        signed_prekey: spk,
+        signed_prekey_sig: spk_sig,
+        one_time_prekey: opk,
         address_hint: address_hint.to_string(),
         created_at: now,
         expires_at: now + validity_secs,
