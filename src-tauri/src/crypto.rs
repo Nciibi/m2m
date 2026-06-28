@@ -1177,7 +1177,7 @@ mod crypto_tests {
 
         let d2 = bob.decrypt(&results[2].2, &results[2].1, &aad,
                             results[2].0.unwrap_or(2), None).unwrap();
-        assert_eq!(&d2, b"msg 1");
+        assert_eq!(&d2, b"msg 2");
     }
 
     #[test]
