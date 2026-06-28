@@ -11,7 +11,7 @@
 ///
 /// ## Architecture
 ///
-/// ```
+/// ```text
 /// PortMapper::add_port_mapping(internal_port, lifetime)
 ///        │
 ///        ▼

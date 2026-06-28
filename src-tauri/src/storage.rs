@@ -502,3 +502,282 @@ pub struct ConversationSummary {
     pub retention_policy: String,
     pub message_count: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Helper: open a KeyStore on `:memory:` for test isolation.
+    fn mem_keystore() -> KeyStore {
+        KeyStore::open(Path::new(":memory:")).unwrap()
+    }
+
+    /// Helper: open a MessageStore on `:memory:` for test isolation.
+    fn mem_messagestore() -> MessageStore {
+        MessageStore::open(Path::new(":memory:")).unwrap()
+    }
+
+    // ─── KeyStore tests ────────────────────────────────────────
+
+    #[test]
+    fn test_store_and_load_identity() {
+        let store = mem_keystore();
+        let pub_key = vec![0xAA; 32];
+        let enc_pk = vec![0xBB; 64];
+        let nonce = vec![0xCC; 24];
+        let created = 1719446400i64;
+
+        store.store_identity(&pub_key, &enc_pk, &nonce, created).unwrap();
+
+        let (loaded_pub, loaded_enc, loaded_nonce) = store.load_identity().unwrap();
+        assert_eq!(loaded_pub, pub_key);
+        assert_eq!(loaded_enc, enc_pk);
+        assert_eq!(loaded_nonce, nonce);
+    }
+
+    #[test]
+    fn test_store_identity_overwrite() {
+        let store = mem_keystore();
+        store.store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000).unwrap();
+        store.store_identity(&[0xDD; 32], &[0xEE; 64], &[0xFF; 24], 2000).unwrap();
+
+        let (pub_key, enc_pk, nonce) = store.load_identity().unwrap();
+        assert_eq!(pub_key, vec![0xDD; 32]);
+        assert_eq!(enc_pk, vec![0xEE; 64]);
+        assert_eq!(nonce, vec![0xFF; 24]);
+    }
+
+    #[test]
+    fn test_store_and_load_public_key() {
+        let store = mem_keystore();
+        store.store_identity(&[0x11; 32], &[0x22; 64], &[0x33; 24], 1000).unwrap();
+
+        let pk = store.load_public_key().unwrap();
+        assert_eq!(pk, vec![0x11; 32]);
+    }
+
+    #[test]
+    fn test_has_identity_false_initially() {
+        let store = mem_keystore();
+        assert!(!store.has_identity().unwrap());
+    }
+
+    #[test]
+    fn test_has_identity_true_after_store() {
+        let store = mem_keystore();
+        store.store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000).unwrap();
+        assert!(store.has_identity().unwrap());
+    }
+
+    #[test]
+    fn test_is_vault_initialized_default_false() {
+        let store = mem_keystore();
+        assert!(!store.is_vault_initialized().unwrap());
+    }
+
+    #[test]
+    fn test_set_vault_initialized_roundtrip() {
+        let store = mem_keystore();
+        assert!(!store.is_vault_initialized().unwrap());
+        store.set_vault_initialized().unwrap();
+        assert!(store.is_vault_initialized().unwrap());
+    }
+
+    #[test]
+    fn test_key_not_found_on_empty_store() {
+        let store = mem_keystore();
+        let err = store.load_identity().unwrap_err();
+        assert!(matches!(err, StorageError::KeyNotFound));
+    }
+
+    #[test]
+    fn test_load_public_key_not_found() {
+        let store = mem_keystore();
+        let err = store.load_public_key().unwrap_err();
+        assert!(matches!(err, StorageError::KeyNotFound));
+    }
+
+    #[test]
+    fn test_upsert_peer_new() {
+        let store = mem_keystore();
+        store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Alice")).unwrap();
+
+        // Verify via has_identity (peers table is separate)
+        // We can't directly query, but upsert should succeed without error.
+        // load_public_key still fails because identity not stored
+        assert!(store.load_identity().is_err());
+    }
+
+    #[test]
+    fn test_upsert_peer_update_alias() {
+        let store = mem_keystore();
+        store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Alice")).unwrap();
+        // Upsert again with new alias — should update, not error
+        store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Bob")).unwrap();
+    }
+
+    #[test]
+    fn test_update_encrypted_private_key() {
+        let store = mem_keystore();
+        store.store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000).unwrap();
+        store.update_encrypted_private_key(&[0xDD; 64], &[0xEE; 24]).unwrap();
+
+        let (_, enc_pk, nonce) = store.load_identity().unwrap();
+        assert_eq!(enc_pk, vec![0xDD; 64]);
+        assert_eq!(nonce, vec![0xEE; 24]);
+    }
+
+    // ─── MessageStore tests ────────────────────────────────────
+
+    #[test]
+    fn test_message_store_roundtrip() {
+        let store = mem_messagestore();
+        let conv_id = "conv-001";
+        let peer_id = vec![0xAA; 32];
+
+        store.ensure_conversation(conv_id, &peer_id).unwrap();
+        store.store_message(
+            "msg-001", conv_id, "sent", &[0x01; 32], &[0x02; 24], 1000,
+        ).unwrap();
+
+        let messages = store.load_messages(conv_id, 10).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "msg-001");
+        assert_eq!(messages[0].direction, "sent");
+        assert_eq!(messages[0].content_encrypted, vec![0x01u8; 32]);
+        assert_eq!(messages[0].content_nonce, vec![0x02u8; 24]);
+        assert_eq!(messages[0].timestamp, 1000);
+    }
+
+    #[test]
+    fn test_store_multiple_messages_ordered() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+
+        for i in 0..5 {
+            store.store_message(
+                &format!("msg-{:03}", i), "conv-001", "received",
+                &[i as u8; 32], &[0xBB; 24], 1000 + i,
+            ).unwrap();
+        }
+
+        let messages = store.load_messages("conv-001", 10).unwrap();
+        assert_eq!(messages.len(), 5);
+        // Should be in ascending timestamp order
+        for (idx, msg) in messages.iter().enumerate() {
+            assert_eq!(msg.timestamp, 1000 + idx as i64);
+        }
+    }
+
+    #[test]
+    fn test_load_messages_limit() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+
+        for i in 0..10 {
+            store.store_message(
+                &format!("msg-{:03}", i), "conv-001", "sent",
+                &[i as u8; 32], &[0xBB; 24], 1000 + i,
+            ).unwrap();
+        }
+
+        let limited = store.load_messages("conv-001", 3).unwrap();
+        assert_eq!(limited.len(), 3);
+        // Most recent 3 messages (timestamps 1007, 1008, 1009)
+        assert_eq!(limited[0].timestamp, 1007);
+        assert_eq!(limited[1].timestamp, 1008);
+        assert_eq!(limited[2].timestamp, 1009);
+    }
+
+    #[test]
+    fn test_list_conversations() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-a", &[0x11; 32]).unwrap();
+        store.ensure_conversation("conv-b", &[0x22; 32]).unwrap();
+
+        store.store_message("m1", "conv-a", "sent", &[0x01; 32], &[0x02; 24], 1000).unwrap();
+        store.store_message("m2", "conv-a", "sent", &[0x03; 32], &[0x04; 24], 2000).unwrap();
+        store.store_message("m3", "conv-b", "received", &[0x05; 32], &[0x06; 24], 1500).unwrap();
+
+        let convos = store.list_conversations().unwrap();
+        assert_eq!(convos.len(), 2);
+
+        // conv-a has 2 messages, last_message_at=2000
+        // conv-b has 1 message, last_message_at=1500
+        let a = convos.iter().find(|c| c.id == "conv-a").unwrap();
+        assert_eq!(a.message_count, 2);
+        assert_eq!(a.last_message_at, Some(2000));
+
+        let b = convos.iter().find(|c| c.id == "conv-b").unwrap();
+        assert_eq!(b.message_count, 1);
+        assert_eq!(b.last_message_at, Some(1500));
+    }
+
+    #[test]
+    fn test_rename_conversation() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+
+        store.rename_conversation("conv-001", "My Chat").unwrap();
+        let conv = store.get_conversation("conv-001").unwrap().unwrap();
+        assert_eq!(conv.display_name, Some("My Chat".to_string()));
+    }
+
+    #[test]
+    fn test_delete_conversation_cascade() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+        store.store_message("msg-001", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000).unwrap();
+
+        // Verify it exists
+        assert!(store.get_conversation("conv-001").unwrap().is_some());
+        assert_eq!(store.load_messages("conv-001", 10).unwrap().len(), 1);
+
+        // Delete
+        store.delete_conversation("conv-001").unwrap();
+
+        // Verify gone
+        assert!(store.get_conversation("conv-001").unwrap().is_none());
+        assert_eq!(store.load_messages("conv-001", 10).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_export_conversation_messages() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+        store.store_message("m1", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000).unwrap();
+        store.store_message("m2", "conv-001", "received", &[0x03; 32], &[0x04; 24], 2000).unwrap();
+
+        let exported = store.export_conversation_messages("conv-001").unwrap();
+        assert_eq!(exported.len(), 2);
+    }
+
+    #[test]
+    fn test_set_peer_display_name() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+
+        store.set_peer_display_name("conv-001", "Bob").unwrap();
+        let conv = store.get_conversation("conv-001").unwrap().unwrap();
+        assert_eq!(conv.peer_display_name, Some("Bob".to_string()));
+    }
+
+    #[test]
+    fn test_set_conversation_retention() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
+
+        store.set_conversation_retention("conv-001", "auto_delete", Some(86400)).unwrap();
+        let conv = store.get_conversation("conv-001").unwrap().unwrap();
+        assert_eq!(conv.retention_policy, "auto_delete");
+        assert!(conv.auto_delete_at.is_some());
+    }
+
+    #[test]
+    fn test_get_conversation_not_found() {
+        let store = mem_messagestore();
+        let conv = store.get_conversation("nonexistent").unwrap();
+        assert!(conv.is_none());
+    }
+}
