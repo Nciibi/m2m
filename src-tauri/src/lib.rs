@@ -16,13 +16,13 @@
 
 mod candidate;
 mod commands;
-mod crypto;
+pub mod crypto;
 mod hole_punch;
 mod identity;
 mod local_addr;
 mod network;
 mod port_mapping;
-mod protocol;
+pub mod protocol;
 mod relay;
 mod session;
 mod state;

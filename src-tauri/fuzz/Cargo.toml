@@ -1,0 +1,29 @@
+[package]
+name = "m2m-fuzz"
+version = "0.0.1"
+description = "Fuzz targets for M2M protocol parsing"
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+m2m = { path = ".." }
+
+# Prevent this from interfering with workspace
+[workspace]
+
+[[bin]]
+name = "frame_parse"
+path = "fuzz_targets/frame_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "padding"
+path = "fuzz_targets/padding.rs"
+test = false
+doc = false
+bench = false
