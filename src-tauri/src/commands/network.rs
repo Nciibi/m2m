@@ -444,6 +444,7 @@ pub async fn connect_to_peer(
     let our_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
         address: c.address.clone(),
         candidate_type: c.candidate_type as u8,
+        relay_id: None,
     }).collect();
 
     // Update state with gathered candidates
