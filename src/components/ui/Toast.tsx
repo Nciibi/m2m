@@ -1,4 +1,6 @@
-interface ToastData {
+import { CheckIcon, CloseIcon, AlertTriangleIcon, InfoIcon } from "./Icons";
+
+export interface ToastData {
   id: string;
   message: string;
   type: "success" | "error" | "warning" | "info";
@@ -10,11 +12,11 @@ interface ToastContainerProps {
   onRemove: (id: string) => void;
 }
 
-const iconMap: Record<string, string> = {
-  success: "✅",
-  error: "❌",
-  warning: "⚠️",
-  info: "ℹ️",
+const iconMap: Record<string, React.ReactNode> = {
+  success: <CheckIcon size={16} color="var(--color-success)" />,
+  error: <CloseIcon size={16} color="var(--color-danger)" />,
+  warning: <AlertTriangleIcon size={16} color="var(--color-warning)" />,
+  info: <InfoIcon size={16} color="var(--color-accent-bright)" />,
 };
 
 const progressColors: Record<string, string> = {
@@ -41,7 +43,10 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
             className="toast__progress"
             style={{
               background: progressColors[t.type],
-              animation: `toastProgress ${(t.duration || 4000)}ms linear forwards`,
+              animationName: "toastProgress",
+              animationDuration: `${t.duration || 4000}ms`,
+              animationTimingFunction: "linear",
+              animationFillMode: "forwards",
             }}
           />
           <span className="toast__icon">{iconMap[t.type]}</span>
@@ -51,12 +56,10 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
             onClick={(e) => { e.stopPropagation(); onRemove(t.id); }}
             aria-label="Dismiss notification"
           >
-            ✕
+            <CloseIcon size={14} />
           </button>
         </div>
       ))}
     </div>
   );
 }
-
-export type { ToastData };
