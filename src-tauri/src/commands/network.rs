@@ -776,11 +776,7 @@ pub fn spawn_receive_loop(
             let conns = hb_state.connections.read().await;
             if let Some(conn_arc) = conns.get(&hb_peer) {
                 let mut conn = conn_arc.lock().await;
-                match crate::network::write_frame(
-                    &mut conn.write_half,
-                    crate::protocol::PacketType::Heartbeat,
-                    &[],
-                ).await {
+                match crate::network::send_heartbeat(&mut conn.write_half).await {
                     Ok(_) => tracing::trace!(peer = %hb_peer, "heartbeat sent"),
                     Err(e) => {
                         tracing::info!(peer = %hb_peer, error = %e, "heartbeat failed — disconnecting");

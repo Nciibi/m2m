@@ -146,21 +146,13 @@ impl RelayConfig {
 
 /// Current relay connection state (for frontend diagnostics).
 #[derive(Debug, Clone, serde::Serialize)]
+#[derive(Default)]
 pub struct RelayState {
     pub connected: bool,
     pub relay_id: Option<String>,
     pub error: Option<String>,
 }
 
-impl Default for RelayState {
-    fn default() -> Self {
-        Self {
-            connected: false,
-            relay_id: None,
-            error: None,
-        }
-    }
-}
 
 // ─── Frame I/O ─────────────────────────────────────────────────────────────────
 

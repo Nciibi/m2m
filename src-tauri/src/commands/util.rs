@@ -179,7 +179,7 @@ fn detect_sequential_penalty(passphrase: &str) -> f64 {
     }
     // Each sequential run reduces entropy
     // A 4+ run is worth ~8 bits of deduction
-    let deduction = (seq_runs as f64) * 0.15 + (longest_run as f64).max(3.0) as f64 * 0.05;
+    let deduction = (seq_runs as f64) * 0.15 + (longest_run as f64).max(3.0) * 0.05;
     (1.0 - deduction).max(0.3)
 }
 

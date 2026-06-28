@@ -393,10 +393,11 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     Ok(stream)
 }
 
-/// Send a heartbeat packet (reserved for future heartbeating).
-#[allow(dead_code)]
-pub async fn send_heartbeat(stream: &mut TcpStream) -> Result<(), NetworkError> {
-    write_frame(stream, PacketType::Heartbeat, &[]).await
+/// Send a heartbeat packet (works with any AsyncWrite).
+pub async fn send_heartbeat<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+) -> Result<(), NetworkError> {
+    write_frame(writer, PacketType::Heartbeat, &[]).await
 }
 
 /// Send a heartbeat acknowledgment (works with any AsyncWrite).

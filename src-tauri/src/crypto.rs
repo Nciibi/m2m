@@ -213,7 +213,7 @@ pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8>
     use hmac::Mac;
     let mut result = Vec::with_capacity(length);
     let mut t: Vec<u8> = Vec::new();
-    for i in 1u8..=((length + 31) / 32) as u8 {
+    for i in 1u8..=length.div_ceil(32) as u8 {
         let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(prk)
             .expect("HMAC accepts any key length");
         mac.update(&t);
@@ -317,7 +317,7 @@ pub struct X3DHSessionKeys {
 /// Caller MUST verify `bundle.signed_prekey_sig` with the peer's Ed25519 key first.
 pub fn x3dh_initiate(
     our_identity: &X25519IdentityKeypair,  // IK_A
-    our_ephemeral: &EphemeralKeypair,      // EK_A
+    _our_ephemeral: &EphemeralKeypair,      // EK_A
     their_bundle: &PrekeyBundle,           // IK_B, SPK_B, [OPK_B]
 ) -> Result<X3DHSessionKeys, CryptoError> {
     // DH1 = DH(IK_A, SPK_B)
@@ -599,18 +599,18 @@ impl DoubleRatchet {
 
     /// Check if we should perform a DH ratchet (based on message count).
     pub fn should_ratchet(&self, interval: u64) -> bool {
-        interval > 0 && self.send_message_number > 0 && self.send_message_number % interval == 0
+        interval > 0 && self.send_message_number > 0 && self.send_message_number.is_multiple_of(interval)
     }
 
     /// Generate a new DH ratchet keypair and return the public key.
     pub fn generate_ratchet_key(&mut self) -> [u8; 32] {
         let new_kp = EphemeralKeypair::generate();
-        let pub_key = new_kp.public_key_bytes();
+        
         // In a full implementation we'd store new_kp as our_ratchet_keypair.
         // For now, we just return the public key — the caller embeds it in the header.
         // The actual ratchet happens on the SEND side when encrypt() is called
         // with embed_ratchet_key = Some(new_pub).
-        pub_key
+        new_kp.public_key_bytes()
     }
 }
 
