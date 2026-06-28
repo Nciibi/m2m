@@ -522,6 +522,8 @@ impl DoubleRatchet {
     }
 
     /// Perform a DH ratchet: advance root key using a new DH shared secret.
+    ///
+    /// Clears the skipped message key cache since the receiving chain is reset.
     fn dh_ratchet_step(&mut self, remote_pub: &[u8; 32]) -> Result<(), CryptoError> {
         let shared = self.our_ratchet_keypair.diffie_hellman(remote_pub)?;
         let out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
@@ -534,6 +536,8 @@ impl DoubleRatchet {
         self.recv_chain_key = Some(new_chain);
         self.their_ratchet_pub = *remote_pub;
         self.recv_message_number = 0;
+        // Clear skipped keys — they belong to the old receiving chain
+        self.skipped_keys.clear();
         Ok(())
     }
 
