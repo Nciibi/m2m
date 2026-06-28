@@ -80,6 +80,7 @@ impl Session {
             peer_identity_pub: [0u8; 32],
             peer_verified: false,
             session_keys: None,
+            ratchet: None,
             tx_counter: initial_counter,
             rx_high_water_mark: initial_counter,
             established_at: 0,
