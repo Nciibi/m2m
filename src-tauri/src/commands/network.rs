@@ -314,6 +314,7 @@ async fn handle_incoming_connection(
         let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
             address: c.address.clone(),
             candidate_type: c.candidate_type as u8,
+            relay_id: None,
         }).collect();
 
         // Update state with gathered candidates
