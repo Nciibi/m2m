@@ -419,6 +419,9 @@ fn x3dh_respond_raw(
 
 // ─── Double Ratchet ───────────────────────────────────────────────────────────
 
+/// Result of DoubleRatchet::encrypt: (optional_ratchet_key, message_number, nonce, ciphertext).
+type EncryptOutput = (Option<[u8; 32]>, u64, Vec<u8>, Vec<u8>);
+
 /// A single-use message key derived from a chain key.
 /// Zeroized on drop to ensure key material doesn't linger in memory.
 pub struct MessageKey(pub [u8; 32]);
