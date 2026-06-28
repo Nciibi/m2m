@@ -162,7 +162,7 @@ pub async fn unlock_vault(
         if vault_was_initialized {
             // Case 3: Normal unlock — decrypt with Argon2id passphrase key
             let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, storage_key.as_bytes())
+            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &storage_key)
                 .map_err(|_| "incorrect passphrase or corrupted data".to_string())?;
 
             let mut sk_arr = [0u8; 64];
@@ -187,7 +187,7 @@ pub async fn unlock_vault(
 
             // Re-encrypt with the new passphrase-derived key
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, new_key.as_bytes())
+            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
 
             key_store
@@ -214,7 +214,7 @@ pub async fn unlock_vault(
         let sk_bytes = kp.secret_key_bytes();
 
         let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-        let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, storage_key.as_bytes())
+        let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key)
             .map_err(|e| format!("failed to encrypt identity: {e}"))?;
 
         let now = chrono::Utc::now().timestamp();
