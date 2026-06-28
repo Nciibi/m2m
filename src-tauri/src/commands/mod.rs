@@ -8,6 +8,7 @@ pub mod chat;
 pub mod files;
 pub mod forwards;
 pub mod network;
+pub mod relay;
 pub mod settings;
 pub mod util;
 pub mod vault;

@@ -34,8 +34,6 @@ use tokio::time;
 use thiserror::Error;
 
 use crate::candidate;
-use crate::crypto;
-use crate::hole_punch::{Role, StrategyResult};
 use crate::network;
 use crate::protocol::{self, PacketType, WireCandidate};
 use crate::session::Session;
@@ -46,32 +44,20 @@ use crate::commands::util;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/// Default relay server port (IANA-registered TURN port, common convention).
-pub const DEFAULT_RELAY_PORT: u16 = 3478;
-
 /// Timeout for TCP connection to the relay server.
 const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Timeout for reading a relay control frame (REGISTERED, CONNECTED, etc.).
 const RELAY_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Relay ID length in bytes (4 bytes = 8 hex chars, 32-bit space).
-const RELAY_ID_BYTES: usize = 4;
-
-/// Maximum relay registration idle time (5 minutes) before server drops it.
-pub const RELAY_IDLE_TIMEOUT_SECS: u64 = 300;
-
-/// Keepalive interval sent by the relay client (30s — keeps NAT/reverse-proxy bindings alive).
-const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
-
-/// Length-prefix size (same as M2M protocol).
-const LENGTH_PREFIX_SIZE: usize = 4;
-
 /// Per-byte read timeout for Slowloris protection (same as network.rs).
 const PER_BYTE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Maximum relay frame body size (64 KiB — generous for control messages).
 const MAX_RELAY_BODY_SIZE: u32 = 65536;
+
+/// Length-prefix size (same as M2M protocol).
+const LENGTH_PREFIX_SIZE: usize = 4;
 
 // ─── Error Types ───────────────────────────────────────────────────────────────
 
@@ -110,6 +96,7 @@ pub enum RelayError {
 pub enum RelayRequest {
     Register = 0x01,
     Connect = 0x02,
+    #[allow(dead_code)]
     Keepalive = 0x03,
 }
 
@@ -177,10 +164,12 @@ impl Default for RelayState {
 
 // ─── Frame I/O ─────────────────────────────────────────────────────────────────
 
-/// Read exactly one relay frame from a TCP stream.
+/// Read exactly one relay frame from an async reader.
 ///
 /// Same Slowloris-resistant per-byte timeout pattern as `network::read_frame`.
-async fn read_relay_frame(stream: &mut TcpStream) -> Result<RelayFrame, RelayError> {
+async fn read_relay_frame<R: AsyncReadExt + Unpin>(
+    stream: &mut R,
+) -> Result<RelayFrame, RelayError> {
     // Read 4-byte length prefix, per-byte timeout
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     let mut pos = 0;
@@ -226,9 +215,9 @@ async fn read_relay_frame(stream: &mut TcpStream) -> Result<RelayFrame, RelayErr
     })
 }
 
-/// Write a relay frame to a TCP stream.
-async fn write_relay_frame(
-    stream: &mut TcpStream,
+/// Write a relay frame to an async writer.
+async fn write_relay_frame<W: AsyncWriteExt + Unpin>(
+    stream: &mut W,
     msg_type: u8,
     body: &[u8],
 ) -> Result<(), RelayError> {
@@ -252,8 +241,8 @@ async fn write_relay_frame(
 }
 
 /// Expect a specific response type from the relay server.
-async fn expect_relay_response(
-    stream: &mut TcpStream,
+async fn expect_relay_response<R: AsyncReadExt + Unpin>(
+    stream: &mut R,
     expected: RelayResponse,
 ) -> Result<Vec<u8>, RelayError> {
     let frame = time::timeout(RELAY_FRAME_TIMEOUT, read_relay_frame(stream))
@@ -278,12 +267,6 @@ async fn expect_relay_response(
 }
 
 // ─── Relay ID Generation ───────────────────────────────────────────────────────
-
-/// Generate a random relay ID (hex-encoded 4 bytes = 8 chars).
-fn generate_relay_id() -> String {
-    let bytes = crypto::random_bytes(RELAY_ID_BYTES);
-    hex::encode(bytes)
-}
 
 // ─── Registration ──────────────────────────────────────────────────────────────
 
@@ -312,7 +295,7 @@ pub async fn register(config: &RelayConfig) -> Result<(TcpStream, String), Relay
 
     // Send REGISTER with optional auth token as body
     let auth_bytes = config.auth_token.as_bytes();
-    write_relay_frame(stream.by_ref(), RelayRequest::Register as u8, auth_bytes).await?;
+    write_relay_frame(&mut stream, RelayRequest::Register as u8, auth_bytes).await?;
 
     // Expect REGISTERED response
     let body = expect_relay_response(&mut stream, RelayResponse::Registered).await?;
@@ -361,7 +344,7 @@ pub async fn connect_via_relay(
     let mut body = vec![id_len];
     body.extend_from_slice(&id_bytes[..id_len as usize]);
 
-    write_relay_frame(stream.by_ref(), RelayRequest::Connect as u8, &body).await?;
+    write_relay_frame(&mut stream, RelayRequest::Connect as u8, &body).await?;
 
     // Expect CONNECTED response
     expect_relay_response(&mut stream, RelayResponse::Connected).await?;
@@ -567,81 +550,6 @@ async fn handle_relay_incoming_with_frame(
     crate::commands::network::spawn_receive_loop(app_handle, state, read_half, peer_key_hex);
 }
 
-// ─── Happy Eyeballs Relay Runner ──────────────────────────────────────────────
-
-/// Run the relay strategy during Happy Eyeballs (called by hole_punch.rs).
-///
-/// Connects to the relay server, requests bridge to the peer's relay_id,
-/// and returns a StrategyResult if successful.
-pub async fn run_relay_strategy(
-    relay_addr: SocketAddr,
-    peer_relay_id: &str,
-) -> Result<StrategyResult, crate::hole_punch::ConnectionError> {
-    let start = std::time::Instant::now();
-
-    tracing::debug!(
-        relay = %relay_addr,
-        peer_relay_id = %peer_relay_id,
-        "relay strategy: connecting"
-    );
-
-    let stream = connect_via_relay(relay_addr, peer_relay_id)
-        .await
-        .map_err(|e| {
-            tracing::warn!(relay = %relay_addr, error = %e, "relay strategy failed");
-            crate::hole_punch::ConnectionError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionRefused,
-                e.to_string(),
-            ))
-        })?;
-
-    tracing::info!(
-        relay = %relay_addr,
-        latency = ?start.elapsed(),
-        "relay strategy succeeded"
-    );
-
-    Ok(StrategyResult {
-        stream,
-        remote_addr: relay_addr,
-        role: Role::Initiator,
-        strategy_name: "relay",
-        latency: start.elapsed(),
-    })
-}
-
-// ─── Keepalive Task ────────────────────────────────────────────────────────────
-
-/// Send keepalive frames on a registered relay connection to prevent timeout.
-///
-/// Should be spawned as a background task after successful registration.
-/// Stops when the stream becomes unwritable or the task is cancelled.
-pub async fn run_keepalive(mut stream: TcpStream) {
-    loop {
-        time::sleep(KEEPALIVE_INTERVAL).await;
-
-        if let Err(e) = write_relay_frame(
-            &mut stream,
-            RelayRequest::Keepalive as u8,
-            &[],
-        )
-        .await
-        {
-            tracing::warn!(error = %e, "relay keepalive failed");
-            return;
-        }
-
-        // Expect PONG
-        match expect_relay_response(&mut stream, RelayResponse::Pong).await {
-            Ok(_) => tracing::trace!("relay keepalive ok"),
-            Err(e) => {
-                tracing::warn!(error = %e, "relay keepalive: no pong");
-                return;
-            }
-        }
-    }
-}
-
 // ─── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -732,13 +640,6 @@ mod tests {
             Err(RelayError::ServerError { code, .. }) => assert_eq!(code, 1),
             other => panic!("expected ServerError, got {:?}", other),
         }
-    }
-
-    #[test]
-    fn test_relay_id_format() {
-        let id = generate_relay_id();
-        assert_eq!(id.len(), RELAY_ID_BYTES * 2); // hex encoding doubles length
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]

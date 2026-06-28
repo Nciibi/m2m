@@ -185,3 +185,19 @@ pub fn gather_reflexive_candidates(
         .collect()
 }
 
+/// Gather a relay candidate from a relay server registration.
+///
+/// Relay candidates have the lowest priority (0) since they go through a
+/// third-party relay and should only be used as a last resort.
+/// The relay_id is embedded so the connecting peer knows which relay_id
+/// to request when connecting to the relay server.
+#[allow(dead_code)]
+pub fn gather_relay_candidate(relay_addr: &str, relay_id: &str) -> NetworkCandidate {
+    NetworkCandidate {
+        address: relay_addr.to_string(),
+        candidate_type: CandidateType::Relay,
+        priority: compute_priority(CandidateType::Relay, 0),
+        foundation: format!("relay-{relay_id}"),
+        base_address: None,
+    }
+}

@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 use zeroize::Zeroizing;
 
 use crate::network;
+use crate::relay;
 use crate::stun;
 
 use crate::crypto::IdentityKeypair;
@@ -124,6 +125,11 @@ pub struct AppState {
     /// User-configured manual port forwards (stored in state, not persisted).
     /// The UI manages this list; each entry becomes a candidate in invites.
     pub manual_forwards: RwLock<Vec<ManualForward>>,
+    /// Relay server configuration (optional).
+    /// When set, relay candidates are included in invites as a fallback.
+    pub relay_config: RwLock<Option<relay::RelayConfig>>,
+    /// Current relay connection state (for frontend diagnostics).
+    pub relay_state: RwLock<relay::RelayState>,
 }
 
 impl AppState {
@@ -151,6 +157,8 @@ impl AppState {
             private_mode: RwLock::new(false),
             connection_limiter: network::ConnectionLimiter::new(),
             manual_forwards: RwLock::new(Vec::new()),
+            relay_config: RwLock::new(None),
+            relay_state: RwLock::new(relay::RelayState::default()),
         }
     }
 

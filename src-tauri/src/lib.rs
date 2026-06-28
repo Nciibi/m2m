@@ -23,6 +23,7 @@ mod local_addr;
 mod network;
 mod port_mapping;
 mod protocol;
+mod relay;
 mod session;
 mod state;
 mod storage;
@@ -93,6 +94,9 @@ pub fn run() {
             commands::forwards::add_manual_forward,
             commands::forwards::remove_manual_forward,
             commands::forwards::reorder_manual_forwards,
+            commands::relay::get_relay_config,
+            commands::relay::set_relay_config,
+            commands::relay::get_relay_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");

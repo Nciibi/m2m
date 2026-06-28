@@ -289,7 +289,8 @@ async fn handle_connect(
             // The reader task will handle sending CONNECTED to both and proxying
             if reg.bridge_tx.send(stream).is_err() {
                 tracing::warn!(relay_id = %relay_id, "registration reader already closed");
-                send_error(&mut stream, 7, "registration target disconnected").await;
+                // stream was moved into the channel and the receiver was dropped,
+                // so there's nothing left to send an error on — just log.
             }
         }
         None => {
@@ -361,16 +362,20 @@ async fn main() {
                 let state = state.clone();
                 let auth = auth_token.clone();
                 tokio::spawn(async move {
-                    // Read the first frame to determine client's intent
+                    let mut stream = stream;
+                    // Read the first frame to determine client's intent.
                     match read_frame(&mut stream).await {
                         Ok((msg_type, body)) => {
+                            // Handle unknown types before moving stream.
+                            if msg_type != 0x01 && msg_type != 0x02 {
+                                tracing::warn!(peer = %peer_addr, msg_type, "unknown request type");
+                                let _ = send_error(&mut stream, 6, &format!("unknown type {msg_type}")).await;
+                                return;
+                            }
                             match msg_type {
                                 0x01 => handle_register(stream, peer_addr, body, state, &auth).await,
                                 0x02 => handle_connect(stream, peer_addr, body, state).await,
-                                other => {
-                                    tracing::warn!(peer = %peer_addr, msg_type = other, "unknown request");
-                                    let _ = send_error(&mut stream, 6, &format!("unknown type {other}")).await;
-                                }
+                                _ => unreachable!(),
                             }
                         }
                         Err(e) => {

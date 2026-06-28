@@ -15,6 +15,7 @@ use crate::crypto;
 use crate::hole_punch;
 use crate::identity;
 use crate::network;
+use crate::relay;
 use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
 use crate::state::{AppState, PeerConnection, IncomingFileTransfer};
@@ -29,6 +30,7 @@ use super::{ConnectionEvent, ConnectionInfo, FileRequestEvent, InviteInfo, Messa
 /// In private mode, the public IP is NOT included — only the local address.
 #[tauri::command]
 pub async fn create_invite(
+    app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     address: String,
     validity_minutes: u64,
@@ -118,6 +120,46 @@ pub async fn create_invite(
         None
     };
 
+    // ─── Relay Registration ───
+    // If a relay server is configured, register to get a relay_id and add
+    // a relay candidate as a fallback. The relay stream is passed to a
+    // background listener task that waits for incoming bridges.
+    let mut relay_registered_id: Option<String> = None;
+    let mut relay_addr_str: Option<String> = None;
+    if !private_mode {
+        let relay_cfg = state.relay_config.read().await;
+        if let Some(ref config) = *relay_cfg {
+            match relay::register(config).await {
+                Ok((relay_stream, rid)) => {
+                    tracing::info!(relay_id = %rid, relay = %config.addr_str(), "relay registered for invite");
+
+                    // Spawn the relay listener task
+                    let state_clone = state.inner().clone();
+                    let app = app_handle.clone();
+                    tokio::spawn(async move {
+                        relay::wait_for_bridge(relay_stream, state_clone, app).await;
+                    });
+
+                    // Update relay state
+                    {
+                        let mut rs = state.relay_state.write().await;
+                        *rs = relay::RelayState {
+                            connected: true,
+                            relay_id: Some(rid.clone()),
+                            error: None,
+                        };
+                    }
+
+                    relay_registered_id = Some(rid);
+                    relay_addr_str = Some(config.addr_str());
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "relay registration failed, continuing without relay");
+                }
+            }
+        }
+    }
+
     let invite_candidates: Vec<protocol::WireCandidate> = {
         let candidates_state = state.candidates.read().await;
         let mut all: Vec<protocol::WireCandidate> = candidates_state
@@ -154,6 +196,16 @@ pub async fn create_invite(
                     relay_id: None,
                 });
             }
+        }
+
+        // Add relay candidate if registration succeeded.
+        if let (Some(ref addr), Some(ref rid)) = (relay_addr_str, relay_registered_id) {
+            all.push(protocol::WireCandidate {
+                address: addr.clone(),
+                candidate_type: 3,
+                relay_id: Some(rid.clone()),
+            });
+            tracing::debug!(relay_addr = %addr, relay_id = %rid, "relay candidate added to invite");
         }
 
         all
@@ -616,7 +668,7 @@ pub async fn get_listen_address(
 
 /// Spawn an async task that reads incoming frames from a peer
 /// and emits Tauri events for the React frontend.
-fn spawn_receive_loop(
+pub fn spawn_receive_loop(
     app_handle: AppHandle,
     state: Arc<AppState>,
     mut read_half: tokio::net::tcp::OwnedReadHalf,
