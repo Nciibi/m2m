@@ -7,10 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite};
 use zeroize::Zeroize;
 
-use crate::crypto::{self, EphemeralKeypair, IdentityKeypair, SessionKeys};
+use crate::crypto::{self, DoubleRatchet, EphemeralKeypair, IdentityKeypair, SessionKeys,
+    X25519IdentityKeypair};
 use crate::network::{self, ConnectionState, RawFrame};
 use crate::protocol::{
-    self, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
+    self, DRHeader, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
     MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
     FileTransferRequestData, FileTransferChunkData, FileTransferCompleteData,
     ConversationMetaData, WireCandidate, MAX_FILE_CHUNK_SIZE,
@@ -44,8 +45,10 @@ pub struct Session {
     pub peer_identity_pub: [u8; 32],
     /// Whether the peer's fingerprint has been verified out-of-band.
     pub peer_verified: bool,
-    /// Session keys for encryption/decryption.
+    /// Session keys for encryption/decryption (legacy, pre-X3DH).
     session_keys: Option<SessionKeys>,
+    /// Double Ratchet state (X3DH+DR sessions).
+    ratchet: Option<DoubleRatchet>,
     /// Outgoing message counter (monotonically increasing).
     tx_counter: u64,
     /// Highest received counter (for replay protection).

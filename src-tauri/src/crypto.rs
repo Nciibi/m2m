@@ -505,30 +505,33 @@ impl DoubleRatchet {
 
     /// Encrypt a message: derive message key, encrypt, advance chain.
     ///
-    /// Returns (message_number, nonce, ciphertext).
-    /// If `embed_ratchet_key` is Some, the provided DH ratchet key is embedded
-    /// in the message header so the other side can advance the root key.
+    /// If `do_ratchet` is true, generates a new DH ratchet keypair, advances
+    /// the root key, and embeds the new public key in the returned header.
+    ///
+    /// Returns (ratchet_key_pub_opt, message_number, nonce, ciphertext).
     pub fn encrypt(
         &mut self,
         plaintext: &[u8],
         aad: &[u8],
-        embed_ratchet_key: Option<[u8; 32]>,
-    ) -> Result<(u64, Vec<u8>, Vec<u8>), CryptoError> {
-        // If we have a new ratchet key to send, do a DH ratchet first
-        if let Some(new_ratchet_pub) = embed_ratchet_key {
-            let shared = self.our_ratchet_keypair.diffie_hellman(&self.their_ratchet_pub)?;
+        do_ratchet: bool,
+    ) -> Result<(Option<[u8; 32]>, u64, Vec<u8>, Vec<u8>), CryptoError> {
+        let mut ratchet_pub = None;
+        if do_ratchet {
+            // Generate a NEW DH ratchet keypair for break-in recovery
+            let new_kp = EphemeralKeypair::generate();
+            let new_pub = new_kp.public_key_bytes();
+            // DH(new_sk, their_old_pk) — the sender advances with their NEW key
+            let shared = new_kp.diffie_hellman(&self.their_ratchet_pub)?;
             let out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
             let mut new_root = [0u8; 32];
             let mut new_chain = [0u8; 32];
             new_root.copy_from_slice(&out[..32]);
             new_chain.copy_from_slice(&out[32..]);
             self.root_key = new_root;
-            // New chain key goes to the sending chain (we're sending after DH ratchet)
             self.send_chain_key = Some(new_chain);
             self.send_message_number = 0;
-            // Update our keypair to the new one
-            // Note: the caller provides the new public key; we keep our existing private key.
-            // In a full implementation, we'd generate a new keypair here.
+            self.our_ratchet_keypair = new_kp;
+            ratchet_pub = Some(new_pub);
         }
 
         let send_chain = self.send_chain_key
@@ -549,7 +552,7 @@ impl DoubleRatchet {
         // Zeroize the message key after use (drop does this, but be explicit)
         drop(msg_key);
 
-        Ok((msg_num, nonce_vec, ciphertext))
+        Ok((ratchet_pub, msg_num, nonce_vec, ciphertext))
     }
 
     /// Decrypt a message: derive message key, decrypt, advance chain.
