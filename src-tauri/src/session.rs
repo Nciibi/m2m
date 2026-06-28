@@ -287,6 +287,188 @@ impl Session {
         Ok(())
     }
 
+    /// Execute the X3DH + Double Ratchet handshake as the initiator.
+    ///
+    /// The peer's prekey bundle is extracted from the invite by the caller.
+    /// The caller MUST have verified `bundle.signed_prekey_sig` against the peer's
+    /// Ed25519 identity key before calling this.
+    pub async fn handshake_as_initiator_x3dh<S: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut S,
+        identity: &IdentityKeypair,
+        x25519_identity: &X25519IdentityKeypair,
+        expected_peer_pub: &[u8; 32],
+        peer_bundle: &crate::crypto::PrekeyBundle,
+        local_candidates: Vec<WireCandidate>,
+    ) -> Result<(), SessionError> {
+        self.state = ConnectionState::Handshaking;
+        self.our_candidates = local_candidates.clone();
+
+        let ek_a = EphemeralKeypair::generate();
+        let now = now_unix_secs();
+
+        let x3dh_out = crate::crypto::x3dh_initiate(x25519_identity, &ek_a, peer_bundle)
+            .map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
+
+        let dh_ratchet = EphemeralKeypair::generate();
+
+        let mut sign_data = Vec::new();
+        sign_data.extend_from_slice(&ek_a.public_key_bytes());
+        sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
+        sign_data.extend_from_slice(&now.to_be_bytes());
+        let signature = identity.sign(&sign_data);
+
+        let init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: ek_a.public_key_bytes(),
+            identity_pub: identity.public_key_bytes(),
+            x25519_identity_pub: x25519_identity.public_key_bytes(),
+            used_opk: None,
+            timestamp: now,
+            signature,
+            candidates: local_candidates,
+        };
+        let init_bytes = protocol::serialize(&init)?;
+        network::write_frame(stream, PacketType::X3DHHandshakeInit, &init_bytes).await?;
+
+        let resp_frame = network::read_frame(stream).await?;
+        if resp_frame.packet_type != PacketType::X3DHHandshakeResponse {
+            return Err(SessionError::HandshakeFailed(format!(
+                "expected X3DHHandshakeResponse, got {:?}", resp_frame.packet_type
+            )));
+        }
+        let response: HandshakeResponse = protocol::deserialize(&resp_frame.body)?;
+
+        if response.version != PROTOCOL_VERSION {
+            return Err(SessionError::HandshakeFailed("version mismatch".to_string()));
+        }
+        if response.identity_pub != *expected_peer_pub {
+            return Err(SessionError::HandshakeFailed("peer identity mismatch".to_string()));
+        }
+        let mut peer_sign_data = Vec::new();
+        peer_sign_data.extend_from_slice(&response.ephemeral_pub);
+        peer_sign_data.extend_from_slice(&response.x25519_identity_pub);
+        peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes());
+        crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
+            .map_err(|_| SessionError::HandshakeFailed("peer signature invalid".to_string()))?;
+
+        // Initialize Double Ratchet
+        self.ratchet = Some(DoubleRatchet::new(
+            x3dh_out, dh_ratchet, response.ephemeral_pub, true,
+        ));
+
+        // Send HandshakeComplete encrypted with Double Ratchet
+        let verify_data = b"m2m-x3dh-handshake-v1";
+        let aad = [PacketType::X3DHComplete.to_byte()];
+        let (ratchet_key, msg_num, nonce, ciphertext) = self.ratchet.as_mut().unwrap()
+            .encrypt(verify_data, &aad, false)?;
+
+        let complete = EncryptedEnvelope {
+            nonce,
+            counter: 0,
+            ciphertext,
+            dr_header: Some(DRHeader {
+                ratchet_key,
+                previous_chain_length: 0,
+                message_number: msg_num,
+            }),
+        };
+        let complete_bytes = protocol::serialize(&complete)?;
+        network::write_frame(stream, PacketType::X3DHComplete, &complete_bytes).await?;
+
+        self.peer_candidates = response.candidates;
+        self.peer_identity_pub = response.identity_pub;
+        self.established_at = now_unix_secs();
+        self.state = ConnectionState::Established;
+
+        tracing::info!(peer = %self.peer_fingerprint(), "session established via X3DH initiator");
+        Ok(())
+    }
+
+    /// Execute the X3DH + Double Ratchet handshake as the responder.
+    pub async fn handshake_as_responder_x3dh<S: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut S,
+        identity: &IdentityKeypair,
+        x25519_identity: &X25519IdentityKeypair,
+        signed_prekey: &EphemeralKeypair,
+        init_frame: &RawFrame,
+        local_candidates: Vec<WireCandidate>,
+    ) -> Result<(), SessionError> {
+        self.state = ConnectionState::Handshaking;
+        self.our_candidates = local_candidates.clone();
+
+        let init: HandshakeInit = protocol::deserialize(&init_frame.body)?;
+
+        if init.version != PROTOCOL_VERSION {
+            return Err(SessionError::HandshakeFailed("version mismatch".to_string()));
+        }
+        let mut sign_data = Vec::new();
+        sign_data.extend_from_slice(&init.ephemeral_pub);
+        sign_data.extend_from_slice(&init.x25519_identity_pub);
+        sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
+        crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature)
+            .map_err(|_| SessionError::HandshakeFailed("initiator signature invalid".to_string()))?;
+
+        let x3dh_out = crate::crypto::x3dh_respond(
+            x25519_identity, signed_prekey, None,
+            &init.ephemeral_pub, &init.x25519_identity_pub,
+        ).map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
+
+        let ek_b = EphemeralKeypair::generate();
+        let now = now_unix_secs();
+
+        self.ratchet = Some(DoubleRatchet::new(
+            x3dh_out, ek_b, init.ephemeral_pub, false,
+        ));
+
+        let mut our_sign_data = Vec::new();
+        our_sign_data.extend_from_slice(&ek_b.public_key_bytes());
+        our_sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
+        our_sign_data.extend_from_slice(&now.to_be_bytes());
+        let signature = identity.sign(&our_sign_data);
+
+        let response = HandshakeResponse {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: ek_b.public_key_bytes(),
+            identity_pub: identity.public_key_bytes(),
+            x25519_identity_pub: x25519_identity.public_key_bytes(),
+            timestamp: now,
+            signature,
+            candidates: local_candidates,
+        };
+        let resp_bytes = protocol::serialize(&response)?;
+        network::write_frame(stream, PacketType::X3DHHandshakeResponse, &resp_bytes).await?;
+
+        let complete_frame = network::read_frame(stream).await?;
+        if complete_frame.packet_type != PacketType::X3DHComplete {
+            return Err(SessionError::HandshakeFailed(format!(
+                "expected X3DHComplete, got {:?}", complete_frame.packet_type
+            )));
+        }
+        let complete: EncryptedEnvelope = protocol::deserialize(&complete_frame.body)?;
+
+        let dr_hdr = complete.dr_header
+            .ok_or_else(|| SessionError::HandshakeFailed("missing dr_header".to_string()))?;
+        let plaintext = self.ratchet.as_mut().unwrap()
+            .decrypt(&complete.ciphertext, &complete.nonce,
+                     &[PacketType::X3DHComplete.to_byte()],
+                     dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
+            .map_err(|_| SessionError::HandshakeFailed("verification failed".to_string()))?;
+
+        if plaintext != b"m2m-x3dh-handshake-v1" {
+            return Err(SessionError::HandshakeFailed("verification mismatch".to_string()));
+        }
+
+        self.peer_candidates = init.candidates;
+        self.peer_identity_pub = init.identity_pub;
+        self.established_at = now_unix_secs();
+        self.state = ConnectionState::Established;
+
+        tracing::info!(peer = %self.peer_fingerprint(), "session established via X3DH responder");
+        Ok(())
+    }
+
     /// Encrypt and send a text message.
     pub async fn send_text<W: AsyncWrite + Unpin>(
         &mut self,
