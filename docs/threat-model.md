@@ -1,139 +1,124 @@
 # M2M — Threat Model
 
-> **Version**: 0.1.0  
-> **Status**: Draft  
-> **Last Updated**: 2026-05-28
+> **Version**: 1.2.0  
+> **Status**: Current  
+> **Last Updated**: 2026-06-28
 
 ## 1. Threat Actors
 
 ### 1.1 Passive Network Observer
 - **Capability**: Can observe all traffic on the network segment.
 - **Goal**: Read message contents, identify communication partners, build metadata profiles.
-- **Mitigation**: All traffic is encrypted with authenticated encryption. No plaintext ever crosses the wire. Minimal metadata in protocol headers.
+- **Mitigation**: All traffic encrypted with authenticated encryption. No plaintext on the wire. Variable padding hides message lengths. Minimal metadata in headers.
 
 ### 1.2 Active Network Attacker (MITM)
 - **Capability**: Can intercept, modify, inject, replay, and drop packets.
 - **Goal**: Impersonate a peer, tamper with messages, inject malicious content.
-- **Mitigation**: 
-  - Authenticated handshake binds session keys to long-term identity keys.
-  - Fingerprint verification enables out-of-band identity confirmation.
-  - Replay protection via monotonic nonces and sequence numbers.
-  - Tamper detection via AEAD authentication tags.
+- **Mitigation**:
+  - X3DH key agreement binds session keys to Ed25519 + X25519 identity keys.
+  - Double Ratchet provides self-healing forward secrecy after compromise.
+  - Fingerprint verification via out-of-band 4x4 grid modal.
+  - Replay protection via monotonic counters + AEAD AAD binding.
+  - Per-message forward secrecy via chain key ratchet.
+  - Protocol version validation with reserved version rejection.
 
 ### 1.3 Malicious Peer
 - **Capability**: Controls one end of the connection. Can send arbitrary data.
-- **Goal**: Exploit parsing bugs, cause denial of service, exfiltrate data via crafted messages.
+- **Goal**: Exploit parsing bugs, cause denial of service, exfiltrate data.
 - **Mitigation**:
   - Strict input validation on all received data.
-  - Message size limits enforced at the framing layer.
-  - Rate limiting on incoming messages.
-  - No auto-execution of attachments or media.
-  - Sandboxed preview rendering.
+  - Frame size limits (16 MiB max), message size limits (64 KiB).
+  - DashMap-based per-IP rate limiting.
+  - Slowloris protection via per-byte read timeouts (1s).
+  - Streaming file transfers to temp file (no RAM buffering).
+  - Chunk hash verification on file transfers.
+  - Filename sanitization (`[a-zA-Z0-9._-]` only, no path traversal).
 
-### 1.4 Local Attacker (Physical Access)
-- **Capability**: Has access to the filesystem or the running process.
-- **Goal**: Extract keys, read message history, impersonate the user.
+### 1.4 Physical/OS Attacker
+- **Capability**: Has local or kernel access to the device. Can read process memory, swap, disk.
+- **Goal**: Extract encryption keys, read message history.
 - **Mitigation**:
-  - Keys encrypted at rest with a user-derived key.
-  - Chat history encrypted with separate keys.
-  - Secure memory zeroization for sensitive data in memory.
-  - Optional message history disablement.
-  - Secure session deletion.
+  - Storage encryption key **mlock()'d** (VirtualLock on Windows) — cannot be paged to swap.
+  - Memory zeroization (`Zeroize` trait) on all session keys, message bodies, and sensitive structs.
+  - At-rest encryption via XChaCha20-Poly1305 with Argon2id-derived key.
+  - Encrypted databases via application-level AEAD (no plaintext SQLite).
+  - Private key never in plain memory outside of short unlock window.
 
-### 1.5 Compromised Dependency / Supply Chain
-- **Capability**: Injected malicious code into a dependency.
-- **Goal**: Exfiltrate keys or plaintext.
+### 1.5 Network-Level Attacker (DoS)
+- **Capability**: Can flood connection with spurious data or half-open connections.
+- **Goal**: Deplete server resources, prevent legitimate connections.
 - **Mitigation**:
-  - Minimal dependency footprint.
-  - No telemetry, analytics, or reporting.
-  - All dependencies auditable.
-  - Reproducible builds.
-  - No dynamic code loading.
+  - DashMap-based per-IP connection rate limiter.
+  - Tokio timeouts on all I/O operations.
+  - Per-byte read timeouts (Slowloris defense).
+  - Frame size validation before allocation.
+  - Connection count tracking.
 
-## 2. Assets to Protect
+## 2. Assets
 
-| Asset | Sensitivity | Storage | Protection |
-|-------|-------------|---------|------------|
-| Long-term identity private key | Critical | Encrypted key store | Encrypted at rest, zeroized in memory |
-| Session keys | Critical | Memory only | Never persisted, zeroized after use |
-| Message plaintext | High | Encrypted DB (optional) | XChaCha20-Poly1305 at rest |
-| Contact list / peer identities | Medium | Encrypted DB | Encrypted at rest |
-| Invite data | Medium | Ephemeral | Signed, time-limited, one-use |
-| Attachments | Medium-High | Encrypted on disk | Encrypted, not auto-opened |
-| Connection metadata (IPs, timing) | Medium | Not persisted | Not logged by default |
+| Asset | Protected By | Impact if Compromised |
+|-------|-------------|----------------------|
+| Long-term Ed25519 identity key | Argon2id-encrypted vault, mlocked key | Identity theft, impersonation |
+| X25519 DH identity key | Argon2id-encrypted vault, mlocked key | Forward secrecy failure |
+| Session keys | mlocked memory, zeroized on disconnect | One session's messages readable |
+| Message history | XChaCha20-Poly1305 at-rest encryption | Historical message access |
+| Peer fingerprints | Out-of-band verification process | MITM undetected |
 
-## 3. Attack Surfaces
+## 3. Key Assumptions
 
-### 3.1 Network Attack Surface
-- TCP listener (accepts connections from any peer)
-- Framing parser (processes untrusted byte streams)
-- Handshake protocol (processes untrusted cryptographic material)
-- Message deserializer (processes untrusted payloads)
-- File transfer handler (processes untrusted file chunks)
+1. **Machine is trusted**: If the OS is compromised, mlock provides defense-in-depth but can be bypassed by a kernel attacker.
+2. **TLS is not used**: M2M avoids TLS in favor of application-layer encryption for metadata minimization.
+3. **TCP ordering**: The Double Ratchet implementation assumes ordered delivery (skipped message keys are derived sequentially, not stored).
+4. **Relay server is operated by the user**: The TURN relay protocol is not authenticated — anyone can connect. Only use trusted relays.
 
-### 3.2 Local Attack Surface
-- Encrypted database files
-- Key storage files
-- Log files (must not contain secrets)
-- Tauri IPC bridge (UI ↔ backend)
-- Attachment storage directory
+## 4. Cryptographic Guarantees
 
-### 3.3 UI Attack Surface
-- Invite paste input (untrusted string from clipboard)
-- Chat message display (must sanitize for XSS)
-- File download prompts (must not auto-execute)
-- Fingerprint display (must not be spoofable via formatting)
+| Property | Implementation |
+|----------|---------------|
+| Forward secrecy (legacy) | SHA-256 KDF ratchet after each message |
+| Forward secrecy (X3DH) | Double Ratchet: message key = HKDF(chain_key, "M2M-MSG-KEY") |
+| Post-compromise security | DH ratchet every 100 messages |
+| Authentication | Ed25519 signatures on handshake + X25519 DH |
+| Replay protection | Monotonic counters + AEAD AAD binding |
+| Key agreement | X3DH: 3 DH ops (4 with OPK) → HKDF → root + chain key |
+| Side-channel resistance | Constant-time libsodium primitives |
 
-## 4. Threat Matrix
+## 5. Network Attack Mitigations
 
-| Threat | Likelihood | Impact | Mitigation Status |
-|--------|-----------|--------|-------------------|
-| MITM during handshake | Medium | Critical | Mitigated (signed handshake + fingerprint verification) |
-| Message replay | Medium | High | Mitigated (nonce + sequence tracking) |
-| Message tampering | Medium | Critical | Mitigated (AEAD authentication) |
-| Malformed packet DoS | High | Medium | Mitigated (size limits, rate limiting, timeouts) |
-| Key extraction (local) | Low-Medium | Critical | Mitigated (encrypted storage, zeroization) |
-| Malicious attachment | High | High | Mitigated (no auto-open, sandboxed preview) |
-| Log data leakage | Medium | High | Mitigated (redaction layer, no secret logging) |
-| Invite forgery | Medium | High | Mitigated (Ed25519 signatures, expiry) |
-| Decompression bomb | Medium | Medium | Mitigated (size caps, bounded decompression) |
-| XSS via chat message | Medium | Medium | Mitigated (React escaping, CSP, no innerHTML) |
+| Attack | Mitigation |
+|--------|-----------|
+| Eavesdropping | XChaCha20-Poly1305 AEAD encryption |
+| Tampering | AEAD authentication tag verification |
+| Replay | Monotonic u64 counter + AAD binding |
+| Traffic analysis | Variable exponential padding (1KB–16KB tiers) |
+| Slowloris | Per-byte 1s read timeout |
+| DoS (connection flood) | DashMap per-IP rate limiter |
+| DNS poisoning | Cross-server STUN consistency check |
+| MITM (first use) | Fingerprint comparison modal |
+| SYM flooding | tokio Accept with backpressure |
+| DoS (large frames) | Frame size validation (16 MiB cap) |
+| DoS (file transfer) | Streaming to temp file, chunk hash verification |
 
-## 5. Trust Boundaries
+## 6. Data Flow Security
 
 ```
-┌─────────── TRUSTED ───────────────────┐
-│  User's Intent                        │
-│    ↓                                  │
-│  UI Layer (React)                     │
-│    ↓ (Tauri IPC — validated)          │
-│  Rust Backend                         │
-│    ↓                                  │
-│  Crypto Module (libsodium)            │
-│    ↓                                  │
-│  Encrypted Storage                    │
-└───────────────────────────────────────┘
-         ↕ TRUST BOUNDARY (network)
-┌─────── UNTRUSTED ─────────────────────┐
-│  TCP Transport                        │
-│  Remote Peer                          │
-│  Attachments                          │
-│  Invite Data (until verified)         │
-└───────────────────────────────────────┘
+Invite Creation:
+  Ed25519 sign(invite_payload) → encoded as base64url → m2m:// prefix
+  X3DH: SignedPrekey = X25519 ephemeral keypair → Ed25519 sig → embedded in payload
+
+Handshake:
+  X3DHInit: DH(IK_A, SPK_B) || DH(EK_A, IK_B) || DH(EK_A, SPK_B) → HKDF → root_key
+  Double Ratchet: root_key → DH ratchet → chain keys → message keys
+
+Message Encryption:
+  padded_msg = pad_message_variable(plaintext)  ← variable padding
+  nonce = XChaCha20-Poly1305 random nonce
+  aad = packet_type || counter
+  ciphertext = AEAD_encrypt(padded_msg, aad, nonce, msg_key)
+  envelope = { nonce, counter, ciphertext, dr_header }
+
+Storage:
+  storage_key = Argon2id(passphrase, salt=pub_key)
+  encrypted = XChaCha20-Poly1305(plaintext, key=storage_key)
+  storage_key → StorageKey::new() → mlock()'d
 ```
-
-## 6. Assumptions
-
-1. The user's operating system is not fully compromised (kernel-level rootkit defeats all protections).
-2. The Rust compiler and libsodium are not backdoored.
-3. The user can perform out-of-band fingerprint verification when needed.
-4. The user's clipboard is not being actively monitored by malware during invite exchange (risk documented, not mitigable at app level).
-5. Time on both peers is approximately correct (for invite expiry validation).
-
-## 7. Known Limitations
-
-1. **Per-message ratchet is SHA-256 not Double Ratchet**: The current ratchet provides forward secrecy (compromising `tx_key_N` does not reveal earlier messages), but it does not provide self-healing (compromising `tx_key_N` does reveal all future messages until the next DH exchange). A full Double Ratchet (X3DH + DH ratchet) is planned for Phase 1.
-2. **No deniability**: Messages are authenticated, which means they are provably authored. Deniable authentication is a future consideration.
-3. **Single device**: No multi-device sync. The identity key exists on one machine.
-4. **IP exposure**: Direct TCP connections reveal IP addresses to the peer. Tor/VPN usage is the user's responsibility.
-5. **No mlock()**: Session keys are zeroized on drop but may be paged to disk. Full `mlock()` protection is planned for Phase 4.
