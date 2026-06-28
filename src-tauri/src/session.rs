@@ -416,6 +416,7 @@ impl Session {
         ).map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
 
         let ek_b = EphemeralKeypair::generate();
+        let ek_b_pub = ek_b.public_key_bytes();
         let now = now_unix_secs();
 
         self.ratchet = Some(DoubleRatchet::new(
@@ -423,14 +424,14 @@ impl Session {
         ));
 
         let mut our_sign_data = Vec::new();
-        our_sign_data.extend_from_slice(&ek_b.public_key_bytes());
+        our_sign_data.extend_from_slice(&ek_b_pub);
         our_sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
         our_sign_data.extend_from_slice(&now.to_be_bytes());
         let signature = identity.sign(&our_sign_data);
 
         let response = HandshakeResponse {
             version: PROTOCOL_VERSION,
-            ephemeral_pub: ek_b.public_key_bytes(),
+            ephemeral_pub: ek_b_pub,
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: x25519_identity.public_key_bytes(),
             timestamp: now,
@@ -499,6 +500,30 @@ impl Session {
         stream: &mut W,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
+        // ── Double Ratchet path (if active) ──
+        if let Some(ratchet) = self.ratchet.as_mut() {
+            let padded = crate::crypto::pad_message_variable(plaintext);
+            let aad = [PacketType::EncryptedMessage.to_byte()];
+            let do_ratchet = ratchet.should_ratchet(100);
+            let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
+                .encrypt(&padded, &aad, do_ratchet)?;
+
+            let envelope = EncryptedEnvelope {
+                nonce,
+                counter: 0,
+                ciphertext,
+                dr_header: Some(DRHeader {
+                    ratchet_key,
+                    previous_chain_length: 0,
+                    message_number: msg_num,
+                }),
+            };
+            let envelope_bytes = protocol::serialize(&envelope)?;
+            network::write_frame(stream, PacketType::EncryptedMessage, &envelope_bytes).await?;
+            return Ok(());
+        }
+
+        // ── Legacy SessionKeys path ──
         let keys = self
             .session_keys
             .as_mut()
@@ -506,20 +531,14 @@ impl Session {
 
         self.tx_counter += 1;
 
-        // Pad plaintext to obfuscate true length
         let padded = crate::crypto::pad_message_variable(plaintext);
 
-        // AAD = packet_type || counter (binds the ciphertext to its context)
         let mut aad = Vec::with_capacity(9);
         aad.push(PacketType::EncryptedMessage.to_byte());
         aad.extend_from_slice(&self.tx_counter.to_be_bytes());
 
         let (nonce, ciphertext) = keys.encrypt(&padded, &aad)?;
 
-        // ═══ Forward Secrecy Ratchet ═══
-        // Evolve the sending key AFTER encrypting this message.
-        // If this session key is compromised in the future, only THIS
-        // message can be decrypted — all previous messages are safe.
         keys.ratchet_tx();
 
         let envelope = EncryptedEnvelope {
@@ -535,9 +554,6 @@ impl Session {
     }
 
     /// Receive and decrypt an encrypted message.
-    /// Removes padding after decryption, then ratchets the receiving key.
-    /// This provides forward secrecy: past messages stay safe even if
-    /// the current session key is compromised.
     pub fn decrypt_message(&mut self, frame: &RawFrame) -> Result<MessageBody, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
@@ -546,7 +562,22 @@ impl Session {
 
         let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body)?;
 
-        // Replay protection: counter must be strictly greater than high water mark
+        // ── Double Ratchet path (if dr_header present) ──
+        if let Some(dr_hdr) = &envelope.dr_header {
+            let ratchet = self.ratchet
+                .as_mut()
+                .ok_or(SessionError::InvalidState)?;
+            let aad = [PacketType::EncryptedMessage.to_byte()];
+            let padded = ratchet
+                .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
+                         dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
+                .map_err(|_| SessionError::Network(network::NetworkError::PeerClosed))?;
+            let plaintext = crate::crypto::unpad_message_variable(&padded)?;
+            let body: MessageBody = protocol::deserialize(&plaintext)?;
+            return Ok(body);
+        }
+
+        // ── Legacy path: replay protection + SessionKeys ──
         if envelope.counter <= self.rx_high_water_mark {
             return Err(SessionError::ReplayDetected {
                 received: envelope.counter,
@@ -559,7 +590,6 @@ impl Session {
             .as_mut()
             .ok_or(SessionError::InvalidState)?;
 
-        // AAD must match what the sender used
         let mut aad = Vec::with_capacity(9);
         aad.push(PacketType::EncryptedMessage.to_byte());
         aad.extend_from_slice(&envelope.counter.to_be_bytes());
