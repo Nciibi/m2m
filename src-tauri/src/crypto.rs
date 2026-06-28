@@ -495,6 +495,7 @@ impl DoubleRatchet {
                 recv_message_number: 0,
                 our_ratchet_keypair: dh_ratchet_keypair,
                 their_ratchet_pub: dh_remote_public,
+                skipped_keys: HashMap::with_capacity(64),
             }
         } else {
             Self {
@@ -505,6 +506,7 @@ impl DoubleRatchet {
                 recv_message_number: 0,
                 our_ratchet_keypair: dh_ratchet_keypair,
                 their_ratchet_pub: dh_remote_public,
+                skipped_keys: HashMap::with_capacity(64),
             }
         }
     }
@@ -590,6 +592,17 @@ impl DoubleRatchet {
     /// Decrypt a message: derive message key, decrypt, advance chain.
     ///
     /// `ratchet_key` is the peer's new DH public key if this message triggers a ratchet.
+    ///
+    /// ## Out-of-order message handling
+    ///
+    /// If `message_number` is below the current receiving chain position, the
+    /// skipped message key cache is consulted. If the key was cached during a
+    /// previous gap derivation, the message decrypts successfully. If not, the
+    /// message is unrecoverable and an error is returned.
+    ///
+    /// The cache is capped at [`MAX_SKIP`] entries (2000). Beyond this, new
+    /// messages are rejected as `MaxSkippedKeysExceeded` to prevent memory
+    /// exhaustion from a peer who sends messages with large gaps.
     pub fn decrypt(
         &mut self,
         ciphertext: &[u8],
@@ -598,18 +611,39 @@ impl DoubleRatchet {
         message_number: u64,
         ratchet_key: Option<&[u8; 32]>,
     ) -> Result<Vec<u8>, CryptoError> {
-        // If peer sent a new ratchet key, perform DH ratchet
+        // If peer sent a new ratchet key, perform DH ratchet first
         if let Some(new_pub) = ratchet_key {
             self.dh_ratchet_step(new_pub)?;
+        }
+
+        // ── Check skipped message key cache for out-of-order messages ──
+        if message_number < self.recv_message_number {
+            return match self.skipped_keys.remove(&message_number) {
+                Some(saved_key) => {
+                    // Decrypt with the previously-cached message key
+                    Self::decrypt_with_key(&saved_key, ciphertext, nonce, aad)
+                }
+                None => Err(CryptoError::DoubleRatchetError(format!(
+                    "message key for {} not found (already consumed or never cached)", message_number
+                ))),
+            };
         }
 
         let recv_chain = self.recv_chain_key
             .ok_or(CryptoError::DoubleRatchetError("no recv chain key".into()))?;
 
-        // If we skipped messages, derive through the gap
+        // ── Derive through gap, caching intermediate keys ──
         let mut current_chain = recv_chain;
         while self.recv_message_number < message_number {
-            let (_, next_chain) = Self::derive_message_key(&current_chain);
+            let (msg_key, next_chain) = Self::derive_message_key(&current_chain);
+
+            // Cache the intermediate message key for out-of-order delivery.
+            // Cap at MAX_SKIP to prevent memory exhaustion.
+            if self.skipped_keys.len() >= MAX_SKIP {
+                return Err(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
+            }
+            self.skipped_keys.insert(self.recv_message_number, msg_key.0);
+
             current_chain = next_chain;
             self.recv_message_number += 1;
         }
@@ -620,13 +654,25 @@ impl DoubleRatchet {
         self.recv_message_number += 1;
 
         // Decrypt with XChaCha20-Poly1305
-        let key = aead::Key::from_slice(&msg_key.0).ok_or(CryptoError::InvalidKeyLength)?;
-        let nonce_obj = aead::Nonce::from_slice(nonce).ok_or(CryptoError::DecryptionFailed)?;
-        let plaintext = aead::open(ciphertext, Some(aad), &nonce_obj, &key)
-            .map_err(|_| CryptoError::DecryptionFailed)?;
-
+        let result = Self::decrypt_with_key(&msg_key.0, ciphertext, nonce, aad);
         drop(msg_key);
-        Ok(plaintext)
+        result
+    }
+
+    /// Decrypt ciphertext using a raw 32-byte message key.
+    ///
+    /// Extracted as a standalone helper so it can be called from both the
+    /// normal decrypt path and the skipped-key cache path.
+    fn decrypt_with_key(
+        key_bytes: &[u8; 32],
+        ciphertext: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, CryptoError> {
+        let key = aead::Key::from_slice(key_bytes).ok_or(CryptoError::InvalidKeyLength)?;
+        let nonce_obj = aead::Nonce::from_slice(nonce).ok_or(CryptoError::DecryptionFailed)?;
+        aead::open(ciphertext, Some(aad), &nonce_obj, &key)
+            .map_err(|_| CryptoError::DecryptionFailed)
     }
 
     /// Check if we should perform a DH ratchet (based on message count).
