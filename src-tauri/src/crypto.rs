@@ -1172,12 +1172,13 @@ mod crypto_tests {
             alice.encrypt(format!("msg {}", i).as_bytes(), &aad, false).unwrap()
         }).collect();
 
-        let d0 = bob.decrypt(&results[0].2, &results[0].1, &aad,
-                            results[0].0.unwrap_or(0), None).unwrap();
+        // result = (rk, msg_num, nonce, ciphertext)
+        let d0 = bob.decrypt(&results[0].3, &results[0].2, &aad,
+                            results[0].1, results[0].0.as_ref()).unwrap();
         assert_eq!(&d0, b"msg 0");
 
-        let d2 = bob.decrypt(&results[2].2, &results[2].1, &aad,
-                            results[2].0.unwrap_or(2), None).unwrap();
+        let d2 = bob.decrypt(&results[2].3, &results[2].2, &aad,
+                            results[2].1, results[2].0.as_ref()).unwrap();
         assert_eq!(&d2, b"msg 2");
     }
 
