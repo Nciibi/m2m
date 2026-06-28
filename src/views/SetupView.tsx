@@ -1,9 +1,9 @@
 import { ToastContainer } from "../components/ui";
+import type { ToastData } from "../components/ui/Toast";
 import { KeyIcon } from "../components/ui/Icons";
-import type { Toast as ToastType } from "../types";
 
 interface Props {
-  toasts: ToastType[];
+  toasts: ToastData[];
   removeToast: (id: string) => void;
 }
 
@@ -16,11 +16,11 @@ export default function SetupView({ toasts, removeToast }: Props) {
           <div className="setup-icon__glow" />
         </div>
 
-        <h2 className="centered-view__title" style={{ marginTop: "var(--space-xl)" }}>
+        <h2 className="centered-view__title centered-view__title--spaced">
           Initializing Secure Enclave
         </h2>
 
-        <p className="centered-view__desc" style={{ margin: "var(--space-xs) 0 var(--space-lg)" }}>
+        <p className="centered-view__desc centered-view__desc--spaced">
           Generating Ed25519 identity keys.
           <br />
           They never leave your device.
