@@ -524,7 +524,7 @@ impl DoubleRatchet {
         plaintext: &[u8],
         aad: &[u8],
         do_ratchet: bool,
-    ) -> Result<(Option<[u8; 32]>, u64, Vec<u8>, Vec<u8>), CryptoError> {
+    ) -> Result<EncryptOutput, CryptoError> {
         let mut ratchet_pub = None;
         if do_ratchet {
             // Generate a NEW DH ratchet keypair for break-in recovery
