@@ -55,12 +55,17 @@ jobs:
 
     - name: Cargo Audit (Rust dependency vulnerabilities)
       continue-on-error: true
-      run: cargo install cargo-audit --locked && cargo audit
-      working-directory: src-tauri
+      uses: rustsec/audit-check@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Pnpm Audit (JS dependency vulnerabilities)
       continue-on-error: true
       run: pnpm audit --audit-level=high
+
+    - name: Run Frontend Tests
+      continue-on-error: true
+      run: pnpm test
 
     - name: Build Frontend
       run: pnpm build
