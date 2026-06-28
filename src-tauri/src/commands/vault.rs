@@ -161,7 +161,7 @@ pub async fn unlock_vault(
         if vault_was_initialized {
             // Case 3: Normal unlock — decrypt with Argon2id passphrase key
             let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &storage_key)
+            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &storage_key, util::AAD_KEY_STORE)
                 .map_err(|_| "incorrect passphrase or corrupted data".to_string())?;
 
             let mut sk_arr = [0u8; 64];
@@ -178,15 +178,19 @@ pub async fn unlock_vault(
             // Case 2: Legacy migration — decrypt with legacy key, re-encrypt with Argon2id
             tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
             let legacy_key = util::derive_storage_key(&pub_bytes);
-            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key)
+            // Legacy ciphertext was encrypted WITHOUT AAD. Empty AAD (b"") is
+            // equivalent to the old None argument in libsodium — libsodium
+            // skips AAD processing when adlen == 0 regardless of the pointer.
+            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"")
                 .map_err(|e| format!("failed to decrypt legacy identity: {e}"))?;
 
             let mut sk_arr = [0u8; 64];
             sk_arr.copy_from_slice(&sk_bytes);
 
-            // Re-encrypt with the new passphrase-derived key
+            // Re-encrypt with the new passphrase-derived key AND domain AAD.
+            // Future unlocks will use AAD_KEY_STORE.
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key)
+            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
 
             key_store
@@ -213,7 +217,7 @@ pub async fn unlock_vault(
         let sk_bytes = kp.secret_key_bytes();
 
         let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-        let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key)
+        let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
             .map_err(|e| format!("failed to encrypt identity: {e}"))?;
 
         let now = chrono::Utc::now().timestamp();
