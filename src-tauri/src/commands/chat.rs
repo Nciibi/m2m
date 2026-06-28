@@ -94,7 +94,7 @@ pub async fn load_messages(
 
     let mut messages = Vec::with_capacity(stored.len());
     for m in stored {
-        let content = util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
+        let content = util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key, util::AAD_MSG_STORE)
             .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
             .unwrap_or_else(|_| "[encrypted]".to_string());
         messages.push(ChatMessage {
@@ -137,7 +137,7 @@ pub async fn list_conversations(
                 .ok()
                 .and_then(|msgs| msgs.into_iter().last())
                 .and_then(|m| {
-                    util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key)
+                    util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key, util::AAD_MSG_STORE)
                         .ok()
                         .map(|bytes| {
                             let text = String::from_utf8_lossy(&bytes).to_string();
@@ -295,7 +295,7 @@ pub async fn export_conversation(
     // Serialize the JSON, then encrypt the entire export with the storage key
     let export_json = serde_json::to_vec_pretty(&export_data)
         .map_err(|e| format!("serialization failed: {e}"))?;
-    let (nonce, ciphertext) = util::crypto_encrypt_storage(&export_json, key)
+    let (nonce, ciphertext) = util::crypto_encrypt_storage(&export_json, key, util::AAD_EXPORT)
         .map_err(|e| format!("encryption failed: {e}"))?;
 
     // Build the final file: nonce (24 bytes) || ciphertext
