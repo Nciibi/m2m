@@ -1,0 +1,726 @@
+
+● # M2M Messenger — S+ Visual Design System
+
+  ## Philosophy
+
+  This is not a "secure chat app." It is a **private communication instrument**. Every pixel should feel intentional, expensive, and alive. Think:
+
+  - **Arc Browser** — glassmorphism done right, micro-animations that delight
+  - **Linear** — obsession with spacing, typography, and hierarchy
+  - **Signal** — security theater done tastefully (every lock icon should earn its place)
+  - **Warp terminal** — that GPU-accelerated glow, the performance sheen
+
+  The user should feel physically safer looking at this UI. The glass, the glow, the dark depths — it should whisper "fortress."
+
+  ## Color System
+
+  ### Dark Mode (default)
+  Background canvas:     #030408 (near-black with 0.5% indigo tint — feels deep, not dead)
+  Surface cards:         rgba(15, 16, 25, 0.75) + backdrop-filter: blur(40px) saturate(200%)
+  Raised elements:       rgba(25, 26, 40, 0.55)
+  Input fields:          rgba(255, 255, 255, 0.04)
+  Input on focus:        rgba(255, 255, 255, 0.08)
+
+  Canvas gradient:       radial-gradient(ellipse at 10% -10%, rgba(99,102,241,0.18), transparent 45%),
+                         radial-gradient(ellipse at 90% 110%, rgba(16,185,129,0.08), transparent 45%),
+                         radial-gradient(ellipse at 50% 50%, rgba(139,92,246,0.04), transparent 70%)
+
+  Accent (indigo):       #6366f1 —— primary CTAs, active indicators
+  Accent bright:         #c7d2fe —— monospace values, highlights
+  Accent dim:            #4f46e5 —— hover/dark accent
+  Accent glow:           rgba(99, 102, 241, 0.3)
+  Accent glow strong:    rgba(99, 102, 241, 0.5)
+
+  Success (emerald):     #10b981 —— connected, verified, alive
+  Danger (red):          #ef4444 —— disconnected, destructive
+  Warning (amber):       #f59e0b —— caution, limited connectivity
+
+  Text primary:          #f8fafc
+  Text secondary:        #cbd5e1
+  Text muted:            #64748b
+  Borders:               rgba(255, 255, 255, 0.06) — subtle, almost invisible
+
+  ### Light Mode
+  Canvas:                #f1f5f9 (cool gray, like a premium notepad)
+  Surface:               rgba(255, 255, 255, 0.85) + blur
+  Raised:                rgba(255, 255, 255, 0.7)
+  Text primary:          #0f172a
+  Text secondary:        #475569
+  Text muted:            #94a3b8
+  Borders:               rgba(0, 0, 0, 0.06)
+  Shadows:               halved opacity vs dark mode — lighter touch
+  Accent:                #4f46e5 (slightly darker for contrast on white)
+
+  ## Typography
+
+  ```css
+  /* Base: 0.78rem = ~12.5px at 16px browser default — compact but readable */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+  --text-xs:   0.65rem  (10px)  — timestamps, labels
+  --text-sm:   0.72rem  (11.5px)— secondary text
+  --text-base: 0.78rem  (12.5px)— body
+  --text-md:   0.85rem  (13.5px)— buttons, inputs
+  --text-lg:   0.95rem  (15px)  — card titles
+  --text-xl:   1.1rem   (17.5px)— section headings
+  --text-2xl:  1.3rem   (21px)  — view titles
+  --text-3xl:  1.5rem   (24px)
+  --text-4xl:  2rem     (32px)  — splash screen
+
+  --font-weight-normal: 400
+  --font-weight-medium: 500
+  --font-weight-semibold: 600
+  --font-weight-bold: 700
+
+  --line-height-tight: 1.25
+  --line-height-normal: 1.5
+  --line-height-relaxed: 1.7
+
+  --letter-spacing-tight: -0.025em
+  --letter-spacing-uppercase: 0.08em
+
+  Rules: No font weight lighter than 400. Mono for all cryptographic/technical values only. Tight letter-spacing on headings. ALL CAPS + 0.08em spacing for section   
+  labels.
+
+  Spacing Scale
+
+  4px grid: 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48 · 64
+
+  Card padding is always 32px. Input padding is 11px 16px. Modal padding is 32px.
+
+  Radius
+
+  - xs: 4px (small code blocks, tooltips)
+  - sm: 8px (small cards, inputs)
+  - md: 12px (cards, containers)
+  - lg: 18px (buttons, message bubbles)
+  - xl: 24px (large cards)
+  - 2xl: 32px (app shell corners)
+  - full: 9999px (badges, status dots)
+
+  The Glass Effect
+
+  THIS is the signature look. Every surface element:
+
+  background: var(--surface-color);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+
+  Plus a 1px top highlight on every card:
+  /* pseudo-element ::before on cards */
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  pointer-events: none;
+
+  This creates that "edge-lit in the dark" premium look — like the UI is floating on glass shelves with a dim light from above.
+
+  Shadows
+
+  --shadow-sm:  0 2px 4px rgba(0,0,0,0.2)
+  --shadow-md:  0 8px 16px rgba(0,0,0,0.3)
+  --shadow-lg:  0 16px 40px rgba(0,0,0,0.4)
+  --shadow-xl:  0 24px 80px rgba(0,0,0,0.6)
+  --shadow-accent: 0 4px 12px rgba(99,102,241,0.2)
+  --shadow-accent-strong: 0 8px 24px rgba(99,102,241,0.4)
+
+  In light mode, all shadow opacities are halved.
+
+  Transitions
+
+  Single cubic-bezier everywhere: cubic-bezier(0.16, 1, 0.3, 1)
+  - fast: 150ms (inputs, badges)
+  - base: 300ms (buttons, hover states)
+  - smooth: 500ms (view transitions, modals)
+
+  This curve is "ease-out with a crisp snap" — feels responsive, never sluggish.
+
+  ---
+  LAYOUT: 5 Views, One Shell
+
+  The App Shell
+
+  ┌─────────────────────────────────────────────┐
+  │                 1000px max                   │
+  │  ┌─────────────────────────────────────┐    │
+  │  │         32px radius glass card       │    │
+  │  │  ═══ Header (if applicable) ═══     │    │
+  │  │                                     │    │
+  │  │         ┌─ View Content ──┐         │    │
+  │  │         │                 │         │    │
+  │  │         │  flex: 1        │         │    │
+  │  │         │  overflow: auto │         │    │
+  │  │         │                 │         │    │
+  │  │         └─────────────────┘         │    │
+  │  │                                     │    │
+  │  └─────────────────────────────────────┘    │
+  │      94vh · glass-blur · edge-lit           │
+  └─────────────────────────────────────────────┘
+      Dark canvas with radial gradient aura
+
+  The shell floats. Never touches edges on desktop (16px margin all around). On <600px, full-bleed, border-radius 0.
+
+  ---
+  VIEW 1: SetupView — The Ritual
+
+  Purpose: Generate Ed25519 keys. Takes ~1-2 seconds. Should feel sacred.
+
+  ┌─────────────────────────────┐
+  │    ╔═══ SetupView ═══╗     │
+  │                             │
+  │         ┌───────┐          │
+  │         │  🔑   │  ← 72px  │
+  │         │       │     icon  │
+  │         └───────┘          │
+  │         PULSE RING          │
+  │                             │
+  │  Initializing Secure        │
+  │  Enclave                    │
+  │                             │
+  │  Generating Ed25519         │
+  │  identity keys. They never  │
+  │  leave your device.         │
+  │                             │
+  │   ●  ●  ●                   │
+  │   (bouncing dots)           │
+  │                             │
+  │  Ed25519 • X25519           │
+  │  XChaCha20-Poly1305         │
+  │  (muted, small)             │
+  │                             │
+  └─────────────────────────────┘
+
+  Animation: The lock icon has a pulse-ring effect — expanding circles of indigo glow radiating outward like sonar. 2s loop. The dots bounce with staggered delay (0s,  0.16s, 0.32s).
+
+  The deep glow underneath: outline: 20px solid rgba(99,102,241,0.08) expanding and contracting.
+
+  ---
+  VIEW 2: VaultView — The Gate
+
+  Purpose: Create or unlock your identity vault. THIS IS THE MOST IMPORTANT SCREEN — it's the first real interaction.
+
+  ┌─────────────────────────────┐
+  │  ╔═══ VaultView ═══╗       │
+  │                             │
+  │         ┌───────┐          │
+  │         │  🔐   │  ← gold  │
+  │         │       │    tinted │
+  │         └───────┘          │
+  │                             │
+  │  Set Up Your Vault          │
+  │                             │
+  │  Choose a strong            │
+  │  passphrase... This is the  │
+  │  only key to your data.     │
+  │                             │
+  │  ┌─────────────────────┐    │
+  │  │ ⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫             👁️  ✕ │ ← input
+  │  └─────────────────────┘    │
+  │                             │
+  │  ▓▓▓▓▓▓░░░░░░░░░░ 52%      │
+  │  Fair — 52 bits    14 chars │
+  │                             │
+  │  ┌─────────────────────┐    │
+  │  │ ⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫             👁️  ✕ │ ← confirm
+  │  └─────────────────────┘    │
+  │                             │
+  │  What makes a strong        │
+  │  passphrase? ▼              │
+  │                             │
+  │  ┌─────────────────────┐    │
+  │  │  Create Vault       │    │
+  │  └─────────────────────┘    │
+  │       (accent gradient)     │
+  └─────────────────────────────┘
+
+  Key interactions:
+  - Eye toggle reveals passphrase with a smooth scale-in transition
+  - Strength bar updates in real-time, transitions color smoothly:
+    - Red (0-30%) → Orange (30-60%) → Green (60-85%) → Cyan (85-100%)
+    - Bar animates width with transition: width 300ms cubic-bezier(0.16, 1, 0.3, 1)
+  - Error state: The whole form shakes (translateX animation 0.4s), input border glows red, error text appears below in a red-tinted banner
+  - Submit success: Lock icon animates with a bounce + rotate (5deg each way) — feels like the lock clicking open
+  - Loading state: Button shows spinner, inputs disabled, "Unlocking..." text
+
+  Tips dropdown: Expands with max-height animation, shows 5 bullet points about diceware passphrases.
+
+  ---
+  VIEW 3: HubView — The Command Center
+
+  Header
+
+  ┌─────────────────────────────────┐
+  │ 🛡️ M2M              ⚪  Offline ⚙️ │
+  └─────────────────────────────────┘
+
+  The logo is the lock emoji + M2M in bold. Status badge is a pill with dot: green pulsing dot when connected, red static dot when disconnected. Settings gear is an  
+  icon button that glows on hover.
+
+  Tab Bar (underline style)
+
+  ┌─────────────────────────────────┐
+  │  🔌 Connect     💬 Chats  [3]  │
+  │  ████████████░░░░░░░░░░░░░░░░   │
+  │       ▲ accent underline        │
+  │       slides on click            │
+  └─────────────────────────────────┘
+
+  Tabs have no border-radius. The active indicator is a 3px accent bar that slides with transform: translateX. Badge on Chats tab is a pill with accent glow.
+
+  Connect Tab (centered, scrollable)
+
+  ┌─────────────────────────────────┐
+  │                                 │
+  │     ┌─── Host Card ────┐       │
+  │     │ ➕  Host a          │       │
+  │     │    Connection      │       │
+  │     │                    │       │
+  │     │ Generate one-time  │       │
+  │     │ signed invite for  │       │
+  │     │ a peer to connect  │       │
+  │     │ to you securely.   │       │
+  │     │                    │       │
+  │     │ [Generate Invite]  │       │
+  │     │    (accent btn)    │       │
+  │     └────────────────────┘       │
+  │                                 │
+  │     ┌─── Join Card ────┐        │
+  │     │ 🔗 Join a         │        │
+  │     │    Connection     │        │
+  │     │                    │       │
+  │     │ Paste an invite    │       │
+  │     │ link from a        │       │
+  │     │ trusted peer to    │       │
+  │     │ connect.           │       │
+  │     │                    │       │
+  │     │ [m2m://............]       │
+  │     │         [Connect]  │       │
+  │     │                    │       │
+  │     │  ┌─Naming Panel─┐  │      │
+  │     │  │ ✅  Valid      │  │      │
+  │     │  │ Your Name:    │  │      │
+  │     │  │ [___________] │  │      │
+  │     │  │ Their Name:   │  │      │
+  │     │  │ [___________] │  │      │
+  │     │  └──────────────┘  │      │
+  │     └────────────────────┘       │
+  │                                 │
+  │     ──── Divider ────           │
+  │                                 │
+  │     ┌── Fingerprint ──┐         │
+  │     │ YOUR IDENTITY    │         │
+  │     │ FINGERPRINT      │         │
+  │     │ 3b4c:... 📋      │         │
+  │     └──────────────────┘         │
+  │                                 │
+  └─────────────────────────────────┘
+
+  Invite generation flow:
+  1. User clicks "Generate Invite Link"
+  2. Button shows spinner, text changes to "Generating..."
+  3. Card slides in the generated output: monospace input with the invite string + copy button
+  4. Copy button toggles to "✅  Copied!" for 2s with a pop-in animation
+  5. A gradient shimmer sweeps across the invite input briefly — visual confirmation it's fresh
+
+  Tor warning banner (conditional): Orange-tinted banner slides in below with warning icon + explanatory text. Has a dismiss button.
+
+  Naming panel animation: When invite validates, the panel expands from the Join card with a max-height + opacity transition. The "✅  Valid Invite Found" badge is    
+  emerald green with a subtle glow.
+
+  Chats Tab
+
+  ┌─────────────────────────────────┐
+  │  🔍 Search conversations...  ✕  │
+  │                                 │
+  │  ┌── Conversation 1 ───┐  🟢   │
+  │  │ [A] Alice            │  2m  │
+  │  │ Hey, did you get the │ ago  │
+  │  │ files?               │      │
+  │  │                   [Delete]  │
+  │  └──────────────────────┘      │
+  │                                 │
+  │  ┌── Conversation 2 ───┐  🔴  │
+  │  │ [B] Bob              │  1h  │
+  │  │ Thanks for the       │ ago  │
+  │  │ invite!              │      │
+  │  │                   [Delete]  │
+  │  └──────────────────────┘      │
+  │                                 │
+  │  ┌── Conversation 3 ───┐  🔴  │
+  │  │ [C] Charlie          │  3d  │
+  │  │ No messages yet.     │ ago  │
+  │  │                   [Delete]  │
+  │  └──────────────────────┘      │
+  └─────────────────────────────────┘
+
+  Conversation item design:
+  - Avatar: 48px rounded-2xl square with dynamic HSL gradient (hue from peer key hash). Shows first letter in white, uppercase. Green border + glow when online.      
+  - Name: Bold, truncated with ellipsis
+  - Preview: Secondary color, single line, truncated
+  - Timestamp: Right-aligned, muted, ultra-small
+  - Status dot: 8px circle. Green with 6px box-shadow glow when online, gray when offline
+  - Actions: "Delete" button appears on hover (slide-left with 150ms opacity transition). Uses danger styling.
+
+  Empty state (no conversations):
+           🔍 or 📭
+
+    No conversations yet.
+    Connect to a peer to
+    start chatting!
+
+  ---
+  VIEW 4: ChatView — The Conversation
+
+  Header
+
+  ┌─────────────────────────────────┐
+  │  ⚠️  Encrypted Session          │
+  │  ← Hub    🟢  Established  [Disconnect] │
+  └─────────────────────────────────┘
+
+  Back button is pill-style with arrow. Status badge has pulsing green dot when connected. Verify icon (⚠️ unverified / ✅  verified) is clickable to open fingerprint 
+  modal. Disconnect button is danger variant.
+
+  File Request Banner (slides in from top)
+
+  ┌─────────────────────────────────┐
+  │ ┌── File Request ─────────────┐ │
+  │ │ 📄 report.pdf       2.4 MB  │ │
+  │ │              [Accept] [Reject]│ │
+  │ └──────────────────────────────┘ │
+  └─────────────────────────────────┘
+  Transparent raised background, accent-tinted border. Slides down with smooth 300ms. Accept button = accent, Reject = secondary.
+
+  Message Area
+
+  ┌─────────────────────────────────┐
+  │                                 │
+  │       ┌────── Session ──────┐   │
+  │       │        🔒            │   │
+  │       │ End-to-end encrypted  │   │
+  │       │   3b4c:f1a2:...      │   │
+  │       └──────────────────────┘   │
+  │                                 │
+  │  ──────── Today ─────────      │
+  │                                 │
+  │                    ┌──────────┐ │
+  │                    │ Hey!      │ │
+  │                    │ Are you   │ │
+  │                    │ there?    │ │
+  │                    │    12:30  │ │
+  │                    └──────────┘ │
+  │                                 │
+  │  ┌──────────────────┐           │
+  │  │ Yes, just got    │           │
+  │  │ your message!    │           │
+  │  │           12:31  │           │
+  │  └──────────────────┘           │
+  │                                 │
+  │  ──────── Yesterday ───────    │
+  │                                 │
+  │  ┌──────────────────┐           │
+  │  │ Did you check     │           │
+  │  │ the repo?         │           │
+  │  │           09:15   │           │
+  │  └──────────────────┘           │
+  │                                 │
+  │                    ┌──────────┐ │
+  │                    │ Yes, PR  │ │
+  │                    │ merged ✅  │ │
+  │                    │   14:22  │ │
+  │                    └──────────┘ │
+  │                                 │
+  │                          [↓]   │ ← FAB
+  └─────────────────────────────────┘
+
+  Message bubble design:
+  - Max-width 75% of container
+  - Sent: Right-aligned. Gradient from accent to accent-dim. White text. Bottom-right radius is 4px (creates a speech-bubble asymmetry). Box-shadow: 0 4px 15px       
+  rgba(99,102,241,0.3)
+  - Received: Left-aligned. Dark surface bg. Light text. Bottom-left radius is 4px. Subtle shadow: 0 4px 15px rgba(0,0,0,0.2)
+  - Animation: opacity 0 → 1, translateY 8px → 0 over 400ms, with that cubic-bezier
+  - Timestamp: Below each bubble, right-aligned, 0.65rem, 60% opacity
+
+  Date separators: Full-width line with centered text. Horizontal rules on both sides. Muted uppercase text with letter-spacing. Like paper dividers.
+
+  Scroll-to-bottom FAB: 40px circle, accent bg, white arrow. Appears when scrolled >100px from bottom. Animation: slide-up + fade 300ms. On click, smooth-scrolls to  
+  bottom and hides.
+
+  Retention Config Dropdown
+
+  ┌─────────────────────────────────┐
+  │ ⚙️ Conversation Policy          │
+  │ [No Expiration ▼] [Export Now] │
+  └─────────────────────────────────┘
+  Compact, nested inside the message area. Background matches the dark surface.
+
+  Input Area (sticky bottom)
+
+  ┌─────────────────────────────────┐
+  │ 📎 ┌──────────────────────┐  ➤ │
+  │    │ Type a secure        │    │
+  │    │ message…             │    │
+  │    └──────────────────────┘    │
+  │ 🔒 E2E encrypted               │
+  │          Ctrl+Enter · Esc back │
+  └─────────────────────────────────┘
+
+  - File button: Icon button, left
+  - Textarea: Rounded-xl, auto-grows 1-4 lines, inner shadow. Focus: accent border + 3px glow ring
+  - Send button: Accent gradient circle with arrow icon. Disabled (50% opacity, no hover) when empty. Shows spinner when sending
+  - Footer bar: Ultra-small muted text, left = "🔒 End-to-end encrypted", right = keyboard shortcuts
+  - Character count appears as small warning text when >90% of 64KB limit
+
+  Fingerprint Verification Modal
+
+  Full-screen overlay with backdrop blur. Content card with:
+  - Title: "🔐 Verify Peer Fingerprint"
+  - Explainer paragraph
+  - Two columns: "You (Local)" and "Peer" — each showing the fingerprint split into 4-column grid of monospace hex groups
+  - Verify button at bottom (only shows if not yet verified)
+  - Confirmation text: "✅  Peer verified — fingerprints match" in emerald when done
+
+  Modal opens with a zoom-in + backdrop fade animation. Closes on ESC or click outside.
+
+  ---
+  VIEW 5: SettingsView — The Engine Room
+
+  Scrollable content with collapsible-ish sections:
+
+  ┌─────────────────────────────────┐
+  │ ⚙️ Settings              ← Back │
+  └─────────────────────────────────┘
+  │                                 │
+  │ PUBLIC IP & CONNECTIVITY        │
+  │ ┌─────────────────────────────┐ │
+  │ │ Public Address              │ │
+  │ │ 203.0.113.42 📋   [STUN]   │ │
+  │ └─────────────────────────────┘ │
+  │ ┌─────────────────────────────┐ │
+  │ │ Connectivity Check          │ │
+  │ │                    [Check]  │ │
+  │ └─────────────────────────────┘ │
+  │                                 │
+  │ STUN SERVERS                    │
+  │ ┌ stun.l.google.com:19302 ✕ ┐ │
+  │ ├ stun1.l.google.com:19302 ✕ ┤ │
+  │ ├ stun.cloudflare.com:3478 ✕ ┤ │
+  │ └──────────────────────────────┘ │
+  │ [host:port.......] [Add] [Reset]│
+  │                                 │
+  │ NETWORK DIAGNOSTICS              │
+  │ ┌─────────┬──────────┐          │
+  │ │ NAT Type│Candidates│          │
+  │ │ 🟢  Full │    4     │          │
+  │ ├─────────┴──────────┤          │
+  │ │ STUN Servers       │          │
+  │ │ ✅  google 12ms     │          │
+  │ │ ✅  google 14ms     │          │
+  │ │ ✅  cloudflare 8ms  │          │
+  │ ├────────────────────┤          │
+  │ │ All Candidates     │          │
+  │ │ 🏠 192.168.1.5     │          │
+  │ │ 🌐 203.0.113.42    │          │
+  │ └────────────────────┘          │
+  │                                 │
+  │ PRIVACY                          │
+  │ ┌─────────────────────────────┐ │
+  │ │ Private Mode                │ │
+  │ │ Hide IP from invites        │ │
+  │ │              🟢  Enabled     │ │
+  │ │              [Disable]      │ │
+  │ └─────────────────────────────┘ │
+  │                                 │
+  │ TOR ROUTING                      │
+  │ ┌─────────────────────────────┐ │
+  │ │ Tor Routing                 │ │
+  │ │ Route via SOCKS5            │ │
+  │ │              ✅  Reachable   │ │
+  │ │              [Disable Tor]  │ │
+  │ └─────────────────────────────┘ │
+  │                                 │
+  │ IDENTITY                         │
+  │ ┌─── Fingerprint ────────────┐ │
+  │ │ YOUR IDENTITY FINGERPRINT  │ │
+  │ │ 3b4c:f1a2:...      📋     │ │
+  │ └──────────────────────────────┘ │
+  │                                 │
+  │ M2M v0.1.0 — E2EE              │
+  └─────────────────────────────────┘
+
+  Section headers: Uppercase, muted, 0.1em letter-spacing. Like hardware panel labels.
+
+  Settings rows: Glass card with label left, value right. Every row has a clear label + description + action.
+
+  Diagnostics grid: 2-column layout using CSS grid. Full-width items span both columns. STUN health items have colored left borders (3px green = ok, red = fail) +    
+  emoji indicator.
+
+  ---
+  MICRO-ANIMATIONS — The Secret Sauce
+
+  These separate a 6/10 app from a 10/10 app:
+
+  ┌────────────────────┬───────────────────────────────────────────────────────┬─────────────────────────────────────────┐
+  │       Moment       │                       Animation                       │                Technique                │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ App mount          │ Card slides up 12px + fades in                        │ 800ms ease-out                          │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ View switch        │ Content slides 30px in direction of travel            │ 500ms, needs will-change: transform     │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Message sent       │ Bubble rises 8px + fades in                           │ 400ms, staggered if multiple            │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Message received   │ Same as sent + subtle accent glow flash on the bubble │ 500ms                                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Status change      │ Badge bg + border color transition                    │ 300ms                                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Button hover       │ Primary: shine sweep left→right                       │ 500ms on ::after pseudo-element         │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Button hover       │ Secondary/ghost: background → brighter                │ 150ms                                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Copy feedback      │ "Copied!" pops in (scale 0.5→1.1→1)                   │ 300ms pop-in, 2s display, 200ms pop-out │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Strength bar       │ Width animates + color transitions                    │ 300ms on width + background-color       │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Vault unlock       │ Lock icon bounces + rotates ±5°                       │ 600ms spring-like                       │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Input focus        │ Border + box-shadow glow transition                   │ 150ms                                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Error shake        │ Form translates left/right 4-6px                      │ 400ms, 4 oscillations                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Modal open         │ Backdrop fades 200ms + content scales up 300ms        │ 200ms + 300ms                           │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Toast in           │ Slides from right, X goes to 0                        │ 300ms slide + auto-dismiss progress bar │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Tab indicator      │ Underline slides horizontally                         │ 300ms                                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Naming panel       │ Expands down (max-height transition)                  │ 300ms                                   │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Connecting spinner │ Spinner rotates                                       │ 600ms per rotation, infinite            │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Status dot pulse   │ Opacity 1→0.5→1                                       │ 2s infinite on connected dot            │
+  ├────────────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────┤
+  │ Setup pulse ring   │ Box-shadow 0→20px→0                                   │ 2s infinite on lock icon                │
+  └────────────────────┴───────────────────────────────────────────────────────┴─────────────────────────────────────────┘
+
+  Performance rule: Every animation uses ONLY transform and opacity. No width, height, top, left, margin, padding animations. Ever. This keeps everything on the GPU  
+  compositor thread.
+
+  Reduced motion: Check prefers-reduced-motion: reduce — zero duration on all animations, zero transition duration.
+
+  ---
+  SCROLLBAR DESIGN
+
+  Custom thin scrollbar with glass aesthetic:
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+
+  /* WebKit */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  ---
+  RESPONSIVE BREAKPOINTS
+
+  > 1000px:  Full desktop (current default, centered card)
+  600-1000px: Full-width card, reduced padding (24→16px)
+  < 600px:   Full-bleed (border-radius 0), no container padding,
+             bottom tab bar on Hub, smaller bubbles
+
+  ---
+  TOAST SYSTEM
+
+  Fixed-position container bottom-right. Each toast:
+  ┌─────────────────────┐
+  │ ✅  Invite copied!  ✕ │
+  │ ▓▓▓▓▓▓▓░░░░░░░░░░   │ ← auto-dismiss progress bar (shrinks over duration)
+  └─────────────────────┘
+  - Types: success (green), error (red), warning (amber), info (indigo)
+  - Icons match type
+  - Dismiss button on right
+  - Progress bar counts down from full to empty over the toast's lifetime
+  - Slide in from right 300ms
+  - Auto-dismiss after 4s (success/info) or 6s (error/warning)
+  - Stack vertically with 8px gap
+
+  ---
+  ACCESSIBILITY
+
+  - Every icon-only button has aria-label
+  - Modals have role="dialog", tabs have role="tablist" + role="tab"
+  - Message area has aria-live="polite"
+  - Focus is trapped in modals (Tab cycles within modal)
+  - Focus ring on all interactive elements: box-shadow: 0 0 0 3px rgba(99,102,241,0.5)
+  - Color is NEVER the sole indicator of state — always text label + icon + color
+  - All animations respect prefers-reduced-motion
+  - Minimum contrast: 7:1 dark, 4.5:1 light (WCAG AA-AAA)
+
+  ---
+  THE "WOW" MOMENTS — When does this feel like a 10/10 app?
+
+  1. Launch — The glass card fades in with the dark canvas glowing behind it. First impression: "this is expensive."
+  2. Vault unlock — Typing a passphrase and watching the strength meter fill in real-time with smooth color transitions. It feels like you're creating something      
+  valuable.
+  3. Invite generation — Click a button, and instantly a cryptographic invite appears with a shimmer animation. The copy button pops "Copied!" You generated a secure 
+  portal to your machine in one click.
+  4. Connection established — The green dot starts pulsing. The status badge transitions smoothly. A lock icon appears. The entire UI shifts from "waiting" to        
+  "connected" with purpose.
+  5. First message — The bubble slides up from the input area. Gradient-filled. Glowing slightly. It looks and feels encrypted.
+  6. Fingerprint verification — The side-by-side comparison in a modal makes security tangible. You're not trusting — you're verifying. The UI makes you feel like a  
+  security professional.
+  7. Settings — The diagnostics panel with STUN health checks, live RTT times, candidate priorities — it looks like mission control. Even non-technical users feel the  robustness.
+  8. Theme switch — Smoothly transition from the deep dark fortress to a clean light workspace. Everything maintains hierarchy. Nothing breaks.
+
+  ---
+  IMPLEMENTATION NOTES
+
+  File Structure After
+
+  src/
+    styles/
+      tokens.css          ← Design tokens (DONE)
+      theme.css           ← Light theme (DONE)
+      reset.css           ← CSS reset (DONE)
+      layout.css          ← App shell, header, centered view (DONE)
+      components.css      ← All component classes (DONE)
+      animations.css      ← All keyframes (DONE)
+    components/
+      ui/
+        Icons.tsx         ← 24 SVG icons (DONE)
+        Button.tsx        ← Class-based (DONE)
+        Input.tsx         ← Class-based (DONE)
+        Card.tsx          ← Class-based (DONE)
+        Badge.tsx         ← Class-based (DONE)
+        Modal.tsx         ← Class-based (DONE)
+        Select.tsx        ← Class-based (DONE)
+        Toast.tsx         ← Class-based (DONE)
+        LoadingSpinner.tsx ← Class-based (DONE)
+    views/
+      SetupView.tsx       ← Needs rewrite — strip inline styles
+      VaultView.tsx       ← Needs rewrite — strip inline styles
+      HubView.tsx         ← Needs rewrite — strip inline styles
+      ChatView.tsx        ← Needs rewrite — strip inline styles
+      SettingsView.tsx    ← Needs rewrite — strip inline styles
+    hooks/
+      useM2MState.ts      ← NEW — extract from App.tsx
+    App.tsx               ← Rewrite as 40-line router
+
+  Critical Rules
+
+  1. Zero inline style={{}} in views — use CSS classes from components.css
+  2. Zero emoji icons — use SVG icons from Icons.tsx
+  3. All transitions use var(--ease-out-expo) — the signature cubic-bezier
+  4. Every interactive element covers: default, hover, active, focus, disabled, loading
+  5. Color is NEVER the sole indicator of status — text label + icon + color always
+  6. Respect prefers-reduced-motion everywhere
+  7. Build must pass: npx tsc --noEmit && pnpm build with 0 errors
