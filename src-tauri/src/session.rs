@@ -4,8 +4,7 @@
 /// replay protection, sequencing, and session lifecycle.
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokio::io::AsyncWrite;
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncWrite};
 use zeroize::Zeroize;
 
 use crate::crypto::{self, EphemeralKeypair, IdentityKeypair, SessionKeys};
@@ -89,9 +88,9 @@ impl Session {
     /// Execute the handshake as the initiator (client).
     /// We already know the peer's identity from the invite.
     /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
-    pub async fn handshake_as_initiator(
+    pub async fn handshake_as_initiator<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut S,
         identity: &IdentityKeypair,
         expected_peer_pub: &[u8; 32],
         local_candidates: Vec<WireCandidate>,
@@ -115,6 +114,8 @@ impl Session {
             version: PROTOCOL_VERSION,
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
+            x25519_identity_pub: identity.public_key_bytes(),
+            used_opk: None,
             timestamp: now,
             signature,
             candidates: local_candidates,
@@ -187,9 +188,9 @@ impl Session {
 
     /// Execute the handshake as the responder (server).
     /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
-    pub async fn handshake_as_responder(
+    pub async fn handshake_as_responder<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
-        stream: &mut TcpStream,
+        stream: &mut S,
         identity: &IdentityKeypair,
         init_frame: &RawFrame,
         local_candidates: Vec<WireCandidate>,
@@ -231,6 +232,7 @@ impl Session {
             version: PROTOCOL_VERSION,
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
+            x25519_identity_pub: identity.public_key_bytes(),
             timestamp: now,
             signature,
             candidates: local_candidates,
@@ -338,6 +340,7 @@ impl Session {
             nonce,
             counter: self.tx_counter,
             ciphertext,
+            dr_header: None,
         };
         let envelope_bytes = protocol::serialize(&envelope)?;
 
@@ -552,6 +555,7 @@ impl Session {
             nonce,
             counter: self.tx_counter,
             ciphertext,
+            dr_header: None,
         };
         let envelope_bytes = protocol::serialize(&envelope)?;
 
@@ -773,6 +777,7 @@ mod session_tests {
             nonce: vec![0u8; 24],
             counter: 50, // <= 100, should be rejected
             ciphertext: vec![0u8; 16],
+            dr_header: None,
         };
         let body = crate::protocol::serialize(&env).unwrap();
         let frame = RawFrame {
@@ -1026,5 +1031,377 @@ mod session_tests {
             "alice tx_key should change after ratchet");
         assert_ne!(bob.session_keys.as_ref().unwrap().rx_key, initial_rx,
             "bob rx_key should change after ratchet (mirrors alice tx)");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Handshake integration — full success
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_handshake_full_success() {
+        init_crypto();
+        let alice_identity = make_test_identity();
+        let bob_identity = make_test_identity();
+        let bob_pub = bob_identity.public_key_bytes();
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        // Alice as initiator
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator(
+                &mut alice_io, &alice_identity, &bob_pub, vec![],
+            ).await?;
+            Ok::<_, SessionError>(session)
+        });
+
+        // Bob as responder
+        let frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::HandshakeInit);
+
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder(
+            &mut bob_io, &bob_identity, &frame, vec![],
+        ).await.unwrap();
+
+        assert_eq!(bob_session.state, ConnectionState::Established);
+        assert!(bob_session.session_keys.is_some());
+
+        let alice_session = alice.await.unwrap().unwrap();
+        assert_eq!(alice_session.state, ConnectionState::Established);
+        assert!(alice_session.session_keys.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_handshake_with_candidates() {
+        init_crypto();
+        let alice_identity = make_test_identity();
+        let bob_identity = make_test_identity();
+        let bob_pub = bob_identity.public_key_bytes();
+
+        let candidates = vec![WireCandidate {
+            address: "192.168.1.5:12345".to_string(),
+            candidate_type: 0,
+            relay_id: None,
+        }];
+        let alice_candidates = candidates.clone(); // for the spawn closure
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator(
+                &mut alice_io, &alice_identity, &bob_pub, alice_candidates,
+            ).await?;
+            Ok::<_, SessionError>(session)
+        });
+
+        let frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::HandshakeInit);
+
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder(
+            &mut bob_io, &bob_identity, &frame, candidates,
+        ).await.unwrap();
+
+        assert_eq!(bob_session.peer_candidates.len(), 1,
+            "responder should have initiator's candidates");
+
+        let alice_session = alice.await.unwrap().unwrap();
+        assert_eq!(alice_session.peer_candidates.len(), 1,
+            "initiator should have responder's candidates");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Handshake — initiator failure modes
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_initiator_rejects_wrong_packet_type() {
+        init_crypto();
+        let alice_identity = make_test_identity();
+        let bob_identity = make_test_identity();
+        let bob_pub = bob_identity.public_key_bytes();
+
+        let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator(
+                &mut alice_io, &alice_identity, &bob_pub, vec![],
+            ).await
+        });
+
+        let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::HandshakeInit);
+        network::write_frame(&mut peer_io, PacketType::Heartbeat, &[]).await.unwrap();
+
+        let result = alice.await.unwrap();
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for wrong packet type, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_initiator_rejects_version_mismatch() {
+        init_crypto();
+        let alice_identity = make_test_identity();
+        let bob_identity = make_test_identity();
+        let bob_pub = bob_identity.public_key_bytes();
+
+        let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator(
+                &mut alice_io, &alice_identity, &bob_pub, vec![],
+            ).await
+        });
+
+        let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::HandshakeInit);
+
+        let bad_response = HandshakeResponse {
+            version: 0x02,
+            ephemeral_pub: [0xAA; 32],
+            identity_pub: bob_pub,
+            x25519_identity_pub: [0u8; 32],
+            timestamp: 12345,
+            signature: vec![0xBB; 64],
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&bad_response).unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body).await.unwrap();
+
+        let result = alice.await.unwrap();
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for version mismatch, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_initiator_rejects_bad_signature() {
+        init_crypto();
+        let alice_identity = make_test_identity();
+        let bob_identity = make_test_identity();
+        let bob_pub = bob_identity.public_key_bytes();
+
+        let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator(
+                &mut alice_io, &alice_identity, &bob_pub, vec![],
+            ).await
+        });
+
+        let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::HandshakeInit);
+
+        let bad_response = HandshakeResponse {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: [0xAA; 32],
+            identity_pub: bob_pub,
+            x25519_identity_pub: [0u8; 32],
+            timestamp: 12345,
+            signature: vec![0xCC; 64],
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&bad_response).unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body).await.unwrap();
+
+        let result = alice.await.unwrap();
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for bad signature, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_initiator_rejects_identity_mismatch() {
+        init_crypto();
+        let alice_identity = make_test_identity();
+        let bob_identity = make_test_identity();
+        let bob_pub = bob_identity.public_key_bytes();
+        let wrong_key = make_test_identity();
+
+        let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator(
+                &mut alice_io, &alice_identity, &bob_pub, vec![],
+            ).await
+        });
+
+        let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::HandshakeInit);
+
+        let bad_response = HandshakeResponse {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: [0xAA; 32],
+            identity_pub: wrong_key.public_key_bytes(),
+            x25519_identity_pub: [0u8; 32],
+            timestamp: 12345,
+            signature: vec![0xBB; 64],
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&bad_response).unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body).await.unwrap();
+
+        let result = alice.await.unwrap();
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for identity mismatch, got: {:?}", result);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Handshake — responder failure modes
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_responder_rejects_version_mismatch() {
+        init_crypto();
+        let bob_identity = make_test_identity();
+        let alice_identity = make_test_identity();
+
+        let eph = EphemeralKeypair::generate();
+        let bad_init = HandshakeInit {
+            version: 0x02,
+            ephemeral_pub: eph.public_key_bytes(),
+            identity_pub: alice_identity.public_key_bytes(),
+            x25519_identity_pub: [0u8; 32],
+            used_opk: None,
+            timestamp: 12345,
+            signature: vec![0xDD; 64],
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&bad_init).unwrap();
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::HandshakeInit,
+            body,
+        };
+
+        let (mut bob_io, _peer_io) = tokio::io::duplex(65536);
+        let mut session = Session::new();
+        let result = session.handshake_as_responder(
+            &mut bob_io, &bob_identity, &frame, vec![],
+        ).await;
+
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for version mismatch, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_responder_rejects_bad_signature() {
+        init_crypto();
+        let bob_identity = make_test_identity();
+        let alice_identity = make_test_identity();
+        let wrong_signer = make_test_identity();
+
+        let eph = EphemeralKeypair::generate();
+        let mut sign_data = Vec::new();
+        sign_data.extend_from_slice(&eph.public_key_bytes());
+        sign_data.extend_from_slice(&12345u64.to_be_bytes());
+        let signature = wrong_signer.sign(&sign_data);
+
+        let bad_init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: eph.public_key_bytes(),
+            identity_pub: alice_identity.public_key_bytes(),
+            x25519_identity_pub: [0u8; 32],
+            used_opk: None,
+            timestamp: 12345,
+            signature,
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&bad_init).unwrap();
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::HandshakeInit,
+            body,
+        };
+
+        let (mut bob_io, _peer_io) = tokio::io::duplex(65536);
+        let mut session = Session::new();
+        let result = session.handshake_as_responder(
+            &mut bob_io, &bob_identity, &frame, vec![],
+        ).await;
+
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for bad signature, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_responder_rejects_bad_verification() {
+        init_crypto();
+        let bob_identity = make_test_identity();
+        let alice_identity = make_test_identity();
+
+        let eph = EphemeralKeypair::generate();
+        let mut sign_data = Vec::new();
+        sign_data.extend_from_slice(&eph.public_key_bytes());
+        sign_data.extend_from_slice(&12345u64.to_be_bytes());
+        let signature = alice_identity.sign(&sign_data);
+
+        let init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: eph.public_key_bytes(),
+            identity_pub: alice_identity.public_key_bytes(),
+            x25519_identity_pub: [0u8; 32],
+            used_opk: None,
+            timestamp: 12345,
+            signature,
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&init).unwrap();
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::HandshakeInit,
+            body,
+        };
+
+        let (mut bob_io, mut peer_io) = tokio::io::duplex(65536);
+
+        let bob = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_responder(
+                &mut bob_io, &bob_identity, &frame, vec![],
+            ).await
+        });
+
+        let resp_frame = network::read_frame_impl(&mut peer_io).await.unwrap();
+        assert_eq!(resp_frame.packet_type, PacketType::HandshakeResponse);
+
+        let bad_complete = HandshakeComplete {
+            encrypted_verify: vec![0xDE, 0xAD, 0xBE, 0xEF],
+            nonce: vec![0u8; 24],
+        };
+        let complete_body = protocol::serialize(&bad_complete).unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeComplete, &complete_body)
+            .await.unwrap();
+
+        let result = bob.await.unwrap();
+        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for bad verification, got: {:?}", result);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // State machine edge cases
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_handshake_from_wrong_state() {
+        init_crypto();
+        let identity = make_test_identity();
+        let peer_identity = make_test_identity();
+        let peer_pub = peer_identity.public_key_bytes();
+
+        let (mut io, _other) = tokio::io::duplex(65536);
+        let mut session = Session::new();
+        session.state = ConnectionState::Established;
+
+        let result = session.handshake_as_initiator(
+            &mut io, &identity, &peer_pub, vec![],
+        ).await;
+
+        assert!(result.is_err(),
+            "handshake from Established state should fail");
     }
 }

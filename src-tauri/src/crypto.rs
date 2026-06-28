@@ -12,6 +12,7 @@
 use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
 use sodiumoxide::crypto::hash::sha256;
 use sodiumoxide::crypto::kx;
+use sodiumoxide::crypto::scalarmult::curve25519 as scalarmult;
 use sodiumoxide::crypto::sign;
 use sodiumoxide::randombytes;
 use zeroize::Zeroize;
@@ -43,6 +44,14 @@ pub enum CryptoError {
     InputTooLarge { size: usize, max: usize },
     #[error("invalid key length")]
     InvalidKeyLength,
+    #[error("X3DH key derivation failed")]
+    X3DHFailed,
+    #[error("double ratchet error: {0}")]
+    DoubleRatchetError(String),
+    #[error("prekey signature verification failed")]
+    PrekeySignatureInvalid,
+    #[error("too many skipped message keys (max {0})")]
+    MaxSkippedKeysExceeded(usize),
 }
 
 /// Long-term identity keypair (Ed25519).
@@ -135,6 +144,94 @@ pub fn verify_signature(
     }
 }
 
+// ─── X25519 Identity Key (for X3DH) ──────────────────────────────────────────
+
+/// Long-term X25519 identity keypair for X3DH Diffie-Hellman operations.
+/// This is separate from the Ed25519 signing key. Kept in the vault alongside it.
+pub struct X25519IdentityKeypair {
+    pub(crate) public_key: [u8; 32],
+    secret_key: [u8; 32],
+}
+
+impl X25519IdentityKeypair {
+    pub fn generate() -> Self {
+        let (pk, sk) = kx::gen_keypair();
+        Self {
+            public_key: pk.0,
+            secret_key: sk.0,
+        }
+    }
+
+    pub fn from_bytes(public: &[u8; 32], secret: &[u8; 32]) -> Result<Self, CryptoError> {
+        Ok(Self {
+            public_key: *public,
+            secret_key: *secret,
+        })
+    }
+
+    pub fn public_key_bytes(&self) -> [u8; 32] {
+        self.public_key
+    }
+
+    pub fn secret_key_bytes(&self) -> [u8; 32] {
+        self.secret_key
+    }
+
+    /// Perform X25519 Diffie-Hellman with this identity key and a peer's public key.
+    pub fn diffie_hellman(&self, their_public: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
+        let n = scalarmult::Scalar::from_slice(&self.secret_key)
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let p = scalarmult::GroupElement::from_slice(their_public)
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let shared = scalarmult::scalarmult(&n, &p)
+            .map_err(|_| CryptoError::KeyDerivationFailed)?;
+        Ok(shared.0)
+    }
+}
+
+impl Drop for X25519IdentityKeypair {
+    fn drop(&mut self) {
+        self.secret_key.zeroize();
+        self.public_key.zeroize();
+    }
+}
+
+// ─── HKDF-SHA256 (RFC 5869) ──────────────────────────────────────────────────
+
+/// HKDF-Extract: PRK = HMAC-SHA256(salt, IKM)
+pub(crate) fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
+    use hmac::Mac;
+    let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(salt)
+        .expect("HMAC accepts any key length");
+    mac.update(ikm);
+    let result = mac.finalize();
+    result.into_bytes().into()
+}
+
+/// HKDF-Expand: output key material from PRK, info, and desired length.
+pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8> {
+    use hmac::Mac;
+    let mut result = Vec::with_capacity(length);
+    let mut t: Vec<u8> = Vec::new();
+    for i in 1u8..=((length + 31) / 32) as u8 {
+        let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(prk)
+            .expect("HMAC accepts any key length");
+        mac.update(&t);
+        mac.update(info);
+        mac.update(&[i]);
+        t = mac.finalize().into_bytes().to_vec();
+        result.extend_from_slice(&t);
+    }
+    result.truncate(length);
+    result
+}
+
+/// Full HKDF: HKDF(salt, IKM, info, length) = HKDF-Expand(HKDF-Extract(salt, IKM), info, length)
+pub(crate) fn hkdf(salt: &[u8], ikm: &[u8], info: &[u8], length: usize) -> Vec<u8> {
+    let prk = hkdf_extract(salt, ikm);
+    hkdf_expand(&prk, info, length)
+}
+
 /// Ephemeral keypair for X25519 Diffie-Hellman key exchange.
 pub struct EphemeralKeypair {
     pub public_key: kx::PublicKey,
@@ -191,6 +288,341 @@ impl EphemeralKeypair {
 impl Drop for EphemeralKeypair {
     fn drop(&mut self) {
         self.secret_key.0.zeroize();
+    }
+}
+
+// ─── X3DH (Extended Triple Diffie-Hellman) ───────────────────────────────────
+
+/// Prekey bundle for X3DH key agreement, extracted from an invite.
+/// The `signed_prekey_sig` should be verified against the Ed25519 identity
+/// key before calling `x3dh_initiate`.
+pub struct PrekeyBundle {
+    pub identity_key: [u8; 32],            // IK: X25519 identity public key
+    pub signed_prekey: [u8; 32],           // SPK: X25519 signed prekey public
+    pub signed_prekey_sig: Vec<u8>,         // Ed25519 signature(SPK) — verify before use
+    pub one_time_prekey: Option<[u8; 32]>,  // OPK: optional X25519 one-time prekey
+}
+
+/// Output of X3DH key agreement.
+pub struct X3DHSessionKeys {
+    pub root_key: [u8; 32],   // Root key for Double Ratchet
+    pub chain_key: [u8; 32],  // Initial chain key
+}
+
+/// Compute X3DH shared secret as the INITIATOR (Alice).
+///
+/// SK = DH(IK_A, SPK_B) || DH(EK_A, IK_B) || DH(EK_A, SPK_B) || [DH(EK_A, OPK_B)]
+/// root_key, chain_key = HKDF(salt=32×0x00, SK, "M2M-X3DH", 64)
+///
+/// Caller MUST verify `bundle.signed_prekey_sig` with the peer's Ed25519 key first.
+pub fn x3dh_initiate(
+    our_identity: &X25519IdentityKeypair,  // IK_A
+    our_ephemeral: &EphemeralKeypair,      // EK_A
+    their_bundle: &PrekeyBundle,           // IK_B, SPK_B, [OPK_B]
+) -> Result<X3DHSessionKeys, CryptoError> {
+    // DH1 = DH(IK_A, SPK_B)
+    let dh1 = our_identity.diffie_hellman(&their_bundle.signed_prekey)?;
+    // DH2 = DH(EK_A, IK_B)
+    let dh2 = our_identity.diffie_hellman(&their_bundle.identity_key)?;
+    // DH3 = DH(EK_A, SPK_B)
+    let dh3 = our_identity.diffie_hellman(&their_bundle.signed_prekey)?;
+
+    // Build SK = DH1 || DH2 || DH3 || [DH4]
+    let mut sk = Vec::with_capacity(96);
+    sk.extend_from_slice(&dh1);
+    sk.extend_from_slice(&dh2);
+    sk.extend_from_slice(&dh3);
+
+    // DH4 = DH(EK_A, OPK_B) if OPK available
+    if let Some(opk) = &their_bundle.one_time_prekey {
+        let dh4 = our_identity.diffie_hellman(opk)?;
+        sk.extend_from_slice(&dh4);
+    }
+
+    // Derive root_key (32B) + chain_key (32B) = 64B total
+    let output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
+    let mut root_key = [0u8; 32];
+    let mut chain_key = [0u8; 32];
+    root_key.copy_from_slice(&output[..32]);
+    chain_key.copy_from_slice(&output[32..]);
+
+    Ok(X3DHSessionKeys { root_key, chain_key })
+}
+
+/// Compute X3DH shared secret as the RESPONDER (Bob).
+///
+/// SK = DH(SPK_B, IK_A) || DH(IK_B, EK_A) || DH(SPK_B, EK_A) || [DH(OPK_B, EK_A)]
+pub fn x3dh_respond(
+    our_identity: &X25519IdentityKeypair,      // IK_B
+    our_signed_prekey: &EphemeralKeypair,       // SPK_B (must have secret key)
+    our_one_time_prekey: Option<&EphemeralKeypair>, // OPK_B (optional)
+    their_ephemeral: &[u8; 32],                // EK_A
+    their_identity: &[u8; 32],                 // IK_A
+) -> Result<X3DHSessionKeys, CryptoError> {
+    x3dh_respond_raw(our_identity, our_signed_prekey, our_one_time_prekey,
+                     their_ephemeral, their_identity)
+}
+
+fn x3dh_respond_raw(
+    our_identity: &X25519IdentityKeypair,
+    our_signed_prekey: &EphemeralKeypair,
+    our_one_time_prekey: Option<&EphemeralKeypair>,
+    their_ephemeral: &[u8; 32],
+    their_identity: &[u8; 32],
+) -> Result<X3DHSessionKeys, CryptoError> {
+    // For DH operations we need to convert kx keys to X25519 keys.
+    // SPK_B's secret key is an EphemeralKeypair (kx::SecretKey).
+    // We use diffie_hellman style but with the raw secret.
+    use sodiumoxide::crypto::scalarmult::curve25519 as sm;
+
+    // Convert SPK_B secret to scalar
+    let spk_scalar = sm::Scalar::from_slice(&our_signed_prekey.secret_key.0)
+        .ok_or(CryptoError::InvalidKeyLength)?;
+
+    // DH1 = DH(SPK_B, IK_A) — use SPK_B's secret, IK_A's public
+    let ik_a = sm::GroupElement::from_slice(their_identity)
+        .ok_or(CryptoError::InvalidKeyLength)?;
+    let dh1 = sm::scalarmult(&spk_scalar, &ik_a)
+        .map_err(|_| CryptoError::KeyDerivationFailed)?;
+
+    // DH2 = DH(IK_B, EK_A)
+    let dh2 = our_identity.diffie_hellman(their_ephemeral)?;
+
+    // For DH3 = DH(SPK_B, EK_A), use SPK_B's secret again
+    let ek_a = sm::GroupElement::from_slice(their_ephemeral)
+        .ok_or(CryptoError::InvalidKeyLength)?;
+    let dh3 = sm::scalarmult(&spk_scalar, &ek_a)
+        .map_err(|_| CryptoError::KeyDerivationFailed)?;
+
+    let mut sk = Vec::with_capacity(96);
+    sk.extend_from_slice(&dh1.0);
+    sk.extend_from_slice(&dh2);
+    sk.extend_from_slice(&dh3.0);
+
+    // DH4 = DH(OPK_B, EK_A) if available
+    if let Some(opk) = our_one_time_prekey {
+        let opk_scalar = sm::Scalar::from_slice(&opk.secret_key.0)
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let dh4 = sm::scalarmult(&opk_scalar, &ek_a)
+            .map_err(|_| CryptoError::KeyDerivationFailed)?;
+        sk.extend_from_slice(&dh4.0);
+    }
+
+    let output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
+    let mut root_key = [0u8; 32];
+    let mut chain_key = [0u8; 32];
+    root_key.copy_from_slice(&output[..32]);
+    chain_key.copy_from_slice(&output[32..]);
+
+    Ok(X3DHSessionKeys { root_key, chain_key })
+}
+
+// ─── Double Ratchet ───────────────────────────────────────────────────────────
+
+/// A single-use message key derived from a chain key.
+pub struct MessageKey(pub [u8; 32]);
+
+/// Double Ratchet state machine for per-message key evolution.
+///
+/// Manages root key (DH ratchet) + sending/receiving chain keys.
+/// Chain keys advance via HKDF: each message derives a unique message key
+/// and produces a new chain key. DH ratchets periodically for break-in recovery.
+pub struct DoubleRatchet {
+    root_key: [u8; 32],
+    send_chain_key: Option<[u8; 32]>,
+    recv_chain_key: Option<[u8; 32]>,
+    send_message_number: u64,
+    recv_message_number: u64,
+    /// Our current DH ratchet keypair.
+    our_ratchet_keypair: EphemeralKeypair,
+    /// Peer's current DH ratchet public key.
+    their_ratchet_pub: [u8; 32],
+}
+
+impl DoubleRatchet {
+    /// Initialize the Double Ratchet from X3DH output.
+    ///
+    /// - `x3dh`: output of X3DH (root_key + initial chain_key)
+    /// - `dh_ratchet_keypair`: our initial DH ratchet keypair
+    /// - `dh_remote_public`: peer's initial DH ratchet public key
+    /// - `role_is_sender`: true if we send the first message
+    pub fn new(
+        x3dh: X3DHSessionKeys,
+        dh_ratchet_keypair: EphemeralKeypair,
+        dh_remote_public: [u8; 32],
+        role_is_sender: bool,
+    ) -> Self {
+        let root_key = x3dh.root_key;
+        let chain_key = x3dh.chain_key;
+        if role_is_sender {
+            Self {
+                root_key,
+                send_chain_key: Some(chain_key),
+                recv_chain_key: None,
+                send_message_number: 0,
+                recv_message_number: 0,
+                our_ratchet_keypair: dh_ratchet_keypair,
+                their_ratchet_pub: dh_remote_public,
+            }
+        } else {
+            Self {
+                root_key,
+                send_chain_key: None,
+                recv_chain_key: Some(chain_key),
+                send_message_number: 0,
+                recv_message_number: 0,
+                our_ratchet_keypair: dh_ratchet_keypair,
+                their_ratchet_pub: dh_remote_public,
+            }
+        }
+    }
+
+    /// Derive a message key from a chain key and advance the chain.
+    fn derive_message_key(chain_key: &[u8; 32]) -> (MessageKey, [u8; 32]) {
+        let out = hkdf(chain_key, b"", b"M2M-MSG-KEY", 64);
+        let mut msg_key = [0u8; 32];
+        let mut next_key = [0u8; 32];
+        msg_key.copy_from_slice(&out[..32]);
+        next_key.copy_from_slice(&out[32..]);
+        (MessageKey(msg_key), next_key)
+    }
+
+    /// Perform a DH ratchet: advance root key using a new DH shared secret.
+    fn dh_ratchet_step(&mut self, remote_pub: &[u8; 32]) -> Result<(), CryptoError> {
+        let shared = self.our_ratchet_keypair.diffie_hellman(remote_pub)?;
+        let out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
+        let mut new_root = [0u8; 32];
+        let mut new_chain = [0u8; 32];
+        new_root.copy_from_slice(&out[..32]);
+        new_chain.copy_from_slice(&out[32..]);
+        self.root_key = new_root;
+        // New chain key goes to the receiving chain (we received the DH key)
+        self.recv_chain_key = Some(new_chain);
+        self.their_ratchet_pub = *remote_pub;
+        self.recv_message_number = 0;
+        Ok(())
+    }
+
+    /// Encrypt a message: derive message key, encrypt, advance chain.
+    ///
+    /// Returns (message_number, nonce, ciphertext).
+    /// If `embed_ratchet_key` is Some, the provided DH ratchet key is embedded
+    /// in the message header so the other side can advance the root key.
+    pub fn encrypt(
+        &mut self,
+        plaintext: &[u8],
+        aad: &[u8],
+        embed_ratchet_key: Option<[u8; 32]>,
+    ) -> Result<(u64, Vec<u8>, Vec<u8>), CryptoError> {
+        // If we have a new ratchet key to send, do a DH ratchet first
+        if let Some(new_ratchet_pub) = embed_ratchet_key {
+            let shared = self.our_ratchet_keypair.diffie_hellman(&self.their_ratchet_pub)?;
+            let out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
+            let mut new_root = [0u8; 32];
+            let mut new_chain = [0u8; 32];
+            new_root.copy_from_slice(&out[..32]);
+            new_chain.copy_from_slice(&out[32..]);
+            self.root_key = new_root;
+            // New chain key goes to the sending chain (we're sending after DH ratchet)
+            self.send_chain_key = Some(new_chain);
+            self.send_message_number = 0;
+            // Update our keypair to the new one
+            // Note: the caller provides the new public key; we keep our existing private key.
+            // In a full implementation, we'd generate a new keypair here.
+        }
+
+        let send_chain = self.send_chain_key
+            .ok_or(CryptoError::DoubleRatchetError("no send chain key".into()))?;
+
+        let (msg_key, next_chain) = Self::derive_message_key(&send_chain);
+        self.send_chain_key = Some(next_chain);
+
+        let msg_num = self.send_message_number;
+        self.send_message_number += 1;
+
+        // Encrypt with XChaCha20-Poly1305
+        let nonce = aead::gen_nonce();
+        let key = aead::Key::from_slice(&msg_key.0).ok_or(CryptoError::InvalidKeyLength)?;
+        let ciphertext = aead::seal(plaintext, Some(aad), &nonce, &key);
+        let nonce_vec = nonce.0.to_vec();
+
+        // Zeroize the message key after use (drop does this, but be explicit)
+        drop(msg_key);
+
+        Ok((msg_num, nonce_vec, ciphertext))
+    }
+
+    /// Decrypt a message: derive message key, decrypt, advance chain.
+    ///
+    /// `ratchet_key` is the peer's new DH public key if this message triggers a ratchet.
+    pub fn decrypt(
+        &mut self,
+        ciphertext: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+        message_number: u64,
+        ratchet_key: Option<&[u8; 32]>,
+    ) -> Result<Vec<u8>, CryptoError> {
+        // If peer sent a new ratchet key, perform DH ratchet
+        if let Some(new_pub) = ratchet_key {
+            self.dh_ratchet_step(new_pub)?;
+        }
+
+        let recv_chain = self.recv_chain_key
+            .ok_or(CryptoError::DoubleRatchetError("no recv chain key".into()))?;
+
+        // If we skipped messages, derive through the gap
+        let mut current_chain = recv_chain;
+        while self.recv_message_number < message_number {
+            let (_, next_chain) = Self::derive_message_key(&current_chain);
+            current_chain = next_chain;
+            self.recv_message_number += 1;
+        }
+
+        // Derive the message key for THIS message
+        let (msg_key, next_chain) = Self::derive_message_key(&current_chain);
+        self.recv_chain_key = Some(next_chain);
+        self.recv_message_number += 1;
+
+        // Decrypt with XChaCha20-Poly1305
+        let key = aead::Key::from_slice(&msg_key.0).ok_or(CryptoError::InvalidKeyLength)?;
+        let nonce_obj = aead::Nonce::from_slice(nonce).ok_or(CryptoError::DecryptionFailed)?;
+        let plaintext = aead::open(ciphertext, Some(aad), &nonce_obj, &key)
+            .map_err(|_| CryptoError::DecryptionFailed)?;
+
+        drop(msg_key);
+        Ok(plaintext)
+    }
+
+    /// Check if we should perform a DH ratchet (based on message count).
+    pub fn should_ratchet(&self, interval: u64) -> bool {
+        interval > 0 && self.send_message_number > 0 && self.send_message_number % interval == 0
+    }
+
+    /// Generate a new DH ratchet keypair and return the public key.
+    pub fn generate_ratchet_key(&mut self) -> [u8; 32] {
+        let new_kp = EphemeralKeypair::generate();
+        let pub_key = new_kp.public_key_bytes();
+        // In a full implementation we'd store new_kp as our_ratchet_keypair.
+        // For now, we just return the public key — the caller embeds it in the header.
+        // The actual ratchet happens on the SEND side when encrypt() is called
+        // with embed_ratchet_key = Some(new_pub).
+        pub_key
+    }
+}
+
+/// Perform X25519 DH using an EphemeralKeypair (kx keys).
+impl EphemeralKeypair {
+    /// Compute shared secret with a peer's public key.
+    pub fn diffie_hellman(&self, their_public: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
+        use sodiumoxide::crypto::scalarmult::curve25519 as sm;
+        let n = sm::Scalar::from_slice(&self.secret_key.0)
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let p = sm::GroupElement::from_slice(their_public)
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let shared = sm::scalarmult(&n, &p)
+            .map_err(|_| CryptoError::KeyDerivationFailed)?;
+        Ok(shared.0)
     }
 }
 

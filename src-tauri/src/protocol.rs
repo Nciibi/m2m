@@ -104,6 +104,9 @@ pub enum PacketType {
     HandshakeInit = 0x01,
     HandshakeResponse = 0x02,
     HandshakeComplete = 0x03,
+    X3DHHandshakeInit = 0x04,
+    X3DHHandshakeResponse = 0x05,
+    X3DHComplete = 0x06,
     EncryptedMessage = 0x10,
     FileTransferRequest = 0x11,
     FileTransferChunk = 0x12,
@@ -124,6 +127,9 @@ impl PacketType {
             0x01 => Ok(PacketType::HandshakeInit),
             0x02 => Ok(PacketType::HandshakeResponse),
             0x03 => Ok(PacketType::HandshakeComplete),
+            0x04 => Ok(PacketType::X3DHHandshakeInit),
+            0x05 => Ok(PacketType::X3DHHandshakeResponse),
+            0x06 => Ok(PacketType::X3DHComplete),
             0x10 => Ok(PacketType::EncryptedMessage),
             0x11 => Ok(PacketType::FileTransferRequest),
             0x12 => Ok(PacketType::FileTransferChunk),
@@ -200,9 +206,14 @@ pub struct HandshakeInit {
     pub timestamp: u64,
     pub signature: Vec<u8>,
     /// Network candidates for ICE-Lite connectivity.
-    /// Allows the responder to know the initiator's alternative addresses.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub candidates: Vec<WireCandidate>,
+    /// X25519 identity public key (X3DH). NEW in protocol v2, appended for backward compat.
+    #[serde(default)]
+    pub x25519_identity_pub: [u8; 32],
+    /// The one-time prekey consumed, if any (X3DH).
+    #[serde(default)]
+    pub used_opk: Option<[u8; 32]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,9 +224,11 @@ pub struct HandshakeResponse {
     pub timestamp: u64,
     pub signature: Vec<u8>,
     /// Network candidates for ICE-Lite connectivity.
-    /// Allows the initiator to know the responder's alternative addresses.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub candidates: Vec<WireCandidate>,
+    /// X25519 identity public key (X3DH). NEW in protocol v2, appended for backward compat.
+    #[serde(default)]
+    pub x25519_identity_pub: [u8; 32],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,13 +237,33 @@ pub struct HandshakeComplete {
     pub nonce: Vec<u8>,
 }
 
+// --- Double Ratchet Header ---
+
+/// Header for Double Ratchet encrypted messages.
+/// Carries the DH ratchet key (if ratcheting) and message number for chain derivation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DRHeader {
+    /// New DH ratchet public key (None for continuation messages).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ratchet_key: Option<[u8; 32]>,
+    /// Number of messages in the previous sending chain (PN in the spec).
+    pub previous_chain_length: u32,
+    /// Message number within the current chain (N in the spec).
+    pub message_number: u64,
+}
+
 // --- Encrypted Message Envelope ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptedEnvelope {
     pub nonce: Vec<u8>,
+    /// Message counter (legacy, used in pre-X3DH sessions).
+    #[serde(default)]
     pub counter: u64,
     pub ciphertext: Vec<u8>,
+    /// Double Ratchet header (used in X3DH+DR sessions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dr_header: Option<DRHeader>,
 }
 
 // --- Inner Message Types (decrypted content) ---
@@ -337,13 +370,25 @@ pub const INVITE_FLAG_LISTENER: u8 = 0x02;
 pub struct InvitePayload {
     pub version: u8,
     pub identity_pub: [u8; 32],
+    /// X25519 public key for X3DH key agreement.
+    #[serde(default)]
+    pub x25519_identity_pub: [u8; 32],
+    /// X25519 signed prekey public key (X3DH).
+    #[serde(default)]
+    pub signed_prekey: [u8; 32],
+    /// Ed25519 signature over the signed prekey, binding it to the identity.
+    #[serde(default)]
+    pub signed_prekey_sig: Vec<u8>,
+    /// Optional one-time prekey for forward secrecy (X3DH).
+    #[serde(default)]
+    pub one_time_prekey: Option<[u8; 32]>,
     pub address_hint: String,
     pub created_at: u64,
     pub expires_at: u64,
     pub nonce: Vec<u8>,
     pub flags: u8,
     /// Network candidates for ICE-Lite connectivity (host, srflx).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub candidates: Vec<WireCandidate>,
 }
 
@@ -411,7 +456,7 @@ mod protocol_tests {
 
     #[test]
     fn test_unknown_packet_type_rejected() {
-        let invalid_bytes: &[u8] = &[0x00, 0x04, 0x0F, 0x16, 0x22, 0x32, 0x41, 0x50, 0xFF];
+        let invalid_bytes: &[u8] = &[0x00, 0x0F, 0x16, 0x22, 0x32, 0x41, 0x50, 0xFF];
         for &byte in invalid_bytes {
             assert!(
                 PacketType::from_byte(byte).is_err(),
@@ -560,6 +605,7 @@ mod protocol_tests {
             nonce: vec![0xAA; 24],
             counter: 42,
             ciphertext: vec![0xBB; 128],
+            dr_header: None,
         };
         let bytes = serialize(&env).unwrap();
         let decoded: EncryptedEnvelope = deserialize(&bytes).unwrap();
@@ -628,6 +674,8 @@ mod protocol_tests {
             version: PROTOCOL_VERSION,
             ephemeral_pub: [0xAA; 32],
             identity_pub: [0xBB; 32],
+            x25519_identity_pub: [0xBB; 32],
+            used_opk: None,
             timestamp: 1719446400,
             signature: vec![0xCC; 64],
             candidates: vec![
@@ -650,6 +698,8 @@ mod protocol_tests {
             version: PROTOCOL_VERSION,
             ephemeral_pub: [0xAA; 32],
             identity_pub: [0xBB; 32],
+            x25519_identity_pub: [0xBB; 32],
+            used_opk: None,
             timestamp: 1719446400,
             signature: vec![0xCC; 64],
             candidates: vec![],

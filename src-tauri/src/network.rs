@@ -300,10 +300,10 @@ pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Res
     })
 }
 
-/// Read exactly one length-prefixed frame from a TCP stream.
+/// Read exactly one length-prefixed frame from any async reader.
 /// Validates frame size and protocol version before returning.
-pub async fn read_frame(stream: &mut TcpStream) -> Result<RawFrame, NetworkError> {
-    read_frame_impl(stream).await
+pub async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFrame, NetworkError> {
+    read_frame_impl(reader).await
 }
 
 /// Read a frame from an OwnedReadHalf (used by the receive loop).
@@ -433,6 +433,7 @@ pub async fn send_error<W: AsyncWrite + Unpin>(
 #[cfg(test)]
 mod network_tests {
     use super::*;
+    use crate::protocol::{MAX_FRAME_SIZE, PROTOCOL_VERSION};
 
     // ═══════════════════════════════════════════════════════════
     // sanitize_filename — path traversal and injection defence
@@ -648,5 +649,176 @@ mod network_tests {
         assert_eq!(frame.packet_type, PacketType::FileTransferChunk);
         assert_eq!(frame.body.len(), body.len());
         assert_eq!(frame.body, body);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ConnectionLimiter — edge cases (security hardening)
+    // ═══════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_limiter_window_expiry() {
+        let limiter = ConnectionLimiter::new();
+        let ip: IpAddr = "10.0.0.1".parse().unwrap();
+
+        // Fill per-IP quota to the limit
+        for _ in 0..MAX_CONNECTIONS_PER_IP {
+            assert!(limiter.check(ip), "should allow connections up to per-IP limit");
+        }
+        // Verify the quota is full
+        assert!(!limiter.check(ip), "should reject connection over per-IP limit");
+
+        // NOTE: This test requires ~61s of real time to pass.
+        // The sliding window is based on std::time::Instant (not tokio time),
+        // so tokio::time::pause/advance cannot accelerate it.
+        std::thread::sleep(Duration::from_secs(RATE_LIMIT_WINDOW_SECS + 1));
+
+        // After the window expires, old entries are drained and new connections allowed
+        assert!(limiter.check(ip), "window expired — new connection should be allowed");
+    }
+
+    #[test]
+    fn test_limiter_ipv6() {
+        let limiter = ConnectionLimiter::new();
+        let ip_loopback: IpAddr = "::1".parse().unwrap();
+        let ip_unique: IpAddr = "2001:db8::1".parse().unwrap();
+
+        // Fill IPv6 loopback quota
+        for _ in 0..MAX_CONNECTIONS_PER_IP {
+            assert!(limiter.check(ip_loopback), "IPv6 loopback should be allowed up to limit");
+        }
+        assert!(!limiter.check(ip_loopback), "IPv6 loopback should hit per-IP limit");
+
+        // A different IPv6 address has its own quota
+        assert!(limiter.check(ip_unique), "different IPv6 address should be independent");
+    }
+
+    #[test]
+    fn test_limiter_check_then_increment_flow() {
+        let limiter = ConnectionLimiter::new();
+        let ip: IpAddr = "10.0.0.1".parse().unwrap();
+
+        // Real-world flow: check() passes → increment()
+        assert!(limiter.check(ip), "check should pass under limit");
+        limiter.increment();
+        assert_eq!(limiter.active_count(), 1);
+
+        // Decrement brings the count back
+        limiter.decrement();
+        assert_eq!(limiter.active_count(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Frame validation — error propagation from protocol layer
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_read_frame_reserved_version_rejected() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        // Craft a frame with reserved version 0x00
+        // Frame: [4B length=2] [1B version=0x00] [1B type=0x10]
+        let len = (2u32).to_be_bytes();
+        writer.write_all(&len).await.unwrap();
+        writer.write_all(&[0x00, PacketType::EncryptedMessage.to_byte()]).await.unwrap();
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(
+            result,
+            Err(NetworkError::Protocol(protocol::ProtocolError::ReservedVersion(0x00)))
+        ), "expected ReservedVersion(0x00)");
+    }
+
+    #[tokio::test]
+    async fn test_read_frame_unsupported_version_rejected() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        // Craft a frame with unsupported version 0x02
+        let len = (2u32).to_be_bytes();
+        writer.write_all(&len).await.unwrap();
+        writer.write_all(&[0x02, PacketType::EncryptedMessage.to_byte()]).await.unwrap();
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(
+            result,
+            Err(NetworkError::Protocol(protocol::ProtocolError::UnsupportedVersion(0x02)))
+        ), "expected UnsupportedVersion(0x02)");
+    }
+
+    #[tokio::test]
+    async fn test_read_frame_unknown_packet_type_rejected() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        // Craft a frame with valid version but unknown packet type 0xFF
+        let len = (2u32).to_be_bytes();
+        writer.write_all(&len).await.unwrap();
+        writer.write_all(&[PROTOCOL_VERSION, 0xFF]).await.unwrap();
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(
+            result,
+            Err(NetworkError::Protocol(protocol::ProtocolError::UnknownPacketType(0xFF)))
+        ), "expected UnknownPacketType(0xFF)");
+    }
+
+    #[tokio::test]
+    async fn test_read_frame_size_too_large_rejected() {
+        let (mut writer, mut reader) = tokio::io::duplex(1024 * 1024);
+
+        // Length prefix claims MAX_FRAME_SIZE + 1 bytes (over 16 MiB)
+        let oversized = MAX_FRAME_SIZE + 1;
+        let len = oversized.to_be_bytes();
+        writer.write_all(&len).await.unwrap();
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(
+            result,
+            Err(NetworkError::Protocol(protocol::ProtocolError::FrameTooLarge { .. }))
+        ), "expected FrameTooLarge");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Slowloris detection — per-byte 1s timeout verification
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_read_frame_timeout_during_length_prefix() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        // Write only 2 of the 4 length-prefix bytes — the per-byte 1s timeout
+        // should fire on the 3rd byte attempt.
+        writer.write_all(&[0x00, 0x01]).await.unwrap();
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(result, Err(NetworkError::ReadTimeout)),
+            "expected ReadTimeout from incomplete length prefix");
+    }
+
+    #[tokio::test]
+    async fn test_read_frame_timeout_during_body() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        // Write valid length prefix declaring 100-byte payload
+        let body_len = 100u32;
+        writer.write_all(&body_len.to_be_bytes()).await.unwrap();
+        // Write only 1 byte of the declared body
+        writer.write_all(&[0xAA]).await.unwrap();
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(result, Err(NetworkError::ReadTimeout)),
+            "expected ReadTimeout from incomplete body");
+    }
+
+    #[tokio::test]
+    async fn test_read_frame_peer_closed_during_body() {
+        let (mut writer, mut reader) = tokio::io::duplex(65536);
+
+        // Write valid length prefix, then drop the writer (peer disconnect)
+        let body_len = 100u32;
+        writer.write_all(&body_len.to_be_bytes()).await.unwrap();
+        drop(writer); // Simulate peer closing the connection
+
+        let result = read_frame_impl(&mut reader).await;
+        assert!(matches!(result, Err(NetworkError::PeerClosed)),
+            "expected PeerClosed after writer drop during body read");
     }
 }

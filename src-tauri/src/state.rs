@@ -79,6 +79,8 @@ pub struct ManualForward {
 pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
     pub identity: RwLock<Option<IdentityKeypair>>,
+    /// X25519 identity keypair for X3DH key agreement.
+    pub x25519_identity: RwLock<Option<crate::crypto::X25519IdentityKeypair>>,
     /// Active peer connections, keyed by peer public key hex.
     pub connections: RwLock<HashMap<String, Arc<Mutex<PeerConnection>>>>,
     /// TCP listener address (if listening).
@@ -136,6 +138,7 @@ impl AppState {
     pub fn new(data_dir: String) -> Self {
         Self {
             identity: RwLock::new(None),
+            x25519_identity: RwLock::new(None),
             connections: RwLock::new(HashMap::new()),
             listen_addr: RwLock::new(None),
             incoming_tx: Mutex::new(None),

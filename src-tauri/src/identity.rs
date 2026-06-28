@@ -73,9 +73,14 @@ pub fn create_invite(
         flags |= INVITE_FLAG_ONE_TIME;
     }
 
+    // TODO: populate X3DH prekey fields from X25519 identity key (Phase 4)
     let payload = InvitePayload {
         version: PROTOCOL_VERSION,
         identity_pub: identity.public_key_bytes(),
+        x25519_identity_pub: identity.public_key_bytes(),
+        signed_prekey: identity.public_key_bytes(),
+        signed_prekey_sig: vec![],
+        one_time_prekey: None,
         address_hint: address_hint.to_string(),
         created_at: now,
         expires_at: now + validity_secs,

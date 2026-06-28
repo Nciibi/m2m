@@ -149,7 +149,7 @@ src-tauri/src/commands/
 | `#[allow(dead_code)]` on `commands.rs` imports | Removed with the split |
 | `RESERVED_VERSIONS` in `protocol.rs` | Already used — kept as-is |
 | `SessionKeyContext` in `crypto.rs` | Checked — already properly used |
-| Pre-existing `#[allow(dead_code)]` scattered in `network.rs`, `port_mapping.rs`, `tor.rs`, `hole_punch.rs`, `state.rs` | Intentional — these are architecture-level markers for Phase 3 (TURN relay) code that's designed but not wired |
+| Pre-existing `#[allow(dead_code)]` scattered in `network.rs`, `port_mapping.rs`, `tor.rs`, `hole_punch.rs`, `state.rs` | Most were architecture-level markers for Phase 3 (now wired). `TcpHolePunch` remains dead-code as a pre-existing artifact. |
 
 ### Project-wide clippy cleanup
 
@@ -417,6 +417,6 @@ to `0x02`. Keep the v0x01 parser as a fallback with a deprecation notice.
 | Innovation | 7.5 | 7.5 | 7.5 | 7.5 | 9.0 |
 | **Overall** | **7.9** | **8.1** | **8.6** | **8.8** | **9.3–9.5** |
 
-The Double Ratchet + X3DH and TURN relay are the two highest-leverage
-remaining changes. Phases 1 + 3 alone would take the project to ~9.0/10.
+The Double Ratchet + X3DH is the single highest-leverage remaining change.
+Phase 3 (TURN relay) is now complete — the full ICE candidate set is wired.
 Phases 4–6 add the polish layer to push toward 9.5+.
