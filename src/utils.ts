@@ -97,18 +97,20 @@ function detectRepeats(s: string): number {
 function detectKeyboard(s: string): number {
   const lower = s.toLowerCase();
   const rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "0123456789"];
+  const charCount = [...lower].length; // Handle astral Unicode (surrogate pairs)
   let matched = 0;
 
   for (const row of rows) {
     let i = 0;
-    while (i + 2 < lower.length) {
-      const chunk = lower.slice(i, i + 3);
+    while (i + 2 < charCount) {
+      const chunk = [...lower].slice(i, i + 3).join("");
+      if (!chunk) { i++; continue; }
       if (row.includes(chunk)) {
         matched += chunk.length;
         i += chunk.length;
         continue;
       }
-      const rev = chunk.split("").reverse().join("");
+      const rev = [...chunk].reverse().join("");
       if (row.includes(rev)) {
         matched += chunk.length;
         i += chunk.length;

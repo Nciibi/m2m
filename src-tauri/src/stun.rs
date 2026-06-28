@@ -298,8 +298,15 @@ async fn query_single_server(
             error: "no addresses found".to_string(),
         })?;
 
-    // ── Bind ephemeral UDP socket ──
-    let socket = UdpSocket::bind("0.0.0.0:0").await.map_err(StunError::Io)?;
+    // ── Bind ephemeral UDP socket (try IPv4, fall back to IPv6) ──
+    // On IPv6-only networks (mobile hotspots, some cloud VPCs), binding
+    // to 0.0.0.0 fails because it explicitly requests IPv4.
+    let socket = match UdpSocket::bind("0.0.0.0:0").await {
+        Ok(s) => s,
+        Err(_) => UdpSocket::bind("[::]:0")
+            .await
+            .map_err(|e| StunError::Io(e))?,
+    };
 
     // Socket timeout is handled entirely by the outer tokio::time::timeout
     // wrapping the recv_from call. No need for set_read_timeout here.

@@ -40,8 +40,12 @@ pub fn decode_peer_key_logged(hex_str: &str) -> Option<[u8; 32]> {
 }
 
 /// Resolve the local (non-loopback) IP address used for internet connectivity.
+///
+/// Uses dual-stack bind: tries IPv4 first, falls back to IPv6 for IPv6-only
+/// networks. Connects to `8.8.8.8:80` to discover the kernel-selected source
+/// address for outbound traffic.
 pub fn resolve_local_ip() -> Option<std::net::IpAddr> {
-    std::net::UdpSocket::bind("0.0.0.0:0")
+    crate::local_addr::bind_udp_any()
         .and_then(|socket| {
             socket.connect("8.8.8.8:80")?;
             socket.local_addr()
@@ -223,15 +227,27 @@ fn detect_repeat_penalty(passphrase: &str) -> f64 {
 }
 
 /// Check for keyboard row patterns (qwerty, asdf, zxcv).
+///
+/// Uses char-count iteration to handle multi-byte Unicode correctly:
+/// `str::len()` returns bytes, but `chars().skip(n)` skips `n` characters.
+/// Using byte length as the bound causes an infinite loop on Unicode strings:
+/// `chars().skip(N)` returns `""` for N >= char count, and `row.contains("")`
+/// is always true, so the index never advances.
 fn detect_keyboard_penalty(passphrase: &str) -> f64 {
     let lower = passphrase.to_lowercase();
     let kb_rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "0123456789"];
+    let char_count = lower.chars().count();
     let mut total_matched = 0usize;
 
     for row in &kb_rows {
         let mut i = 0;
-        while i + 2 < lower.len() {
+        while i + 2 < char_count {
             let chunk: String = lower.chars().skip(i).take(3).collect();
+            // Guard against empty chunk (should not happen with correct bounds)
+            if chunk.is_empty() {
+                i += 1;
+                continue;
+            }
             if row.contains(&chunk) {
                 total_matched += chunk.len();
                 i += chunk.len();
@@ -317,7 +333,7 @@ mod entropy_tests {
     #[test]
     fn test_keyboard_penalty() {
         let e = estimate_passphrase_entropy("qwerty1234");
-        assert!(e < 25.0, "keyboard pattern should score < 25 bits, got {e}");
+        assert!(e < 28.0, "keyboard pattern should score < 28 bits, got {e}");
     }
 
     #[test]

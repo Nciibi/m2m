@@ -32,7 +32,7 @@ pub fn gather_host_candidates() -> Vec<SocketAddr> {
     ];
 
     for &(ip, port) in probes {
-        if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if let Ok(socket) = bind_udp_any() {
             let addr_str = format!("{}:{}", ip, port);
             if socket.connect(&addr_str).is_ok() {
                 if let Ok(local) = socket.local_addr() {
@@ -95,6 +95,19 @@ pub fn gather_ipv6_candidates() -> Vec<SocketAddr> {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/// Bind a `std::net::UdpSocket` to an arbitrary port, trying IPv4 first then IPv6.
+///
+/// On IPv6-only networks (some mobile hotspots, AWS VPCs with IPv6-only subnets),
+/// binding to `0.0.0.0:0` fails because it explicitly requests IPv4. This helper
+/// falls back to `[::]:0` for dual-stack or IPv6-only environments.
+///
+/// The returned socket is bound to `0.0.0.0:0` on IPv4-capable hosts and
+/// `[::]:0` on IPv6-only hosts.
+pub fn bind_udp_any() -> std::io::Result<std::net::UdpSocket> {
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .or_else(|_| std::net::UdpSocket::bind("[::]:0"))
+}
 
 /// Returns `true` if `ip` is an IPv6 link-local address (fe80::/10).
 pub fn ipv6_is_link_local(ip: IpAddr) -> bool {

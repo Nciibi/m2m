@@ -1,0 +1,152 @@
+import {
+  createContext, useContext, useState, useCallback, ReactNode,
+} from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useApp } from "./AppContext";
+import type { NetworkSettings, StunConfig, NatTypeInfo } from "../types";
+
+interface SettingsContextValue {
+  networkSettings: NetworkSettings | null;
+  publicIp: string | null;
+  stunLoading: boolean;
+  networkDiagnostics: NatTypeInfo | null;
+  stunConfig: StunConfig | null;
+  stunServerInput: string;
+  setStunServerInput: (v: string) => void;
+  privateMode: boolean;
+  connectivityResult: any;
+  openSettings: () => Promise<void>;
+  handleStunDiscover: () => Promise<void>;
+  handleAddStunServer: () => Promise<void>;
+  handleRemoveStunServer: (idx: number) => Promise<void>;
+  handleResetStunDefaults: () => Promise<void>;
+  handlePrivateModeToggle: () => Promise<void>;
+  handleConnectivityCheck: () => Promise<void>;
+  handleTorToggle: () => Promise<void>;
+}
+
+const SettingsContext = createContext<SettingsContextValue | null>(null);
+
+export function useSettings(): SettingsContextValue {
+  const ctx = useContext(SettingsContext);
+  if (!ctx) throw new Error("useSettings() must be used within <SettingsProvider>");
+  return ctx;
+}
+
+export function SettingsProvider({ children }: { children: ReactNode }) {
+  const { addToast, setView } = useApp();
+
+  const [networkSettings, setNetworkSettings] = useState<NetworkSettings | null>(null);
+  const [publicIp, setPublicIp] = useState<string | null>(null);
+  const [stunLoading, setStunLoading] = useState(false);
+  const [networkDiagnostics, setNetworkDiagnostics] = useState<NatTypeInfo | null>(null);
+  const [stunConfig, setStunConfig] = useState<StunConfig | null>(null);
+  const [stunServerInput, setStunServerInput] = useState("");
+  const [privateMode, setPrivateMode] = useState(false);
+  const [connectivityResult, setConnectivityResult] = useState<any>(null);
+
+  const openSettings = useCallback(async () => {
+    setView("settings");
+    try {
+      const ns = await invoke<NetworkSettings>("get_network_settings");
+      setNetworkSettings(ns);
+      setPublicIp(ns.public_ip);
+      const sc = await invoke<StunConfig>("get_stun_config");
+      setStunConfig(sc);
+      setPrivateMode(sc.private_mode);
+      try { setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics")); }
+      catch { /* noop */ }
+    } catch { /* noop */ }
+  }, [setView]);
+
+  const handleStunDiscover = useCallback(async () => {
+    setStunLoading(true);
+    try {
+      setPublicIp(await invoke<string>("discover_public_ip"));
+      setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics"));
+    } catch (e) {
+      addToast("STUN failed: " + e, "error");
+    } finally {
+      setStunLoading(false);
+    }
+  }, [addToast]);
+
+  const handleAddStunServer = useCallback(async () => {
+    if (!stunConfig || !stunServerInput.trim()) return;
+    const newServers = [...stunConfig.servers, stunServerInput.trim()];
+    try {
+      await invoke("set_stun_servers", { servers: newServers });
+      setStunConfig({ ...stunConfig, servers: newServers });
+      setStunServerInput("");
+    } catch (e) {
+      addToast("Failed to add STUN server: " + e, "error");
+    }
+  }, [stunConfig, stunServerInput, addToast]);
+
+  const handleRemoveStunServer = useCallback(async (idx: number) => {
+    if (!stunConfig) return;
+    const newServers = stunConfig.servers.filter((_, i) => i !== idx);
+    if (newServers.length === 0) {
+      addToast("Cannot remove all STUN servers — at least one required.", "warning");
+      return;
+    }
+    try {
+      await invoke("set_stun_servers", { servers: newServers });
+      setStunConfig({ ...stunConfig, servers: newServers });
+    } catch (e) {
+      addToast("Failed to remove STUN server: " + e, "error");
+    }
+  }, [stunConfig, addToast]);
+
+  const handleResetStunDefaults = useCallback(async () => {
+    const defaults = ["stun.l.google.com:19302", "stun1.l.google.com:19302", "stun.cloudflare.com:3478", "stun.nextcloud.com:3478"];
+    try {
+      await invoke("set_stun_servers", { servers: defaults });
+      setStunConfig(stunConfig ? { ...stunConfig, servers: defaults } : null);
+    } catch (e) {
+      addToast("Failed to reset STUN servers: " + e, "error");
+    }
+  }, [stunConfig, addToast]);
+
+  const handlePrivateModeToggle = useCallback(async () => {
+    const newVal = !privateMode;
+    try {
+      await invoke("set_private_mode", { enabled: newVal });
+      setPrivateMode(newVal);
+    } catch { /* noop */ }
+  }, [privateMode]);
+
+  const handleConnectivityCheck = useCallback(async () => {
+    try {
+      setConnectivityResult(await invoke<any>("check_connectivity"));
+      setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics"));
+    } catch (e) {
+      addToast("Connectivity check failed: " + e, "error");
+    }
+  }, [addToast]);
+
+  const handleTorToggle = useCallback(async () => {
+    if (!networkSettings) return;
+    const newVal = !networkSettings.tor_enabled;
+    try {
+      await invoke("set_tor_enabled", { enabled: newVal });
+      setNetworkSettings({ ...networkSettings, tor_enabled: newVal });
+    } catch (e) {
+      addToast("Tor toggle failed: " + e, "error");
+    }
+  }, [networkSettings, addToast]);
+
+  return (
+    <SettingsContext.Provider value={{
+      networkSettings, publicIp, stunLoading, networkDiagnostics,
+      stunConfig, stunServerInput, setStunServerInput,
+      privateMode, connectivityResult,
+      openSettings,
+      handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
+      handleResetStunDefaults, handlePrivateModeToggle,
+      handleConnectivityCheck, handleTorToggle,
+    }}>
+      {children}
+    </SettingsContext.Provider>
+  );
+}

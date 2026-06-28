@@ -463,6 +463,11 @@ impl MessageStore {
     }
 
     /// Delete a conversation and all its messages.
+    ///
+    /// Uses `secure_delete` to overwrite deleted data on disk.
+    /// Does NOT run `VACUUM` — that rebuilds the entire database file (O(db_size))
+    /// and should only be done as a periodic maintenance task, not per-deletion.
+    /// SQLite automatically marks freed pages for reuse.
     pub fn delete_conversation(&self, conversation_id: &str) -> Result<(), StorageError> {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
         self.conn.execute(
@@ -473,7 +478,6 @@ impl MessageStore {
             "DELETE FROM conversations WHERE id = ?1",
             params![conversation_id],
         )?;
-        self.conn.execute_batch("VACUUM;")?;
         Ok(())
     }
 

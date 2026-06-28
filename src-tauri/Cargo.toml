@@ -88,5 +88,6 @@ default = []
 strip = true
 lto = true
 codegen-units = 1
+opt-level = "z"       # Optimize for binary size over speed
 panic = "abort"
 overflow-checks = true

@@ -388,7 +388,7 @@ mod tests {
         // Modify a payload field and re-encode with wrong sig
         let mut payload = parsed.payload.clone();
         payload.address_hint = "999.999.999.999:9999".to_string();
-        let payload_bytes = protocol::serialize(&payload).unwrap();
+        let _payload_bytes = protocol::serialize(&payload).unwrap();
         let wrong_sig = vec![0xCC; 64]; // bogus signature
         let bad_signed = protocol::SignedInvite { payload, signature: wrong_sig };
         let bad_bytes = protocol::serialize(&bad_signed).unwrap();

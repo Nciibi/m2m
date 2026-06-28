@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { Button, Input, ToastContainer } from "../components/ui";
 import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon } from "../components/ui/Icons";
 import { estimateEntropy } from "../utils";
-import { useM2M } from "../context/M2MContext";
+import { useApp } from "../context/AppContext";
+import { useVault } from "../context/VaultContext";
 
 export default function VaultView() {
-  const { vaultInitialized, handleUnlockVault, toasts, removeToast } = useM2M();
+  const { vaultInitialized, toasts, removeToast } = useApp();
+  const { handleUnlockVault } = useVault();
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
   const [vaultError, setVaultError] = useState("");

@@ -6,7 +6,6 @@ import {
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot,
 } from "../components/ui/Icons";
 import { useM2M } from "../context/M2MContext";
-import type { ConversationEntry } from "../types";
 
 export default function HubView() {
   const {

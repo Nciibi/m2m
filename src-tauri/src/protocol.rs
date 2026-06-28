@@ -323,6 +323,18 @@ pub struct FileTransferCompleteData {
     pub transfer_id: String,
 }
 
+/// Request to accept an incoming file transfer (type 0x14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileTransferAcceptData {
+    pub transfer_id: String,
+}
+
+/// Request to reject an incoming file transfer (type 0x15).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileTransferRejectData {
+    pub transfer_id: String,
+}
+
 // --- Conversation Metadata ---
 
 /// Exchanged between peers after handshake to set conversation display names.

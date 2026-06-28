@@ -14,6 +14,7 @@ use crate::protocol::{
     self, DRHeader, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
     MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
     FileTransferRequestData, FileTransferChunkData, FileTransferCompleteData,
+    FileTransferAcceptData, FileTransferRejectData,
     ConversationMetaData, WireCandidate, MAX_FILE_CHUNK_SIZE,
 };
 
@@ -571,7 +572,7 @@ impl Session {
             let padded = ratchet
                 .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
                          dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
-                .map_err(|_| SessionError::Network(network::NetworkError::PeerClosed))?;
+                .map_err(SessionError::Crypto)?;
             let plaintext = crate::crypto::unpad_message_variable(&padded)?;
             let body: MessageBody = protocol::deserialize(&plaintext)?;
             return Ok(body);
@@ -704,7 +705,9 @@ impl Session {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
         }
-        let body = protocol::serialize(&serde_json::json!({ "transfer_id": transfer_id }))?;
+        let body = protocol::serialize(&FileTransferAcceptData {
+            transfer_id: transfer_id.to_string(),
+        })?;
         self.send_encrypted_typed(stream, PacketType::FileTransferAccept, &body).await
     }
 
@@ -717,7 +720,9 @@ impl Session {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
         }
-        let body = protocol::serialize(&serde_json::json!({ "transfer_id": transfer_id }))?;
+        let body = protocol::serialize(&FileTransferRejectData {
+            transfer_id: transfer_id.to_string(),
+        })?;
         self.send_encrypted_typed(stream, PacketType::FileTransferReject, &body).await
     }
 
@@ -926,9 +931,6 @@ mod session_tests {
     use super::*;
     use crate::crypto::{self, IdentityKeypair, SessionKeys};
     use crate::protocol::{EncryptedEnvelope, PacketType, PROTOCOL_VERSION};
-    use std::time::Duration;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
     fn init_crypto() {
         let _ = crypto::init();
     }
@@ -1134,7 +1136,7 @@ mod session_tests {
         let eph2 = EphemeralKeypair::generate();
 
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1174,7 +1176,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1218,7 +1220,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1264,7 +1266,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();
@@ -1293,7 +1295,7 @@ mod session_tests {
         let eph = EphemeralKeypair::generate();
         let eph2 = EphemeralKeypair::generate();
         let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
-        let _bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
 
         let mut alice = Session::new();
         let mut bob = Session::new();

@@ -50,9 +50,6 @@ const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 /// Timeout for reading a relay control frame (REGISTERED, CONNECTED, etc.).
 const RELAY_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Per-byte read timeout for Slowloris protection (same as network.rs).
-const PER_BYTE_TIMEOUT: Duration = Duration::from_secs(1);
-
 /// Maximum relay frame body size (64 KiB — generous for control messages).
 const MAX_RELAY_BODY_SIZE: u32 = 65536;
 
@@ -158,21 +155,20 @@ pub struct RelayState {
 
 /// Read exactly one relay frame from an async reader.
 ///
-/// Same Slowloris-resistant per-byte timeout pattern as `network::read_frame`.
+/// Uses the shared Slowloris-resistant `network::read_exact_timeout` helper
+/// for per-byte timeout protection on all reads.
 async fn read_relay_frame<R: AsyncReadExt + Unpin>(
     stream: &mut R,
 ) -> Result<RelayFrame, RelayError> {
-    // Read 4-byte length prefix, per-byte timeout
+    // Read 4-byte length prefix with Slowloris protection
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
-    let mut pos = 0;
-    while pos < LENGTH_PREFIX_SIZE {
-        match time::timeout(PER_BYTE_TIMEOUT, stream.read(&mut len_buf[pos..])).await {
-            Ok(Ok(0)) => return Err(RelayError::ConnectionClosed),
-            Ok(Ok(n)) => pos += n,
-            Ok(Err(e)) => return Err(RelayError::Io(e)),
-            Err(_) => return Err(RelayError::TimedOut),
-        }
-    }
+    network::read_exact_timeout(stream, &mut len_buf, "relay len prefix")
+        .await
+        .map_err(|e| match e {
+            network::NetworkError::PeerClosed => RelayError::ConnectionClosed,
+            network::NetworkError::Io(io) => RelayError::Io(io),
+            _ => RelayError::TimedOut,
+        })?;
 
     let body_len = u32::from_be_bytes(len_buf) as usize;
 
@@ -186,17 +182,15 @@ async fn read_relay_frame<R: AsyncReadExt + Unpin>(
         return Err(RelayError::Protocol("empty relay frame".into()));
     }
 
-    // Read body with per-byte timeout
+    // Read body with Slowloris protection
     let mut body = vec![0u8; body_len];
-    let mut pos = 0;
-    while pos < body_len {
-        match time::timeout(PER_BYTE_TIMEOUT, stream.read(&mut body[pos..])).await {
-            Ok(Ok(0)) => return Err(RelayError::ConnectionClosed),
-            Ok(Ok(n)) => pos += n,
-            Ok(Err(e)) => return Err(RelayError::Io(e)),
-            Err(_) => return Err(RelayError::TimedOut),
-        }
-    }
+    network::read_exact_timeout(stream, &mut body, "relay body")
+        .await
+        .map_err(|e| match e {
+            network::NetworkError::PeerClosed => RelayError::ConnectionClosed,
+            network::NetworkError::Io(io) => RelayError::Io(io),
+            _ => RelayError::TimedOut,
+        })?;
 
     let msg_type = body[0];
     let payload = body[1..].to_vec();

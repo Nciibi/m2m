@@ -683,17 +683,6 @@ impl DoubleRatchet {
     pub fn should_ratchet(&self, interval: u64) -> bool {
         interval > 0 && self.send_message_number > 0 && self.send_message_number.is_multiple_of(interval)
     }
-
-    /// Generate a new DH ratchet keypair and return the public key.
-    pub fn generate_ratchet_key(&mut self) -> [u8; 32] {
-        let new_kp = EphemeralKeypair::generate();
-        
-        // In a full implementation we'd store new_kp as our_ratchet_keypair.
-        // For now, we just return the public key — the caller embeds it in the header.
-        // The actual ratchet happens on the SEND side when encrypt() is called
-        // with embed_ratchet_key = Some(new_pub).
-        new_kp.public_key_bytes()
-    }
 }
 
 /// Perform X25519 DH using an EphemeralKeypair (kx keys).

@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, AlertTriangleIcon } from "../components/ui/Icons";
-import { useM2M } from "../context/M2MContext";
+import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon } from "../components/ui/Icons";
+import { useApp } from "../context/AppContext";
+import { useSettings } from "../context/SettingsContext";
 
 export default function SettingsView() {
+  const { identity, toasts, removeToast, setView } = useApp();
   const {
-    identity, networkSettings, publicIp, stunLoading, networkDiagnostics,
+    networkSettings, publicIp, stunLoading, networkDiagnostics,
     stunConfig, stunServerInput, privateMode, connectivityResult,
-    toasts, removeToast, setView, handleStunDiscover, handleAddStunServer,
+    handleStunDiscover, handleAddStunServer,
     handleRemoveStunServer, handleResetStunDefaults, handlePrivateModeToggle,
     handleConnectivityCheck, handleTorToggle, setStunServerInput,
-  } = useM2M();
+  } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
 
@@ -70,8 +72,8 @@ export default function SettingsView() {
                   </Badge>
                 </div>
                 <div className="settings-row">
-                  <span className="settings-label">Latency</span>
-                  <span>{networkDiagnostics.latency_ms} ms</span>
+                  <span className="settings-label">STUN Servers</span>
+                  <span>{networkDiagnostics.stun_servers?.filter(s => s.reachable).length ?? 0}/{networkDiagnostics.stun_servers?.length ?? 0} reachable</span>
                 </div>
               </>
             )}

@@ -30,14 +30,8 @@ use crate::protocol::{
 /// A dead connection is detected within 10s instead of 30s.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// TCP connection timeout.
-#[allow(dead_code)]
+/// TCP connection timeout — used by the hole_punch module's per-strategy timeout.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// Maximum number of queued incoming connections.
-/// Increased from 8 to 128 for better DoS resilience.
-#[allow(dead_code)]
-const LISTENER_BACKLOG: u32 = 128;
 
 // ─── Connection Rate Limiting ───────────────────────────────────────────────
 
@@ -57,21 +51,34 @@ const MAX_TOTAL_CONNECTIONS: usize = 50;
 /// `VecDeque<Instant>` that lives in its own DashMap shard.
 ///
 /// ## Limits
-/// - **Per-IP**: max 10 new connections per 60-second window
+/// - **Per-IP**: max 10 new connections per time window (default 60s)
 /// - **Global**: max 50 concurrent connections total
 pub struct ConnectionLimiter {
     /// Per-IP sliding window timestamps (lock-free concurrent map).
     per_ip: DashMap<IpAddr, VecDeque<Instant>>,
     /// Current total active connection count (lock-free atomic).
     active_connections: AtomicUsize,
+    /// Sliding window duration (configurable for testing).
+    window_duration: Duration,
 }
 
 impl ConnectionLimiter {
-    /// Create a new connection limiter with default limits.
+    /// Create a new connection limiter with default limits (60s window).
     pub fn new() -> Self {
         Self {
             per_ip: DashMap::new(),
             active_connections: AtomicUsize::new(0),
+            window_duration: Duration::from_secs(RATE_LIMIT_WINDOW_SECS),
+        }
+    }
+
+    /// Create a connection limiter with a custom window duration (for testing).
+    #[cfg(test)]
+    pub fn with_window(window: Duration) -> Self {
+        Self {
+            per_ip: DashMap::new(),
+            active_connections: AtomicUsize::new(0),
+            window_duration: window,
         }
     }
 
@@ -90,12 +97,11 @@ impl ConnectionLimiter {
 
         // Per-IP rate limit: DashMap shard-level locking (not global).
         let now = Instant::now();
-        let window = Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
         let mut entry = self.per_ip.entry(ip).or_default();
 
         // Drain expired entries from the front.
         while let Some(&t) = entry.front() {
-            if now.duration_since(t) >= window {
+            if now.duration_since(t) >= self.window_duration {
                 entry.pop_front();
             } else {
                 break;
@@ -202,31 +208,25 @@ pub enum NetworkError {
 }
 
 /// Connection state machine.
-/// Transitions: Disconnected → Connecting → Handshaking → Established → Disconnecting → Disconnected
+/// Transitions: Disconnected → Handshaking → Established
+/// `Connecting` and `Disconnecting` sub-states are managed internally by the
+/// network and session layers and are not exposed through this enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionState {
     /// No active connection.
     Disconnected,
-    /// TCP connection in progress.
-    #[allow(dead_code)]
-    Connecting,
     /// TCP connected, performing cryptographic handshake.
     Handshaking,
     /// Handshake complete, encrypted communication active.
     Established,
-    /// Graceful disconnect in progress.
-    #[allow(dead_code)]
-    Disconnecting,
 }
 
 impl std::fmt::Display for ConnectionState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConnectionState::Disconnected => write!(f, "disconnected"),
-            ConnectionState::Connecting => write!(f, "connecting"),
             ConnectionState::Handshaking => write!(f, "handshaking"),
             ConnectionState::Established => write!(f, "established"),
-            ConnectionState::Disconnecting => write!(f, "disconnecting"),
         }
     }
 }
@@ -240,48 +240,53 @@ pub struct RawFrame {
     pub body: Vec<u8>,
 }
 
+/// Read exactly `buf.len()` bytes from an async reader with a per-byte 1s timeout.
+///
+/// This is the core Slowloris-protection primitive used across the codebase.
+/// Each call to `reader.read()` has a 1-second timeout rather than one timeout
+/// for the entire read, preventing an attacker from holding a connection open
+/// by sending data at a trickle (e.g. 1 byte / 9 seconds).
+///
+/// Returns `PeerClosed` on EOF before filling `buf`, `Io` on transport errors,
+/// and `ReadTimeout` if any single `read()` call takes longer than 1 second.
+pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    buf: &mut [u8],
+    label: &'static str,
+) -> Result<(), NetworkError> {
+    let mut read_pos = 0;
+    while read_pos < buf.len() {
+        match time::timeout(Duration::from_secs(1), reader.read(&mut buf[read_pos..])).await {
+            Ok(Ok(0)) => return Err(NetworkError::PeerClosed),
+            Ok(Ok(n)) => read_pos += n,
+            Ok(Err(e)) => return Err(NetworkError::Io(e)),
+            Err(_) => {
+                tracing::warn!(
+                    "Slowloris detected: read timeout on {} (progress: {}/{})",
+                    label, read_pos, buf.len()
+                );
+                return Err(NetworkError::ReadTimeout);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Internal: read a frame from any AsyncRead source.
 /// Includes Slowloris protection: each bytes-read iteration has a 1s timeout
 /// instead of a single N-second timeout for the entire frame. An attacker
 /// sending 1 byte every 9 seconds will timeout after the first byte.
 pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFrame, NetworkError> {
     // ── Slowloris-resistant length prefix read ──
-    // Read each byte with a per-byte 1s timeout instead of one 10s timeout
-    // for all 4 bytes. This prevents attackers from holding connections open
-    // by sending data at a trickle (e.g. 1 byte / 9 seconds).
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
-    let mut read_pos = 0;
-    while read_pos < LENGTH_PREFIX_SIZE {
-        match time::timeout(Duration::from_secs(1), reader.read(&mut len_buf[read_pos..])).await {
-            Ok(Ok(0)) => return Err(NetworkError::PeerClosed),
-            Ok(Ok(n)) => read_pos += n,
-            Ok(Err(e)) => return Err(NetworkError::Io(e)),
-            Err(_) => {
-                tracing::warn!("Slowloris detected: read timeout on {}-byte prefix read (progress: {}/4)", LENGTH_PREFIX_SIZE, read_pos);
-                return Err(NetworkError::ReadTimeout);
-            }
-        }
-    }
+    read_exact_timeout(reader, &mut len_buf, "length prefix").await?;
 
     let frame_len = u32::from_be_bytes(len_buf);
     validate_frame_size(frame_len)?;
 
     // ── Slowloris-resistant frame body read ──
-    // Same per-byte 1s timeout as the length prefix to prevent
-    // trickle-send attacks on large frames.
     let mut payload = vec![0u8; frame_len as usize];
-    let mut read_pos = 0;
-    while read_pos < frame_len as usize {
-        match time::timeout(Duration::from_secs(1), reader.read(&mut payload[read_pos..])).await {
-            Ok(Ok(0)) => return Err(NetworkError::PeerClosed),
-            Ok(Ok(n)) => read_pos += n,
-            Ok(Err(e)) => return Err(NetworkError::Io(e)),
-            Err(_) => {
-                tracing::warn!("Slowloris detected: read timeout on frame body (progress: {}/{})", read_pos, frame_len);
-                return Err(NetworkError::ReadTimeout);
-            }
-        }
-    }
+    read_exact_timeout(reader, &mut payload, "frame body").await?;
 
     // Parse version
     let version = payload[0];
@@ -658,7 +663,9 @@ mod network_tests {
 
     #[test]
     fn test_limiter_window_expiry() {
-        let limiter = ConnectionLimiter::new();
+        // Use a 1-second window so this test completes in ~2s instead of ~61s.
+        let window = Duration::from_secs(1);
+        let limiter = ConnectionLimiter::with_window(window);
         let ip: IpAddr = "10.0.0.1".parse().unwrap();
 
         // Fill per-IP quota to the limit
@@ -668,10 +675,8 @@ mod network_tests {
         // Verify the quota is full
         assert!(!limiter.check(ip), "should reject connection over per-IP limit");
 
-        // NOTE: This test requires ~61s of real time to pass.
-        // The sliding window is based on std::time::Instant (not tokio time),
-        // so tokio::time::pause/advance cannot accelerate it.
-        std::thread::sleep(Duration::from_secs(RATE_LIMIT_WINDOW_SECS + 1));
+        // Wait for the window to expire (1s window + 1s margin)
+        std::thread::sleep(window + Duration::from_secs(1));
 
         // After the window expires, old entries are drained and new connections allowed
         assert!(limiter.check(ip), "window expired — new connection should be allowed");

@@ -77,17 +77,15 @@ pub struct NetworkDiagnostics {
 ///
 /// Type preferences:
 ///   Host: 126
-///   IPv6: 115   (below LAN host, above srflx — IPv6 is routable but may have higher latency)
+///   IPv6: 115   (below LAN host, above srflx)
 ///   Peer-Reflexive: 110
 ///   Server-Reflexive: 100
-///   Port-mapped: 95  (UPnP/NAT-PMP/PCP — reliably forwarded but via NAT)
+///   Port-mapped: 95  (UPnP/NAT-PMP/PCP — documented for reference)
 ///   Relay: 0
 const TYPE_PREF_HOST: u32 = 126;
 const TYPE_PREF_IPV6: u32 = 115;
 const TYPE_PREF_PRFLX: u32 = 110;
 const TYPE_PREF_SRFLX: u32 = 100;
-#[allow(dead_code)]
-const TYPE_PREF_PORT_MAPPED: u32 = 95;
 const TYPE_PREF_RELAY: u32 = 0;
 
 fn compute_priority(candidate_type: CandidateType, local_pref: u32) -> u32 {
@@ -185,19 +183,3 @@ pub fn gather_reflexive_candidates(
         .collect()
 }
 
-/// Gather a relay candidate from a relay server registration.
-///
-/// Relay candidates have the lowest priority (0) since they go through a
-/// third-party relay and should only be used as a last resort.
-/// The relay_id is embedded so the connecting peer knows which relay_id
-/// to request when connecting to the relay server.
-#[allow(dead_code)]
-pub fn gather_relay_candidate(relay_addr: &str, relay_id: &str) -> NetworkCandidate {
-    NetworkCandidate {
-        address: relay_addr.to_string(),
-        candidate_type: CandidateType::Relay,
-        priority: compute_priority(CandidateType::Relay, 0),
-        foundation: format!("relay-{relay_id}"),
-        base_address: None,
-    }
-}
