@@ -9,6 +9,8 @@
 /// - XChaCha20-Poly1305: authenticated encryption (AEAD)
 /// - HKDF-SHA256: key derivation
 /// - SHA-256: fingerprint generation
+use std::collections::HashMap;
+
 use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
 use sodiumoxide::crypto::hash::sha256;
 use sodiumoxide::crypto::kx;

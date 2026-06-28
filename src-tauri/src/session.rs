@@ -742,12 +742,39 @@ impl Session {
     /// Encrypt and send data with a specific packet type.
     /// Applies KDF ratchet after encryption for forward secrecy.
     /// Pads plaintext to obfuscate message length.
+    ///
+    /// Automatically uses the Double Ratchet path if an X3DH+DR session is active,
+    /// falling back to the legacy SessionKeys path for backward compatibility.
     async fn send_encrypted_typed<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
         packet_type: PacketType,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
+        // ── Double Ratchet path (X3DH+DR sessions) ──
+        if let Some(ratchet) = self.ratchet.as_mut() {
+            let padded = crate::crypto::pad_message_variable(plaintext);
+            let aad = [packet_type.to_byte()];
+            let do_ratchet = ratchet.should_ratchet(100);
+            let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
+                .encrypt(&padded, &aad, do_ratchet)?;
+
+            let envelope = EncryptedEnvelope {
+                nonce,
+                counter: 0,
+                ciphertext,
+                dr_header: Some(DRHeader {
+                    ratchet_key,
+                    previous_chain_length: 0,
+                    message_number: msg_num,
+                }),
+            };
+            let envelope_bytes = protocol::serialize(&envelope)?;
+            network::write_frame(stream, packet_type, &envelope_bytes).await?;
+            return Ok(());
+        }
+
+        // ── Legacy SessionKeys path ──
         let keys = self
             .session_keys
             .as_mut()
@@ -809,6 +836,11 @@ impl Session {
         frame.packet_type == PacketType::Heartbeat
             || frame.packet_type == PacketType::HeartbeatAck
     }
+    /// Decrypt a typed frame (file transfers, conversation metadata, etc.).
+    ///
+    /// Automatically detects whether the envelope uses the Double Ratchet (DR header present)
+    /// or the legacy SessionKeys path. For DR envelopes, replay protection is provided by
+    /// the chain key advancement — old message numbers produce different chain states.
     pub fn decrypt_typed_frame(&mut self, frame: &RawFrame) -> Result<Vec<u8>, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
@@ -817,6 +849,21 @@ impl Session {
 
         let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body)?;
 
+        // ── Double Ratchet path (X3DH+DR sessions) ──
+        if let Some(dr_hdr) = &envelope.dr_header {
+            let ratchet = self.ratchet
+                .as_mut()
+                .ok_or(SessionError::InvalidState)?;
+            let aad = [frame.packet_type.to_byte()];
+            let padded = ratchet
+                .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
+                         dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
+                .map_err(|e| SessionError::Crypto(e))?;
+            let plaintext = crate::crypto::unpad_message_variable(&padded)?;
+            return Ok(plaintext);
+        }
+
+        // ── Legacy path: replay protection + SessionKeys ──
         if envelope.counter <= self.rx_high_water_mark {
             return Err(SessionError::ReplayDetected {
                 received: envelope.counter,
