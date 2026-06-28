@@ -24,6 +24,7 @@ mod network;
 mod port_mapping;
 pub mod protocol;
 mod relay;
+mod secure_key;
 mod session;
 mod state;
 mod storage;

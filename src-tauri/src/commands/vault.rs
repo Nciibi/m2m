@@ -6,9 +6,9 @@
 use std::sync::Arc;
 
 use tauri::State;
-use zeroize::Zeroizing;
 
 use crate::crypto::{self, IdentityKeypair};
+use crate::secure_key::StorageKey;
 use crate::state::AppState;
 use crate::storage::{self, KeyStore};
 
@@ -162,7 +162,7 @@ pub async fn unlock_vault(
         if vault_was_initialized {
             // Case 3: Normal unlock — decrypt with Argon2id passphrase key
             let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &storage_key)
+            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, storage_key.as_bytes())
                 .map_err(|_| "incorrect passphrase or corrupted data".to_string())?;
 
             let mut sk_arr = [0u8; 64];
@@ -170,7 +170,7 @@ pub async fn unlock_vault(
 
             {
                 let mut sk_lock = state.storage_key.write().await;
-                *sk_lock = Some(Zeroizing::new(storage_key));
+                *sk_lock = Some(storage_key);
             }
 
             IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
@@ -187,7 +187,7 @@ pub async fn unlock_vault(
 
             // Re-encrypt with the new passphrase-derived key
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key)
+            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, new_key.as_bytes())
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
 
             key_store
@@ -199,7 +199,7 @@ pub async fn unlock_vault(
 
             {
                 let mut sk_lock = state.storage_key.write().await;
-                *sk_lock = Some(Zeroizing::new(new_key));
+                *sk_lock = Some(new_key);
             }
 
             IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
@@ -214,7 +214,7 @@ pub async fn unlock_vault(
         let sk_bytes = kp.secret_key_bytes();
 
         let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-        let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key)
+        let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, storage_key.as_bytes())
             .map_err(|e| format!("failed to encrypt identity: {e}"))?;
 
         let now = chrono::Utc::now().timestamp();
@@ -227,7 +227,7 @@ pub async fn unlock_vault(
 
         {
             let mut sk_lock = state.storage_key.write().await;
-            *sk_lock = Some(Zeroizing::new(storage_key));
+            *sk_lock = Some(storage_key);
         }
 
         kp

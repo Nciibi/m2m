@@ -99,8 +99,10 @@ pub fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
 }
 
 /// Derive a storage encryption key from a user-supplied passphrase using Argon2id.
+/// Returns a `StorageKey` which is locked in physical RAM (mlock/VirtualLock)
+/// and automatically zeroized on drop.
 /// The `salt` should be unique per identity (we use the public key).
-pub fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+pub fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Result<crate::secure_key::StorageKey, String> {
     use argon2::{Argon2, Algorithm, Version, Params};
 
     let params = Params::new(
@@ -114,7 +116,7 @@ pub fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Resu
     let mut key = [0u8; 32];
     argon.hash_password_into(passphrase.as_bytes(), salt, &mut key)
         .map_err(|e| format!("argon2 hash failed: {e}"))?;
-    Ok(key)
+    Ok(crate::secure_key::StorageKey::new(key))
 }
 
 /// Legacy fallback: derive a storage encryption key from the public key.
@@ -132,11 +134,11 @@ pub fn derive_storage_key(public_key: &[u8]) -> [u8; 32] {
 /// Encrypt data for storage using XChaCha20-Poly1305.
 pub fn crypto_encrypt_storage(
     plaintext: &[u8],
-    key: &[u8; 32],
+    key: &crate::secure_key::StorageKey,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
     use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
     let nonce = aead::gen_nonce();
-    let aead_key = aead::Key::from_slice(key).ok_or("invalid key length")?;
+    let aead_key = aead::Key::from_slice(key.as_bytes()).ok_or("invalid key length")?;
     let ciphertext = aead::seal(plaintext, None, &nonce, &aead_key);
     Ok((nonce.0.to_vec(), ciphertext))
 }
@@ -145,11 +147,11 @@ pub fn crypto_encrypt_storage(
 pub fn crypto_decrypt_storage(
     ciphertext: &[u8],
     nonce_bytes: &[u8],
-    key: &[u8; 32],
+    key: &crate::secure_key::StorageKey,
 ) -> Result<Vec<u8>, String> {
     use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
     let nonce = aead::Nonce::from_slice(nonce_bytes).ok_or("invalid nonce")?;
-    let aead_key = aead::Key::from_slice(key).ok_or("invalid key length")?;
+    let aead_key = aead::Key::from_slice(key.as_bytes()).ok_or("invalid key length")?;
     aead::open(ciphertext, None, &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
 }
 
