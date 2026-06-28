@@ -368,27 +368,37 @@ pub fn derive_storage_key(public_key: &[u8]) -> crate::secure_key::StorageKey {
 }
 
 /// Encrypt data for storage using XChaCha20-Poly1305.
+///
+/// `aad` is Additional Authenticated Data — a context string that binds the
+/// ciphertext to a specific storage domain (e.g., `b"m2m-keys"`, `b"m2m-msg"`).
+/// This prevents ciphertext from one domain (e.g., keys.db) from being
+/// substituted into another (e.g., messages.db), even if the same encryption
+/// key is used.
 pub fn crypto_encrypt_storage(
     plaintext: &[u8],
     key: &crate::secure_key::StorageKey,
+    aad: &[u8],
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
     use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
     let nonce = aead::gen_nonce();
     let aead_key = aead::Key::from_slice(key.as_bytes()).ok_or("invalid key length")?;
-    let ciphertext = aead::seal(plaintext, None, &nonce, &aead_key);
+    let ciphertext = aead::seal(plaintext, Some(aad), &nonce, &aead_key);
     Ok((nonce.0.to_vec(), ciphertext))
 }
 
 /// Decrypt storage-encrypted data.
+///
+/// `aad` must match the AAD used during encryption, or decryption will fail.
 pub fn crypto_decrypt_storage(
     ciphertext: &[u8],
     nonce_bytes: &[u8],
     key: &crate::secure_key::StorageKey,
+    aad: &[u8],
 ) -> Result<Vec<u8>, String> {
     use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
     let nonce = aead::Nonce::from_slice(nonce_bytes).ok_or("invalid nonce")?;
     let aead_key = aead::Key::from_slice(key.as_bytes()).ok_or("invalid key length")?;
-    aead::open(ciphertext, None, &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
+    aead::open(ciphertext, Some(aad), &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
 }
 
 /// Create a temporary file pre-allocated to the given size.
