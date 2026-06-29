@@ -901,15 +901,26 @@ pub fn spawn_receive_loop(
                                             };
 
                                             IncomingFileTransfer {
+                                                transfer_id: transfer_id.clone(),
+                                                peer_key_hex: peer_key_hex.clone(),
                                                 filename: safe_name,
                                                 total_size,
                                                 total_chunks,
                                                 file_hash,
+                                                chunk_hashes: req.chunk_hashes.clone(),
+                                                peer_protocol_version: req.file_transfer_version,
                                                 save_path: std::path::PathBuf::new(),
                                                 temp_file,
                                                 temp_path,
                                                 chunks_received: 0,
+                                                bytes_received: 0,
                                                 chunks_bitmask: vec![false; total_chunks as usize],
+                                                state: crate::state::TransferState::Pending,
+                                                created_at: std::time::SystemTime::now()
+                                                    .duration_since(std::time::UNIX_EPOCH)
+                                                    .unwrap_or_default()
+                                                    .as_secs(),
+                                                error: None,
                                             }
                                         });
                                     }
