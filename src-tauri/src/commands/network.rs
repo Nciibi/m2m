@@ -1097,17 +1097,17 @@ pub fn spawn_receive_loop(
                                             let transfers = state.outgoing_transfers.read().await;
                                             transfers.get(tid).map(|t| t.file_path.to_string_lossy().to_string())
                                         };
-                                        if let Some(fp) = filepath {
+                                        if filepath.is_some() {
                                             let tid = tid.to_string();
                                             let state_c = state.clone();
                                             let app_c = app_handle.clone();
                                             let peer_c = peer_key_hex.clone();
                                             drop(conn);
                                             drop(conns);
-                                            // Spawn chunk sender with progress events
-                                            tokio::spawn(async move {
-                                                let _ = super::files::send_file_chunks(app_c, state_c, &peer_c, &tid, &fp).await;
-                                            });
+                                            // Start via queue-aware transfer lifecycle
+                                            super::files::try_start_outgoing_transfer(
+                                                app_c, state_c, peer_c, tid,
+                                            );
                                         }
                                     }
                                 }
