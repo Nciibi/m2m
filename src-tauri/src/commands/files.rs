@@ -1,20 +1,29 @@
 //! File transfer commands.
 //!
 //! Handles initiating outgoing file transfers, accepting/rejecting
-//! incoming ones, and the async chunk-sending loop.
+//! incoming ones, and the async chunk-sending loop with ACK tracking.
 
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
+use tokio::sync::Mutex;
 
 use crate::protocol;
-use crate::state::{AppState, PeerConnection};
+use crate::state::{AppState, IncomingFileTransfer, OutgoingFileTransfer, PeerConnection, TransferState};
+use crate::session::Session;
 
-use super::FileTransferInfo;
+use super::{FileTransferInfo, TransferProgressEvent};
+
+// ─── Public Commands ───────────────────────────────────────────
 
 /// Initiate a file transfer to a peer.
+///
+/// Reads the file in a streaming fashion to compute per-chunk SHA-256
+/// hashes and the full-file hash, then sends the request and enqueues
+/// the transfer for the chunk-sending loop.
 #[tauri::command]
 pub async fn send_file(
+    app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     file_path: String,
@@ -30,73 +39,140 @@ pub async fn send_file(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let file_data = std::fs::read(path).map_err(|e| format!("failed to read file: {e}"))?;
-    let file_hash = sodiumoxide::crypto::hash::sha256::hash(&file_data);
     let total_chunks = (total_size as usize).div_ceil(protocol::MAX_FILE_CHUNK_SIZE) as u32;
     let transfer_id = uuid::Uuid::new_v4().to_string();
 
-    // Store for later chunk sending
-    state.outgoing_transfers.write().await.insert(transfer_id.clone(), file_path);
+    // ── Streaming hash pass ──────────────────────────────────
+    // Read the file once, computing both per-chunk hashes and the full-file hash.
+    // Uses a fixed 256 KiB buffer — never loads the entire file into RAM.
+    let (file_hash, chunk_hashes) = compute_file_hashes(&file_path, total_chunks)
+        .map_err(|e| format!("failed to read file: {e}"))?;
 
-    // Send the request
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // ── Store outgoing transfer state ────────────────────────
+    {
+        let mut outgoing = state.outgoing_transfers.write().await;
+        outgoing.insert(transfer_id.clone(), OutgoingFileTransfer {
+            transfer_id: transfer_id.clone(),
+            peer_key_hex: peer_key_hex.clone(),
+            file_path: path.to_path_buf(),
+            filename: filename.clone(),
+            total_size,
+            total_chunks,
+            file_hash,
+            chunk_hashes: chunk_hashes.clone(),
+            peer_protocol_version: 0, // will be detected from peer's ACK behavior
+            state: TransferState::Pending,
+            chunks_sent: 0,
+            chunks_acked: 0,
+            last_acked_index: 0,
+            created_at: now,
+            last_activity_at: now,
+        });
+    }
+
+    // ── Send the file transfer request ───────────────────────
     let conns = state.connections.read().await;
     let conn_arc = conns.get(&peer_key_hex)
         .ok_or("no connection to this peer")?.clone();
-    let mut conn = conn_arc.lock().await;
-    let PeerConnection { session, write_half, .. } = &mut *conn;
-    session.send_file_request(
-        &mut *write_half,
-        &transfer_id, &filename, total_size, total_chunks, file_hash.0.to_vec(),
-    ).await.map_err(|e| format!("failed to send file request: {e}"))?;
+    drop(conns); // release read lock before send
 
-    Ok(FileTransferInfo {
-        transfer_id,
-        filename,
-        total_size,
-        peer_key_hex,
-    })
+    // Serialize chunk_hashes as Vec<Vec<u8>> for the wire (convert from Vec<[u8; 32]>)
+    let wire_chunk_hashes: Vec<Vec<u8>> = chunk_hashes.iter()
+        .map(|h| h.to_vec())
+        .collect();
+
+    let result = {
+        let mut conn = conn_arc.lock().await;
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session.send_file_request_v2(
+            &mut *write_half,
+            &transfer_id,
+            &filename,
+            total_size,
+            total_chunks,
+            file_hash.to_vec(),
+            wire_chunk_hashes,
+        ).await
+    };
+
+    match result {
+        Ok(_) => {
+            tracing::info!(
+                transfer_id = %transfer_id,
+                filename = %filename,
+                size = total_size,
+                chunks = total_chunks,
+                "file transfer request sent"
+            );
+            Ok(FileTransferInfo {
+                transfer_id,
+                filename,
+                total_size,
+                peer_key_hex,
+            })
+        }
+        Err(e) => {
+            // Clean up state on send failure
+            state.outgoing_transfers.write().await.remove(&transfer_id);
+            Err(format!("failed to send file request: {e}"))
+        }
+    }
 }
 
 /// Accept an incoming file transfer.
 #[tauri::command]
 pub async fn accept_file_transfer(
+    app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     transfer_id: String,
     save_dir: String,
 ) -> Result<(), String> {
-    // Store the save_dir into the incoming transfer state so the
-    // FileTransferComplete handler knows where to write the reassembled file.
+    // Store the save_dir and update state
     {
         let transfers = state.incoming_transfers.read().await;
-        if !transfers.contains_key(&transfer_id) {
-            // The transfer metadata arrives via a FileTransferRequest event.
-            // If it hasn't been stored yet we create a placeholder entry here;
-            // the real metadata (filename, hash, etc.) will be patched in by
-            // the receive loop.
+        if let Some(t) = transfers.get(&transfer_id) {
+            // Already registered from the request handler. Patch save_path.
             drop(transfers);
+            let mut w = state.incoming_transfers.write().await;
+            if let Some(t) = w.get_mut(&transfer_id) {
+                t.save_path = std::path::PathBuf::from(&save_dir);
+                t.state = TransferState::Transferring;
+            }
+        } else {
+            drop(transfers);
+            // Create placeholder entry
             let mut w = state.incoming_transfers.write().await;
             w.entry(transfer_id.clone()).or_insert_with(|| {
                 let save_path = std::path::PathBuf::from(&save_dir);
-                crate::state::IncomingFileTransfer {
+                IncomingFileTransfer {
+                    transfer_id: transfer_id.clone(),
+                    peer_key_hex: peer_key_hex.clone(),
                     filename: String::new(),
                     total_size: 0,
                     total_chunks: 0,
                     file_hash: Vec::new(),
+                    chunk_hashes: Vec::new(),
+                    peer_protocol_version: 0,
                     save_path,
                     temp_file: None,
                     temp_path: None,
                     chunks_received: 0,
+                    bytes_received: 0,
                     chunks_bitmask: Vec::new(),
+                    state: TransferState::Transferring,
+                    created_at: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
+                    error: None,
                 }
             });
-        } else {
-            drop(transfers);
-            // Patch save_path into existing entry
-            let mut w = state.incoming_transfers.write().await;
-            if let Some(t) = w.get_mut(&transfer_id) {
-                t.save_path = std::path::PathBuf::from(&save_dir);
-            }
         }
     }
 
@@ -128,42 +204,351 @@ pub async fn reject_file_transfer(
     session.send_file_reject(&mut *write_half, &transfer_id)
         .await.map_err(|e| format!("failed to send reject: {e}"))?;
 
+    // Clean up local state
+    state.incoming_transfers.write().await.remove(&transfer_id);
+
     Ok(())
 }
 
+/// Cancel an in-progress file transfer (send or receive).
+/// Sends a cancel packet to the peer and cleans up local state.
+#[tauri::command]
+pub async fn cancel_file_transfer(
+    app_handle: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    // Send cancel to peer if connected
+    let conns = state.connections.read().await;
+    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+        let mut conn = conn_arc.lock().await;
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        let _ = session.send_file_cancel(&mut *write_half, &transfer_id).await;
+    }
+    drop(conns);
+
+    // Clean up outgoing state
+    {
+        let mut outgoing = state.outgoing_transfers.write().await;
+        if let Some(t) = outgoing.get_mut(&transfer_id) {
+            t.state = TransferState::Cancelled;
+        }
+        outgoing.remove(&transfer_id);
+    }
+
+    // Clean up incoming state (temp file removal)
+    {
+        let mut incoming = state.incoming_transfers.write().await;
+        if let Some(t) = incoming.remove(&transfer_id) {
+            drop(t.temp_file);
+            if let Some(ref path) = t.temp_path {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+
+    // Remove from queue
+    {
+        let mut queue = state.transfer_queue.write().await;
+        queue.queue.retain(|id| id != &transfer_id);
+        queue.active.remove(&transfer_id);
+    }
+
+    // Notify frontend
+    let _ = app_handle.emit("m2m://transfer-cancelled", serde_json::json!({
+        "transfer_id": transfer_id,
+    }));
+
+    Ok(())
+}
+
+// ─── Internal: Chunk Sender ────────────────────────────────────
+
 /// Send file chunks to a peer after they've accepted the transfer.
+///
+/// Reads the file in a streaming fashion using a fixed 256 KiB buffer.
+/// Never loads the entire file into RAM.
+/// Sends chunks one at a time, waiting for ACKs (v2 protocol) or
+/// sending blindly (v1 fallback).
+/// Emits progress events to the frontend.
 pub(super) async fn send_file_chunks(
+    app_handle: AppHandle,
     state: Arc<AppState>,
     peer_key_hex: &str,
     transfer_id: &str,
     file_path: &str,
-) -> Result<(), String> {
-    let file_data = std::fs::read(file_path).map_err(|e| format!("read failed: {e}"))?;
-    let chunks: Vec<&[u8]> = file_data.chunks(protocol::MAX_FILE_CHUNK_SIZE).collect();
+) {
+    let result = send_file_chunks_inner(
+        &app_handle, &state, peer_key_hex, transfer_id, file_path,
+    ).await;
 
-    for (i, chunk) in chunks.iter().enumerate() {
-        let chunk_hash = sodiumoxide::crypto::hash::sha256::hash(chunk);
+    match result {
+        Ok(()) => {
+            tracing::info!(transfer_id = %transfer_id, "file transfer completed successfully");
+
+            // Mark transfer as completed
+            let mut outgoing = state.outgoing_transfers.write().await;
+            if let Some(t) = outgoing.get_mut(transfer_id) {
+                t.state = TransferState::Completed;
+            }
+
+            let _ = app_handle.emit("m2m://transfer-completed", serde_json::json!({
+                "transfer_id": transfer_id,
+            }));
+
+            // Finish in queue (allows next queued transfer to start)
+            let mut queue = state.transfer_queue.write().await;
+            queue.finish(transfer_id);
+        }
+        Err(e) => {
+            tracing::error!(transfer_id = %transfer_id, error = %e, "file transfer failed");
+
+            {
+                let mut outgoing = state.outgoing_transfers.write().await;
+                if let Some(t) = outgoing.get_mut(transfer_id) {
+                    t.state = TransferState::Failed;
+                }
+            }
+
+            let _ = app_handle.emit("m2m://transfer-error", serde_json::json!({
+                "transfer_id": transfer_id,
+                "error": e,
+            }));
+
+            // Finish in queue
+            let mut queue = state.transfer_queue.write().await;
+            queue.finish(transfer_id);
+        }
+    }
+}
+
+/// Inner implementation of the chunk-sending loop. Returns Ok/Err so
+/// the caller handles state transitions consistently.
+async fn send_file_chunks_inner(
+    app_handle: &AppHandle,
+    state: &Arc<AppState>,
+    peer_key_hex: &str,
+    transfer_id: &str,
+    file_path: &str,
+) -> Result<(), String> {
+    let file = std::fs::File::open(file_path)
+        .map_err(|e| format!("failed to open file: {e}"))?;
+
+    let total_chunks: u32;
+    let chunk_hashes: Vec<[u8; 32]>;
+    let is_v2_protocol: bool;
+
+    // Read transfer metadata from state
+    {
+        let outgoing = state.outgoing_transfers.read().await;
+        let t = outgoing.get(transfer_id)
+            .ok_or("transfer not found in state")?;
+        total_chunks = t.total_chunks;
+        chunk_hashes = t.chunk_hashes.clone();
+        is_v2_protocol = t.peer_protocol_version >= 2;
+    }
+
+    // Throttle: emit progress every N chunks to avoid flooding the frontend
+    let progress_interval = std::cmp::max(1, total_chunks / 20);
+
+    // ACK timeout: if we don't get an ACK within 10s, retry the chunk
+    let ack_timeout = std::time::Duration::from_secs(10);
+    let max_retries: u32 = 3;
+
+    for chunk_index in 0..total_chunks {
+        let mut retries = 0;
+        let chunk_success = loop {
+            // Read this chunk from disk (seeking each time to avoid holding the file open)
+            let mut buf = vec![0u8; protocol::MAX_FILE_CHUNK_SIZE];
+            let mut f = std::fs::File::open(file_path)
+                .map_err(|e| format!("failed to re-open file: {e}"))?;
+
+            use std::io::{Read, Seek};
+            let offset = (chunk_index as u64) * (protocol::MAX_FILE_CHUNK_SIZE as u64);
+            f.seek(std::io::SeekFrom::Start(offset))
+                .map_err(|e| format!("seek failed: {e}"))?;
+            let n = f.read(&mut buf)
+                .map_err(|e| format!("read failed: {e}"))?;
+            buf.truncate(n);
+
+            // Verify chunk hash (integrity check against pre-computed hash)
+            let expected_hash = chunk_hashes.get(chunk_index as usize)
+                .cloned()
+                .unwrap_or([0u8; 32]);
+            let actual_hash = sodiumoxide::crypto::hash::sha256::hash(&buf);
+            if actual_hash.0 != expected_hash {
+                return Err(format!(
+                    "chunk {} hash mismatch before send — file may have changed on disk",
+                    chunk_index
+                ));
+            }
+
+            // Send the chunk
+            {
+                let conns = state.connections.read().await;
+                let conn_arc = conns.get(peer_key_hex)
+                    .ok_or("peer disconnected during transfer")?.clone();
+                let mut conn = conn_arc.lock().await;
+                let PeerConnection { session, write_half, .. } = &mut *conn;
+                session.send_file_chunk(
+                    &mut *write_half,
+                    transfer_id, chunk_index, buf, expected_hash.to_vec(),
+                ).await.map_err(|e| format!("chunk send failed: {e}"))?;
+            }
+
+            // Update chunks_sent
+            {
+                let mut outgoing = state.outgoing_transfers.write().await;
+                if let Some(t) = outgoing.get_mut(transfer_id) {
+                    t.chunks_sent += 1;
+                    t.last_activity_at = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                }
+            }
+
+            // If v2 protocol, wait for ACK with retry
+            if is_v2_protocol {
+                let ack_received = wait_for_ack(state, transfer_id, chunk_index, ack_timeout).await;
+
+                if ack_received {
+                    break true;
+                } else {
+                    retries += 1;
+                    if retries >= max_retries {
+                        return Err(format!(
+                            "chunk {} not acked after {} retries",
+                            chunk_index, max_retries
+                        ));
+                    }
+                    tracing::warn!(
+                        transfer_id = %transfer_id,
+                        chunk = chunk_index,
+                        retry = retries,
+                        "chunk not acked, retrying"
+                    );
+                    continue;
+                }
+            } else {
+                // v1 protocol: blind send, no ACK
+                break true;
+            }
+        };
+
+        if !chunk_success {
+            return Err(format!("failed to send chunk {}", chunk_index));
+        }
+
+        // Emit progress periodically
+        if chunk_index % progress_interval == 0 || chunk_index == total_chunks - 1 {
+            emit_progress(app_handle, state, transfer_id).await;
+        }
+    }
+
+    // ── All chunks sent — send FileTransferComplete ──
+    {
         let conns = state.connections.read().await;
         let conn_arc = conns.get(peer_key_hex)
             .ok_or("peer disconnected during transfer")?.clone();
         let mut conn = conn_arc.lock().await;
         let PeerConnection { session, write_half, .. } = &mut *conn;
-        session.send_file_chunk(
-            &mut *write_half,
-            transfer_id, i as u32, chunk.to_vec(), chunk_hash.0.to_vec(),
-        ).await.map_err(|e| format!("chunk send failed: {e}"))?;
+        session.send_file_complete(&mut *write_half, transfer_id)
+            .await.map_err(|e| format!("complete send failed: {e}"))?;
     }
 
-    // Send completion
-    let conns = state.connections.read().await;
-    let conn_arc = conns.get(peer_key_hex)
-        .ok_or("peer disconnected during transfer")?.clone();
-    let mut conn = conn_arc.lock().await;
-    let PeerConnection { session, write_half, .. } = &mut *conn;
-    session.send_file_complete(&mut *write_half, transfer_id)
-        .await.map_err(|e| format!("complete send failed: {e}"))?;
-
-    // Clean up
-    state.outgoing_transfers.write().await.remove(transfer_id);
     Ok(())
+}
+
+/// Wait for an ACK for the given chunk index. Returns true if acked, false if timeout.
+async fn wait_for_ack(
+    state: &Arc<AppState>,
+    transfer_id: &str,
+    chunk_index: u32,
+    timeout: std::time::Duration,
+) -> bool {
+    let deadline = tokio::time::Instant::now() + timeout;
+    let poll_interval = std::time::Duration::from_millis(50);
+
+    while tokio::time::Instant::now() < deadline {
+        {
+            let outgoing = state.outgoing_transfers.read().await;
+            if let Some(t) = outgoing.get(transfer_id) {
+                if t.chunks_acked > chunk_index
+                    || (t.chunks_acked > 0 && t.last_acked_index >= chunk_index)
+                {
+                    return true;
+                }
+            }
+        }
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    false
+}
+
+/// Emit a transfer progress event to the frontend.
+async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_id: &str) {
+    let outgoing = state.outgoing_transfers.read().await;
+    if let Some(t) = outgoing.get(transfer_id) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let elapsed = now.saturating_sub(t.created_at).max(1);
+        let bytes_completed = t.chunks_acked as u64 * protocol::MAX_FILE_CHUNK_SIZE as u64;
+        let speed = bytes_completed / elapsed; // bytes/sec
+        let remaining = t.total_size.saturating_sub(bytes_completed);
+        let eta = if speed > 0 { remaining / speed } else { 0 };
+
+        let _ = app_handle.emit("m2m://transfer-progress", TransferProgressEvent {
+            transfer_id: transfer_id.to_string(),
+            peer_key_hex: t.peer_key_hex.clone(),
+            filename: t.filename.clone(),
+            total_size: t.total_size,
+            bytes_transferred: bytes_completed.min(t.total_size),
+            chunks_completed: t.chunks_acked,
+            chunks_total: t.total_chunks,
+            state: t.state.to_string(),
+            speed_bytes_per_sec: speed,
+            estimated_remaining_secs: eta,
+        });
+    }
+}
+
+// ─── Hash Computation (Streaming) ──────────────────────────────
+
+/// Compute per-chunk SHA-256 hashes and the full-file SHA-256 hash in a
+/// single streaming pass. Uses a fixed 256 KiB buffer — never loads the
+/// entire file into RAM.
+fn compute_file_hashes(
+    file_path: &str,
+    total_chunks: u32,
+) -> Result<([u8; 32], Vec<[u8; 32]>), String> {
+    use std::io::Read;
+    use sodiumoxide::crypto::hash::sha256;
+
+    let mut file = std::fs::File::open(file_path)
+        .map_err(|e| format!("failed to open file: {e}"))?;
+
+    let mut full_hasher = sha256::State::new();
+    let mut chunk_hashes = Vec::with_capacity(total_chunks as usize);
+    let mut buf = vec![0u8; protocol::MAX_FILE_CHUNK_SIZE];
+
+    loop {
+        let n = file.read(&mut buf)
+            .map_err(|e| format!("read error during hash computation: {e}"))?;
+        if n == 0 { break; }
+
+        let chunk = &buf[..n];
+        full_hasher.update(chunk);
+
+        let chunk_hash = sha256::hash(chunk);
+        chunk_hashes.push(chunk_hash.0);
+    }
+
+    let full_hash = full_hasher.finalize();
+    Ok((full_hash.0, chunk_hashes))
 }
