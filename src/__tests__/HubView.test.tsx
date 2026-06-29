@@ -146,7 +146,11 @@ describe("HubView", () => {
   it("disables connect button while connecting", () => {
     state.isConnecting = true;
     render(<HubView />);
-    const connectBtn = screen.getByRole("button", { name: /connect/i });
+    // When loading, the button shows a spinner, not "Connect" text
+    // Use getAllByRole to find the disabled button
+    const buttons = screen.getAllByRole("button");
+    const connectBtn = buttons.find(b => b.id === "connect-btn");
+    expect(connectBtn).toBeDefined();
     expect(connectBtn).toBeDisabled();
   });
 
@@ -175,20 +179,20 @@ describe("HubView", () => {
     expect(screen.getByRole("tab", { name: /chats/i })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("shows chats tab with conversation list", () => {
+  it("shows chats tab with conversation list", async () => {
     state.conversations = [
       { id: "conv-1", peer_display_name: "Alice", last_message_preview: "Hello!", last_message_at: Date.now() / 1000 },
     ];
     render(<HubView />);
     const user = userEvent.setup();
-    user.click(screen.getByRole("tab", { name: /chats/i }));
+    await user.click(screen.getByRole("tab", { name: /chats/i }));
     expect(screen.getByText("Alice")).toBeInTheDocument();
   });
 
-  it("shows empty state when no conversations", () => {
+  it("shows empty state when no conversations", async () => {
     render(<HubView />);
     const user = userEvent.setup();
-    user.click(screen.getByRole("tab", { name: /chats/i }));
+    await user.click(screen.getByRole("tab", { name: /chats/i }));
     expect(screen.getByText(/no conversations yet/i)).toBeInTheDocument();
   });
 
