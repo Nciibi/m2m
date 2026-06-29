@@ -711,6 +711,8 @@ mod protocol_tests {
             total_size: 1_048_576,
             total_chunks: 16,
             file_hash: vec![0xCC; 32],
+            chunk_hashes: Vec::new(),
+            file_transfer_version: 0,
         };
         let bytes = serialize(&req).unwrap();
         let decoded: FileTransferRequestData = deserialize(&bytes).unwrap();
@@ -719,6 +721,9 @@ mod protocol_tests {
         assert_eq!(decoded.total_size, 1_048_576);
         assert_eq!(decoded.total_chunks, 16);
         assert_eq!(decoded.file_hash.len(), 32);
+        // New fields should default to empty/0 for backward compat
+        assert!(decoded.chunk_hashes.is_empty());
+        assert_eq!(decoded.file_transfer_version, 0);
     }
 
     #[test]
