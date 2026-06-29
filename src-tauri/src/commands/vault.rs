@@ -248,6 +248,14 @@ pub async fn unlock_vault(
         *ms = Some(msg_store);
     }
 
+    // Initialize transfer history store
+    let transfer_store = storage::TransferStore::open(&transfers_db_path)
+        .map_err(|e| format!("transfer store error: {e}"))?;
+    {
+        let mut ts = state.transfer_store.lock().await;
+        *ts = Some(transfer_store);
+    }
+
     // Store the full keypair in state
     {
         let mut id_lock = state.identity.write().await;
