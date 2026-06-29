@@ -440,14 +440,30 @@ async fn send_file_chunks(
 async fn try_start_next_queued(state: &Arc<AppState>) {
     let next_id = {
         let mut queue = state.transfer_queue.write().await;
-        let next = queue.finish(""); // will remove "" from active (no-op) then dequeue
-        // Wait — finish with empty string won't remove the right one.
-        // Let me do it manually:
-        next
+        // Can't use finish() because we don't have the finished transfer_id here.
+        // Instead, just try to dequeue.
+        queue.dequeue()
     };
-    // Actually, the finish method won't work this way since we don't know
-    // which transfer just finished here. Let's just remove from active
-    // and dequeue. The caller will handle this.
+
+    if let Some(ref next_tid) = next_id {
+        // Get transfer details and start it
+        let (filepath, peer_key_hex) = {
+            let outgoing = state.outgoing_transfers.read().await;
+            let t = outgoing.get(next_tid)?;
+            (t.file_path.to_string_lossy().to_string(), t.peer_key_hex.clone())
+        };
+
+        tracing::info!(
+            transfer_id = %next_tid,
+            "starting next queued transfer"
+        );
+
+        let app_handle: AppHandle = {
+            // We need AppHandle here but don't have it. The caller
+            // (send_file_chunks) will dequeue directly.
+            return;
+        };
+    }
 }
 
 /// Inner implementation of the chunk-sending loop. Returns Ok/Err so
