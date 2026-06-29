@@ -454,6 +454,7 @@ async fn handle_incoming_connection(
         write_half,
         session,
         remote_addr: peer_addr,
+        strategy_name: "incoming".to_string(),
     };
 
     let mut conns = state.connections.write().await;
