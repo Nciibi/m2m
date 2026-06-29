@@ -130,7 +130,7 @@ impl ConnectionLimiter {
     }
 
     /// Get the current number of active connections.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Used in tests only")]
     pub fn active_count(&self) -> usize {
         self.active_connections.load(Ordering::Relaxed)
     }
@@ -189,7 +189,6 @@ pub enum NetworkError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("connection timeout")]
-    #[allow(dead_code)]
     ConnectionTimeout,
     #[error("read timeout")]
     ReadTimeout,
@@ -200,10 +199,10 @@ pub enum NetworkError {
     #[error("protocol error: {0}")]
     Protocol(#[from] protocol::ProtocolError),
     #[error("connection in invalid state: {0}")]
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for invalid connection states")]
     InvalidState(String),
     #[error("rate limit exceeded")]
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for rate limiting")]
     RateLimitExceeded,
 }
 
@@ -234,7 +233,7 @@ impl std::fmt::Display for ConnectionState {
 /// A raw frame read from the wire.
 pub struct RawFrame {
     /// Protocol version.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for protocol version negotiation")]
     pub version: u8,
     pub packet_type: PacketType,
     pub body: Vec<u8>,
