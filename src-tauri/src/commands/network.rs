@@ -1130,6 +1130,90 @@ pub fn spawn_receive_loop(
                         }
                     }
                 }
+                PacketType::FileTransferChunkAck => {
+                    // Sender side: peer confirmed a chunk was received and verified.
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(ack) = protocol::deserialize::<protocol::FileTransferChunkAckData>(&plaintext) {
+                                    let mut outgoing = state.outgoing_transfers.write().await;
+                                    if let Some(t) = outgoing.get_mut(&ack.transfer_id) {
+                                        if ack.chunk_index >= t.last_acked_index {
+                                            t.chunks_acked += ack.chunk_index.saturating_sub(t.last_acked_index) + 1;
+                                            t.last_acked_index = ack.chunk_index;
+                                            t.last_activity_at = std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_secs();
+                                        }
+                                        tracing::trace!(
+                                            transfer_id = %ack.transfer_id,
+                                            chunk = ack.chunk_index,
+                                            acked = t.chunks_acked,
+                                            total = t.total_chunks,
+                                            "chunk ack received"
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt chunk ack");
+                            }
+                        }
+                    }
+                }
+                PacketType::FileTransferCancel => {
+                    // Either side: peer cancelled an in-progress transfer.
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(cancel) = protocol::deserialize::<protocol::FileTransferCancelData>(&plaintext) {
+                                    let tid = cancel.transfer_id;
+
+                                    // Clean up outgoing transfer if this side was sending
+                                    {
+                                        let mut outgoing = state.outgoing_transfers.write().await;
+                                        if let Some(t) = outgoing.get_mut(&tid) {
+                                            t.state = crate::state::TransferState::Cancelled;
+                                        }
+                                        outgoing.remove(&tid);
+                                    }
+
+                                    // Clean up incoming transfer if this side was receiving
+                                    {
+                                        let mut incoming = state.incoming_transfers.write().await;
+                                        if let Some(t) = incoming.remove(&tid) {
+                                            drop(t.temp_file);
+                                            if let Some(ref path) = t.temp_path {
+                                                let _ = std::fs::remove_file(path);
+                                            }
+                                        }
+                                    }
+
+                                    // Remove from queue
+                                    {
+                                        let mut queue = state.transfer_queue.write().await;
+                                        queue.queue.retain(|id| id != &tid);
+                                        queue.active.remove(&tid);
+                                    }
+
+                                    let _ = app_handle.emit("m2m://transfer-cancelled", serde_json::json!({
+                                        "transfer_id": tid,
+                                    }));
+
+                                    tracing::info!(transfer_id = %tid, "file transfer cancelled by peer");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt file cancel");
+                            }
+                        }
+                    }
+                }
                 PacketType::Heartbeat => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
