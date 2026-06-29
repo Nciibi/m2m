@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: any[]) => mockInvoke(...args) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
+vi.mock("@tauri-apps/plugin-notification", () => ({ isPermissionGranted: vi.fn().mockResolvedValue(false), sendNotification: vi.fn() }));
 
 // Mock AppContext used by ChatProvider
 const appState = {

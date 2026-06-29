@@ -14,3 +14,12 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+
+// JSDOM doesn't implement window.Notification; provide a stub.
+Object.defineProperty(window, "Notification", {
+  writable: true,
+  value: {
+    permission: "default",
+    requestPermission: () => Promise.resolve("default"),
+  },
+});
