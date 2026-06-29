@@ -260,7 +260,9 @@ pub struct HandshakeComplete {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DRHeader {
     /// New DH ratchet public key (None for continuation messages).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// NOTE: no `skip_serializing_if` — rmp-serde uses positional encoding and
+    /// skipping a field shifts subsequent elements, breaking deserialization.
+    #[serde(default)]
     pub ratchet_key: Option<[u8; 32]>,
     /// Number of messages in the previous sending chain (PN in the spec).
     pub previous_chain_length: u32,
