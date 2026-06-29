@@ -101,6 +101,23 @@ pub async fn send_file(
 
     match result {
         Ok(_) => {
+            // Enqueue the transfer (won't start until peer accepts)
+            {
+                let mut queue = state.transfer_queue.write().await;
+                let _ = queue.enqueue(transfer_id.clone());
+            }
+
+            // Persist initial transfer record
+            {
+                let ts = state.transfer_store.lock().await;
+                if let Some(ref store) = *ts {
+                    let _ = store.store_transfer(
+                        &transfer_id, &peer_key_hex, &filename,
+                        total_size, "sent", "pending", total_chunks,
+                    );
+                }
+            }
+
             tracing::info!(
                 transfer_id = %transfer_id,
                 filename = %filename,
