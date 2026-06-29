@@ -526,28 +526,7 @@ impl Session {
         if let Some(ratchet) = self.ratchet.as_mut() {
             let padded = crate::crypto::pad_message_variable(plaintext);
             let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &our_pub, &peer_pub);
-            let do_ratchet = ratchet.should_ratchet(100);
-            let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
-                .encrypt(&padded, &aad, do_ratchet)?;
-
-            let envelope = EncryptedEnvelope {
-                nonce,
-                counter: 0,
-                ciphertext,
-                dr_header: Some(DRHeader {
-                    ratchet_key,
-                    previous_chain_length: 0,
-                    message_number: msg_num,
-                }),
-            };
-            let envelope_bytes = protocol::serialize(&envelope)?;
-            network::write_frame(stream, PacketType::EncryptedMessage, &envelope_bytes).await?;
-            return Ok(());
-        }
-
-        // ── Legacy SessionKeys path ──
-        let keys = self
-            .session_keys
+            let do_ratchet = ratchet.should_ratchet(self.ratchet_interval);
             .as_mut()
             .ok_or(SessionError::InvalidState)?;
 
