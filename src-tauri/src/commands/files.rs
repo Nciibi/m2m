@@ -455,26 +455,16 @@ async fn send_file_chunks_inner(
     let chunk_hashes: Vec<[u8; 32]>;
     let is_v2_protocol: bool;
 
-    // Read transfer metadata from state, and determine adaptive chunk size
-    let chunk_size = {
+    let chunk_size: usize;
+    {
         let outgoing = state.outgoing_transfers.read().await;
         let t = outgoing.get(transfer_id)
             .ok_or("transfer not found in state")?;
         total_chunks = t.total_chunks;
         chunk_hashes = t.chunk_hashes.clone();
+        chunk_size = t.chunk_size;
         is_v2_protocol = t.peer_protocol_version >= 2;
-
-        // Look up peer's connection strategy for adaptive chunk size
-        let conns = state.connections.read().await;
-        let strategy = conns.get(&t.peer_key_hex)
-            .and_then(|c| {
-                let cg = c.try_lock().ok()?;
-                Some(cg.strategy_name.clone())
-            })
-            .unwrap_or_default();
-        drop(conns);
-        compute_chunk_size(&strategy)
-    };
+    }
 
     // Throttle: emit progress every N chunks to avoid flooding the frontend
     let progress_interval = std::cmp::max(1, total_chunks / 20);
