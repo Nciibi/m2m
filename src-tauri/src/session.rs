@@ -752,6 +752,41 @@ impl Session {
         self.send_encrypted_typed(stream, PacketType::FileTransferReject, &body).await
     }
 
+    /// Send a chunk acknowledgement to the sender, confirming the chunk was
+    /// received, hash-verified, and written to disk.
+    pub async fn send_file_chunk_ack<W: AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut W,
+        transfer_id: &str,
+        chunk_index: u32,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        let body = protocol::serialize(&FileTransferChunkAckData {
+            transfer_id: transfer_id.to_string(),
+            chunk_index,
+        })?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferChunkAck, &body).await
+    }
+
+    /// Send a cancel notification to the peer for an in-progress file transfer.
+    /// Either side can send this. The receiver stops accepting chunks and cleans up.
+    /// The sender stops sending and marks the transfer as cancelled.
+    pub async fn send_file_cancel<W: AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut W,
+        transfer_id: &str,
+    ) -> Result<(), SessionError> {
+        if self.state != ConnectionState::Established {
+            return Err(SessionError::InvalidState);
+        }
+        let body = protocol::serialize(&FileTransferCancelData {
+            transfer_id: transfer_id.to_string(),
+        })?;
+        self.send_encrypted_typed(stream, PacketType::FileTransferCancel, &body).await
+    }
+
     /// Send conversation metadata (display names) to the peer.
     pub async fn send_conversation_meta<W: AsyncWrite + Unpin>(
         &mut self,
