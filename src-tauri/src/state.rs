@@ -254,6 +254,8 @@ pub struct AppState {
     pub message_store: Mutex<Option<storage::MessageStore>>,
     /// Key store (initialised when identity is loaded).
     pub key_store: Mutex<Option<storage::KeyStore>>,
+    /// Transfer history store (initialised when identity is loaded).
+    pub transfer_store: Mutex<Option<storage::TransferStore>>,
     /// The storage encryption key (derived from passphrase or identity).
     /// Wrapped in StorageKey to ensure:
     /// - Locked in physical RAM (mlock/VirtualLock) — cannot be paged to swap
