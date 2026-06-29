@@ -26,7 +26,7 @@ const DEFAULT_STUN_SERVERS: &[&str] = &[
 ];
 
 /// Per-server query timeout (used externally, keep for API consistency).
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for external API consistency")]
 const STUN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Magic cookie as defined in RFC 8489 §6.
@@ -45,7 +45,7 @@ const XOR_MAPPED_ADDRESS: u16 = 0x0020;
 const MAPPED_ADDRESS: u16 = 0x0001;
 
 /// Minimum valid STUN message size: header (20B) + attribute header (4B) + addr (8B).
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for message validation")]
 const MIN_STUN_MESSAGE: usize = 32;
 
 // ─── NAT Classification ─────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ pub struct StunResult {
     /// The server that reported this address.
     pub server: String,
     /// Round-trip time for the query.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for RTT-based NAT classification")]
     pub rtt: Duration,
 }
 

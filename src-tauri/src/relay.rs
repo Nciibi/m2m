@@ -93,7 +93,7 @@ pub enum RelayError {
 pub enum RelayRequest {
     Register = 0x01,
     Connect = 0x02,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved relay protocol variant")]
     Keepalive = 0x03,
 }
 
