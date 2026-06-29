@@ -669,6 +669,8 @@ impl Session {
             total_size,
             total_chunks,
             file_hash,
+            chunk_hashes: Vec::new(),
+            file_transfer_version: 0,
         };
         let body_bytes = protocol::serialize(&req)?;
         self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes).await
