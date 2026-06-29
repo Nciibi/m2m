@@ -78,6 +78,7 @@ pub async fn send_file(
             total_chunks,
             file_hash,
             chunk_hashes: chunk_hashes.clone(),
+            chunk_size,
             peer_protocol_version: 0, // will be detected from peer's ACK behavior
             state: TransferState::Pending,
             chunks_sent: 0,
