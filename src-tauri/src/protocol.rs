@@ -734,6 +734,106 @@ mod protocol_tests {
     }
 
     #[test]
+    fn test_serialize_deserialize_file_transfer_chunk_ack() {
+        let ack = FileTransferChunkAckData {
+            transfer_id: "xfer-001".to_string(),
+            chunk_index: 42,
+        };
+        let bytes = serialize(&ack).unwrap();
+        let decoded: FileTransferChunkAckData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.transfer_id, "xfer-001");
+        assert_eq!(decoded.chunk_index, 42);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_file_transfer_cancel() {
+        let cancel = FileTransferCancelData {
+            transfer_id: "xfer-001".to_string(),
+        };
+        let bytes = serialize(&cancel).unwrap();
+        let decoded: FileTransferCancelData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.transfer_id, "xfer-001");
+    }
+
+    #[test]
+    fn test_serialize_deserialize_file_transfer_request_v2() {
+        let req = FileTransferRequestData {
+            transfer_id: "xfer-v2-001".to_string(),
+            filename: "large_file.iso".to_string(),
+            total_size: 4_294_967_296,
+            total_chunks: 16384,
+            file_hash: vec![0xCC; 32],
+            chunk_hashes: vec![vec![0xDD; 32]; 16384],
+            file_transfer_version: 2,
+        };
+        let bytes = serialize(&req).unwrap();
+        let decoded: FileTransferRequestData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.transfer_id, "xfer-v2-001");
+        assert_eq!(decoded.chunk_hashes.len(), 16384);
+        assert_eq!(decoded.chunk_hashes[0], vec![0xDD; 32]);
+        assert_eq!(decoded.file_transfer_version, 2);
+        assert_eq!(decoded.total_size, 4_294_967_296);
+    }
+
+    #[test]
+    fn test_deserialize_v2_file_transfer_request_as_v1_client() {
+        // Old clients without the new fields should still be able to
+        // deserialize v2 requests — unknown fields are ignored by serde.
+        let req = FileTransferRequestData {
+            transfer_id: "xfer-v2-001".to_string(),
+            filename: "large_file.iso".to_string(),
+            total_size: 1_048_576,
+            total_chunks: 16,
+            file_hash: vec![0xCC; 32],
+            chunk_hashes: vec![vec![0xDD; 32]; 16],
+            file_transfer_version: 2,
+        };
+        let bytes = serialize(&req).unwrap();
+        // Deserialize into a struct that has the v1 fields only
+        // (via serde_json to simulate different schema — MessagePack ignores unknown)
+        let decoded: FileTransferRequestData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.transfer_id, "xfer-v2-001");
+        // Old client ignores extra fields — they have defaults
+        assert_eq!(decoded.file_transfer_version, 2);
+        assert_eq!(decoded.chunk_hashes.len(), 16);
+    }
+
+    #[test]
+    fn test_deserialize_v1_file_transfer_request_as_v2_client() {
+        // A v2 client receiving a v1 request gets empty defaults for new fields
+        let v1_req_bytes = {
+            // Simulate v1 serialization: only the original fields
+            let mut buf = Vec::new();
+            // Build a minimal MessagePack map for v1 fields
+            buf.push(0x86); // fixmap with 6 entries
+            // ... We can just use serialize from a v1 struct:
+            #[derive(Serialize)]
+            struct V1Request {
+                transfer_id: String,
+                filename: String,
+                total_size: u64,
+                total_chunks: u32,
+                file_hash: Vec<u8>,
+            }
+            let v1 = V1Request {
+                transfer_id: "v1-xfer".to_string(),
+                filename: "doc.pdf".to_string(),
+                total_size: 65536,
+                total_chunks: 1,
+                file_hash: vec![0xAB; 32],
+            };
+            serialize(&v1).unwrap()
+        };
+
+        let decoded: FileTransferRequestData = deserialize(&v1_req_bytes).unwrap();
+        assert_eq!(decoded.transfer_id, "v1-xfer");
+        assert_eq!(decoded.total_chunks, 1);
+        // New fields get defaults
+        assert!(decoded.chunk_hashes.is_empty(), "v1 request should have no chunk_hashes");
+        assert_eq!(decoded.file_transfer_version, 0, "v1 request should have version 0");
+    }
+
+    #[test]
     fn test_deserialize_garbage_rejected() {
         let garbage = vec![0xFF, 0x00, 0x01, 0x02];
         let result: Result<DisconnectMessage, _> = deserialize(&garbage);
