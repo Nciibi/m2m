@@ -60,6 +60,8 @@ pub struct Session {
     pub peer_candidates: Vec<WireCandidate>,
     /// Our own candidates sent during handshake.
     pub our_candidates: Vec<WireCandidate>,
+    /// Our own Ed25519 identity public key (used for DR AAD construction).
+    our_identity_pub: [u8; 32],
 }
 
 impl Session {
@@ -87,6 +89,7 @@ impl Session {
             established_at: 0,
             peer_candidates: Vec::new(),
             our_candidates: Vec::new(),
+            our_identity_pub: [0u8; 32],
         }
     }
 
@@ -388,6 +391,7 @@ impl Session {
 
         self.peer_candidates = response.candidates;
         self.peer_identity_pub = response.identity_pub;
+        self.our_identity_pub = identity.public_key_bytes();
         self.established_at = now_unix_secs();
         self.state = ConnectionState::Established;
 
@@ -473,6 +477,7 @@ impl Session {
 
         self.peer_candidates = init.candidates;
         self.peer_identity_pub = init.identity_pub;
+        self.our_identity_pub = identity.public_key_bytes();
         self.established_at = now_unix_secs();
         self.state = ConnectionState::Established;
 
