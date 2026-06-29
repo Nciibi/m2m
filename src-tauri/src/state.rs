@@ -42,6 +42,18 @@ pub enum TransferState {
     Cancelled,       // User-initiated cancel or peer cancelled
 }
 
+impl std::fmt::Display for TransferState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TransferState::Pending => write!(f, "pending"),
+            TransferState::Transferring => write!(f, "transferring"),
+            TransferState::Completed => write!(f, "completed"),
+            TransferState::Failed => write!(f, "failed"),
+            TransferState::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
+
 /// State for an in-progress file transfer (sending side).
 ///
 /// The sender reads the file in a streaming fashion (never full-file in RAM),
