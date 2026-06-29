@@ -6,11 +6,9 @@
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::Mutex;
 
 use crate::protocol;
 use crate::state::{AppState, IncomingFileTransfer, OutgoingFileTransfer, PeerConnection, TransferState};
-use crate::session::Session;
 
 use super::{FileTransferInfo, TransferProgressEvent};
 

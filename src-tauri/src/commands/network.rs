@@ -1092,17 +1092,21 @@ pub fn spawn_receive_loop(
                             Ok(plaintext) => {
                                 if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
                                     if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
-                                        let transfers = state.outgoing_transfers.read().await;
-                                        if let Some(filepath) = transfers.get(tid) {
-                                            let filepath = filepath.clone();
+                                        // Check if we have an outgoing transfer with filepath
+                                        let filepath = {
+                                            let transfers = state.outgoing_transfers.read().await;
+                                            transfers.get(tid).map(|t| t.file_path.to_string_lossy().to_string())
+                                        };
+                                        if let Some(fp) = filepath {
                                             let tid = tid.to_string();
                                             let state_c = state.clone();
+                                            let app_c = app_handle.clone();
                                             let peer_c = peer_key_hex.clone();
                                             drop(conn);
                                             drop(conns);
-                                            // Spawn chunk sender
+                                            // Spawn chunk sender with progress events
                                             tokio::spawn(async move {
-                                                let _ = super::files::send_file_chunks(state_c, &peer_c, &tid, &filepath).await;
+                                                let _ = super::files::send_file_chunks(app_c, state_c, &peer_c, &tid, &fp).await;
                                             });
                                         }
                                     }
