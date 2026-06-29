@@ -62,6 +62,8 @@ pub struct Session {
     pub our_candidates: Vec<WireCandidate>,
     /// Our own Ed25519 identity public key (used for DR AAD construction).
     our_identity_pub: [u8; 32],
+    /// How many messages between DH ratchets (default 100). 0 = never ratchet.
+    pub ratchet_interval: u64,
 }
 
 impl Session {
