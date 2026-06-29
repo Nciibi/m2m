@@ -89,11 +89,10 @@
 
 | Area | Priority | Detail |
 |------|----------|--------|
-| **Component tests (vitest)** | Medium | Config created, tests written, needs `pnpm install` |
-| **cargo audit in CI** | Medium | Dependency vulnerability scanning |
-| **pnpm audit in CI** | Low | Frontend dependency scanning |
 | **Binary size optimization** | Low | Release profile already optimized (LTO, strip) |
 | **System tray icon** | Low | Nice-to-have desktop integration |
+| **macOS code signing** | Medium | Requires Apple Developer account for notarized distribution |
+| **Automatic updates** | Medium | Tauri updater integration for seamless version upgrades |
 
 ## Security Scores
 
