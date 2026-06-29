@@ -331,9 +331,6 @@ async fn send_file_chunks_inner(
     transfer_id: &str,
     file_path: &str,
 ) -> Result<(), String> {
-    let file = std::fs::File::open(file_path)
-        .map_err(|e| format!("failed to open file: {e}"))?;
-
     let total_chunks: u32;
     let chunk_hashes: Vec<[u8; 32]>;
     let is_v2_protocol: bool;
