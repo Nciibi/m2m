@@ -6,17 +6,18 @@ import {
   ArrowLeftIcon, ShieldIcon, VerifiedIcon, LockIcon,
   SendIcon, AttachIcon, FileIcon, ArrowDownIcon,
 } from "../components/ui/Icons";
-import { useM2M } from "../context/M2MContext";
+import { useApp } from "../context/AppContext";
+import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
 
 export default function ChatView() {
+  const { identity, toasts, removeToast, addToast, setView } = useApp();
   const {
-    connection, messages, identity, fileRequests, activeConversationId,
-    toasts, removeToast, addToast, handleSendMessage, handleSendFile,
-    handleVerify, handleDisconnect, setView,
+    connection, messages, fileRequests, activeConversationId,
+    handleSendMessage, handleSendFile, handleVerify, handleDisconnect,
     handleExportConversation, handleSetRetention,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
-  } = useM2M();
+  } = useChat();
   const [text, setText] = useState("");
   const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
