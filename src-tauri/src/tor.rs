@@ -22,6 +22,7 @@ pub const TOR_PROXY_ADDR: &str = "127.0.0.1:9050";
 static TOR_ENABLED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Error)]
+#[expect(dead_code, reason = "Reserved; used only by tor::connect")]
 pub enum TorError {
     #[error("Tor SOCKS5 connection failed: {0}")]
     ConnectionFailed(String),
