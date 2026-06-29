@@ -594,6 +594,8 @@ const PCP_MAP_REQUEST_SIZE: usize = 50;
 const PCP_OFF_OP: usize = 1;
 const PCP_OFF_RESULT: usize = 3;
 const PCP_OFF_LIFETIME: usize = 4;
+/// PCP header size: 24 bytes (RFC 6887 §7.3).
+const PCP_HEADER_SIZE: usize = 24;
 // Constants used by future PCP features (ECHO REQUEST, THIRD PARTY, etc.).
 #[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_OFF_CLIENT_IP: usize = 8;
