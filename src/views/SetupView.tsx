@@ -3,7 +3,7 @@ import { KeyIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 
 export default function SetupView() {
-  const { toasts, removeToast } = useM2M();
+  const { toasts, removeToast } = useApp();
   return (
     <div className="app-shell">
       <div className="centered-view">
