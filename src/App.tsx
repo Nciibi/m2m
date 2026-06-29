@@ -19,7 +19,7 @@ import ChatView from "./views/ChatView";
 import SettingsView from "./views/SettingsView";
 
 function AppInner() {
-  const { view } = useM2M();
+  const { view } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
 
   // Global keyboard shortcut: ? opens help modal
