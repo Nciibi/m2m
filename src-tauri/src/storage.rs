@@ -507,6 +507,220 @@ pub struct ConversationSummary {
     pub message_count: i64,
 }
 
+/// Summary of a stored transfer for the frontend.
+#[derive(Debug, Clone)]
+pub struct StoredTransfer {
+    pub id: String,
+    pub peer_key_hex: String,
+    pub filename: String,
+    pub total_size: u64,
+    pub direction: String,
+    pub state: String,
+    pub chunks_completed: u32,
+    pub chunks_total: u32,
+    pub created_at: i64,
+    pub completed_at: Option<i64>,
+    pub local_path: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Persistent transfer history store.
+///
+/// Records every file transfer (both sent and received) so the user can
+/// see past transfers, retry failed ones, and resume interrupted ones
+/// after an app restart.
+pub struct TransferStore {
+    conn: Connection,
+}
+
+impl TransferStore {
+    /// Open or create the transfer store.
+    pub fn open(db_path: &Path) -> Result<Self, StorageError> {
+        let conn = Connection::open(db_path)?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS transfers (
+                id TEXT PRIMARY KEY,
+                peer_key_hex TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                total_size INTEGER NOT NULL,
+                direction TEXT NOT NULL CHECK (direction IN ('sent', 'received')),
+                state TEXT NOT NULL DEFAULT 'pending',
+                chunks_completed INTEGER NOT NULL DEFAULT 0,
+                chunks_total INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                local_path TEXT,
+                error TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_transfers_peer
+                ON transfers(peer_key_hex);
+            CREATE INDEX IF NOT EXISTS idx_transfers_created
+                ON transfers(created_at DESC);",
+        )?;
+
+        Ok(Self { conn })
+    }
+
+    /// Insert or update a transfer record.
+    pub fn store_transfer(
+        &self,
+        id: &str,
+        peer_key_hex: &str,
+        filename: &str,
+        total_size: u64,
+        direction: &str,
+        state: &str,
+        chunks_total: u32,
+    ) -> Result<(), StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT INTO transfers (id, peer_key_hex, filename, total_size, direction, state, chunks_total, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(id) DO UPDATE SET
+                state = excluded.state,
+                chunks_total = excluded.chunks_total",
+            params![id, peer_key_hex, filename, total_size, direction, state, chunks_total, now],
+        )?;
+        Ok(())
+    }
+
+    /// Update the transfer state.
+    pub fn update_state(
+        &self,
+        transfer_id: &str,
+        state: &str,
+        completed_at: Option<i64>,
+        error: Option<&str>,
+    ) -> Result<(), StorageError> {
+        match (completed_at, error) {
+            (Some(at), Some(e)) => {
+                self.conn.execute(
+                    "UPDATE transfers SET state = ?1, completed_at = ?2, error = ?3 WHERE id = ?4",
+                    params![state, at, e, transfer_id],
+                )?;
+            }
+            (Some(at), None) => {
+                self.conn.execute(
+                    "UPDATE transfers SET state = ?1, completed_at = ?2 WHERE id = ?3",
+                    params![state, at, transfer_id],
+                )?;
+            }
+            (None, Some(e)) => {
+                self.conn.execute(
+                    "UPDATE transfers SET state = ?1, error = ?2 WHERE id = ?3",
+                    params![state, e, transfer_id],
+                )?;
+            }
+            (None, None) => {
+                self.conn.execute(
+                    "UPDATE transfers SET state = ?1 WHERE id = ?2",
+                    params![state, transfer_id],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Update the number of completed chunks.
+    pub fn update_progress(
+        &self,
+        transfer_id: &str,
+        chunks_completed: u32,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE transfers SET chunks_completed = ?1 WHERE id = ?2",
+            params![chunks_completed, transfer_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update the local path for a completed received file.
+    pub fn set_local_path(
+        &self,
+        transfer_id: &str,
+        local_path: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE transfers SET local_path = ?1 WHERE id = ?2",
+            params![local_path, transfer_id],
+        )?;
+        Ok(())
+    }
+
+    /// List all stored transfers, most recent first.
+    pub fn list_transfers(&self, limit: i64) -> Result<Vec<StoredTransfer>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, peer_key_hex, filename, total_size, direction, state,
+                    chunks_completed, chunks_total, created_at, completed_at,
+                    local_path, error
+             FROM transfers ORDER BY created_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            Ok(StoredTransfer {
+                id: row.get(0)?,
+                peer_key_hex: row.get(1)?,
+                filename: row.get(2)?,
+                total_size: row.get(3)?,
+                direction: row.get(4)?,
+                state: row.get(5)?,
+                chunks_completed: row.get(6)?,
+                chunks_total: row.get(7)?,
+                created_at: row.get(8)?,
+                completed_at: row.get(9)?,
+                local_path: row.get(10)?,
+                error: row.get(11)?,
+            })
+        })?;
+        let mut transfers = Vec::new();
+        for row in rows {
+            transfers.push(row?);
+        }
+        Ok(transfers)
+    }
+
+    /// Get a single transfer by ID.
+    pub fn get_transfer(&self, transfer_id: &str) -> Result<Option<StoredTransfer>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, peer_key_hex, filename, total_size, direction, state,
+                    chunks_completed, chunks_total, created_at, completed_at,
+                    local_path, error
+             FROM transfers WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![transfer_id], |row| {
+            Ok(StoredTransfer {
+                id: row.get(0)?,
+                peer_key_hex: row.get(1)?,
+                filename: row.get(2)?,
+                total_size: row.get(3)?,
+                direction: row.get(4)?,
+                state: row.get(5)?,
+                chunks_completed: row.get(6)?,
+                chunks_total: row.get(7)?,
+                created_at: row.get(8)?,
+                completed_at: row.get(9)?,
+                local_path: row.get(10)?,
+                error: row.get(11)?,
+            })
+        });
+        match result {
+            Ok(t) => Ok(Some(t)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(StorageError::Database(e)),
+        }
+    }
+
+    /// Delete a transfer record.
+    pub fn delete_transfer(&self, transfer_id: &str) -> Result<(), StorageError> {
+        self.conn.execute(
+            "DELETE FROM transfers WHERE id = ?1",
+            params![transfer_id],
+        )?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
