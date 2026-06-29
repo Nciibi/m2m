@@ -15,6 +15,7 @@ use crate::protocol::{
     MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
     FileTransferRequestData, FileTransferChunkData, FileTransferCompleteData,
     FileTransferAcceptData, FileTransferRejectData,
+    FileTransferChunkAckData, FileTransferCancelData,
     ConversationMetaData, WireCandidate, MAX_FILE_CHUNK_SIZE,
 };
 
