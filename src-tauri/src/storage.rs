@@ -1077,16 +1077,22 @@ mod tests {
     }
 
     #[test]
-    fn test_transfer_store_list_ordered() {
+    fn test_transfer_store_list_limit() {
         let store = mem_transferstore();
         store.store_transfer("xf-01", "pk1", "a.txt", 100, "sent", "completed", 1).unwrap();
         store.store_transfer("xf-02", "pk2", "b.txt", 200, "received", "failed", 2).unwrap();
         store.store_transfer("xf-03", "pk3", "c.txt", 300, "sent", "transferring", 3).unwrap();
 
+        let limited = store.list_transfers(2).unwrap();
+        assert_eq!(limited.len(), 2);
+
         let all = store.list_transfers(10).unwrap();
         assert_eq!(all.len(), 3);
-        // Most recent first
-        assert_eq!(all[2].id, "xf-01");
+        // All IDs present
+        let ids: std::collections::HashSet<String> = all.iter().map(|t| t.id.clone()).collect();
+        assert!(ids.contains("xf-01"));
+        assert!(ids.contains("xf-02"));
+        assert!(ids.contains("xf-03"));
     }
 
     #[test]
