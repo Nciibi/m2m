@@ -26,9 +26,9 @@ export default function HubView() {
 
   // Derive connection state for the status badge
   const connectionBadge = (() => {
-    if (isConnecting) return { children: "Connecting…", variant: "warning" as const };
-    if (connection?.state === "established") return { children: "Connected", variant: "success" as const };
-    return { children: "Offline", variant: "default" as const };
+    if (isConnecting) return { dot: null, label: "Connecting…", variant: "warning" as const };
+    if (connection?.state === "established") return { dot: <OnlineDot />, label: "Connected", variant: "success" as const };
+    return { dot: <OfflineDot />, label: "Offline", variant: "default" as const };
   })();
 
   const filtered = conversations.filter(c => {
