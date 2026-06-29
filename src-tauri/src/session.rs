@@ -1393,11 +1393,12 @@ mod session_tests {
         let alice_candidates = candidates.clone(); // for the spawn closure
 
         let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+        let alice_xp = alice_x25519.public_key_bytes();
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, alice_candidates,
+                &mut alice_io, &alice_identity, &bob_pub, alice_candidates, alice_xp,
             ).await?;
             Ok::<_, SessionError>(session)
         });
@@ -1405,9 +1406,10 @@ mod session_tests {
         let frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::HandshakeInit);
 
+        let bob_xp = bob_x25519.public_key_bytes();
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, candidates,
+            &mut bob_io, &bob_identity, &frame, candidates, bob_xp,
         ).await.unwrap();
 
         assert_eq!(bob_session.peer_candidates.len(), 1,
@@ -1430,11 +1432,12 @@ mod session_tests {
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+        let alice_xp = alice_x25519.public_key_bytes();
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![],
+                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
             ).await
         });
 
@@ -1455,11 +1458,12 @@ mod session_tests {
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+        let alice_xp = alice_x25519.public_key_bytes();
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![],
+                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
             ).await
         });
 
@@ -1491,11 +1495,12 @@ mod session_tests {
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+        let alice_xp = alice_x25519.public_key_bytes();
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![],
+                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
             ).await
         });
 
@@ -1525,14 +1530,15 @@ mod session_tests {
         let (alice_identity, alice_x25519) = make_identities();
         let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
-        let wrong_key = make_identities();
+        let (wrong_key, _wrong_x25519) = make_identities();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
+        let alice_xp = alice_x25519.public_key_bytes();
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![],
+                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
             ).await
         });
 
@@ -1563,8 +1569,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_responder_rejects_version_mismatch() {
         init_crypto();
-        let bob_identity = make_identities();
-        let alice_identity = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
+        let (alice_identity, _alice_x25519) = make_identities();
 
         let eph = EphemeralKeypair::generate();
         let bad_init = HandshakeInit {
@@ -1585,9 +1591,10 @@ mod session_tests {
         };
 
         let (mut bob_io, _peer_io) = tokio::io::duplex(65536);
+        let bob_xp = bob_x25519.public_key_bytes();
         let mut session = Session::new();
         let result = session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, vec![],
+            &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
         ).await;
 
         assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
@@ -1597,9 +1604,9 @@ mod session_tests {
     #[tokio::test]
     async fn test_responder_rejects_bad_signature() {
         init_crypto();
-        let bob_identity = make_identities();
-        let alice_identity = make_identities();
-        let wrong_signer = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
+        let (alice_identity, _alice_x25519) = make_identities();
+        let (wrong_signer, _wrong_x25519) = make_identities();
 
         let eph = EphemeralKeypair::generate();
         let mut sign_data = Vec::new();
@@ -1625,9 +1632,10 @@ mod session_tests {
         };
 
         let (mut bob_io, _peer_io) = tokio::io::duplex(65536);
+        let bob_xp = bob_x25519.public_key_bytes();
         let mut session = Session::new();
         let result = session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, vec![],
+            &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
         ).await;
 
         assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
@@ -1637,8 +1645,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_responder_rejects_bad_verification() {
         init_crypto();
-        let bob_identity = make_identities();
-        let alice_identity = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
+        let (alice_identity, _alice_x25519) = make_identities();
 
         let eph = EphemeralKeypair::generate();
         let mut sign_data = Vec::new();
@@ -1664,11 +1672,12 @@ mod session_tests {
         };
 
         let (mut bob_io, mut peer_io) = tokio::io::duplex(65536);
+        let bob_xp = bob_x25519.public_key_bytes();
 
         let bob = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_responder(
-                &mut bob_io, &bob_identity, &frame, vec![],
+                &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
             ).await
         });
 
@@ -1695,16 +1704,17 @@ mod session_tests {
     #[tokio::test]
     async fn test_handshake_from_wrong_state() {
         init_crypto();
-        let identity = make_identities();
-        let peer_identity = make_identities();
+        let (identity, x25519) = make_identities();
+        let (peer_identity, _peer_x25519) = make_identities();
         let peer_pub = peer_identity.public_key_bytes();
+        let xp = x25519.public_key_bytes();
 
         let (mut io, _other) = tokio::io::duplex(65536);
         let mut session = Session::new();
         session.state = ConnectionState::Established;
 
         let result = session.handshake_as_initiator(
-            &mut io, &identity, &peer_pub, vec![],
+            &mut io, &identity, &peer_pub, vec![], xp,
         ).await;
 
         assert!(result.is_err(),
