@@ -92,6 +92,7 @@ impl Session {
             peer_candidates: Vec::new(),
             our_candidates: Vec::new(),
             our_identity_pub: [0u8; 32],
+            ratchet_interval: 100,
         }
     }
 
