@@ -90,7 +90,7 @@ describe("ChatContext", () => {
     );
 
     await user.click(screen.getByText("Open Chat"));
-    expect(mockInvoke).toHaveBeenCalledWith("get_messages", expect.any(Object));
+    expect(mockInvoke).toHaveBeenCalledWith("load_messages", expect.any(Object));
   });
 
   it("useChat throws without ChatProvider", () => {
