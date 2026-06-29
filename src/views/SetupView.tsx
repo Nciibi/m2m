@@ -1,6 +1,6 @@
 import { ToastContainer } from "../components/ui";
 import { KeyIcon } from "../components/ui/Icons";
-import { useM2M } from "../context/M2MContext";
+import { useApp } from "../context/AppContext";
 
 export default function SetupView() {
   const { toasts, removeToast } = useM2M();
