@@ -27,21 +27,26 @@ const state = {
   addToast: vi.fn(),
 };
 
-vi.mock("../context/M2MContext", () => ({
-  useM2M: () => ({
-    connection: state.connection,
-    messages: state.messages,
+vi.mock("../context/AppContext", () => ({
+  useApp: () => ({
     identity: state.identity,
-    fileRequests: state.fileRequests,
-    activeConversationId: state.activeConversationId,
     toasts: state.toasts,
     removeToast: state.removeToast,
     addToast: state.addToast,
+    setView: state.setView,
+  }),
+}));
+
+vi.mock("../context/ChatContext", () => ({
+  useChat: () => ({
+    connection: state.connection,
+    messages: state.messages,
+    fileRequests: state.fileRequests,
+    activeConversationId: state.activeConversationId,
     handleSendMessage: state.handleSendMessage,
     handleSendFile: state.handleSendFile,
     handleVerify: state.handleVerify,
     handleDisconnect: state.handleDisconnect,
-    setView: state.setView,
     handleExportConversation: state.handleExportConversation,
     handleSetRetention: state.handleSetRetention,
     retentionPolicy: state.retentionPolicy,
@@ -49,7 +54,6 @@ vi.mock("../context/M2MContext", () => ({
     retentionDuration: state.retentionDuration,
     setRetentionDuration: state.setRetentionDuration,
   }),
-  M2MProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 import ChatView from "../views/ChatView";
