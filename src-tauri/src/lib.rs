@@ -84,6 +84,8 @@ pub fn run() {
             commands::files::accept_file_transfer,
             commands::files::reject_file_transfer,
             commands::files::cancel_file_transfer,
+            commands::files::pause_file_transfer,
+            commands::files::resume_file_transfer,
             commands::settings::discover_public_ip,
             commands::settings::get_stun_config,
             commands::settings::set_stun_servers,
