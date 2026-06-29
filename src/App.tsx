@@ -56,9 +56,15 @@ function AppInner() {
 
 function App() {
   return (
-    <M2MProvider>
-      <AppInner />
-    </M2MProvider>
+    <AppProvider>
+      <VaultProvider>
+        <SettingsProvider>
+          <ChatProvider>
+            <AppInner />
+          </ChatProvider>
+        </SettingsProvider>
+      </VaultProvider>
+    </AppProvider>
   );
 }
 
