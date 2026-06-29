@@ -6,7 +6,10 @@ import "./styles/reset.css";
 import "./styles/layout.css";
 import "./styles/components.css";
 
-import { M2MProvider, useM2M } from "./context/M2MContext";
+import { AppProvider, useApp } from "./context/AppContext";
+import { VaultProvider } from "./context/VaultContext";
+import { ChatProvider } from "./context/ChatContext";
+import { SettingsProvider } from "./context/SettingsContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import ShortcutHelp from "./components/ShortcutHelp";
 import SetupView from "./views/SetupView";
