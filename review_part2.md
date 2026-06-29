@@ -300,7 +300,7 @@ Only VaultView tests (7 tests) exist. All other views and contexts are untested.
 
 ### Tier A — Security / Correctness (Address Next)
 
-1. **[LOW] Fix Ed25519/X25519 key confusion in legacy handshake**: Use the dedicated `X25519IdentityKeypair` in `session.rs:121` instead of coercing the Ed25519 public key. This would require generating the X25519 keypair during identity creation and storing it alongside the Ed25519 keypair.
+1. ✅ **[FIXED] Ed25519/X25519 key confusion in legacy handshake**: `handshake_as_initiator` and `handshake_as_responder` now accept `x25519_pub: [u8; 32]` and use it for the `x25519_identity_pub` handshake field instead of coercing the Ed25519 public key. All 12 callers (3 production + 9 test sites) updated. X25519 key is read from `state.x25519_identity` at all production call sites.
 
 2. **[LOW] Verify padding bytes after unpad**: Add a verification step in `unpad_message_variable` that re-pads the recovered plaintext with the same padding and compares against the received padded buffer to defeat any theoretical padding oracle.
 

@@ -1528,7 +1528,7 @@ mod session_tests {
     async fn test_initiator_rejects_identity_mismatch() {
         init_crypto();
         let (alice_identity, alice_x25519) = make_identities();
-        let (bob_identity, bob_x25519) = make_identities();
+        let (bob_identity, _bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
         let (wrong_key, _wrong_x25519) = make_identities();
 
