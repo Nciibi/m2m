@@ -64,6 +64,21 @@ pub struct FileTransferInfo {
     pub peer_key_hex: String,
 }
 
+/// Progress event for an in-progress file transfer.
+#[derive(Debug, Clone, Serialize)]
+pub struct TransferProgressEvent {
+    pub transfer_id: String,
+    pub peer_key_hex: String,
+    pub filename: String,
+    pub total_size: u64,
+    pub bytes_transferred: u64,
+    pub chunks_completed: u32,
+    pub chunks_total: u32,
+    pub state: String,
+    pub speed_bytes_per_sec: u64,
+    pub estimated_remaining_secs: u64,
+}
+
 // ─── Events emitted to the React frontend ───
 
 #[derive(Debug, Clone, Serialize)]
