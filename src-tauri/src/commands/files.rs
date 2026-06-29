@@ -619,6 +619,23 @@ async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_i
     }
 }
 
+// ─── Adaptive Chunk Size ──────────────────────────────────────
+
+/// Compute the best chunk size for the given connection strategy.
+///
+/// - host, ipv6, port-mapped (local/fast paths): 512 KiB
+/// - srflx, prflx (internet hole-punch): 256 KiB
+/// - relay (high-latency): 128 KiB
+/// - default: 256 KiB
+pub(super) fn compute_chunk_size(strategy_name: &str) -> usize {
+    match strategy_name {
+        "host" | "ipv6" | "port-mapped" => 512 * 1024,
+        "srflx" | "prflx" => 256 * 1024,
+        "relay" => 128 * 1024,
+        _ => 256 * 1024,
+    }
+}
+
 // ─── Hash Computation (Streaming) ──────────────────────────────
 
 /// Compute per-chunk SHA-256 hashes and the full-file SHA-256 hash in a
