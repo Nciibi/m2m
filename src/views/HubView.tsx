@@ -50,7 +50,10 @@ export default function HubView() {
           M2M
         </h1>
         <div className="app-header__actions">
-          <Badge variant={connectionStatus.variant} compact>{connectionStatus.dot} {connectionStatus.label}</Badge>
+          <Badge variant={connectionBadge.variant} compact>
+            {connectionBadge.variant === "success" ? <OnlineDot /> : connectionBadge.variant === "warning" ? null : <OfflineDot />}
+            {' '}{connectionBadge.children}
+          </Badge>
           <button className="btn btn--icon" onClick={openSettings} id="settings-btn" aria-label="Settings"><GearIcon size={20} /></button>
         </div>
       </div>
