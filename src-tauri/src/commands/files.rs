@@ -21,7 +21,7 @@ use super::{FileTransferInfo, TransferProgressEvent};
 /// the transfer for the chunk-sending loop.
 #[tauri::command]
 pub async fn send_file(
-    app_handle: AppHandle,
+    #[allow(unused_variables)] app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     file_path: String,
