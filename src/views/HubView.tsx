@@ -10,14 +10,14 @@ import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
 
 export default function HubView() {
-  const { identity, toasts, removeToast, openSettings } = useApp();
+  const { identity, toasts, removeToast } = useApp();
   const {
     generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
     isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
     handleConnect, setNamingMyName, setNamingTheirName, handleOpenChat,
     handleDeleteConversation, conversations,
   } = useChat();
-  const { networkSettings, privateMode } = useSettings();
+  const { networkSettings, privateMode, openSettings } = useSettings();
   const [tab, setTab] = useState<"connect" | "chats">("connect");
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
