@@ -1741,4 +1741,427 @@ mod session_tests {
         assert!(result.is_err(),
             "handshake from Established state should fail");
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // X3DH + Double Ratchet Integration Tests
+    // ═══════════════════════════════════════════════════════════
+
+    /// Helper: build Bob's PrekeyBundle for X3DH integration tests.
+    /// Returns (spk, bundle) — the caller needs spk secret key for responder handshake.
+    fn make_bob_prekey(
+        bob_x25519: &crate::crypto::X25519IdentityKeypair,
+        bob_identity: &IdentityKeypair,
+    ) -> (crate::crypto::EphemeralKeypair, crate::crypto::PrekeyBundle) {
+        let spk = crate::crypto::EphemeralKeypair::generate();
+        let sig = bob_identity.sign(&spk.public_key_bytes());
+        let bundle = crate::crypto::PrekeyBundle {
+            identity_key: bob_x25519.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: sig,
+            one_time_prekey: None,
+        };
+        (spk, bundle)
+    }
+
+    #[tokio::test]
+    async fn test_x3dh_full_handshake_text_message() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+        let (bob_spk, bob_bundle) = make_bob_prekey(&bob_x25519, &bob_id);
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        // Alice as initiator (background)
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
+            ).await?;
+            // Send a text message over the DR path
+            let msg_id = session.send_text(&mut alice_io, "Hello via X3DH+DR!").await?;
+            Ok::<_, SessionError>((session, msg_id))
+        });
+
+        // Bob as responder
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(init_frame.packet_type, PacketType::X3DHHandshakeInit);
+
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+        ).await.unwrap();
+        assert_eq!(bob_session.state, ConnectionState::Established);
+        assert!(bob_session.ratchet.is_some(), "Bob should have DR after X3DH");
+
+        // Bob reads Alice's text message
+        let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(msg_frame.packet_type, PacketType::EncryptedMessage);
+        let body = bob_session.decrypt_message(&msg_frame).unwrap();
+        match body {
+            MessageBody::Text { content, .. } => assert_eq!(content, "Hello via X3DH+DR!"),
+            other => panic!("expected Text, got {:?}", other),
+        }
+
+        let (alice_session, msg_id) = alice.await.unwrap().unwrap();
+        assert_eq!(alice_session.state, ConnectionState::Established);
+        assert!(alice_session.ratchet.is_some(), "Alice should have DR after X3DH");
+    }
+
+    #[tokio::test]
+    async fn test_x3dh_full_handshake_file_transfer_dr_path() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+        let (bob_spk, bob_bundle) = make_bob_prekey(&bob_x25519, &bob_id);
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
+            ).await?;
+            session.send_file_request(
+                &mut alice_io, "integ-test-001", "secret.pdf", 524288, 8, vec![0xAB; 32],
+            ).await?;
+            Ok::<_, SessionError>(session)
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+        ).await.unwrap();
+
+        // Bob reads the file request — typed frame via DR path
+        let req_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(req_frame.packet_type, PacketType::FileTransferRequest);
+        let plaintext = bob_session.decrypt_typed_frame(&req_frame).unwrap();
+        let req: crate::protocol::FileTransferRequestData =
+            crate::protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(req.transfer_id, "integ-test-001");
+        assert_eq!(req.filename, "secret.pdf");
+        assert_eq!(req.total_size, 524288);
+        assert_eq!(req.total_chunks, 8);
+
+        alice.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_x3dh_full_handshake_conversation_meta_dr_path() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+        let (bob_spk, bob_bundle) = make_bob_prekey(&bob_x25519, &bob_id);
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
+            ).await?;
+            session.send_conversation_meta(&mut alice_io, "Alice", "Bob").await?;
+            Ok::<_, SessionError>(session)
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+        ).await.unwrap();
+
+        let meta_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(meta_frame.packet_type, PacketType::ConversationMeta);
+        let plaintext = bob_session.decrypt_typed_frame(&meta_frame).unwrap();
+        let meta: crate::protocol::ConversationMetaData =
+            crate::protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(meta.my_display_name, "Alice");
+        assert_eq!(meta.your_display_name, "Bob");
+
+        alice.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_x3dh_dh_ratchet_during_message_exchange() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+        let (bob_spk, bob_bundle) = make_bob_prekey(&bob_x25519, &bob_id);
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
+            ).await?;
+            // Send 105 messages to trigger DH ratchet at 100
+            for i in 0..105 {
+                let msg = format!("Message {}", i);
+                session.send_text(&mut alice_io, &msg).await?;
+            }
+            Ok::<_, SessionError>(session)
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+        ).await.unwrap();
+
+        // Verify all 105 messages decrypt correctly (including across DH ratchet)
+        for i in 0..105 {
+            let frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+            let body = bob_session.decrypt_message(&frame).unwrap();
+            match body {
+                MessageBody::Text { content, .. } => {
+                    assert_eq!(content, format!("Message {}", i));
+                }
+                other => panic!("expected Text msg {}, got {:?}", i, other),
+            }
+        }
+
+        alice.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_x3dh_replay_detected_integration() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+        let (bob_spk, bob_bundle) = make_bob_prekey(&bob_x25519, &bob_id);
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
+            ).await?;
+            session.send_text(&mut alice_io, "Message 1").await?;
+            session.send_text(&mut alice_io, "Message 2").await?;
+            Ok::<_, SessionError>(session)
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+        ).await.unwrap();
+
+        // Read both messages
+        let f1 = network::read_frame_impl(&mut bob_io).await.unwrap();
+        bob_session.decrypt_message(&f1).unwrap();
+        let f2 = network::read_frame_impl(&mut bob_io).await.unwrap();
+        bob_session.decrypt_message(&f2).unwrap();
+
+        // Replay f1 — should be rejected by DR chain advancement
+        let replay = bob_session.decrypt_message(&f1);
+        assert!(replay.is_err(), "replayed message should fail");
+
+        alice.await.unwrap().unwrap();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Typed-Frame Double Ratchet Tests (direct setup)
+    // ═══════════════════════════════════════════════════════════
+
+    fn make_session_with_ratchet() -> (Session, Session) {
+        init_crypto();
+        // Build a DR pair from X3DH key exchange
+        let ik_alice = crate::crypto::X25519IdentityKeypair::generate();
+        let ik_bob = crate::crypto::X25519IdentityKeypair::generate();
+        let ek_alice = crate::crypto::EphemeralKeypair::generate();
+        let spk = crate::crypto::EphemeralKeypair::generate();
+        let bundle = crate::crypto::PrekeyBundle {
+            identity_key: ik_bob.public_key_bytes(),
+            signed_prekey: spk.public_key_bytes(),
+            signed_prekey_sig: vec![0xAAu8; 64],
+            one_time_prekey: None,
+        };
+        let x3dh_alice = crate::crypto::x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
+        let dh_alice = crate::crypto::EphemeralKeypair::generate();
+        let dh_bob = crate::crypto::EphemeralKeypair::generate();
+        let alice_pub = dh_alice.public_key_bytes();
+        let bob_pub = dh_bob.public_key_bytes();
+
+        let mut alice = Session::new();
+        alice.ratchet = Some(crate::crypto::DoubleRatchet::new(
+            x3dh_alice, dh_alice, bob_pub, true,
+        ));
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        // Set peer identity key for DR AAD
+        alice.peer_identity_pub = [0xBBu8; 32];
+
+        let bob_x3dh = crate::crypto::x3dh_respond(
+            &ik_bob, &spk, None,
+            &ek_alice.public_key_bytes(),
+            &ik_alice.public_key_bytes(),
+        ).unwrap();
+        let mut bob = Session::new();
+        bob.ratchet = Some(crate::crypto::DoubleRatchet::new(
+            bob_x3dh, dh_bob, alice_pub, false,
+        ));
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+        bob.peer_identity_pub = [0xBBu8; 32];
+
+        (alice, bob)
+    }
+
+    #[tokio::test]
+    async fn test_dr_file_transfer_request_roundtrip() {
+        let (mut alice, mut bob) = make_session_with_ratchet();
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        alice.send_file_request(
+            &mut alice_w, "dr-file-001", "document.pdf", 1048576, 16, vec![0xCD; 32],
+        ).await.unwrap();
+
+        let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
+        // Verify it has a DR header
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body).unwrap();
+        assert!(envelope.dr_header.is_some(), "should use DR path");
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let req: crate::protocol::FileTransferRequestData =
+            protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(req.transfer_id, "dr-file-001");
+        assert_eq!(req.filename, "document.pdf");
+        assert_eq!(req.total_size, 1048576);
+    }
+
+    #[tokio::test]
+    async fn test_dr_file_accept_roundtrip() {
+        let (mut alice, mut bob) = make_session_with_ratchet();
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        alice.send_file_accept(&mut alice_w, "dr-accept-001").await.unwrap();
+
+        let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::FileTransferAccept);
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body).unwrap();
+        assert!(envelope.dr_header.is_some());
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let accept: crate::protocol::FileTransferAcceptData =
+            protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(accept.transfer_id, "dr-accept-001");
+    }
+
+    #[tokio::test]
+    async fn test_dr_file_reject_roundtrip() {
+        let (mut alice, mut bob) = make_session_with_ratchet();
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        alice.send_file_reject(&mut alice_w, "dr-reject-001").await.unwrap();
+
+        let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::FileTransferReject);
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body).unwrap();
+        assert!(envelope.dr_header.is_some());
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let reject: crate::protocol::FileTransferRejectData =
+            protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(reject.transfer_id, "dr-reject-001");
+    }
+
+    #[tokio::test]
+    async fn test_dr_file_chunk_roundtrip() {
+        let (mut alice, mut bob) = make_session_with_ratchet();
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        let chunk_data = vec![0x42u8; 1024];
+        alice.send_file_chunk(
+            &mut alice_w, "dr-chunk-001", 0, chunk_data.clone(), vec![0xEF; 32],
+        ).await.unwrap();
+
+        let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::FileTransferChunk);
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body).unwrap();
+        assert!(envelope.dr_header.is_some());
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let chunk: crate::protocol::FileTransferChunkData =
+            protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(chunk.transfer_id, "dr-chunk-001");
+        assert_eq!(chunk.chunk_index, 0);
+        assert_eq!(chunk.data, chunk_data);
+    }
+
+    #[tokio::test]
+    async fn test_dr_file_complete_roundtrip() {
+        let (mut alice, mut bob) = make_session_with_ratchet();
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        alice.send_file_complete(&mut alice_w, "dr-complete-001").await.unwrap();
+
+        let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::FileTransferComplete);
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body).unwrap();
+        assert!(envelope.dr_header.is_some());
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let complete: crate::protocol::FileTransferCompleteData =
+            protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(complete.transfer_id, "dr-complete-001");
+    }
+
+    #[tokio::test]
+    async fn test_dr_conversation_meta_roundtrip() {
+        let (mut alice, mut bob) = make_session_with_ratchet();
+        let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
+
+        alice.send_conversation_meta(&mut alice_w, "AliceDR", "BobDR").await.unwrap();
+
+        let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
+        assert_eq!(frame.packet_type, PacketType::ConversationMeta);
+        let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body).unwrap();
+        assert!(envelope.dr_header.is_some(), "should use DR path");
+
+        let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
+        let meta: crate::protocol::ConversationMetaData =
+            protocol::deserialize(&plaintext).unwrap();
+        assert_eq!(meta.my_display_name, "AliceDR");
+        assert_eq!(meta.your_display_name, "BobDR");
+    }
+
+    #[tokio::test]
+    async fn test_dr_decrypt_typed_frame_without_ratchet_fails() {
+        init_crypto();
+        // Legacy session without ratchet
+        let mut session = Session::new();
+        session.state = ConnectionState::Established;
+        session.established_at = now_unix_secs();
+
+        // Construct a DR envelope manually
+        let envelope = EncryptedEnvelope {
+            nonce: vec![0u8; 24],
+            counter: 0,
+            ciphertext: vec![0u8; 32],
+            dr_header: Some(DRHeader {
+                ratchet_key: None,
+                previous_chain_length: 0,
+                message_number: 0,
+            }),
+        };
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::FileTransferRequest,
+            body: protocol::serialize(&envelope).unwrap(),
+        };
+
+        let result = session.decrypt_typed_frame(&frame);
+        assert!(matches!(result, Err(SessionError::InvalidState)),
+            "expected InvalidState without ratchet, got {:?}", result);
+    }
 }
