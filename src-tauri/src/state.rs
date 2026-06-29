@@ -74,6 +74,9 @@ pub struct OutgoingFileTransfer {
     pub file_hash: [u8; 32],
     /// Per-chunk SHA-256 hashes, pre-computed in a single streaming pass.
     pub chunk_hashes: Vec<[u8; 32]>,
+    /// Chunk size in bytes used when computing hashes and sending.
+    /// Adapted to the connection strategy (512 KiB for LAN, 256 KiB default, 128 KiB relay).
+    pub chunk_size: usize,
     /// Version of file transfer protocol the peer supports (0x01 = legacy, 0x02 = ACKs).
     pub peer_protocol_version: u8,
     pub state: TransferState,
