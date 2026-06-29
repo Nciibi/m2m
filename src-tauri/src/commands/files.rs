@@ -241,6 +241,81 @@ pub async fn reject_file_transfer(
     Ok(())
 }
 
+/// Pause an in-progress file transfer.
+/// Marks the transfer as paused. The chunk sender will not send further
+/// chunks until resumed.
+#[tauri::command]
+pub async fn pause_file_transfer(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    // Pause outgoing transfer
+    {
+        let mut outgoing = state.outgoing_transfers.write().await;
+        if let Some(t) = outgoing.get_mut(&transfer_id) {
+            t.state = TransferState::Paused;
+        }
+    }
+
+    // Pause incoming transfer
+    {
+        let mut incoming = state.incoming_transfers.write().await;
+        if let Some(t) = incoming.get_mut(&transfer_id) {
+            t.state = TransferState::Paused;
+        }
+    }
+
+    // Persist
+    {
+        let ts = state.transfer_store.lock().await;
+        if let Some(ref store) = *ts {
+            let _ = store.update_state(&transfer_id, "paused", None, None);
+        }
+    }
+
+    tracing::info!(transfer_id = %transfer_id, "file transfer paused");
+    Ok(())
+}
+
+/// Resume a paused file transfer.
+#[tauri::command]
+pub async fn resume_file_transfer(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    // Resume outgoing transfer
+    {
+        let mut outgoing = state.outgoing_transfers.write().await;
+        if let Some(t) = outgoing.get_mut(&transfer_id) {
+            if t.state != TransferState::Paused && t.state != TransferState::Failed {
+                return Err("transfer is not paused or failed".to_string());
+            }
+            t.state = TransferState::Transferring;
+        }
+    }
+
+    // Resume incoming transfer
+    {
+        let mut incoming = state.incoming_transfers.write().await;
+        if let Some(t) = incoming.get_mut(&transfer_id) {
+            t.state = TransferState::Transferring;
+        }
+    }
+
+    // Persist
+    {
+        let ts = state.transfer_store.lock().await;
+        if let Some(ref store) = *ts {
+            let _ = store.update_state(&transfer_id, "transferring", None, None);
+        }
+    }
+
+    tracing::info!(transfer_id = %transfer_id, "file transfer resumed");
+    Ok(())
+}
+
 /// Cancel an in-progress file transfer (send or receive).
 /// Sends a cancel packet to the peer and cleans up local state.
 #[tauri::command]
