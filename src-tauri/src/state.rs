@@ -32,6 +32,60 @@ pub struct PeerConnection {
     pub remote_addr: SocketAddr,
 }
 
+/// Transfer state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TransferState {
+    Pending,         // Waiting for accept (sender) / awaiting chunks (receiver)
+    Transferring,    // Chunks actively flowing
+    Completed,       // File fully transferred and verified
+    Failed,          // Irrecoverable error (disconnect, hash mismatch)
+    Cancelled,       // User-initiated cancel or peer cancelled
+}
+
+/// State for an in-progress file transfer (sending side).
+///
+/// The sender reads the file in a streaming fashion (never full-file in RAM),
+/// tracks which chunks have been ACKed by the receiver, and supports retry
+/// on timeouts. Pre-computed chunk hashes are stored for verification
+/// before each send.
+pub struct OutgoingFileTransfer {
+    pub transfer_id: String,
+    pub peer_key_hex: String,
+    pub file_path: PathBuf,
+    pub filename: String,
+    pub total_size: u64,
+    pub total_chunks: u32,
+    pub file_hash: [u8; 32],
+    /// Per-chunk SHA-256 hashes, pre-computed in a single streaming pass.
+    pub chunk_hashes: Vec<[u8; 32]>,
+    /// Version of file transfer protocol the peer supports (0x01 = legacy, 0x02 = ACKs).
+    pub peer_protocol_version: u8,
+    pub state: TransferState,
+    /// Chunks dispatched (may not be acked yet).
+    pub chunks_sent: u32,
+    /// Chunks confirmed by receiver via ACK packets.
+    pub chunks_acked: u32,
+    /// Index of last chunk acked — used for resume on reconnect.
+    pub last_acked_index: u32,
+    /// Created timestamp (unix seconds).
+    pub created_at: u64,
+    /// Last activity timestamp (unix seconds).
+    pub last_activity_at: u64,
+}
+
+impl OutgoingFileTransfer {
+    /// Check if all chunks have been sent and acked.
+    pub fn is_complete(&self) -> bool {
+        self.chunks_acked >= self.total_chunks
+    }
+
+    /// Fraction [0.0, 1.0] of chunks completed.
+    pub fn progress_fraction(&self) -> f64 {
+        if self.total_chunks == 0 { return 1.0; }
+        self.chunks_acked as f64 / self.total_chunks as f64
+    }
+}
+
 /// State for an in-progress file transfer (receiving side).
 ///
 /// Chunks are written directly to a temporary file on disk as they arrive,
@@ -39,10 +93,16 @@ pub struct PeerConnection {
 /// which chunks have been received. This prevents OOM attacks from peers
 /// claiming large files (e.g. 4GB).
 pub struct IncomingFileTransfer {
+    pub transfer_id: String,
+    pub peer_key_hex: String,
     pub filename: String,
     pub total_size: u64,
     pub total_chunks: u32,
     pub file_hash: Vec<u8>,
+    /// Per-chunk SHA-256 hashes from v2 request (empty if v1 sender).
+    pub chunk_hashes: Vec<Vec<u8>>,
+    /// File transfer protocol version used by the sender (0x01 = legacy, 0x02 = v2).
+    pub peer_protocol_version: u8,
     pub save_path: PathBuf,
     /// Temporary file on disk — chunks are written here as they arrive.
     pub temp_file: Option<std::fs::File>,
@@ -50,9 +110,88 @@ pub struct IncomingFileTransfer {
     pub temp_path: Option<PathBuf>,
     /// Number of chunks received so far.
     pub chunks_received: u32,
+    /// Total bytes received so far.
+    pub bytes_received: u64,
     /// Bitmask of received chunks: true = chunk received.
     /// Size = total_chunks, initialized to all false.
     pub chunks_bitmask: Vec<bool>,
+    pub state: TransferState,
+    /// Created timestamp (unix seconds).
+    pub created_at: u64,
+    /// Error description if state = Failed.
+    pub error: Option<String>,
+}
+
+impl IncomingFileTransfer {
+    pub fn progress_fraction(&self) -> f64 {
+        if self.total_chunks == 0 { return 1.0; }
+        self.chunks_received as f64 / self.total_chunks as f64
+    }
+
+    /// Check if all chunks have been received (bitmask fully true).
+    pub fn all_chunks_received(&self) -> bool {
+        if self.chunks_bitmask.is_empty() {
+            return self.chunks_received >= self.total_chunks;
+        }
+        self.chunks_bitmask.iter().all(|&b| b)
+    }
+
+    pub fn bytes_received(&self) -> u64 {
+        self.bytes_received
+    }
+}
+
+/// Transfer queue with concurrency limits.
+///
+/// - Max concurrent: 3 (configurable)
+/// - Max queue depth: 100
+/// - Transfers beyond the queue are rejected immediately.
+pub struct TransferQueue {
+    /// Ordered transfer IDs waiting to start.
+    pub queue: VecDeque<String>,
+    /// Transfer IDs currently being transferred.
+    pub active: HashSet<String>,
+    /// Max concurrent active transfers.
+    pub max_concurrent: u32,
+}
+
+impl TransferQueue {
+    pub fn new() -> Self {
+        Self {
+            queue: VecDeque::new(),
+            active: HashSet::new(),
+            max_concurrent: 3,
+        }
+    }
+
+    /// Check if we can start a new transfer.
+    pub fn can_start(&self) -> bool {
+        self.active.len() < self.max_concurrent as usize
+    }
+
+    /// Enqueue a transfer ID. Returns Err if queue is full.
+    pub fn enqueue(&mut self, transfer_id: String) -> Result<(), &'static str> {
+        const MAX_QUEUE_DEPTH: usize = 100;
+        if self.queue.len() + self.active.len() >= MAX_QUEUE_DEPTH {
+            return Err("transfer queue is full (max 100 pending)");
+        }
+        self.queue.push_back(transfer_id);
+        Ok(())
+    }
+
+    /// Try to start the next queued transfer. Returns the transfer_id if one was started.
+    pub fn dequeue(&mut self) -> Option<String> {
+        if !self.can_start() { return None; }
+        let id = self.queue.pop_front()?;
+        self.active.insert(id.clone());
+        Some(id)
+    }
+
+    /// Mark a transfer as done (completed/failed/cancelled). Returns the next queued transfer.
+    pub fn finish(&mut self, transfer_id: &str) -> Option<String> {
+        self.active.remove(transfer_id);
+        self.dequeue()
+    }
 }
 
 /// A port forwarding rule the user configured manually on their router.
@@ -93,10 +232,12 @@ pub struct AppState {
     /// Data directory path.
     #[expect(dead_code, reason = "Reserved for diagnostics/settings display")]
     pub data_dir: String,
-    /// Pending outgoing file transfers. Key: transfer_id, Value: filepath
-    pub outgoing_transfers: RwLock<HashMap<String, String>>,
+    /// Pending outgoing file transfers. Key: transfer_id, Value: transfer state.
+    pub outgoing_transfers: RwLock<HashMap<String, OutgoingFileTransfer>>,
     /// Active incoming file transfers. Key: transfer_id
     pub incoming_transfers: RwLock<HashMap<String, IncomingFileTransfer>>,
+    /// Ordered transfer queue (outgoing).
+    pub transfer_queue: RwLock<TransferQueue>,
     /// Message store (initialised when identity is loaded).
     pub message_store: Mutex<Option<storage::MessageStore>>,
     /// Key store (initialised when identity is loaded).
@@ -148,6 +289,7 @@ impl AppState {
             data_dir,
             outgoing_transfers: RwLock::new(HashMap::new()),
             incoming_transfers: RwLock::new(HashMap::new()),
+            transfer_queue: RwLock::new(TransferQueue::new()),
             message_store: Mutex::new(None),
             key_store: Mutex::new(None),
             storage_key: RwLock::new(None),
