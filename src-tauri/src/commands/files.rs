@@ -134,7 +134,7 @@ pub async fn accept_file_transfer(
     // Store the save_dir and update state
     {
         let transfers = state.incoming_transfers.read().await;
-        if let Some(t) = transfers.get(&transfer_id) {
+        if let Some(_t) = transfers.get(&transfer_id) {
             // Already registered from the request handler. Patch save_path.
             drop(transfers);
             let mut w = state.incoming_transfers.write().await;
