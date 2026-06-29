@@ -938,7 +938,7 @@ fn now_unix_secs() -> u64 {
 #[cfg(test)]
 mod session_tests {
     use super::*;
-    use crate::crypto::{self, IdentityKeypair, SessionKeys, X25519IdentityKeypair};
+    use crate::crypto::{self, IdentityKeypair, SessionKeys};
     use crate::protocol::{EncryptedEnvelope, PacketType, PROTOCOL_VERSION};
     fn init_crypto() {
         let _ = crypto::init();
@@ -1428,7 +1428,7 @@ mod session_tests {
     async fn test_initiator_rejects_wrong_packet_type() {
         init_crypto();
         let (alice_identity, alice_x25519) = make_identities();
-        let (bob_identity, bob_x25519) = make_identities();
+        let (bob_identity, _bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
@@ -1454,7 +1454,7 @@ mod session_tests {
     async fn test_initiator_rejects_version_mismatch() {
         init_crypto();
         let (alice_identity, alice_x25519) = make_identities();
-        let (bob_identity, bob_x25519) = make_identities();
+        let (bob_identity, _bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
@@ -1491,7 +1491,7 @@ mod session_tests {
     async fn test_initiator_rejects_bad_signature() {
         init_crypto();
         let (alice_identity, alice_x25519) = make_identities();
-        let (bob_identity, bob_x25519) = make_identities();
+        let (bob_identity, _bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
