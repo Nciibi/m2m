@@ -487,7 +487,9 @@ async fn handle_relay_incoming_with_frame(
         }
 
         // Same handshake flow as handle_incoming_connection
-        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates).await {
+        let x25519_pub = state.x25519_identity.read().await
+            .as_ref().map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
+        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates, x25519_pub).await {
             tracing::warn!(error = %e, "relay handshake failed for incoming connection");
             let _ = network::send_error(
                 &mut stream,

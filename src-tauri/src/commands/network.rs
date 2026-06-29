@@ -428,8 +428,10 @@ async fn handle_incoming_connection(
                 return;
             }
         } else {
-            // Legacy handshake path
-            if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates).await {
+            // Legacy handshake path (use X25519 pub key for the `x25519_identity_pub` field)
+            let x25519_pub = state.x25519_identity.read().await
+                .as_ref().map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
+            if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates, x25519_pub).await {
                 tracing::warn!(error = %e, "handshake failed for incoming connection");
                 let _ = network::send_error(
                     &mut stream,
@@ -598,8 +600,9 @@ pub async fn connect_to_peer(
                     .await
                     .map_err(|e| format!("X3DH initiator handshake failed: {e}"))?;
             } else {
+                let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
                 session
-                    .handshake_as_initiator(&mut stream, kp, &expected_peer_pub, our_candidates)
+                    .handshake_as_initiator(&mut stream, kp, &expected_peer_pub, our_candidates, x25519_pub)
                     .await
                     .map_err(|e| format!("initiator handshake failed: {e}"))?;
             }
@@ -622,8 +625,9 @@ pub async fn connect_to_peer(
                     .await
                     .map_err(|e| format!("X3DH responder handshake failed: {e}"))?;
             } else if frame.packet_type == protocol::PacketType::HandshakeInit {
+                let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
                 session
-                    .handshake_as_responder(&mut stream, kp, &frame, our_candidates)
+                    .handshake_as_responder(&mut stream, kp, &frame, our_candidates, x25519_pub)
                     .await
                     .map_err(|e| format!("responder handshake failed: {e}"))?;
             } else {

@@ -93,12 +93,15 @@ impl Session {
     /// Execute the handshake as the initiator (client).
     /// We already know the peer's identity from the invite.
     /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
+    /// `x25519_pub` is our X25519 identity public key (for X3DH backward compat in the handshake).
+    /// It is distinct from the Ed25519 `identity` keypair.
     pub async fn handshake_as_initiator<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         stream: &mut S,
         identity: &IdentityKeypair,
         expected_peer_pub: &[u8; 32],
         local_candidates: Vec<WireCandidate>,
+        x25519_pub: [u8; 32],
     ) -> Result<(), SessionError> {
         self.state = ConnectionState::Handshaking;
         self.our_candidates = local_candidates.clone();
@@ -119,7 +122,7 @@ impl Session {
             version: PROTOCOL_VERSION,
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
-            x25519_identity_pub: identity.public_key_bytes(),
+            x25519_identity_pub: x25519_pub,
             used_opk: None,
             timestamp: now,
             signature,
@@ -193,12 +196,18 @@ impl Session {
 
     /// Execute the handshake as the responder (server).
     /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
+    /// Execute the handshake as the responder (server).
+    /// `local_candidates` are our network candidates sent to the peer for ICE-Lite.
+    /// `x25519_pub` is our X25519 identity public key (for X3DH backward compat in the handshake).
+    /// It is distinct from the Ed25519 `identity` keypair and should be the
+    /// public key of the X25519IdentityKeypair stored in AppState.
     pub async fn handshake_as_responder<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         stream: &mut S,
         identity: &IdentityKeypair,
         init_frame: &RawFrame,
         local_candidates: Vec<WireCandidate>,
+        x25519_pub: [u8; 32],
     ) -> Result<(), SessionError> {
         self.state = ConnectionState::Handshaking;
         self.our_candidates = local_candidates.clone();
@@ -237,7 +246,7 @@ impl Session {
             version: PROTOCOL_VERSION,
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
-            x25519_identity_pub: identity.public_key_bytes(),
+            x25519_identity_pub: x25519_pub,
             timestamp: now,
             signature,
             candidates: local_candidates,
@@ -929,14 +938,16 @@ fn now_unix_secs() -> u64 {
 #[cfg(test)]
 mod session_tests {
     use super::*;
-    use crate::crypto::{self, IdentityKeypair, SessionKeys};
+    use crate::crypto::{self, IdentityKeypair, SessionKeys, X25519IdentityKeypair};
     use crate::protocol::{EncryptedEnvelope, PacketType, PROTOCOL_VERSION};
     fn init_crypto() {
         let _ = crypto::init();
     }
 
-    fn make_test_identity() -> IdentityKeypair {
-        IdentityKeypair::generate().unwrap()
+    /// Generate a pair of identities (Ed25519 + X25519) for testing.
+    /// Returns (ed25519_keypair, x25519_keypair).
+    fn make_identities() -> (IdentityKeypair, crate::crypto::X25519IdentityKeypair) {
+        (IdentityKeypair::generate().unwrap(), crate::crypto::X25519IdentityKeypair::generate())
     }
 
     fn make_session_keys() -> SessionKeys {
@@ -1333,8 +1344,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_handshake_full_success() {
         init_crypto();
-        let alice_identity = make_test_identity();
-        let bob_identity = make_test_identity();
+        let (alice_identity, alice_x25519) = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
@@ -1368,8 +1379,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_handshake_with_candidates() {
         init_crypto();
-        let alice_identity = make_test_identity();
-        let bob_identity = make_test_identity();
+        let (alice_identity, alice_x25519) = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let candidates = vec![WireCandidate {
@@ -1412,8 +1423,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_initiator_rejects_wrong_packet_type() {
         init_crypto();
-        let alice_identity = make_test_identity();
-        let bob_identity = make_test_identity();
+        let (alice_identity, alice_x25519) = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
@@ -1437,8 +1448,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_initiator_rejects_version_mismatch() {
         init_crypto();
-        let alice_identity = make_test_identity();
-        let bob_identity = make_test_identity();
+        let (alice_identity, alice_x25519) = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
@@ -1473,8 +1484,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_initiator_rejects_bad_signature() {
         init_crypto();
-        let alice_identity = make_test_identity();
-        let bob_identity = make_test_identity();
+        let (alice_identity, alice_x25519) = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
@@ -1509,10 +1520,10 @@ mod session_tests {
     #[tokio::test]
     async fn test_initiator_rejects_identity_mismatch() {
         init_crypto();
-        let alice_identity = make_test_identity();
-        let bob_identity = make_test_identity();
+        let (alice_identity, alice_x25519) = make_identities();
+        let (bob_identity, bob_x25519) = make_identities();
         let bob_pub = bob_identity.public_key_bytes();
-        let wrong_key = make_test_identity();
+        let wrong_key = make_identities();
 
         let (mut alice_io, mut peer_io) = tokio::io::duplex(65536);
 
@@ -1550,8 +1561,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_responder_rejects_version_mismatch() {
         init_crypto();
-        let bob_identity = make_test_identity();
-        let alice_identity = make_test_identity();
+        let bob_identity = make_identities();
+        let alice_identity = make_identities();
 
         let eph = EphemeralKeypair::generate();
         let bad_init = HandshakeInit {
@@ -1584,9 +1595,9 @@ mod session_tests {
     #[tokio::test]
     async fn test_responder_rejects_bad_signature() {
         init_crypto();
-        let bob_identity = make_test_identity();
-        let alice_identity = make_test_identity();
-        let wrong_signer = make_test_identity();
+        let bob_identity = make_identities();
+        let alice_identity = make_identities();
+        let wrong_signer = make_identities();
 
         let eph = EphemeralKeypair::generate();
         let mut sign_data = Vec::new();
@@ -1624,8 +1635,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_responder_rejects_bad_verification() {
         init_crypto();
-        let bob_identity = make_test_identity();
-        let alice_identity = make_test_identity();
+        let bob_identity = make_identities();
+        let alice_identity = make_identities();
 
         let eph = EphemeralKeypair::generate();
         let mut sign_data = Vec::new();
@@ -1682,8 +1693,8 @@ mod session_tests {
     #[tokio::test]
     async fn test_handshake_from_wrong_state() {
         init_crypto();
-        let identity = make_test_identity();
-        let peer_identity = make_test_identity();
+        let identity = make_identities();
+        let peer_identity = make_identities();
         let peer_pub = peer_identity.public_key_bytes();
 
         let (mut io, _other) = tokio::io::duplex(65536);
