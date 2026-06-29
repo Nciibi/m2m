@@ -113,7 +113,8 @@ describe("ChatView", () => {
 
   it("disables send button when input is empty", () => {
     render(<ChatView />);
-    const sendBtn = screen.getByRole("button", { name: /send/i });
+    const sendBtn = document.getElementById("send-message-btn");
+    expect(sendBtn).toBeInTheDocument();
     expect(sendBtn).toBeDisabled();
   });
 
@@ -122,10 +123,10 @@ describe("ChatView", () => {
     state.connection = { state: "established", peer_verified: false };
     render(<ChatView />);
     const input = screen.getByPlaceholderText(/type a secure message/i);
-    const sendBtn = screen.getByRole("button", { name: /send/i });
+    const sendBtn = document.getElementById("send-message-btn");
     await user.type(input, "Hello from test!");
     expect(sendBtn).not.toBeDisabled();
-    await user.click(sendBtn);
+    await user.click(sendBtn!);
     expect(state.handleSendMessage).toHaveBeenCalledWith("Hello from test!");
   });
 
