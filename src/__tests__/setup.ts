@@ -14,15 +14,3 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
-
-// Stub for clipboard API — jsdom doesn't implement it.
-// Use writable: false to prevent tests from trying to redefine it.
-if (!navigator.clipboard) {
-  Object.defineProperty(navigator, "clipboard", {
-    writable: false,
-    value: {
-      writeText: () => Promise.resolve(),
-      readText: () => Promise.resolve(""),
-    },
-  });
-}

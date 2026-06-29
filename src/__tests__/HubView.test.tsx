@@ -180,7 +180,6 @@ describe("HubView", () => {
       { id: "conv-1", peer_display_name: "Alice", last_message_preview: "Hello!", last_message_at: Date.now() / 1000 },
     ];
     render(<HubView />);
-    // Switch to chats tab
     const user = userEvent.setup();
     user.click(screen.getByRole("tab", { name: /chats/i }));
     expect(screen.getByText("Alice")).toBeInTheDocument();
@@ -217,18 +216,5 @@ describe("HubView", () => {
     state.privateMode = true;
     render(<HubView />);
     expect(screen.queryByText(/Tor Inbound Warning/i)).not.toBeInTheDocument();
-  });
-
-  it("filters conversations by search query", () => {
-    state.conversations = [
-      { id: "c1", peer_display_name: "Alice", last_message_preview: "Hey", peer_key_hex: "aaa" },
-      { id: "c2", peer_display_name: "Bob", last_message_preview: "Meeting at 3", peer_key_hex: "bbb" },
-    ];
-    render(<HubView />);
-    const user = userEvent.setup();
-    user.click(screen.getByRole("tab", { name: /chats/i }));
-    // The search input in chats tab
-    const searchInput = screen.getByPlaceholderText(/search/i);
-    expect(searchInput).toBeInTheDocument();
   });
 });

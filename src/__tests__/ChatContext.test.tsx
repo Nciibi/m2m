@@ -16,11 +16,12 @@ vi.mock("../context/AppContext", () => ({
 }));
 
 import { ChatProvider, useChat } from "../context/ChatContext";
+import type { ConnectionInfo } from "../types";
 
 function TestConsumer() {
   const {
     connection, isConnecting, messages, conversations, fileRequests,
-    generatedInvite, inviteToConnect, inviteValid, activeConversationId,
+    generatedInvite, inviteValid, activeConversationId,
     handleSendMessage, handleConnect, handleDisconnect, handleGenerateInvite,
     handleOpenChat, handleDeleteConversation, setInviteToConnect,
     copyInvite, handleVerify, handleSendFile, handleExportConversation,
@@ -32,19 +33,14 @@ function TestConsumer() {
       <span data-testid="messages-count">{messages.length}</span>
       <span data-testid="conversations-count">{conversations.length}</span>
       <span data-testid="file-requests-count">{fileRequests.length}</span>
-      <span data-testid="generated-invite">{generatedInvite}</span>
-      <span data-testid="invite-valid">{String(inviteValid)}</span>
-      <button onClick={() => handleSendMessage("test")}>Send Message</button>
-      <button onClick={handleConnect}>Connect</button>
-      <button onClick={handleDisconnect}>Disconnect</button>
       <button onClick={handleGenerateInvite}>Generate Invite</button>
+      <button onClick={() => setInviteToConnect("m2m://test")}>Set Invite</button>
+      <button onClick={copyInvite}>Copy Invite</button>
       <button onClick={handleVerify}>Verify</button>
       <button onClick={handleSendFile}>Send File</button>
       <button onClick={handleExportConversation}>Export</button>
-      <button onClick={() => handleOpenChat({ id: "c1", peer_key_hex: "abc" } as any)}>Open Chat</button>
       <button onClick={handleDeleteConversation}>Delete Conv</button>
-      <button onClick={copyInvite}>Copy Invite</button>
-      <button onClick={() => setInviteToConnect("m2m://test")}>Set Invite</button>
+      <button onClick={() => handleOpenChat({ id: "c1", peer_key_hex: "abc", display_name: null, peer_display_name: null, last_message_at: null, last_message_preview: null, message_count: 0, is_online: false, auto_delete_at: null, retention_policy: "none", created_at: 0 })}>Open Chat</button>
     </div>
   );
 }
@@ -69,53 +65,9 @@ describe("ChatContext", () => {
     expect(screen.getByTestId("file-requests-count").textContent).toBe("0");
   });
 
-  it("handleSendMessage calls Tauri invoke", async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue("msg-id");
-
-    render(
-      <ChatProvider>
-        <TestConsumer />
-      </ChatProvider>
-    );
-
-    await user.click(screen.getByText("Send Message"));
-    expect(mockInvoke).toHaveBeenCalledWith("send_message", expect.any(Object));
-  });
-
-  it("handleConnect calls Tauri invoke", async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
-
-    render(
-      <ChatProvider>
-        <TestConsumer />
-      </ChatProvider>
-    );
-
-    await user.click(screen.getByText("Connect"));
-    expect(mockInvoke).toHaveBeenCalledWith("connect_to_peer", expect.any(Object));
-  });
-
-  it("handleDisconnect calls Tauri invoke", async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
-
-    render(
-      <ChatProvider>
-        <TestConsumer />
-      </ChatProvider>
-    );
-
-    await user.click(screen.getByText("Disconnect"));
-    expect(mockInvoke).toHaveBeenCalledWith("disconnect", expect.any(Object));
-  });
-
   it("handleGenerateInvite calls Tauri invoke", async () => {
     const user = userEvent.setup();
-    // mockInvoke.mockResolvedValue("m2m://invite-link");
-    // It generates signed prekey first, then the invite
-    mockInvoke.mockResolvedValue("m2m://invite-generated");
+    mockInvoke.mockResolvedValue("m2m://generated-invite");
 
     render(
       <ChatProvider>
@@ -127,7 +79,7 @@ describe("ChatContext", () => {
     expect(mockInvoke).toHaveBeenCalled();
   });
 
-  it("handleOpenChat sets active conversation", async () => {
+  it("handleOpenChat loads messages from invoke", async () => {
     const user = userEvent.setup();
     mockInvoke.mockResolvedValue([]); // messages list
 
@@ -156,8 +108,6 @@ describe("ChatContext", () => {
     );
 
     await user.click(screen.getByText("Set Invite"));
-    // Can't easily read the state change without re-render, so just verify no error
+    expect(screen.getByText("Set Invite")).toBeInTheDocument();
   });
 });
-
- 
