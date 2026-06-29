@@ -293,6 +293,7 @@ impl Session {
 
         // Session established
         self.peer_identity_pub = init.identity_pub;
+        self.our_identity_pub = identity.public_key_bytes();
         self.session_keys = Some(session_keys);
         self.established_at = now_unix_secs();
         self.state = ConnectionState::Established;
@@ -518,9 +519,10 @@ impl Session {
     ) -> Result<(), SessionError> {
         // ── Double Ratchet path (if active) ──
         let peer_pub = self.peer_identity_pub;
+        let our_pub = self.our_identity_pub;
         if let Some(ratchet) = self.ratchet.as_mut() {
             let padded = crate::crypto::pad_message_variable(plaintext);
-            let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &peer_pub);
+            let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &our_pub, &peer_pub);
             let do_ratchet = ratchet.should_ratchet(100);
             let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
                 .encrypt(&padded, &aad, do_ratchet)?;
@@ -581,11 +583,12 @@ impl Session {
 
         // ── Double Ratchet path (if dr_header present) ──
         let peer_pub = self.peer_identity_pub;
+        let our_pub = self.our_identity_pub;
         if let Some(dr_hdr) = &envelope.dr_header {
             let ratchet = self.ratchet
                 .as_mut()
                 .ok_or(SessionError::InvalidState)?;
-            let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &peer_pub);
+            let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &our_pub, &peer_pub);
             let padded = ratchet
                 .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
                          dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
@@ -775,9 +778,10 @@ impl Session {
     ) -> Result<(), SessionError> {
         // ── Double Ratchet path (X3DH+DR sessions) ──
         let peer_pub = self.peer_identity_pub;
+        let our_pub = self.our_identity_pub;
         if let Some(ratchet) = self.ratchet.as_mut() {
             let padded = crate::crypto::pad_message_variable(plaintext);
-            let aad = session_dr_aad(packet_type.to_byte(), &peer_pub);
+            let aad = session_dr_aad(packet_type.to_byte(), &our_pub, &peer_pub);
             let do_ratchet = ratchet.should_ratchet(100);
             let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
                 .encrypt(&padded, &aad, do_ratchet)?;
@@ -874,11 +878,12 @@ impl Session {
 
         // ── Double Ratchet path (X3DH+DR sessions) ──
         let peer_pub = self.peer_identity_pub;
+        let our_pub = self.our_identity_pub;
         if let Some(dr_hdr) = &envelope.dr_header {
             let ratchet = self.ratchet
                 .as_mut()
                 .ok_or(SessionError::InvalidState)?;
-            let aad = session_dr_aad(frame.packet_type.to_byte(), &peer_pub);
+            let aad = session_dr_aad(frame.packet_type.to_byte(), &our_pub, &peer_pub);
             let padded = ratchet
                 .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
                          dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
@@ -940,18 +945,28 @@ impl Drop for Session {
 
 /// Build the AAD for Double Ratchet encrypted messages.
 ///
-/// Includes the packet type and peer identity public key to bind
-/// ciphertexts to a specific session pair. Without the identity key,
-/// the same ciphertext could theoretically be submitted to a different
-/// session with the same chain state (defense-in-depth; the chain keys
-/// are already session-unique via X3DH).
+/// Includes the packet type and BOTH identity public keys (ours and peer's)
+/// sorted lexicographically to produce the same value on both sides of
+/// the session. This binds ciphertexts to a specific session pair for
+/// defense-in-depth — the chain keys are already session-unique via X3DH.
 ///
 /// This is a free function (not a method on `Session`) so callers can
-/// extract `peer_identity_pub` before taking a mutable borrow on `self`.
-fn session_dr_aad(packet_type_byte: u8, peer_identity_pub: &[u8; 32]) -> Vec<u8> {
-    let mut aad = Vec::with_capacity(33);
+/// extract the identity keys before taking a mutable borrow on `self`.
+fn session_dr_aad(
+    packet_type_byte: u8,
+    our_identity_pub: &[u8; 32],
+    peer_identity_pub: &[u8; 32],
+) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(65);
     aad.push(packet_type_byte);
-    aad.extend_from_slice(peer_identity_pub);
+    // Include both keys sorted to ensure the same AAD on both sides.
+    if our_identity_pub < peer_identity_pub {
+        aad.extend_from_slice(our_identity_pub);
+        aad.extend_from_slice(peer_identity_pub);
+    } else {
+        aad.extend_from_slice(peer_identity_pub);
+        aad.extend_from_slice(our_identity_pub);
+    }
     aad
 }
 
