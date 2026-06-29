@@ -49,7 +49,6 @@ pub fn is_enabled() -> bool {
 
 /// Connect to a peer, routing through Tor if enabled.
 /// Falls back to direct TCP if Tor is disabled.
-#[expect(dead_code, reason = "Reserved; callers use crate::tor::connect directly")]
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
     if is_enabled() {
         connect_via_tor(addr).await
@@ -61,7 +60,6 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
 }
 
 /// Connect to a target address through the Tor SOCKS5 proxy.
-#[expect(dead_code, reason = "Called only by pub `connect` fn")]
 async fn connect_via_tor(target: SocketAddr) -> Result<TcpStream, TorError> {
     tracing::debug!(target = %target, proxy = TOR_PROXY_ADDR, "connecting via Tor SOCKS5");
 

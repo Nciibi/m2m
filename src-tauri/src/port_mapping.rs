@@ -55,14 +55,12 @@ pub struct PortMapping {
     /// One of "pcp", "nat-pmp", "upnp-igd".
     pub protocol: &'static str,
     /// The internal port we bound on this machine.
-    #[expect(dead_code, reason = "Reserved; used in remove_port_mapping and renewal")]
     pub internal_port: u16,
     /// The public (WAN) IP and port the router forwards to us.
     /// This is what remote peers connect to.
     pub external_addr: SocketAddr,
     /// The lifetime the router granted, in seconds.
     /// Renewal should happen at ~75% of this interval.
-    #[expect(dead_code, reason = "Reserved; used in spawn_renewal")]
     pub lifetime_secs: u32,
 }
 
@@ -524,7 +522,6 @@ async fn nat_pmp_map_tcp(
 }
 
 /// Remove a NAT-PMP TCP mapping by requesting lifetime=0 for the external port.
-#[expect(dead_code, reason = "Reserved; used by remove_port_mapping")]
 async fn nat_pmp_remove_tcp(external_port: u16) -> Result<(), PortMapError> {
     let gateway = match discover_gateway().await {
         Some(g) => g,
@@ -691,7 +688,6 @@ async fn pcp_map_tcp(
 }
 
 /// Remove a PCP mapping by requesting lifetime=0.
-#[expect(dead_code, reason = "Reserved; used by remove_port_mapping")]
 async fn pcp_remove_tcp(
     internal_port: u16,
     external_port: u16,
@@ -757,7 +753,6 @@ const SOAP_ADD_PORT: &str = r#"<?xml version="1.0"?>
 </s:Envelope>"#;
 
 /// UPnP action template for `DeletePortMapping`.
-#[expect(dead_code, reason = "Reserved; used by upnp_remove_tcp")]
 const SOAP_DELETE_PORT: &str = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
             s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
@@ -1183,7 +1178,6 @@ async fn upnp_map_tcp(
 }
 
 /// Remove a UPnP TCP port mapping.
-#[expect(dead_code, reason = "Reserved; used by remove_port_mapping")]
 async fn upnp_remove_tcp(
     _internal_port: u16,
     external_port: u16,

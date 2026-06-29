@@ -40,7 +40,6 @@ const MAX_SKIP: usize = 2000;
 pub enum CryptoError {
     #[error("sodiumoxide initialization failed")]
     InitFailed,
-    #[expect(dead_code, reason = "Reserved encryption error variant")]
     #[error("encryption failed")]
     EncryptionFailed,
     #[error("decryption failed: ciphertext may be tampered")]
