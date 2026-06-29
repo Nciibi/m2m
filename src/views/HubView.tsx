@@ -24,6 +24,13 @@ export default function HubView() {
 
   const handleCopy = () => { copyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
+  // Derive connection state for the status badge
+  const connectionStatus = (() => {
+    if (isConnecting) return { label: "Connecting…", dot: <span className="badge__dot badge__dot--warning" />, variant: "warning" as const };
+    if (connection?.state === "established") return { label: "Connected", dot: <OnlineDot />, variant: "success" as const };
+    return { label: "Offline", dot: <OfflineDot />, variant: "default" as const };
+  })();
+
   const filtered = conversations.filter(c => {
     if (!search) return true;
     const q = search.toLowerCase();
