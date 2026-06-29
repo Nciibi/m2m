@@ -736,6 +736,11 @@ mod tests {
         MessageStore::open(Path::new(":memory:")).unwrap()
     }
 
+    /// Helper: open a TransferStore on `:memory:` for test isolation.
+    fn mem_transferstore() -> TransferStore {
+        TransferStore::open(Path::new(":memory:")).unwrap()
+    }
+
     // ─── KeyStore tests ────────────────────────────────────────
 
     #[test]
