@@ -113,7 +113,8 @@ describe("SettingsView", () => {
 
   it("shows placeholder when no identity", () => {
     render(<SettingsView />);
-    expect(screen.getByText("—")).toBeInTheDocument();
+    const placeholders = screen.getAllByText("—");
+    expect(placeholders.length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders network section with public IP discovery", () => {
