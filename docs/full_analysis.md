@@ -64,7 +64,9 @@
 | **Identity tests** | ✅ Done | Invite creation, validation, expiry, tampering (16 tests) |
 | **Network tests** | ✅ Done | Frame I/O, timeouts, rate limiter, filename sanitization |
 | **Fuzz harness** | ✅ Done | frame_parse + padding fuzz targets in `fuzz/` |
-| **Total tests** | **~176** | All passing, 0 failures |
+| **Total tests** | **282** | 197 Rust + 85 Vitest, all passing, 0 failures |
+| **Component tests (vitest)** | ✅ Done | 85 frontend tests covering all views (Hub, Chat, Setup, Settings, Vault) |
+| **Integration tests (frontend)** | ✅ Done | React Testing Library with mocked Tauri invoke, contexts, hooks |
 
 ## ✅ Frontend
 
