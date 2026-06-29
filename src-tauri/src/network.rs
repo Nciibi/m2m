@@ -31,7 +31,6 @@ use crate::protocol::{
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// TCP connection timeout — used by the hole_punch module's per-strategy timeout.
-#[expect(dead_code, reason = "Reserved for network::connect")]
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ─── Connection Rate Limiting ───────────────────────────────────────────────
@@ -190,7 +189,6 @@ pub enum NetworkError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("connection timeout")]
-    #[expect(dead_code, reason = "Reserved error variant for network::connect")]
     ConnectionTimeout,
     #[error("read timeout")]
     ReadTimeout,

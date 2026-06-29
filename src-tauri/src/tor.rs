@@ -22,7 +22,6 @@ pub const TOR_PROXY_ADDR: &str = "127.0.0.1:9050";
 static TOR_ENABLED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Error)]
-#[expect(dead_code, reason = "Reserved; used only by tor::connect")]
 pub enum TorError {
     #[error("Tor SOCKS5 connection failed: {0}")]
     ConnectionFailed(String),
@@ -49,7 +48,6 @@ pub fn is_enabled() -> bool {
 
 /// Connect to a peer, routing through Tor if enabled.
 /// Falls back to direct TCP if Tor is disabled.
-#[expect(dead_code, reason = "Reserved; used by network::connect")]
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
     if is_enabled() {
         connect_via_tor(addr).await
@@ -61,7 +59,6 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
 }
 
 /// Connect to a target address through the Tor SOCKS5 proxy.
-#[expect(dead_code, reason = "Reserved; called only by tor::connect")]
 async fn connect_via_tor(target: SocketAddr) -> Result<TcpStream, TorError> {
     tracing::debug!(target = %target, proxy = TOR_PROXY_ADDR, "connecting via Tor SOCKS5");
 
