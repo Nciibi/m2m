@@ -3,7 +3,7 @@
 /// Central application state shared across Tauri commands.
 /// Manages the identity, active sessions, storage handles,
 /// and network configuration (STUN, candidates, Tor).
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
