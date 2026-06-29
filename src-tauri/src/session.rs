@@ -1800,8 +1800,8 @@ mod session_tests {
         assert_eq!(msg_frame.packet_type, PacketType::EncryptedMessage);
         let body = bob_session.decrypt_message(&msg_frame).unwrap();
         match body {
-            MessageBody::Text { content, .. } => assert_eq!(content, "Hello via X3DH+DR!"),
-            other => panic!("expected Text, got {:?}", other),
+            MessageBody::Text { ref content, .. } => assert_eq!(content, "Hello via X3DH+DR!"),
+            ref other => panic!("expected Text, got {:?}", other),
         }
 
         let (alice_session, msg_id) = alice.await.unwrap().unwrap();
@@ -1920,10 +1920,10 @@ mod session_tests {
             let frame = network::read_frame_impl(&mut bob_io).await.unwrap();
             let body = bob_session.decrypt_message(&frame).unwrap();
             match body {
-                MessageBody::Text { content, .. } => {
-                    assert_eq!(content, format!("Message {}", i));
+                MessageBody::Text { ref content, .. } => {
+                    assert_eq!(content, &format!("Message {}", i));
                 }
-                other => panic!("expected Text msg {}, got {:?}", i, other),
+                ref other => panic!("expected Text msg {}, got {:?}", i, other),
             }
         }
 
