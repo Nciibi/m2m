@@ -32,11 +32,18 @@ const state = {
   setView: vi.fn(),
 };
 
-vi.mock("../context/M2MContext", () => ({
-  useM2M: () => ({
+vi.mock("../context/AppContext", () => ({
+  useApp: () => ({
     identity: state.identity,
     toasts: state.toasts,
     removeToast: state.removeToast,
+    addToast: state.addToast,
+    setView: state.setView,
+  }),
+}));
+
+vi.mock("../context/ChatContext", () => ({
+  useChat: () => ({
     generatedInvite: state.generatedInvite,
     inviteToConnect: state.inviteToConnect,
     inviteValid: state.inviteValid,
@@ -44,8 +51,6 @@ vi.mock("../context/M2MContext", () => ({
     namingMyName: state.namingMyName,
     namingTheirName: state.namingTheirName,
     conversations: state.conversations,
-    networkSettings: state.networkSettings,
-    privateMode: state.privateMode,
     handleGenerateInvite: state.handleGenerateInvite,
     copyInvite: state.copyInvite,
     handleConnect: state.handleConnect,
@@ -54,11 +59,15 @@ vi.mock("../context/M2MContext", () => ({
     setInviteToConnect: state.setInviteToConnect,
     setNamingMyName: state.setNamingMyName,
     setNamingTheirName: state.setNamingTheirName,
-    openSettings: state.openSettings,
-    addToast: state.addToast,
-    setView: state.setView,
   }),
-  M2MProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock("../context/SettingsContext", () => ({
+  useSettings: () => ({
+    networkSettings: state.networkSettings,
+    privateMode: state.privateMode,
+    openSettings: state.openSettings,
+  }),
 }));
 
 import HubView from "../views/HubView";
