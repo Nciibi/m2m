@@ -86,6 +86,7 @@ describe("VaultView", () => {
     render(<VaultView />);
     const input = screen.getByPlaceholderText("Passphrase");
     await user.type(input, "correct-horse-battery-staple");
-    expect(screen.getByText(/chars/)).toBeInTheDocument();
+    // Shows "28 chars" in the strength section
+    expect(screen.getByText("28")).toBeInTheDocument();
   });
 });
