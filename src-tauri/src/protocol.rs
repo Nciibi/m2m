@@ -346,6 +346,23 @@ pub struct FileTransferRejectData {
     pub transfer_id: String,
 }
 
+/// Chunk acknowledgement (type 0x16). Receiver confirms a single chunk was
+/// received, hash-verified, and written to disk. The sender uses this to
+/// track which chunks are safe from retry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileTransferChunkAckData {
+    pub transfer_id: String,
+    pub chunk_index: u32,
+}
+
+/// Cancel an in-progress file transfer (type 0x17). Either side can send this.
+/// The receiver stops accepting chunks and cleans up the temp file.
+/// The sender stops sending and marks the transfer as cancelled.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileTransferCancelData {
+    pub transfer_id: String,
+}
+
 // --- Conversation Metadata ---
 
 /// Exchanged between peers after handshake to set conversation display names.
@@ -480,6 +497,8 @@ mod protocol_tests {
             (0x13, PacketType::FileTransferComplete),
             (0x14, PacketType::FileTransferAccept),
             (0x15, PacketType::FileTransferReject),
+            (0x16, PacketType::FileTransferChunkAck),
+            (0x17, PacketType::FileTransferCancel),
             (0x20, PacketType::Heartbeat),
             (0x21, PacketType::HeartbeatAck),
             (0x30, PacketType::Disconnect),
@@ -614,6 +633,8 @@ mod protocol_tests {
             PacketType::FileTransferComplete,
             PacketType::FileTransferAccept,
             PacketType::FileTransferReject,
+            PacketType::FileTransferChunkAck,
+            PacketType::FileTransferCancel,
             PacketType::Heartbeat,
             PacketType::HeartbeatAck,
             PacketType::Disconnect,
