@@ -372,7 +372,7 @@ pub async fn start_listener(
 /// Connect to a remote peer with timeout.
 /// Routes through Tor SOCKS5 proxy when Tor is enabled, otherwise direct TCP.
 /// Enables TCP keepalive to maintain NAT bindings and detect silent peer disconnects.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved; callers use crate::tor::connect directly")]
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     tracing::debug!(target_addr = %addr, tor_enabled = crate::tor::is_enabled(), "attempting TCP connection");
     let result = time::timeout(CONNECT_TIMEOUT, crate::tor::connect(addr)).await;

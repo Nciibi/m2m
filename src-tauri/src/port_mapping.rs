@@ -55,14 +55,14 @@ pub struct PortMapping {
     /// One of "pcp", "nat-pmp", "upnp-igd".
     pub protocol: &'static str,
     /// The internal port we bound on this machine.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved; used in remove_port_mapping and renewal")]
     pub internal_port: u16,
     /// The public (WAN) IP and port the router forwards to us.
     /// This is what remote peers connect to.
     pub external_addr: SocketAddr,
     /// The lifetime the router granted, in seconds.
     /// Renewal should happen at ~75% of this interval.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved; used in spawn_renewal")]
     pub lifetime_secs: u32,
 }
 
@@ -143,7 +143,7 @@ impl PortMapper {
     ///
     /// Best-effort — logs failures but does not propagate them to the caller
     /// (the mapping will eventually expire on the router anyway).
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for cleanup on shutdown")]
     pub async fn remove_port_mapping(mapping: &PortMapping) {
         match mapping.protocol {
             "nat-pmp" => {
@@ -174,7 +174,7 @@ impl PortMapper {
     ///
     /// Returns a handle that can be used to cancel the renewal loop (e.g. on
     /// app shutdown).
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for automatic mapping renewal")]
     pub fn spawn_renewal(mapping: Arc<PortMapping>) -> tokio::sync::watch::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(());
 
@@ -524,7 +524,7 @@ async fn nat_pmp_map_tcp(
 }
 
 /// Remove a NAT-PMP TCP mapping by requesting lifetime=0 for the external port.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved; used by remove_port_mapping")]
 async fn nat_pmp_remove_tcp(external_port: u16) -> Result<(), PortMapError> {
     let gateway = match discover_gateway().await {
         Some(g) => g,
@@ -595,13 +595,13 @@ const PCP_OFF_OP: usize = 1;
 const PCP_OFF_RESULT: usize = 3;
 const PCP_OFF_LIFETIME: usize = 4;
 // Constants used by future PCP features (ECHO REQUEST, THIRD PARTY, etc.).
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_HEADER_SIZE: usize = 24;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_OFF_CLIENT_IP: usize = 8;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_OFF_BODY_RESERVED: usize = 24;
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_OFF_RESERVED2: usize = 28;
 const PCP_OFF_PROTOCOL: usize = 27;
 const PCP_OFF_INT_PORT: usize = 30;
@@ -691,7 +691,7 @@ async fn pcp_map_tcp(
 }
 
 /// Remove a PCP mapping by requesting lifetime=0.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved; used by remove_port_mapping")]
 async fn pcp_remove_tcp(
     internal_port: u16,
     external_port: u16,

@@ -30,7 +30,7 @@ pub enum IdentityError {
     InviteSignatureInvalid,
     #[error("invite format invalid: {0}")]
     InviteFormatInvalid(String),
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for one-time invites")]
     #[error("invite already consumed")]
     InviteAlreadyConsumed,
     #[error("address hint too long")]
@@ -208,7 +208,7 @@ pub fn is_one_time(invite: &SignedInvite) -> bool {
 }
 
 /// Check if the inviter is the TCP listener.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for listener role detection")]
 pub fn is_listener(invite: &SignedInvite) -> bool {
     invite.payload.flags & INVITE_FLAG_LISTENER != 0
 }

@@ -53,7 +53,7 @@ pub enum Strategy {
     DirectTcp { peer: SocketAddr },
     Ipv6Direct { peer: SocketAddr },
     PortMapped { peer: SocketAddr },
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved TCP hole-punch strategy variant")]
     TcpHolePunch { peer: SocketAddr },
     TcpRelay { peer: SocketAddr, relay_id: String },
 }

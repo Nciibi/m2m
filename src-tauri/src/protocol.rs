@@ -26,7 +26,7 @@ pub const MAX_TEXT_MESSAGE_SIZE: usize = 64 * 1024;
 pub const MAX_FILE_CHUNK_SIZE: usize = 256 * 1024;
 
 /// Maximum handshake message size: 4 KiB.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for message size validation")]
 pub const MAX_HANDSHAKE_SIZE: usize = 4 * 1024;
 
 /// Minimum frame size: version (1) + at least 1 byte payload type.
@@ -49,7 +49,7 @@ pub const HEARTBEAT_TIMEOUT_SECS: u64 = 10;
 pub const MAX_SESSION_DURATION_SECS: u64 = 24 * 60 * 60;
 
 /// Key rotation interval in seconds (1 hour, reserved for future use).
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for automatic key rotation")]
 pub const KEY_ROTATION_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Maximum invite validity duration in seconds (24 hours).
@@ -65,7 +65,7 @@ pub const MAX_INVITE_LENGTH: usize = 512;
 pub const MAX_ADDRESS_HINT_LENGTH: usize = 256;
 
 /// Rate limit: max messages per second from a single peer.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for per-peer rate limiting")]
 pub const RATE_LIMIT_MSGS_PER_SEC: u32 = 20;
 
 #[derive(Debug, Error)]
@@ -84,19 +84,19 @@ pub enum ProtocolError {
     SerializationError(String),
     #[error("deserialization error: {0}")]
     DeserializationError(String),
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for invalid handshakes")]
     #[error("invalid handshake message")]
     InvalidHandshake,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for invalid invites")]
     #[error("invalid invite format")]
     InvalidInvite,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for expired invites")]
     #[error("invite expired")]
     InviteExpired,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for invalid signatures")]
     #[error("invite signature invalid")]
     InviteSignatureInvalid,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved error variant for invalid sequence numbers")]
     #[error("invalid sequence number")]
     InvalidSequence,
     #[error("message too large")]

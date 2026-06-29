@@ -26,7 +26,7 @@ use thiserror::Error;
 const MAX_ENCRYPT_SIZE: usize = 16 * 1024 * 1024;
 
 /// Context string for HKDF session key derivation (reserved).
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved for HKDF session key derivation")]
 const SESSION_KEY_CONTEXT: &[u8] = b"m2m-v1-session-key";
 
 /// Maximum number of out-of-order message keys to cache per DH ratchet phase.
@@ -40,7 +40,7 @@ const MAX_SKIP: usize = 2000;
 pub enum CryptoError {
     #[error("sodiumoxide initialization failed")]
     InitFailed,
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved encryption error variant")]
     #[error("encryption failed")]
     EncryptionFailed,
     #[error("decryption failed: ciphertext may be tampered")]

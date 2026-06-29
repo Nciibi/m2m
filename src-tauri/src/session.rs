@@ -838,7 +838,7 @@ impl Session {
 
     /// Send a heartbeat to keep the connection alive.
     /// Heartbeats are unencrypted protocol-level keepalives.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved; network-level send_heartbeat used instead")]
     pub async fn send_heartbeat<W: AsyncWrite + Unpin>(
         &self,
         stream: &mut W,
@@ -849,7 +849,7 @@ impl Session {
     }
 
     /// Send a heartbeat acknowledgement.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved; network-level send_heartbeat_ack used instead")]
     pub async fn send_heartbeat_ack<W: AsyncWrite + Unpin>(
         &self,
         stream: &mut W,
@@ -861,7 +861,7 @@ impl Session {
 
     /// Check if a received frame is a heartbeat and handle it.
     /// Returns true if the frame was a heartbeat (caller should not process further).
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for session-level heartbeat handling")]
     pub fn handle_heartbeat(&self, frame: &network::RawFrame) -> bool {
         frame.packet_type == PacketType::Heartbeat
             || frame.packet_type == PacketType::HeartbeatAck

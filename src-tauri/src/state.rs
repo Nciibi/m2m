@@ -28,7 +28,7 @@ pub struct PeerConnection {
     pub write_half: OwnedWriteHalf,
     pub session: Session,
     /// Remote address (stored for diagnostics).
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for diagnostic display")]
     pub remote_addr: SocketAddr,
 }
 
@@ -91,7 +91,7 @@ pub struct AppState {
     /// Whether message history is enabled.
     pub history_enabled: RwLock<bool>,
     /// Data directory path.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for diagnostics/settings display")]
     pub data_dir: String,
     /// Pending outgoing file transfers. Key: transfer_id, Value: filepath
     pub outgoing_transfers: RwLock<HashMap<String, String>>,
