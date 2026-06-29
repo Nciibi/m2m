@@ -472,12 +472,12 @@ async fn send_file_chunks_inner(
         let mut retries = 0;
         let chunk_success = loop {
             // Read this chunk from disk (seeking each time to avoid holding the file open)
-            let mut buf = vec![0u8; protocol::MAX_FILE_CHUNK_SIZE];
+            let mut buf = vec![0u8; chunk_size];
             let mut f = std::fs::File::open(file_path)
                 .map_err(|e| format!("failed to re-open file: {e}"))?;
 
             use std::io::{Read, Seek};
-            let offset = (chunk_index as u64) * (protocol::MAX_FILE_CHUNK_SIZE as u64);
+            let offset = (chunk_index as u64) * (chunk_size as u64);
             f.seek(std::io::SeekFrom::Start(offset))
                 .map_err(|e| format!("seek failed: {e}"))?;
             let n = f.read(&mut buf)
