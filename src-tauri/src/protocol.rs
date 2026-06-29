@@ -208,7 +208,8 @@ pub struct WireCandidate {
     /// Relay ID for type-3 (relay) candidates.
     /// Set by the invite creator when registering with a relay server.
     /// The connecting peer sends this to the relay to request bridging.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// NOTE: no `skip_serializing_if` — rmp-serde uses positional encoding.
+    #[serde(default)]
     pub relay_id: Option<String>,
 }
 
@@ -280,7 +281,9 @@ pub struct EncryptedEnvelope {
     pub counter: u64,
     pub ciphertext: Vec<u8>,
     /// Double Ratchet header (used in X3DH+DR sessions).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// NOTE: no `skip_serializing_if` — rmp-serde uses positional encoding and
+    /// skipping a field shifts subsequent elements, breaking deserialization.
+    #[serde(default)]
     pub dr_header: Option<DRHeader>,
 }
 
