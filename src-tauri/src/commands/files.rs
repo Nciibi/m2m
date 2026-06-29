@@ -125,7 +125,7 @@ pub async fn send_file(
 /// Accept an incoming file transfer.
 #[tauri::command]
 pub async fn accept_file_transfer(
-    app_handle: AppHandle,
+    #[allow(unused_variables)] app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     transfer_id: String,
@@ -211,6 +211,7 @@ pub async fn reject_file_transfer(
 /// Cancel an in-progress file transfer (send or receive).
 /// Sends a cancel packet to the peer and cleans up local state.
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn cancel_file_transfer(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
