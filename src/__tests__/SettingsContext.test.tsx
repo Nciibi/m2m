@@ -158,3 +158,4 @@ describe("SettingsContext", () => {
     spy.mockRestore();
   });
 });
+

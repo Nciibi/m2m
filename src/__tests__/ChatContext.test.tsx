@@ -159,3 +159,4 @@ describe("ChatContext", () => {
     // Can't easily read the state change without re-render, so just verify no error
   });
 });
+
