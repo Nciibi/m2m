@@ -47,6 +47,9 @@ pub const HEARTBEAT_TIMEOUT_SECS: u64 = 10;
 /// Maximum session duration in seconds (24 hours).
 pub const MAX_SESSION_DURATION_SECS: u64 = 24 * 60 * 60;
 
+/// File transfer protocol version (v0x02 — adds per-chunk hashes, ACKs, cancel).
+pub const PROTOCOL_FILE_TRANSFER_VERSION: u8 = 0x02;
+
 /// Key rotation interval in seconds (1 hour, reserved for future use).
 pub const KEY_ROTATION_INTERVAL_SECS: u64 = 60 * 60;
 
@@ -111,6 +114,8 @@ pub enum PacketType {
     FileTransferComplete = 0x13,
     FileTransferAccept = 0x14,
     FileTransferReject = 0x15,
+    FileTransferChunkAck = 0x16,
+    FileTransferCancel = 0x17,
     Heartbeat = 0x20,
     HeartbeatAck = 0x21,
     Disconnect = 0x30,
@@ -134,6 +139,8 @@ impl PacketType {
             0x13 => Ok(PacketType::FileTransferComplete),
             0x14 => Ok(PacketType::FileTransferAccept),
             0x15 => Ok(PacketType::FileTransferReject),
+            0x16 => Ok(PacketType::FileTransferChunkAck),
+            0x17 => Ok(PacketType::FileTransferCancel),
             0x20 => Ok(PacketType::Heartbeat),
             0x21 => Ok(PacketType::HeartbeatAck),
             0x30 => Ok(PacketType::Disconnect),
