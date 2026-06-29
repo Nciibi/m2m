@@ -139,6 +139,7 @@ pub async fn unlock_vault(
     let data_dir = storage::ensure_data_dir()
         .map_err(|e| format!("data dir error: {e}"))?;
     let msgs_db_path = data_dir.join("messages.db");
+    let transfers_db_path = data_dir.join("transfers.db");
 
     // Access the key store that init_identity opened
     let ks_guard = state.key_store.lock().await;
