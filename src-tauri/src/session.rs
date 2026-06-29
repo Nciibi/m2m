@@ -189,6 +189,7 @@ impl Session {
 
         // Session established
         self.peer_identity_pub = response.identity_pub;
+        self.our_identity_pub = identity.public_key_bytes();
         self.session_keys = Some(session_keys);
         self.established_at = now_unix_secs();
         self.state = ConnectionState::Established;
