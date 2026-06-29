@@ -12,7 +12,7 @@ import { useSettings } from "../context/SettingsContext";
 export default function HubView() {
   const { identity, toasts, removeToast } = useApp();
   const {
-    generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
+    connection, generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
     isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
     handleConnect, setNamingMyName, setNamingTheirName, handleOpenChat,
     handleDeleteConversation, conversations,
