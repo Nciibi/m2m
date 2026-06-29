@@ -31,6 +31,7 @@ use crate::protocol::{
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// TCP connection timeout — used by the hole_punch module's per-strategy timeout.
+#[expect(dead_code, reason = "Reserved for network::connect")]
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ─── Connection Rate Limiting ───────────────────────────────────────────────
@@ -189,6 +190,7 @@ pub enum NetworkError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("connection timeout")]
+    #[expect(dead_code, reason = "Reserved error variant for network::connect")]
     ConnectionTimeout,
     #[error("read timeout")]
     ReadTimeout,
@@ -372,6 +374,7 @@ pub async fn start_listener(
 /// Connect to a remote peer with timeout.
 /// Routes through Tor SOCKS5 proxy when Tor is enabled, otherwise direct TCP.
 /// Enables TCP keepalive to maintain NAT bindings and detect silent peer disconnects.
+#[expect(dead_code, reason = "Reserved high-level connect wrapper")]
 pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     tracing::debug!(target_addr = %addr, tor_enabled = crate::tor::is_enabled(), "attempting TCP connection");
     let result = time::timeout(CONNECT_TIMEOUT, crate::tor::connect(addr)).await;
