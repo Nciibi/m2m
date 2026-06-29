@@ -1,4 +1,32 @@
 // Re-export from tree-shakeable individual icon files.
 // This file is kept for backward compatibility — new code should
 // import directly from "./icons/ShieldIcon" etc.
-export * from "./icons/index";
+export { ShieldIcon } from "./icons/ShieldIcon";
+export { LockIcon } from "./icons/LockIcon";
+export { UnlockIcon } from "./icons/UnlockIcon";
+export { KeyIcon } from "./icons/KeyIcon";
+export { GearIcon } from "./icons/GearIcon";
+export { PlusIcon } from "./icons/PlusIcon";
+export { LinkIcon } from "./icons/LinkIcon";
+export { SearchIcon } from "./icons/SearchIcon";
+export { CloseIcon } from "./icons/CloseIcon";
+export { ArrowLeftIcon } from "./icons/ArrowLeftIcon";
+export { ArrowDownIcon } from "./icons/ArrowDownIcon";
+export { SendIcon } from "./icons/SendIcon";
+export { AttachIcon } from "./icons/AttachIcon";
+export { CopyIcon } from "./icons/CopyIcon";
+export { CheckIcon } from "./icons/CheckIcon";
+export { MessageIcon } from "./icons/MessageIcon";
+export { FileIcon } from "./icons/FileIcon";
+export { VerifiedIcon } from "./icons/VerifiedIcon";
+export { EyeIcon } from "./icons/EyeIcon";
+export { EyeOffIcon } from "./icons/EyeOffIcon";
+export { OnlineDot } from "./icons/OnlineDot";
+export { TrashIcon } from "./icons/TrashIcon";
+export { OfflineDot } from "./icons/OfflineDot";
+export { AlertTriangleIcon } from "./icons/AlertTriangleIcon";
+export { InfoIcon } from "./icons/InfoIcon";
+export { GlobeIcon } from "./icons/GlobeIcon";
+export { HomeIcon } from "./icons/HomeIcon";
+export { WifiIcon } from "./icons/WifiIcon";
+export { ChevronDownIcon } from "./icons/ChevronDownIcon";
