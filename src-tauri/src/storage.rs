@@ -1003,4 +1003,106 @@ mod tests {
         let conv = store.get_conversation("nonexistent").unwrap();
         assert!(conv.is_none());
     }
+
+    // ─── TransferStore tests ──────────────────────────────────
+
+    #[test]
+    fn test_transfer_store_roundtrip() {
+        let store = mem_transferstore();
+        store.store_transfer(
+            "xfer-001", "alice_pk", "report.pdf", 1048576, "received", "completed", 16,
+        ).unwrap();
+
+        let saved = store.get_transfer("xfer-001").unwrap().unwrap();
+        assert_eq!(saved.id, "xfer-001");
+        assert_eq!(saved.filename, "report.pdf");
+        assert_eq!(saved.total_size, 1048576);
+        assert_eq!(saved.direction, "received");
+        assert_eq!(saved.state, "completed");
+        assert_eq!(saved.chunks_total, 16);
+    }
+
+    #[test]
+    fn test_transfer_store_update_state() {
+        let store = mem_transferstore();
+        store.store_transfer(
+            "xfer-002", "bob_pk", "photo.jpg", 524288, "sent", "transferring", 8,
+        ).unwrap();
+
+        store.update_state("xfer-002", "completed", Some(2000), None).unwrap();
+
+        let saved = store.get_transfer("xfer-002").unwrap().unwrap();
+        assert_eq!(saved.state, "completed");
+        assert_eq!(saved.completed_at, Some(2000));
+    }
+
+    #[test]
+    fn test_transfer_store_update_error() {
+        let store = mem_transferstore();
+        store.store_transfer(
+            "xfer-003", "carol_pk", "archive.zip", 2097152, "sent", "transferring", 32,
+        ).unwrap();
+
+        store.update_state("xfer-003", "failed", None, Some("connection lost")).unwrap();
+
+        let saved = store.get_transfer("xfer-003").unwrap().unwrap();
+        assert_eq!(saved.state, "failed");
+        assert_eq!(saved.error, Some("connection lost".to_string()));
+    }
+
+    #[test]
+    fn test_transfer_store_update_progress() {
+        let store = mem_transferstore();
+        store.store_transfer(
+            "xfer-004", "dave_pk", "video.mp4", 10485760, "sent", "transferring", 40,
+        ).unwrap();
+
+        store.update_progress("xfer-004", 15).unwrap();
+
+        let saved = store.get_transfer("xfer-004").unwrap().unwrap();
+        assert_eq!(saved.chunks_completed, 15);
+    }
+
+    #[test]
+    fn test_transfer_store_set_local_path() {
+        let store = mem_transferstore();
+        store.store_transfer(
+            "xfer-005", "eve_pk", "doc.pdf", 65536, "received", "completed", 1,
+        ).unwrap();
+
+        store.set_local_path("xfer-005", "/downloads/doc.pdf").unwrap();
+
+        let saved = store.get_transfer("xfer-005").unwrap().unwrap();
+        assert_eq!(saved.local_path, Some("/downloads/doc.pdf".to_string()));
+    }
+
+    #[test]
+    fn test_transfer_store_list_ordered() {
+        let store = mem_transferstore();
+        store.store_transfer("xf-01", "pk1", "a.txt", 100, "sent", "completed", 1).unwrap();
+        store.store_transfer("xf-02", "pk2", "b.txt", 200, "received", "failed", 2).unwrap();
+        store.store_transfer("xf-03", "pk3", "c.txt", 300, "sent", "transferring", 3).unwrap();
+
+        let all = store.list_transfers(10).unwrap();
+        assert_eq!(all.len(), 3);
+        // Most recent first
+        assert_eq!(all[2].id, "xf-01");
+    }
+
+    #[test]
+    fn test_transfer_store_delete() {
+        let store = mem_transferstore();
+        store.store_transfer("xf-del", "pk", "nope.txt", 100, "sent", "cancelled", 1).unwrap();
+        assert!(store.get_transfer("xf-del").unwrap().is_some());
+
+        store.delete_transfer("xf-del").unwrap();
+        assert!(store.get_transfer("xf-del").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_transfer_store_get_not_found() {
+        let store = mem_transferstore();
+        let result = store.get_transfer("nonexistent").unwrap();
+        assert!(result.is_none());
+    }
 }
