@@ -1349,12 +1349,13 @@ mod session_tests {
         let bob_pub = bob_identity.public_key_bytes();
 
         let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+        let alice_xp = alice_x25519.public_key_bytes();
 
         // Alice as initiator
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
             session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![],
+                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
             ).await?;
             Ok::<_, SessionError>(session)
         });
