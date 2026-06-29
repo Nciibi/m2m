@@ -1364,9 +1364,10 @@ mod session_tests {
         let frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::HandshakeInit);
 
+        let bob_xp = bob_x25519.public_key_bytes();
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, vec![],
+            &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
         ).await.unwrap();
 
         assert_eq!(bob_session.state, ConnectionState::Established);
