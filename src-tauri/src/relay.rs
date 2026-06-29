@@ -511,6 +511,7 @@ async fn handle_relay_incoming_with_frame(
         write_half,
         session,
         remote_addr: peer_addr,
+        strategy_name: "relay".to_string(),
     };
 
     let mut conns = state.connections.write().await;
