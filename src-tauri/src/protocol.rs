@@ -312,6 +312,13 @@ pub struct FileTransferRequestData {
     pub total_size: u64,
     pub total_chunks: u32,
     pub file_hash: Vec<u8>,
+    /// Per-chunk SHA-256 hashes (v2 protocol). Empty for backward compat with v1 senders.
+    /// When present, the receiver verifies each chunk hash before writing to disk.
+    #[serde(default)]
+    pub chunk_hashes: Vec<Vec<u8>>,
+    /// File transfer protocol version (0x01 = legacy, 0x02 = chunk hashes + ACKs + cancel).
+    #[serde(default)]
+    pub file_transfer_version: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
