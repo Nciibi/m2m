@@ -280,11 +280,12 @@ pub async fn cancel_file_transfer(
     Ok(())
 }
 
-// ─── Queue-Aware Transfer Start ────────────────────────────────
+// ─── Queue-Aware Transfer Lifecycle ────────────────────────────
 
 /// Try to start an outgoing transfer. Called when the peer accepts.
-/// Checks queue concurrency limits; if a slot is available, spawns
-/// the chunk sender. Otherwise leaves it queued.
+/// Checks queue concurrency limits; if a slot is available, runs
+/// the chunk sender inline (on a spawned task). Otherwise leaves
+/// it queued for later.
 pub(super) fn try_start_outgoing_transfer(
     app_handle: AppHandle,
     state: Arc<AppState>,
@@ -300,23 +301,20 @@ pub(super) fn try_start_outgoing_transfer(
         let filepath = match filepath {
             Some(fp) => fp,
             None => {
-                tracing::warn!(transfer_id = %transfer_id, "outgoing transfer not found when trying to start");
+                tracing::warn!(transfer_id = %transfer_id, "outgoing transfer not found");
                 return;
             }
         };
 
-        // Check if we can start this transfer now
-        let can_start = {
+        // Check queue slot
+        let should_start = {
             let mut queue = state.transfer_queue.write().await;
             if queue.active.contains(&transfer_id) {
-                // Already started (e.g., resumed)
                 true
             } else if queue.can_start() {
-                // Slot available, activate it
                 queue.active.insert(transfer_id.clone());
                 true
             } else {
-                // Queue full — leave it queued, will start when a slot opens
                 tracing::info!(
                     transfer_id = %transfer_id,
                     active = queue.active.len(),
@@ -327,9 +325,9 @@ pub(super) fn try_start_outgoing_transfer(
             }
         };
 
-        if !can_start { return; }
+        if !should_start { return; }
 
-        // Mark state as transferring and persist
+        // Mark transferring + persist
         {
             let mut outgoing = state.outgoing_transfers.write().await;
             if let Some(t) = outgoing.get_mut(&transfer_id) {
@@ -343,126 +341,89 @@ pub(super) fn try_start_outgoing_transfer(
             }
         }
 
-        // Persist incoming transfer state (receiving side)
-        {
-            let mut incoming = state.incoming_transfers.write().await;
-            if let Some(t) = incoming.get_mut(&transfer_id) {
-                t.state = TransferState::Transferring;
-            }
-        }
+        // ── Run chunk sender ──
+        let result = send_file_chunks_inner(
+            &app_handle, &state, &peer_key_hex, &transfer_id, &filepath,
+        ).await;
 
-        // Spawn the chunk sender
-        send_file_chunks(app_handle, state, &peer_key_hex, &transfer_id, &filepath).await;
+        // ── Handle result and chain next queued ──
+        finish_and_chain(
+            &app_handle, &state, &transfer_id, result,
+        ).await;
     });
 }
 
-// ─── Internal: Chunk Sender ────────────────────────────────────
-
-/// Send file chunks to a peer after they've accepted the transfer.
-///
-/// Reads the file in a streaming fashion using a fixed 256 KiB buffer.
-/// Never loads the entire file into RAM.
-/// Sends chunks one at a time, waiting for ACKs (v2 protocol) or
-/// sending blindly (v1 fallback).
-/// Emits progress events to the frontend.
-async fn send_file_chunks(
-    app_handle: AppHandle,
-    state: Arc<AppState>,
-    peer_key_hex: &str,
+/// After a transfer finishes, update state, persist, emit events,
+/// remove from active, and start the next queued transfer.
+async fn finish_and_chain(
+    app_handle: &AppHandle,
+    state: &Arc<AppState>,
     transfer_id: &str,
-    file_path: &str,
+    result: Result<(), String>,
 ) {
-    let result = send_file_chunks_inner(
-        &app_handle, &state, peer_key_hex, transfer_id, file_path,
-    ).await;
-
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
-    match result {
+    match &result {
         Ok(()) => {
-            tracing::info!(transfer_id = %transfer_id, "file transfer completed successfully");
-
-            // Mark transfer as completed
             let mut outgoing = state.outgoing_transfers.write().await;
             if let Some(t) = outgoing.get_mut(transfer_id) {
                 t.state = TransferState::Completed;
             }
 
-            // Persist completion
-            {
-                let ts = state.transfer_store.lock().await;
-                if let Some(ref store) = *ts {
-                    let _ = store.update_state(transfer_id, "completed", Some(now as i64), None);
-                }
+            let ts = state.transfer_store.lock().await;
+            if let Some(ref store) = *ts {
+                let _ = store.update_state(transfer_id, "completed", Some(now as i64), None);
             }
 
             let _ = app_handle.emit("m2m://transfer-completed", serde_json::json!({
                 "transfer_id": transfer_id,
             }));
-
-            // Finish in queue (allows next queued transfer to start)
-            try_start_next_queued(&state).await;
         }
         Err(e) => {
-            tracing::error!(transfer_id = %transfer_id, error = %e, "file transfer failed");
-
-            {
-                let mut outgoing = state.outgoing_transfers.write().await;
-                if let Some(t) = outgoing.get_mut(transfer_id) {
-                    t.state = TransferState::Failed;
-                }
+            let mut outgoing = state.outgoing_transfers.write().await;
+            if let Some(t) = outgoing.get_mut(transfer_id) {
+                t.state = TransferState::Failed;
             }
 
-            // Persist failure
-            {
-                let ts = state.transfer_store.lock().await;
-                if let Some(ref store) = *ts {
-                    let _ = store.update_state(transfer_id, "failed", Some(now as i64), Some(&e));
-                }
+            let ts = state.transfer_store.lock().await;
+            if let Some(ref store) = *ts {
+                let _ = store.update_state(transfer_id, "failed", Some(now as i64), Some(e));
             }
 
             let _ = app_handle.emit("m2m://transfer-error", serde_json::json!({
                 "transfer_id": transfer_id,
                 "error": e,
             }));
-
-            // Finish in queue
-            try_start_next_queued(&state).await;
         }
     }
-}
 
-/// After a transfer finishes (completed/failed/cancelled), remove it
-/// from the active set and try to start the next queued transfer.
-async fn try_start_next_queued(state: &Arc<AppState>) {
+    // Dequeue next transfer and recurse
     let next_id = {
         let mut queue = state.transfer_queue.write().await;
-        // Can't use finish() because we don't have the finished transfer_id here.
-        // Instead, just try to dequeue.
+        queue.active.remove(transfer_id);
         queue.dequeue()
     };
 
-    if let Some(ref next_tid) = next_id {
-        // Get transfer details and start it
-        let (filepath, peer_key_hex) = {
+    if let Some(next_tid) = next_id {
+        let (next_fp, next_pk) = {
             let outgoing = state.outgoing_transfers.read().await;
-            let t = outgoing.get(next_tid)?;
-            (t.file_path.to_string_lossy().to_string(), t.peer_key_hex.clone())
+            match outgoing.get(&next_tid) {
+                Some(t) => (t.file_path.to_string_lossy().to_string(), t.peer_key_hex.clone()),
+                None => return,
+            }
         };
 
-        tracing::info!(
-            transfer_id = %next_tid,
-            "starting next queued transfer"
-        );
+        tracing::info!(transfer_id = %next_tid, "starting next queued transfer after previous finished");
 
-        let app_handle: AppHandle = {
-            // We need AppHandle here but don't have it. The caller
-            // (send_file_chunks) will dequeue directly.
-            return;
-        };
+        let result = send_file_chunks_inner(
+            app_handle, state, &next_pk, &next_tid, &next_fp,
+        ).await;
+
+        // Recurse for the chain
+        Box::pin(finish_and_chain(app_handle, state, &next_tid, result)).await;
     }
 }
 
