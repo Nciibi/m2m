@@ -764,7 +764,7 @@ impl Session {
         if let Some(ratchet) = self.ratchet.as_mut() {
             let padded = crate::crypto::pad_message_variable(plaintext);
             let aad = session_dr_aad(packet_type.to_byte(), &our_pub, &peer_pub);
-            let do_ratchet = ratchet.should_ratchet(100);
+            let do_ratchet = ratchet.should_ratchet(self.ratchet_interval);
             let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
                 .encrypt(&padded, &aad, do_ratchet)?;
 
