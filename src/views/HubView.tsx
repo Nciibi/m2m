@@ -5,16 +5,19 @@ import {
   ShieldIcon, GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot,
 } from "../components/ui/Icons";
-import { useM2M } from "../context/M2MContext";
+import { useApp } from "../context/AppContext";
+import { useChat } from "../context/ChatContext";
+import { useSettings } from "../context/SettingsContext";
 
 export default function HubView() {
+  const { identity, toasts, removeToast, openSettings } = useApp();
   const {
-    identity, toasts, removeToast, generatedInvite, inviteToConnect,
-    inviteValid, namingMyName, namingTheirName, isConnecting,
-    handleGenerateInvite, copyInvite, setInviteToConnect, handleConnect,
-    setNamingMyName, setNamingTheirName, handleOpenChat, openSettings,
-    handleDeleteConversation, conversations, networkSettings, privateMode,
-  } = useM2M();
+    generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
+    isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
+    handleConnect, setNamingMyName, setNamingTheirName, handleOpenChat,
+    handleDeleteConversation, conversations,
+  } = useChat();
+  const { networkSettings, privateMode } = useSettings();
   const [tab, setTab] = useState<"connect" | "chats">("connect");
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
