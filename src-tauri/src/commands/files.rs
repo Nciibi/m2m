@@ -665,11 +665,12 @@ pub(super) fn compute_chunk_size(strategy_name: &str) -> usize {
 // ─── Hash Computation (Streaming) ──────────────────────────────
 
 /// Compute per-chunk SHA-256 hashes and the full-file SHA-256 hash in a
-/// single streaming pass. Uses a fixed 256 KiB buffer — never loads the
+/// single streaming pass. Uses `chunk_size`-sized buffers — never loads the
 /// entire file into RAM.
 fn compute_file_hashes(
     file_path: &str,
     total_chunks: u32,
+    chunk_size: usize,
 ) -> Result<([u8; 32], Vec<[u8; 32]>), String> {
     use std::io::Read;
     use sodiumoxide::crypto::hash::sha256;
@@ -679,7 +680,7 @@ fn compute_file_hashes(
 
     let mut full_hasher = sha256::State::new();
     let mut chunk_hashes = Vec::with_capacity(total_chunks as usize);
-    let mut buf = vec![0u8; protocol::MAX_FILE_CHUNK_SIZE];
+    let mut buf = vec![0u8; chunk_size];
 
     loop {
         let n = file.read(&mut buf)
