@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
+use crate::state::TransferState as Ts;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("database error: {0}")]
