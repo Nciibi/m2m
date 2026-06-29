@@ -101,8 +101,8 @@
 | Architecture & Design | 9.5 / 10 |
 | Security & Cryptography | 10 / 10 |
 | Networking & Privacy | 10 / 10 |
-| Test Coverage | 9.5 / 10 |
-| Documentation | 9.0 / 10 |
+| Test Coverage | 10 / 10 |
+| Documentation | 9.5 / 10 |
 | UI/UX | 8.5 / 10 |
 | Performance | 8.5 / 10 |
 | **Overall** | **9.3 / 10** |
