@@ -181,7 +181,7 @@ describe("HubView", () => {
 
   it("shows chats tab with conversation list", async () => {
     state.conversations = [
-      { id: "conv-1", peer_display_name: "Alice", last_message_preview: "Hello!", last_message_at: Date.now() / 1000 },
+      { id: "conv-1", peer_display_name: "Alice", peer_key_hex: "abc123", last_message_preview: "Hello!", last_message_at: Date.now() / 1000 },
     ];
     render(<HubView />);
     const user = userEvent.setup();

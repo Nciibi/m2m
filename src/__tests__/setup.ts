@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import { vi } from "vitest";
 
 // JSDOM doesn't implement window.matchMedia; provide a stub.
 Object.defineProperty(window, "matchMedia", {
@@ -15,11 +16,9 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-// JSDOM doesn't implement window.Notification; provide a stub.
-Object.defineProperty(window, "Notification", {
-  writable: true,
-  value: {
-    permission: "default",
-    requestPermission: () => Promise.resolve("default"),
-  },
-});
+// Mock @tauri-apps/plugin-notification globally so it doesn't throw in jsdom
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  isPermissionGranted: vi.fn().mockResolvedValue(false),
+  sendNotification: vi.fn(),
+  requestPermission: vi.fn().mockResolvedValue("granted"),
+}));
