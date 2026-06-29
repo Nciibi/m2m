@@ -306,6 +306,7 @@ impl AppState {
             transfer_queue: RwLock::new(TransferQueue::new()),
             message_store: Mutex::new(None),
             key_store: Mutex::new(None),
+            transfer_store: Mutex::new(None),
             storage_key: RwLock::new(None),
             vault_unlocked: RwLock::new(false),
             vault_initialized: RwLock::new(false),
