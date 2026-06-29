@@ -38,13 +38,27 @@ pub async fn send_file(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let total_chunks = (total_size as usize).div_ceil(protocol::MAX_FILE_CHUNK_SIZE) as u32;
     let transfer_id = uuid::Uuid::new_v4().to_string();
+
+    // Determine adaptive chunk size from the peer's connection strategy.
+    let chunk_size = {
+        let conns = state.connections.read().await;
+        let strategy = conns.get(&peer_key_hex)
+            .and_then(|c| {
+                let cg = c.try_lock().ok()?;
+                Some(cg.strategy_name.clone())
+            })
+            .unwrap_or_default();
+        compute_chunk_size(&strategy)
+    };
+
+    let total_chunks = (total_size as usize).div_ceil(chunk_size) as u32;
 
     // ── Streaming hash pass ──────────────────────────────────
     // Read the file once, computing both per-chunk hashes and the full-file hash.
-    // Uses a fixed 256 KiB buffer — never loads the entire file into RAM.
-    let (file_hash, chunk_hashes) = compute_file_hashes(&file_path, total_chunks)
+    // Uses a fixed buffer sized to the adaptive chunk size — never loads the entire
+    // file into RAM.
+    let (file_hash, chunk_hashes) = compute_file_hashes(&file_path, total_chunks, chunk_size)
         .map_err(|e| format!("failed to read file: {e}"))?;
 
     let now = std::time::SystemTime::now()
