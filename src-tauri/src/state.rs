@@ -41,6 +41,7 @@ pub struct PeerConnection {
 pub enum TransferState {
     Pending,         // Waiting for accept (sender) / awaiting chunks (receiver)
     Transferring,    // Chunks actively flowing
+    Paused,          // User-initiated pause
     Completed,       // File fully transferred and verified
     Failed,          // Irrecoverable error (disconnect, hash mismatch)
     Cancelled,       // User-initiated cancel or peer cancelled
@@ -51,6 +52,7 @@ impl std::fmt::Display for TransferState {
         match self {
             TransferState::Pending => write!(f, "pending"),
             TransferState::Transferring => write!(f, "transferring"),
+            TransferState::Paused => write!(f, "paused"),
             TransferState::Completed => write!(f, "completed"),
             TransferState::Failed => write!(f, "failed"),
             TransferState::Cancelled => write!(f, "cancelled"),
