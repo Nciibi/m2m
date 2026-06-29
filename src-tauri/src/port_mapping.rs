@@ -596,8 +596,6 @@ const PCP_OFF_RESULT: usize = 3;
 const PCP_OFF_LIFETIME: usize = 4;
 // Constants used by future PCP features (ECHO REQUEST, THIRD PARTY, etc.).
 #[expect(dead_code, reason = "Reserved for future PCP features")]
-const PCP_HEADER_SIZE: usize = 24;
-#[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_OFF_CLIENT_IP: usize = 8;
 #[expect(dead_code, reason = "Reserved for future PCP features")]
 const PCP_OFF_BODY_RESERVED: usize = 24;
@@ -757,7 +755,7 @@ const SOAP_ADD_PORT: &str = r#"<?xml version="1.0"?>
 </s:Envelope>"#;
 
 /// UPnP action template for `DeletePortMapping`.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved; used by upnp_remove_tcp")]
 const SOAP_DELETE_PORT: &str = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
             s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
@@ -1183,7 +1181,7 @@ async fn upnp_map_tcp(
 }
 
 /// Remove a UPnP TCP port mapping.
-#[allow(dead_code)]
+#[expect(dead_code, reason = "Reserved; used by remove_port_mapping")]
 async fn upnp_remove_tcp(
     _internal_port: u16,
     external_port: u16,
