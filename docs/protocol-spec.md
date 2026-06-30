@@ -73,6 +73,9 @@ for i in 0..4 {
 | `0x30` | Disconnect | Any |
 | `0x31` | Error | Any |
 | `0x40` | ConversationMeta | Established |
+| `0x41` | MessageReaction | Established |
+| `0x42` | MessageEdit | Established |
+| `0x43` | MessageDelete | Established |
 
 Unknown types → Error packet + close connection.
 
