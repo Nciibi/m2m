@@ -140,14 +140,14 @@ fn build_announcement(
 
 /// Parse a received LAN discovery announcement packet.
 ///
-/// Returns `Some(LanPeer)` if the packet is valid and signed by the
-/// claimed identity. Returns `None` silently for invalid packets
-/// (incompatible version, bad signature, etc.).
+/// The packet contains an ephemeral session token, NOT a permanent
+/// identity key. No signature verification needed — the token has
+/// no linkable meaning. Identity is established during X3DH.
 fn parse_announcement(
     packet: &[u8],
     sender: SocketAddr,
 ) -> Option<LanPeer> {
-    if packet.len() != 107 {
+    if packet.len() != 43 {
         tracing::trace!(len = packet.len(), "ignoring LAN packet with wrong length");
         return None;
     }
@@ -162,36 +162,19 @@ fn parse_announcement(
     }
 
     // Listen port
-    if packet.len() < offset + 2 {
-        return None;
-    }
     let listen_port = u16::from_be_bytes([packet[offset], packet[offset + 1]]);
     offset += 2;
 
-    // Identity public key
-    if packet.len() < offset + 32 {
-        return None;
-    }
-    let mut identity_pub = [0u8; 32];
-    identity_pub.copy_from_slice(&packet[offset..offset + 32]);
+    // Session token (32 bytes — ephemeral, no linkable info)
+    let mut session_token = [0u8; 32];
+    session_token.copy_from_slice(&packet[offset..offset + 32]);
     offset += 32;
 
     // Timestamp
-    if packet.len() < offset + 8 {
-        return None;
-    }
     let timestamp = u64::from_be_bytes([
         packet[offset], packet[offset + 1], packet[offset + 2], packet[offset + 3],
         packet[offset + 4], packet[offset + 5], packet[offset + 6], packet[offset + 7],
     ]);
-    offset += 8;
-
-    // Signature
-    if packet.len() < offset + 64 {
-        return None;
-    }
-    let mut signature = [0u8; 64];
-    signature.copy_from_slice(&packet[offset..offset + 64]);
 
     // Reject stale timestamps (more than 5 minutes old)
     let now = now_unix_secs();
@@ -205,31 +188,14 @@ fn parse_announcement(
         return None;
     }
 
-    // Reconstruct signed data
-    let mut sign_data = Vec::with_capacity(1 + 2 + 32 + 8);
-    sign_data.push(LAN_DISCOVERY_VERSION);
-    sign_data.extend_from_slice(&listen_port.to_be_bytes());
-    sign_data.extend_from_slice(&identity_pub);
-    sign_data.extend_from_slice(&timestamp.to_be_bytes());
-
-    // Verify signature
-    if crate::crypto::verify_signature(&identity_pub, &sign_data, &signature).is_err() {
-        tracing::trace!("ignoring LAN announcement with invalid signature");
-        return None;
-    }
-
-    let fingerprint = crate::crypto::fingerprint_from_public_key(&identity_pub);
-
-    // Build the connect address: use the sender's IP (since we got the UDP packet,
-    // we know they're reachable at that IP) + the announced listen port.
     let connect_addr = SocketAddr::new(sender.ip(), listen_port);
+    let token_hex = hex::encode(session_token);
 
     Some(LanPeer {
-        identity_pub,
-        fingerprint,
+        session_token,
+        token_hex,
         connect_addr,
         last_seen: now,
-        verified: false,
     })
 }
 
