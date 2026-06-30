@@ -380,17 +380,3 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
   );
 }
 
-function hashToColor(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return `hsl(${Math.abs(hash) % 360}, 55%, 48%)`;
-}
-
-function formatTime(ts: number): string {
-  const d = Math.floor(Date.now() / 1000) - ts;
-  if (d < 60) return "now";
-  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
-  if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
-  if (d < 604800) return `${Math.floor(d / 86400)}d ago`;
-  return new Date(ts * 1000).toLocaleDateString();
-}
