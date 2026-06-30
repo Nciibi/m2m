@@ -312,6 +312,7 @@ pub async fn connect_discovered_peer(
         peer_key_hex: peer_key_hex.clone(),
         state: "established".to_string(),
         peer_fingerprint: Some(peer_fingerprint.clone()),
+        peer_verified: false,
     });
 
     // Upsert peer in key store

@@ -239,6 +239,7 @@ pub async fn attempt_reconnect(
                     peer_key_hex: peer_key_hex.clone(),
                     state: "established".to_string(),
                     peer_fingerprint: Some(info.peer_fingerprint.clone()),
+                    peer_verified: info.peer_verified,
                 });
 
                 // Start receive loop
