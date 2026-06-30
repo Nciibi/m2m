@@ -170,12 +170,49 @@ export default function ChatView() {
               <span className="date-sep__line" />
             </div>
             {msgs.map((m: ChatMessage, i: number) => (
-              <div key={m.id} className={`msg-bubble msg-bubble--${m.direction}`} style={{ animationDelay: `${i * 0.05}s` }}
+              <div key={m.id} className={`msg-bubble msg-bubble--${m.direction}${m.deleted ? ' msg-bubble--deleted' : ''}`}
+                style={{ animationDelay: `${i * 0.05}s` }}
                 onMouseEnter={() => setPickerMsgId(m.id)}
-                onMouseLeave={() => setPickerMsgId(null)}>
-                {formatMsg(m.content)}
+                onMouseLeave={() => setPickerMsgId(null)}
+                onContextMenu={(e) => { e.preventDefault(); setContextMsgId(m.id); }}
+              >
+                {m.deleted ? (
+                  <em style={{ opacity: 0.5, fontStyle: 'italic' }}>Message deleted</em>
+                ) : editingMsgId === m.id ? (
+                  /* Inline edit mode */
+                  <div className="msg-edit-inline">
+                    <textarea className="msg-edit-input" value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                          e.preventDefault();
+                          await handleEditMessage(m.id, editText);
+                          setEditingMsgId(null);
+                        }
+                        if (e.key === "Escape") setEditingMsgId(null);
+                      }}
+                      autoFocus
+                      rows={2}
+                    />
+                    <div className="msg-edit-actions">
+                      <Button size="xs" onClick={async () => { await handleEditMessage(m.id, editText); setEditingMsgId(null); }}>Save</Button>
+                      <Button variant="secondary" size="xs" onClick={() => setEditingMsgId(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Normal message rendering with markdown */
+                  <div className="msg-content">{renderMarkdown(m.content)}</div>
+                )}
                 <span className="msg-footer-row">
                   <span className="msg-time">{new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  {/* Edited badge */}
+                  {m.edited_at !== null && !m.deleted && (
+                    <span className="msg-edited-badge" title={`Edited ${new Date(m.edited_at * 1000).toLocaleString()}`}>edited</span>
+                  )}
+                  {/* Self-destruct timer */}
+                  {m.expires_at !== null && !m.deleted && !m.direction.startsWith("sent") && (
+                    <SelfDestructTimer expiresAt={m.expires_at} />
+                  )}
                   {/* Read receipt for received messages */}
                   {m.direction === "received" && m.read_at !== null && (
                     <span className="msg-read-badge" title={`Read ${new Date(m.read_at * 1000).toLocaleString()}`}>
@@ -184,7 +221,7 @@ export default function ChatView() {
                   )}
                 </span>
                 {/* Reactions */}
-                {Object.keys(m.reactions || {}).length > 0 && (
+                {Object.keys(m.reactions || {}).length > 0 && !m.deleted && (
                   <div className="msg-reactions">
                     {Object.entries(m.reactions).map(([emoji, reactors]) => (
                       <button
@@ -205,7 +242,7 @@ export default function ChatView() {
                   </div>
                 )}
                 {/* Reaction picker on hover */}
-                {pickerMsgId === m.id && (
+                {pickerMsgId === m.id && !m.deleted && (
                   <div className="reaction-picker">
                     {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
                       <button
@@ -225,6 +262,17 @@ export default function ChatView() {
                         {emoji}
                       </button>
                     ))}
+                  </div>
+                )}
+                {/* Context menu */}
+                {contextMsgId === m.id && !m.deleted && (
+                  <div className="msg-context-menu" onClick={(e) => e.stopPropagation()}>
+                    <button className="msg-context-item" onClick={() => { setEditingMsgId(m.id); setEditText(m.content); setContextMsgId(null); }}>
+                      Edit
+                    </button>
+                    <button className="msg-context-item msg-context-item--danger" onClick={async () => { await handleDeleteMessage(m.id); setContextMsgId(null); }}>
+                      Delete
+                    </button>
                   </div>
                 )}
               </div>
