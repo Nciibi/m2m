@@ -851,13 +851,21 @@ pub fn spawn_receive_loop(
                                                             id, &peer_key_hex, "received",
                                                             &encrypted, &nonce, now as i64,
                                                         );
-                                                        // Periodic PRAGMA optimize (at most once per minute)
-                                                        let now_ts = Utc::now().timestamp();
-                                                        let mut last_opt = state.last_optimize_at.write().await;
-                                                        if now_ts - *last_opt > 60 {
-                                                            let _ = store.optimize();
-                                                            *last_opt = now_ts;
+                                                    }
+                                                    // Drop store lock before PRAGMA optimize to avoid
+                                                    // holding RefCell-backed connection across .await
+                                                    drop(ms);
+                                                    drop(sk);
+                                                    // Periodic PRAGMA optimize (at most once per minute)
+                                                    let now_ts = Utc::now().timestamp();
+                                                    let mut last_opt = state.last_optimize_at.write().await;
+                                                    if now_ts - *last_opt > 60 {
+                                                        // Re-acquire store lock just for the optimize call
+                                                        let ms2 = state.message_store.lock().await;
+                                                        if let Some(store2) = ms2.as_ref() {
+                                                            let _ = store2.optimize();
                                                         }
+                                                        *last_opt = now_ts;
                                                     }
                                                 }
                                                 Err(e) => {
