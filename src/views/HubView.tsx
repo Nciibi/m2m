@@ -23,6 +23,7 @@ export default function HubView() {
     networkSettings, privateMode, openSettings,
     discoveryConfig, discoveredPeers,
     handleConnectDiscoveredPeer, handleRefreshDiscovery,
+    securityConfig, scheduleClipboardClear,
   } = useSettings();
   const [tab, setTab] = useState<"connect" | "chats" | "family" | "nearby">("connect");
   const [copied, setCopied] = useState(false);
@@ -30,7 +31,14 @@ export default function HubView() {
   const [family, setFamily] = useState<FamilyMember[]>([]);
   const [_familyLoading, setFamilyLoading] = useState(false);
 
-  const handleCopy = () => { copyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const handleCopy = () => {
+    copyInvite();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+      scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+    }
+  };
 
   const loadFamily = useCallback(async () => {
     try {
