@@ -429,6 +429,34 @@ impl AppState {
         }
     }
 
+    /// Ensure the message store is opened (lazy init).
+    /// Called on first message load/send, not during vault unlock.
+    pub fn ensure_message_store(&self, data_dir: &str) -> Result<(), String> {
+        let mut ms = self.message_store.lock().map_err(|e| e.to_string())?;
+        if ms.is_none() {
+            let path = std::path::Path::new(data_dir).join("messages.db");
+            *ms = Some(
+                crate::storage::MessageStore::open(&path)
+                    .map_err(|e| format!("message store open: {e}"))?,
+            );
+        }
+        Ok(())
+    }
+
+    /// Ensure the transfer store is opened (lazy init).
+    /// Called on first file transfer, not during vault unlock.
+    pub fn ensure_transfer_store(&self, data_dir: &str) -> Result<(), String> {
+        let mut ts = self.transfer_store.lock().map_err(|e| e.to_string())?;
+        if ts.is_none() {
+            let path = std::path::Path::new(data_dir).join("transfers.db");
+            *ts = Some(
+                crate::storage::TransferStore::open(&path)
+                    .map_err(|e| format!("transfer store open: {e}"))?,
+            );
+        }
+        Ok(())
+    }
+
     /// Refresh STUN discovery and update stored candidates/NAT type.
     pub async fn refresh_stun(&self) -> Result<stun::StunMultiResult, stun::StunError> {
         let config = self.stun_config.read().await;
