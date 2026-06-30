@@ -147,6 +147,7 @@ impl PacketType {
             0x30 => Ok(PacketType::Disconnect),
             0x31 => Ok(PacketType::Error),
             0x40 => Ok(PacketType::ConversationMeta),
+            0x41 => Ok(PacketType::MessageReaction),
             other => Err(ProtocolError::UnknownPacketType(other)),
         }
     }
