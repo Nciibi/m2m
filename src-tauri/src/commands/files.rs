@@ -9,7 +9,6 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::protocol;
 use crate::state::{AppState, IncomingFileTransfer, OutgoingFileTransfer, PeerConnection, TransferState};
-use crate::storage;
 
 use super::{FileTransferInfo, TransferProgressEvent};
 

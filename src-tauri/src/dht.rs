@@ -47,7 +47,6 @@ use tokio::time;
 
 use thiserror::Error;
 
-use crate::crypto::IdentityKeypair;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
