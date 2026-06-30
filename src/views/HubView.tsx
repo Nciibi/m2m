@@ -39,7 +39,7 @@ export default function HubView() {
 
   const handleFamilyConnect = useCallback(async (peerKeyHex: string) => {
     // connect emits m2m://connection event which ChatContext picks up
-    const info = await invoke<any>("connect_family_member", { peerKeyHex });
+    await invoke<any>("connect_family_member", { peerKeyHex });
     setView("chat");
   }, [setView]);
 
