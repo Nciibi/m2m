@@ -342,69 +342,47 @@ fn now_unix_secs() -> u64 {
 mod lan_discovery_tests {
     use super::*;
 
-    fn init_crypto() {
-        let _ = sodiumoxide::init();
-    }
-
-    fn make_identity() -> crate::crypto::IdentityKeypair {
-        crate::crypto::IdentityKeypair::generate().unwrap()
-    }
-
     #[test]
     fn test_build_announcement_success() {
-        init_crypto();
-        let identity = make_identity();
-        let packet = build_announcement(&identity, 9876).unwrap();
+        let session_token = [0xABu8; 32];
+        let packet = build_announcement(9876, &session_token);
 
-        // Packet format: version(1) + port(2) + pubkey(32) + timestamp(8) + sig(64)
-        assert_eq!(packet.len(), 107, "announcement should be 107 bytes");
+        // Packet format: version(1) + port(2) + token(32) + timestamp(8) = 43 bytes
+        assert_eq!(packet.len(), 43, "announcement should be 43 bytes");
         assert_eq!(packet[0], LAN_DISCOVERY_VERSION, "version byte mismatch");
 
         // Listen port at offset 1-2
         let port = u16::from_be_bytes([packet[1], packet[2]]);
         assert_eq!(port, 9876);
+
+        // Session token at offset 3-34
+        assert_eq!(&packet[3..35], &session_token, "session token should match");
     }
 
     #[test]
     fn test_parse_valid_announcement() {
-        init_crypto();
-        let identity = make_identity();
-        let packet = build_announcement(&identity, 5555).unwrap();
+        let session_token = [0xCDu8; 32];
+        let packet = build_announcement(5555, &session_token);
 
         let sender = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 42)), 9999);
         let peer = parse_announcement(&packet, sender).unwrap();
 
-        assert_eq!(peer.identity_pub, identity.public_key_bytes());
+        assert_eq!(peer.session_token, session_token);
         assert_eq!(peer.connect_addr.port(), 5555);
         assert_eq!(peer.connect_addr.ip(), sender.ip());
-        assert!(!peer.verified);
     }
 
     #[test]
     fn test_parse_rejects_wrong_length() {
-        let packet = vec![0u8; 50]; // Wrong length
+        let packet = vec![0u8; 50]; // Wrong length (should be 43)
         let sender = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 1234);
         assert!(parse_announcement(&packet, sender).is_none());
     }
 
     #[test]
-    fn test_parse_rejects_bad_signature() {
-        init_crypto();
-        let identity = make_identity();
-        let mut packet = build_announcement(&identity, 4444).unwrap();
-
-        // Corrupt the last byte of the signature
-        *packet.last_mut().unwrap() ^= 0xFF;
-
-        let sender = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)), 8888);
-        assert!(parse_announcement(&packet, sender).is_none());
-    }
-
-    #[test]
     fn test_parse_rejects_unknown_version() {
-        init_crypto();
-        let identity = make_identity();
-        let mut packet = build_announcement(&identity, 3333).unwrap();
+        let session_token = [0xEEu8; 32];
+        let mut packet = build_announcement(3333, &session_token);
         packet[0] = 0xFF; // Unknown version
 
         let sender = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3)), 7777);
@@ -419,11 +397,10 @@ mod lan_discovery_tests {
         state.peers.insert(
             "old_peer".to_string(),
             LanPeer {
-                identity_pub: [0xAA; 32],
-                fingerprint: "AAAA:BBBB:CCCC".to_string(),
+                session_token: [0xAA; 32],
+                token_hex: "aa".to_string(),
                 connect_addr: "10.0.0.1:1234".parse().unwrap(),
                 last_seen: old_time,
-                verified: false,
             },
         );
 
@@ -439,11 +416,10 @@ mod lan_discovery_tests {
         state.peers.insert(
             "recent_peer".to_string(),
             LanPeer {
-                identity_pub: [0xBB; 32],
-                fingerprint: "BBBB:CCCC:DDDD".to_string(),
+                session_token: [0xBB; 32],
+                token_hex: "bb".to_string(),
                 connect_addr: "10.0.0.2:5678".parse().unwrap(),
                 last_seen: now,
-                verified: false,
             },
         );
 
@@ -452,15 +428,14 @@ mod lan_discovery_tests {
     }
 
     #[test]
-    fn test_different_identity_produces_different_signatures() {
-        init_crypto();
-        let id1 = make_identity();
-        let id2 = make_identity();
+    fn test_different_session_tokens_produce_different_packets() {
+        let token_a = [0xAAu8; 32];
+        let token_b = [0xBBu8; 32];
 
-        let p1 = build_announcement(&id1, 1111).unwrap();
-        let p2 = build_announcement(&id2, 1111).unwrap();
+        let packet_a = build_announcement(1111, &token_a);
+        let packet_b = build_announcement(1111, &token_b);
 
-        // Same port, different identity — signatures should differ
-        assert_ne!(p1[43..], p2[43..], "different identities should produce different signatures");
+        // Same port, different tokens — packets should differ in the token section
+        assert_ne!(packet_a[3..35], packet_b[3..35], "different tokens should produce different packets");
     }
 }
