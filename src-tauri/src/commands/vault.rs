@@ -139,8 +139,8 @@ pub async fn unlock_vault(
 
     let data_dir = storage::ensure_data_dir()
         .map_err(|e| format!("data dir error: {e}"))?;
-    let msgs_db_path = data_dir.join("messages.db");
-    let transfers_db_path = data_dir.join("transfers.db");
+    // Note: messages.db and transfers.db paths are used by
+    // ensure_message_store / ensure_transfer_store lazy init in chat.rs/state.rs
 
     // Access the key store that init_identity opened
     let ks_guard = state.key_store.lock().await;
