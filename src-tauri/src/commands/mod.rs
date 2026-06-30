@@ -126,12 +126,4 @@ pub struct ConversationListItem {
     pub created_at: i64,
 }
 
-/// A family member — a peer saved as a persistent contact.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FamilyMember {
-    pub public_key_hex: String,
-    pub nickname: String,
-    pub added_at: i64,
-    pub expires_at: Option<i64>,
-    pub last_address: Option<String>,
-}
+pub use crate::storage::FamilyMember;
