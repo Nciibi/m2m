@@ -22,12 +22,17 @@ function TestConsumer() {
     handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
     handleResetStunDefaults, handlePrivateModeToggle, handleConnectivityCheck,
     handleTorToggle, setStunServerInput,
+    discoveryConfig, discoveredPeers,
+    handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
   } = useSettings();
   return (
     <div>
       <span data-testid="public-ip">{publicIp || "null"}</span>
       <span data-testid="stun-loading">{String(stunLoading)}</span>
       <span data-testid="private-mode">{String(privateMode)}</span>
+      <span data-testid="lan-enabled">{String(discoveryConfig?.lan_enabled ?? false)}</span>
+      <span data-testid="dht-enabled">{String(discoveryConfig?.dht_enabled ?? false)}</span>
+      <span data-testid="discovered-count">{discoveredPeers.length}</span>
       <button onClick={handleStunDiscover}>STUN Discover</button>
       <button onClick={handlePrivateModeToggle}>Toggle Private</button>
       <button onClick={handleTorToggle}>Toggle Tor</button>
@@ -36,6 +41,9 @@ function TestConsumer() {
       <button onClick={() => handleRemoveStunServer(0)}>Remove STUN 0</button>
       <button onClick={handleResetStunDefaults}>Reset STUN</button>
       <button onClick={() => setStunServerInput("test:3478")}>Set STUN Input</button>
+      <button onClick={handleLanToggle}>Toggle LAN</button>
+      <button onClick={handleDhtToggle}>Toggle DHT</button>
+      <button onClick={handleRefreshDiscovery}>Refresh Discovery</button>
     </div>
   );
 }
@@ -56,6 +64,9 @@ describe("SettingsContext", () => {
     expect(screen.getByTestId("public-ip").textContent).toBe("null");
     expect(screen.getByTestId("stun-loading").textContent).toBe("false");
     expect(screen.getByTestId("private-mode").textContent).toBe("false");
+    expect(screen.getByTestId("lan-enabled").textContent).toBe("false");
+    expect(screen.getByTestId("dht-enabled").textContent).toBe("false");
+    expect(screen.getByTestId("discovered-count").textContent).toBe("0");
   });
 
   it("handleStunDiscover calls Tauri invoke", async () => {
@@ -90,26 +101,6 @@ describe("SettingsContext", () => {
 
   it("handleTorToggle requires networkSettings", async () => {
     const user = userEvent.setup();
-    // networkSettings is null initially — handleTorToggle returns early
-    render(
-      <SettingsProvider>
-        <TestConsumer />
-      </SettingsProvider>
-    );
-
-    await user.click(screen.getByText("Toggle Tor"));
-    // Should NOT call invoke because networkSettings is null
-    expect(mockInvoke).not.toHaveBeenCalled();
-  });
-
-  it("handleTorToggle calls Tauri invoke when networkSettings available", async () => {
-    const user = userEvent.setup();
-    // Set up networkSettings by calling openSettings-like flow
-    mockInvoke.mockResolvedValueOnce({ tor_enabled: false, public_ip: "1.2.3.4" });
-    mockInvoke.mockResolvedValueOnce({ servers: ["default:3478"], private_mode: false });
-
-    // We need to mount with pre-set state. Since we can't call openSettings
-    // from the test, we just verify the handler refuses to call without networkSettings.
     render(
       <SettingsProvider>
         <TestConsumer />
@@ -123,7 +114,6 @@ describe("SettingsContext", () => {
   it("handleConnectivityCheck calls Tauri invoke", async () => {
     const user = userEvent.setup();
     mockInvoke.mockResolvedValue({ reachable: true });
-    // Second call for get_network_diagnostics
     mockInvoke.mockResolvedValueOnce({ reachable: true });
     mockInvoke.mockResolvedValueOnce({ nat_type: "FullCone", stun_servers: [] });
 
@@ -151,6 +141,66 @@ describe("SettingsContext", () => {
     expect(mockInvoke).toHaveBeenCalledWith("set_stun_servers", {
       servers: ["stun.l.google.com:19302", "stun1.l.google.com:19302", "stun.cloudflare.com:3478", "stun.nextcloud.com:3478"],
     });
+  });
+
+  it("handleLanToggle calls set_discovery_config with lan_enabled: true", async () => {
+    const user = userEvent.setup();
+    // First call from openSettings-style init: mock discovery config with both OFF
+    mockInvoke
+      .mockResolvedValueOnce({ lan_enabled: false, dht_enabled: false })
+      .mockResolvedValueOnce([]);
+
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+
+    // Simulate openSettings being called
+    const dc = await mockInvoke.mock.results[0]?.value;
+    // Toggle LAN on
+    mockInvoke.mockResolvedValueOnce({ lan_enabled: true, dht_enabled: false });
+    mockInvoke.mockResolvedValueOnce([]);
+
+    await user.click(screen.getByText("Toggle LAN"));
+    expect(mockInvoke).toHaveBeenCalledWith("set_discovery_config", {
+      config: { lan_enabled: true, dht_enabled: false },
+    });
+  });
+
+  it("handleDhtToggle calls set_discovery_config with dht_enabled: true", async () => {
+    const user = userEvent.setup();
+    mockInvoke
+      .mockResolvedValueOnce({ lan_enabled: false, dht_enabled: false })
+      .mockResolvedValueOnce([]);
+
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+
+    mockInvoke.mockResolvedValueOnce({ lan_enabled: false, dht_enabled: true });
+    mockInvoke.mockResolvedValueOnce([]);
+
+    await user.click(screen.getByText("Toggle DHT"));
+    expect(mockInvoke).toHaveBeenCalledWith("set_discovery_config", {
+      config: { lan_enabled: false, dht_enabled: true },
+    });
+  });
+
+  it("handleRefreshDiscovery calls refresh_discovery", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValueOnce([]);
+
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+
+    await user.click(screen.getByText("Refresh Discovery"));
+    expect(mockInvoke).toHaveBeenCalledWith("refresh_discovery");
   });
 
   it("useSettings throws without SettingsProvider", () => {
