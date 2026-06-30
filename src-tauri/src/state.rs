@@ -298,6 +298,9 @@ pub struct AppState {
     pub relay_config: RwLock<Option<relay::RelayConfig>>,
     /// Current relay connection state (for frontend diagnostics).
     pub relay_state: RwLock<relay::RelayState>,
+    /// Reconnection metadata for disconnected peers (keyed by peer_key_hex).
+    /// Used by the reconnection logic to re-establish X3DH sessions.
+    pub pending_reconnects: RwLock<HashMap<String, ReconnectInfo>>,
 }
 
 impl AppState {
