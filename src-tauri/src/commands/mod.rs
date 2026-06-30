@@ -42,6 +42,12 @@ pub struct ChatMessage {
     pub timestamp: u64,
     /// When this message was read (null = unread, only for received messages).
     pub read_at: Option<i64>,
+    /// When this message was edited (null = never edited).
+    pub edited_at: Option<i64>,
+    /// Whether this message has been soft-deleted.
+    pub deleted: bool,
+    /// When this message self-destructs (null = never).
+    pub expires_at: Option<i64>,
     /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
     #[serde(default)]
     pub reactions: std::collections::HashMap<String, Vec<String>>,
@@ -52,6 +58,9 @@ impl ChatMessage {
         Self {
             id, content, direction, timestamp,
             read_at: None,
+            edited_at: None,
+            deleted: false,
+            expires_at: None,
             reactions: std::collections::HashMap::new(),
         }
     }
