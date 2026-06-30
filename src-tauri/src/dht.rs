@@ -340,13 +340,10 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
         let port_offset = offset + 32 + 4;
         let port = u16::from_be_bytes([body[port_offset], body[port_offset + 1]]);
 
-        let fingerprint = String::new(); // No permanent fingerprint for ephemeral IDs
         let addr = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(ip_bytes)), port);
 
         peers.push(DhtPeer {
             peer_id,
-            identity_pub,
-            fingerprint,
             connect_addr: Some(addr),
             protocol_version: 1,
             last_seen: now_unix_secs(),
