@@ -285,7 +285,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       });
       setMessages((prev) => prev.map((m) => m.id === messageId ? updated : m));
     } catch (e) {
-      app.addToast("Edit failed: " + e, "error");
+      addToast("Edit failed: " + e, "error");
     }
   }, [connection?.peer_key_hex, addToast]);
 
