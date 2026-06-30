@@ -18,8 +18,6 @@ use crate::protocol::{
     FileTransferCancelData,
     ConversationMetaData, WireCandidate, MAX_FILE_CHUNK_SIZE,
 };
-#[cfg(test)]
-use crate::protocol::FileTransferChunkAckData;
 
 use thiserror::Error;
 
