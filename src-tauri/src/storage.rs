@@ -468,6 +468,7 @@ impl MessageStore {
 
         // Run migrations for existing databases that lack the new columns
         Self::migrate_conversations_table(&conn)?;
+        Self::migrate_messages_table(&conn)?;
 
         Ok(Self { conn })
     }
