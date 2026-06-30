@@ -167,6 +167,70 @@ export default function SettingsView() {
           </div>
         </section>
 
+        {/* ─── Security ─── */}
+        <section className="settings-section">
+          <h2 className="settings-section__title">Security</h2>
+          <div className="settings-card">
+            <div className="settings-row">
+              <span className="settings-label"><EyeOffIcon size={16} /> Screen Capture Protection</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.screen_capture_protection ?? false}
+                  onChange={handleScreenCaptureToggle}
+                  aria-label="Toggle screen capture protection"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">Prevent window from appearing in screenshots</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Clipboard Auto-Clear</span>
+              <div className="select-wrap" style={{ width: 'auto' }}>
+                <select className="select--compact"
+                  value={securityConfig?.clipboard_clear_secs ?? 0}
+                  onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))}
+                  aria-label="Clipboard auto-clear timeout"
+                >
+                  <option value={0}>Off</option>
+                  <option value={5}>5 seconds</option>
+                  <option value={10}>10 seconds</option>
+                  <option value={30}>30 seconds</option>
+                  <option value={60}>1 minute</option>
+                </select>
+              </div>
+              <span className="settings-hint">Auto-clear clipboard after copying sensitive data</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Idle Vault Lock</span>
+              <div className="select-wrap" style={{ width: 'auto' }}>
+                <select className="select--compact"
+                  value={securityConfig?.idle_lock_secs ?? 0}
+                  onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))}
+                  aria-label="Idle vault lock timeout"
+                >
+                  <option value={0}>Off</option>
+                  <option value={60}>1 minute</option>
+                  <option value={300}>5 minutes</option>
+                  <option value={600}>10 minutes</option>
+                  <option value={1800}>30 minutes</option>
+                </select>
+              </div>
+              <span className="settings-hint">Auto-lock vault after inactivity</span>
+            </div>
+
+            <div className="settings-divider" />
+
+            <div className="settings-row">
+              <span className="settings-label"><LockIcon size={16} /> Vault</span>
+              <Button variant="secondary" size="xs" onClick={handleLockVault}>Lock Now</Button>
+              <Button variant="secondary" size="xs" onClick={handleClearClipboard}>Clear Clipboard</Button>
+            </div>
+          </div>
+        </section>
+
         {/* ─── STUN Servers ─── */}
         <section className="settings-section">
           <h2 className="settings-section__title">STUN Servers</h2>
