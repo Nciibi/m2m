@@ -104,15 +104,25 @@ export default function VaultView() {
           )}
 
           {isFirstTime && (
-            <Input
-              id="vault-passphrase-confirm"
-              type={showPassphrase ? "text" : "password"}
-              placeholder="Confirm passphrase"
-              value={passphraseConfirm}
-              onChange={e => setPassphraseConfirm(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleUnlock()}
-              error={passphraseConfirm && passphrase !== passphraseConfirm ? "Passphrases do not match" : undefined}
-            />
+            <>
+              <Input
+                id="vault-passphrase-confirm"
+                type={showPassphrase ? "text" : "password"}
+                placeholder="Confirm passphrase"
+                value={passphraseConfirm}
+                onChange={e => setPassphraseConfirm(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                error={passphraseConfirm && passphrase !== passphraseConfirm ? "Passphrases do not match" : undefined}
+              />
+              {passphraseConfirm && passphrase === passphraseConfirm && passphrase.length >= 12 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', fontSize: 'var(--text-sm)', color: 'var(--color-success)', marginTop: '-8px' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  Passphrases match
+                </div>
+              )}
+            </>
           )}
 
           <button
