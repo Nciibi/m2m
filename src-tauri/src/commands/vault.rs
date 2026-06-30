@@ -440,7 +440,7 @@ pub async fn connect_family_member(
 
                 // Skip identity pre-check — we already know this peer
                 let expected = [0u8; 32];
-                session.handshake_as_initiator(&mut stream, kp, &expected, our_candidates, x25519_pub)
+                session.handshake_as_initiator(&mut stream, &identity_keypair, &expected, our_candidates, x25519_pub)
                     .await
                     .map_err(|e| format!("handshake failed: {e}"))?;
 
