@@ -763,6 +763,84 @@ impl MessageStore {
         self.store_message(id, conversation_id, "pending", content_encrypted, content_nonce, timestamp)
     }
 
+    // ─── Reactions ─────────────────────────────────────
+
+    /// Store or remove a reaction on a message.
+    pub fn upsert_reaction(
+        &self,
+        message_id: &str,
+        reaction: &str,
+        peer_key_hex: &str,
+        remove: bool,
+    ) -> Result<(), StorageError> {
+        if remove {
+            self.conn.execute(
+                "DELETE FROM reactions WHERE message_id = ?1 AND reaction = ?2 AND peer_key_hex = ?3",
+                rusqlite::params![message_id, reaction, peer_key_hex],
+            )?;
+        } else {
+            let now = chrono::Utc::now().timestamp();
+            self.conn.execute(
+                "INSERT OR IGNORE INTO reactions (message_id, reaction, peer_key_hex, created_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![message_id, reaction, peer_key_hex, now],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Get all reactions for a list of message IDs.
+    /// Returns a map of message_id → Vec<(reaction, peer_key_hex, created_at)>.
+    pub fn get_reactions(
+        &self,
+        message_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<(String, String, i64)>>, StorageError> {
+        if message_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders: Vec<String> = message_ids.iter().enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT message_id, reaction, peer_key_hex, created_at
+             FROM reactions WHERE message_id IN ({})",
+            placeholders.join(",")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> = message_ids.iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(params.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?;
+
+        let mut result: std::collections::HashMap<String, Vec<(String, String, i64)>> =
+            std::collections::HashMap::new();
+        for row in rows {
+            let (msg_id, reaction, peer, ts) = row?;
+            result.entry(msg_id).or_default().push((reaction, peer, ts));
+        }
+        Ok(result)
+    }
+
+    // ─── Read Receipts ─────────────────────────────────
+
+    /// Mark all unread received messages as read for a conversation.
+    pub fn mark_messages_read(&self, conversation_id: &str) -> Result<u32, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        let count = self.conn.execute(
+            "UPDATE messages SET read_at = ?1
+             WHERE conversation_id = ?2 AND direction = 'received' AND read_at IS NULL",
+            rusqlite::params![now, conversation_id],
+        )?;
+        Ok(count as u32)
+    }
+
 }
 
 /// A stored message row.
