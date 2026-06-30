@@ -5,6 +5,7 @@
 //! No secrets are exposed to the frontend.
 
 pub mod chat;
+pub mod discovery;
 pub mod files;
 pub mod forwards;
 pub mod network;
