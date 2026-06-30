@@ -97,10 +97,13 @@ pub enum DhtError {
     Timeout,
     #[error("bad response: {0}")]
     BadResponse(String),
+    #[expect(dead_code, reason = "Reserved error variant for peer lookup failures")]
     #[error("peer not found")]
     PeerNotFound,
+    #[expect(dead_code, reason = "Error when DHT has not bootstrapped yet")]
     #[error("not bootstrapped")]
     NotBootstrapped,
+    #[expect(dead_code, reason = "Error when DHT is disabled")]
     #[error("DHT not enabled")]
     NotEnabled,
 }
