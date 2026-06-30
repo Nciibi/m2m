@@ -912,6 +912,12 @@ pub struct StoredMessage {
     pub timestamp: i64,
     /// When this message was read by the recipient (null = unread).
     pub read_at: Option<i64>,
+    /// When this message was edited (null = never edited).
+    pub edited_at: Option<i64>,
+    /// Whether this message has been deleted.
+    pub deleted: bool,
+    /// When this message self-destructs (null = never).
+    pub expires_at: Option<i64>,
 }
 
 /// Summary of a conversation for the frontend.
