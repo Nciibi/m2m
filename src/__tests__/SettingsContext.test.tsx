@@ -145,22 +145,15 @@ describe("SettingsContext", () => {
 
   it("handleLanToggle calls set_discovery_config with lan_enabled: true", async () => {
     const user = userEvent.setup();
-    // First call from openSettings-style init: mock discovery config with both OFF
-    mockInvoke
-      .mockResolvedValueOnce({ lan_enabled: false, dht_enabled: false })
-      .mockResolvedValueOnce([]);
+    // handleLanToggle uses hardcoded default {lan: false, dht: false} when null
+    mockInvoke.mockResolvedValueOnce({ lan_enabled: true, dht_enabled: false });
+    mockInvoke.mockResolvedValueOnce([]);
 
     render(
       <SettingsProvider>
         <TestConsumer />
       </SettingsProvider>
     );
-
-    // Simulate openSettings being called
-    const dc = await mockInvoke.mock.results[0]?.value;
-    // Toggle LAN on
-    mockInvoke.mockResolvedValueOnce({ lan_enabled: true, dht_enabled: false });
-    mockInvoke.mockResolvedValueOnce([]);
 
     await user.click(screen.getByText("Toggle LAN"));
     expect(mockInvoke).toHaveBeenCalledWith("set_discovery_config", {
@@ -170,18 +163,15 @@ describe("SettingsContext", () => {
 
   it("handleDhtToggle calls set_discovery_config with dht_enabled: true", async () => {
     const user = userEvent.setup();
-    mockInvoke
-      .mockResolvedValueOnce({ lan_enabled: false, dht_enabled: false })
-      .mockResolvedValueOnce([]);
+    // handleDhtToggle uses hardcoded default {lan: false, dht: false} when null
+    mockInvoke.mockResolvedValueOnce({ lan_enabled: false, dht_enabled: true });
+    mockInvoke.mockResolvedValueOnce([]);
 
     render(
       <SettingsProvider>
         <TestConsumer />
       </SettingsProvider>
     );
-
-    mockInvoke.mockResolvedValueOnce({ lan_enabled: false, dht_enabled: true });
-    mockInvoke.mockResolvedValueOnce([]);
 
     await user.click(screen.getByText("Toggle DHT"));
     expect(mockInvoke).toHaveBeenCalledWith("set_discovery_config", {
