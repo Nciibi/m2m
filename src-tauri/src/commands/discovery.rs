@@ -269,19 +269,17 @@ pub async fn connect_discovered_peer(
     let peer_fingerprint = session.peer_fingerprint();
 
     // Check if this peer is already known (previously verified)
-    let key_store = state.key_store.lock().await;
-    let is_known = key_store
+    let message_store = state.message_store.lock().await;
+    let is_known = message_store
         .as_ref()
-        .map(|ks| {
-            // Try to find the peer in the key store by scanning known peers.
-            // We look up by checking if get_conversation sees this peer.
-            ks.get_conversation(&peer_key_hex)
+        .map(|ms| {
+            ms.get_conversation(&peer_key_hex)
                 .ok()
                 .flatten()
                 .is_some()
         })
         .unwrap_or(false);
-    drop(key_store);
+    drop(message_store);
 
     // If the peer is known, trust them. Otherwise leave as unverified.
     if is_known {
