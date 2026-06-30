@@ -71,12 +71,14 @@ impl std::fmt::Display for TransferState {
 /// on timeouts. Pre-computed chunk hashes are stored for verification
 /// before each send.
 pub struct OutgoingFileTransfer {
+    #[allow(dead_code)]
     pub transfer_id: String,
     pub peer_key_hex: String,
     pub file_path: PathBuf,
     pub filename: String,
     pub total_size: u64,
     pub total_chunks: u32,
+    #[allow(dead_code)]
     pub file_hash: [u8; 32],
     /// Per-chunk SHA-256 hashes, pre-computed in a single streaming pass.
     pub chunk_hashes: Vec<[u8; 32]>,
