@@ -744,3 +744,37 @@ pub async fn import_identity(
         has_identity: true,
     })
 }
+
+/// Lock the vault — zeroizes keys in memory and marks vault as locked.
+///
+/// After calling this, the user must unlock the vault again to perform
+/// sensitive operations. Active connections remain open.
+#[tauri::command]
+pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    // Zeroize storage key
+    let mut sk = state.storage_key.write().await;
+    sk.take(); // Drop + zeroize via StorageKey's Drop impl
+
+    // Drop key store (closes database connection)
+    let mut ks = state.key_store.lock().await;
+    *ks = None;
+    drop(ks);
+
+    // Drop message store
+    let mut ms = state.message_store.lock().await;
+    *ms = None;
+    drop(ms);
+
+    // Drop transfer store
+    let mut ts = state.transfer_store.lock().await;
+    *ts = None;
+    drop(ts);
+
+    // Mark vault as locked
+    let mut vu = state.vault_unlocked.write().await;
+    *vu = false;
+    drop(vu);
+
+    tracing::info!("Vault locked — keys zeroized, stores closed");
+    Ok(())
+}
