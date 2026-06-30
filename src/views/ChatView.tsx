@@ -23,6 +23,7 @@ export default function ChatView() {
   const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pickerMsgId, setPickerMsgId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const msgRef = useRef<HTMLDivElement>(null);
 
