@@ -466,13 +466,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   return (
     <ChatContext.Provider value={{
-      connection, isConnecting, messages, fileRequests,
+      connection, isConnecting, reconnecting, reconnectAttempt, messages, fileRequests,
       conversations, activeConversationId,
       inviteToConnect, setInviteToConnect, inviteValid,
       namingMyName, setNamingMyName, namingTheirName, setNamingTheirName,
       generatedInvite,
       retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
-      handleSendMessage, handleVerify, handleDisconnect, handleSendFile,
+      handleSendMessage, handleVerify, handleDisconnect, handleReconnect, handleSendFile,
       handleExportConversation, handleSetRetention,
       handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
       handleDeleteConversation,
