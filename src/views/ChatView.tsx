@@ -313,6 +313,18 @@ export default function ChatView() {
             rows={1} disabled={connection?.state !== "established"} />
           {text.length > 64 * 1024 * 0.9 && <span className="msg-input-limit">{text.length}/{64 * 1024}</span>}
         </div>
+        <div className="msg-input-timer">
+          <select className="select--compact" value={timerSecs} onChange={e => setTimerSecs(parseInt(e.target.value, 10))}
+            title="Self-destruct timer" aria-label="Self-destruct timer">
+            <option value={0}>Off</option>
+            <option value={5}>5s</option>
+            <option value={30}>30s</option>
+            <option value={60}>1m</option>
+            <option value={300}>5m</option>
+            <option value={3600}>1h</option>
+            <option value={86400}>24h</option>
+          </select>
+        </div>
         <button type="submit" className="msg-send-btn" id="send-message-btn" disabled={!text.trim() || sending || connection?.state !== "established"}>
           {sending ? <span className="msg-send-spinner" /> : <SendIcon size={20} />}
         </button>
