@@ -249,7 +249,7 @@ pub async fn reject_file_transfer(
 #[tauri::command]
 pub async fn pause_file_transfer(
     state: State<'_, Arc<AppState>>,
-    peer_key_hex: String,
+    _peer_key_hex: String,
     transfer_id: String,
 ) -> Result<(), String> {
     // Pause outgoing transfer
@@ -284,7 +284,7 @@ pub async fn pause_file_transfer(
 #[tauri::command]
 pub async fn resume_file_transfer(
     state: State<'_, Arc<AppState>>,
-    peer_key_hex: String,
+    _peer_key_hex: String,
     transfer_id: String,
 ) -> Result<(), String> {
     // Resume outgoing transfer

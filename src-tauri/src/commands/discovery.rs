@@ -56,7 +56,7 @@ pub async fn get_discovery_config(
 /// Disabling a method that's not running is a no-op.
 #[tauri::command]
 pub async fn set_discovery_config(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     config: DiscoveryConfig,
 ) -> Result<DiscoveryConfig, String> {
