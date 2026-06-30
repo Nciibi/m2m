@@ -1,30 +1,33 @@
 /// M2M — LAN Discovery
 ///
-/// Zero-config local network peer discovery via UDP multicast.
-/// Every M2M instance periodically broadcasts a signed announcement
-/// containing its identity fingerprint and connection address.
-/// All M2M instances on the same LAN receive these and can connect
-/// without exchanging invite links.
+/// ⚠️ **PRIVACY WARNING** ⚠️
 ///
-/// ## Security Model
+/// This module is **OFF by default**. When enabled, your app broadcasts
+/// a presence announcement over WiFi every 30 seconds. Anyone on the
+/// same network can see your presence. Use only on trusted networks.
 ///
-/// Announcements are signed with the Ed25519 identity key so peers
-/// can verify authenticity. The announcement contains only public
-/// information (fingerprint, TCP address) — no secrets are exposed.
-/// The actual connection still requires a full X3DH handshake and
-/// optional fingerprint verification.
+/// When on, the announcement uses an **ephemeral session token** —
+/// NOT your permanent identity key. The token changes every hour, so
+/// observers cannot track you across sessions. But your IP address is
+/// still visible to anyone on the same WiFi.
+///
+/// ## When to use
+///
+/// - **Safe**: Home WiFi, friends nearby, want zero-config setup
+/// - **Unsafe**: Coffee shops, airports, conferences, any public WiFi
 ///
 /// ## Protocol
 ///
-/// UDP multicast to 239.255.27.3:38553 (IANA-registered-like port,
-/// using a non-standard port to avoid colliding with other mDNS
-/// services on the LAN).
+/// UDP multicast to 239.255.27.3:38553.
 ///
-/// Packet format (max ~512 bytes — fits in single UDP frame):
-///   [version: u8] [listen_port: u16 BE] [identity_pub: 32B]
-///   [timestamp: u64 BE] [signature: 64B Ed25519]
+/// Packet format:
+///   [version: u8] [listen_port: u16 BE] [ephemeral_token: 32B]
+///   [timestamp: u64 BE]
 ///
-/// Total: 1 + 2 + 32 + 8 + 64 = 107 bytes
+/// Note: No permanent identity key, no signature — the token is
+/// ephemeral and carries no linkable information.
+///
+/// Total: 1 + 2 + 32 + 8 = 43 bytes
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::Arc;
