@@ -10,6 +10,8 @@ use crate::state::{AppState, PeerConnection};
 use super::util;
 use super::{ChatMessage, ConversationListItem};
 
+use crate::protocol::MessageReactionData;
+
 /// Send a text message to a connected peer.
 #[tauri::command]
 pub async fn send_message(
