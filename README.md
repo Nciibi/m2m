@@ -426,17 +426,40 @@ npm run tauri dev
 
 ```bash
 # Rust backend — unit + integration
-cd src-tauri && cargo test
+cargo test
 
 # Rust linter (must pass clean)
-cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 
 # Rust formatting
-cd src-tauri && cargo fmt --all -- --check
+cargo fmt --all -- --check
 
 # Frontend build
 pnpm build
 ```
+
+---
+
+## 🔁 Self-Host a Relay Server
+
+Peers behind symmetric NATs that can't establish a direct connection can fall back to a TCP relay server. You can run your own:
+
+```sh
+# Quick deploy with Docker (from project root)
+docker compose up -d
+
+# With authentication (prevents unauthorized use)
+RELAY_AUTH_TOKEN=your-secret docker compose up -d
+
+# Build from source (standalone binary)
+cargo build --release -p m2m-relay
+./target/release/m2m-relay
+
+# Custom port
+RELAY_PORT=3478 ./target/release/m2m-relay
+```
+
+The relay server is lightweight (~5 MB binary, ~8 MB RSS). Configure your M2M clients to use it via Settings → Relay.
 
 ---
 
