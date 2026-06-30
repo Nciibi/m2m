@@ -28,6 +28,35 @@ export default function HubView() {
 
   const handleCopy = () => { copyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
+  const loadFamily = useCallback(async () => {
+    try {
+      setFamilyLoading(true);
+      const f = await invoke<FamilyMember[]>("list_family");
+      setFamily(f);
+    } catch { /* noop */ }
+    finally { setFamilyLoading(false); }
+  }, []);
+
+  const handleFamilyConnect = useCallback(async (peerKeyHex: string) => {
+    const info = await invoke<any>("connect_family_member", { peerKeyHex });
+    setView("chat");
+    setConnection({
+      state: "established",
+      peer_fingerprint: info.peer_fingerprint,
+      peer_verified: true,
+      peer_key_hex: info.peer_key_hex,
+    });
+    setActiveConversationId(info.peer_key_hex || null);
+    try {
+      setMessages(await invoke<any[]>("load_messages", { peerKeyHex: info.peer_key_hex }));
+    } catch { /* noop */ }
+  }, [setView, setConnection, setActiveConversationId, setMessages]);
+
+  // Load family on mount and when switching to family tab
+  useEffect(() => {
+    if (tab === "family") loadFamily();
+  }, [tab, loadFamily]);
+
   // Derive connection state for the status badge
   const connectionBadge = (() => {
     if (isConnecting) return { dot: null, label: "Connecting…", variant: "warning" as const };
