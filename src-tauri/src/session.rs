@@ -697,6 +697,7 @@ impl Session {
     }
 
     /// Send a file transfer request to the peer (v1 — backward compat).
+    #[cfg(test)]
     pub async fn send_file_request<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
@@ -801,6 +802,7 @@ impl Session {
 
     /// Send a chunk acknowledgement to the sender, confirming the chunk was
     /// received, hash-verified, and written to disk.
+    #[cfg(test)]
     pub async fn send_file_chunk_ack<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
