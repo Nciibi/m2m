@@ -81,6 +81,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       catch { /* noop */ }
       try { setDiscoveredPeers(await invoke<DiscoveredPeer[]>("get_discovered_peers")); }
       catch { /* noop */ }
+      try { setSecurityConfig(await invoke<SecurityConfig>("get_security_config")); }
+      catch { /* noop */ }
     } catch { /* noop */ }
   }, [setView]);
 
