@@ -14,7 +14,9 @@ export default function ChatView() {
   const { identity, toasts, removeToast, addToast, setView } = useApp();
   const {
     connection, messages, fileRequests, activeConversationId,
+    reconnecting, reconnectAttempt,
     handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
+    handleReconnect,
     handleExportConversation, handleSetRetention,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
     handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
