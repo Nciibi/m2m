@@ -210,6 +210,7 @@ fn build_dht_message(msg_type: u8, body: &[u8]) -> Vec<u8> {
     msg
 }
 
+#[expect(dead_code, reason = "Reserved for DHT message parsing")]
 /// Parse a DHT message: returns (type, body).
 fn parse_dht_message(data: &[u8]) -> Result<(u8, &[u8]), DhtError> {
     if data.len() < 5 {
@@ -254,6 +255,7 @@ async fn dht_recv(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), DhtError> {
     Ok((body[0], body[1..].to_vec()))
 }
 
+#[expect(dead_code, reason = "Reserved for DHT connectivity checks")]
 /// Connect to a DHT node and exchange a ping/pong to verify it's alive.
 async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
     let start = std::time::Instant::now();
@@ -327,11 +329,13 @@ pub async fn announce_to_node(
     Ok(())
 }
 
+#[expect(dead_code, reason = "Reserved for DHT lookup operations")]
 /// Build a FIND_NODE body for a peer ID.
 fn build_find_node_body(peer_id: &[u8; 32]) -> Vec<u8> {
     peer_id.to_vec()
 }
 
+#[expect(dead_code, reason = "Reserved for DHT response parsing")]
 /// Parse a NODE_RESPONSE body into a list of DHT peers.
 ///
 /// Wire format per entry: [ephemeral_id(32B) ip(4B) port(2B)]
@@ -621,7 +625,4 @@ mod dht_tests {
         let original = b"m2m-dht-test-payload";
         let msg = build_dht_message(DHT_ANNOUNCE, original);
         let (typ, parsed) = parse_dht_message(&msg).unwrap();
-        assert_eq!(typ, DHT_ANNOUNCE);
-        assert_eq!(parsed, original);
-    }
-}
+        assert_eq!
