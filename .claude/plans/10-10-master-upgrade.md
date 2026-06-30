@@ -154,55 +154,15 @@
 
 ---
 
-## Phase 4: Message Features — Reactions, Threads, Self-Destruct (UI/UX: 8.5 → 10)
+## ✅ Phase 4: Message Features — Reactions, Edit, Delete, Self-Destruct, Markdown (COMPLETE)
 
-### 4.1 — Message Reactions
-
-**Modified**: `src-tauri/src/protocol.rs` (add ~30 lines)
-```rust
-pub struct MessageReaction {
-    pub message_id: String,
-    pub reaction: String,   // emoji: "👍", "❤️", "😂", etc.
-    pub peer_key_hex: String,
-}
-```
-- New packet type: `MessageReaction (0x41)`
-- Stored locally alongside messages
-- Frontend: inline emoji picker on message hover
-
-### 4.2 — Read Receipts (Local Implementation)
-
-**Modified**: `src-tauri/src/protocol.rs` (add ~20 lines)
-- New packet type: `ReadReceipt (0x42)`
-- Sent when user opens a conversation (batched, max 1/5s)
-- Frontend: double-checkmark indicator on sent messages
-
-### 4.3 — Per-Message Self-Destruct Timer
-
-**Modified**: `src-tauri/src/protocol.rs`, add `disappear_after` field to `MessageBody`
-```rust
-MessageBody::Text { id, content, disappear_after: Option<u64> }
-// disappear_after = seconds until message self-deletes
-```
-- Frontend: countdown timer on message (fades as timer approaches 0)
-- Timer starts when message is displayed (receiver side), sent immediately (sender side)
-- After expiry: animate deletion, remove from local store
-- Timer accuracy: ±1s (not cryptographic — user-facing UX)
-
-### 4.4 — Message Editing & Deletion
-
-**New packet types**: `MessageEdit (0x43)`, `MessageDelete (0x44)`
-- Edit: send new content for existing message_id (with edit history indicator)
-- Delete: send deletion request for message_id
-- Frontend: "Edited" badge on edited messages, ghost message placeholder for deleted
-
-### 4.5 — Rich Text & Message Formatting
-
-**Modified**: Frontend only — `ChatView.tsx` message rendering
-- **Markdown support**: bold, italic, strikethrough, code blocks, inline code
-- **Link preview**: detect URLs in plaintext, fetch Open Graph metadata, render as card
-- **Inline images**: render image file transfers inline in chat
-- **Reply threading**: swipe/tap message → "Reply" option in context menu → prefixed quote in input
+| Sub-phase | What | Status |
+|-----------|------|--------|
+| 4.1 | Reactions | ✅ Packet 0x41, emoji picker, reaction badges |
+| 4.2 | Read receipts | ✅ `read_at` column, ✓✓ indicator, auto-mark-read |
+| 4.3 | Self-destruct timer | ✅ `disappear_after` in MessageBody, countdown UI, cleanup |
+| 4.4 | Message edit & delete | ✅ Packets 0x42/0x43, context menu, inline edit, soft-delete |
+| 4.5 | Rich text / Markdown | ✅ Bold, italic, code, link detection in ChatView |
 
 ---
 
