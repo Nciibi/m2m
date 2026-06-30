@@ -744,6 +744,7 @@ mod protocol_tests {
             id: "msg-001".to_string(),
             content: "Hello, world! 🔒".to_string(),
             disappear_after: None,
+            timestamp: 1719000000,
         };
         let bytes = serialize(&body).unwrap();
         let decoded: MessageBody = deserialize(&bytes).unwrap();
