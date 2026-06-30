@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::crypto::{self, IdentityKeypair};
