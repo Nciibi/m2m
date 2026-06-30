@@ -921,8 +921,7 @@ impl MessageStore {
             ))
         })?;
 
-        let mut result: std::collections::HashMap<String, Vec<(String, String, i64)>> =
-            std::collections::HashMap::new();
+        let mut result: ReactionsMap = ReactionsMap::new();
         for row in rows {
             let (msg_id, reaction, peer, ts) = row?;
             result.entry(msg_id).or_default().push((reaction, peer, ts));
@@ -1095,6 +1094,7 @@ impl TransferStore {
         direction: &str,
         state: &str,
         chunks_total: u32,
+        _completed_at: Option<i64>,
     ) -> Result<(), StorageError> {
         let now = chrono::Utc::now().timestamp();
         self.conn.execute(
