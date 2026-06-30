@@ -556,7 +556,7 @@ impl MessageStore {
         limit: i64,
     ) -> Result<Vec<StoredMessage>, StorageError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, direction, content_encrypted, content_nonce, timestamp
+            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at
              FROM messages WHERE conversation_id = ?1
              ORDER BY timestamp DESC LIMIT ?2",
         )?;
@@ -567,6 +567,7 @@ impl MessageStore {
                 content_encrypted: row.get(2)?,
                 content_nonce: row.get(3)?,
                 timestamp: row.get(4)?,
+                read_at: row.get(5)?,
             })
         })?;
         let mut messages = Vec::new();
