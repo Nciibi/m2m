@@ -15,11 +15,10 @@ use m2m_lib::crypto::{
 
 /// Helper: create a DoubleRatchet in a known state for benchmarking.
 fn make_dr() -> DoubleRatchet {
-    let ik_a = X25519IdentityKeypair::generate();
     let ek_a = EphemeralKeypair::generate();
     let ek_b = EphemeralKeypair::generate();
 
-    // X3DH output using random keys — not a valid X3DH, but produces valid DR state
+    // X3DH output using fixed keys — not a valid X3DH derivation, but produces valid DR state
     let x3dh = X3DHSessionKeys {
         root_key: *b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         chain_key: *b"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
@@ -27,23 +26,47 @@ fn make_dr() -> DoubleRatchet {
     DoubleRatchet::new(x3dh, ek_a, ek_b.public_key_bytes(), true)
 }
 
-/// Helper: create an X25519 keypair for storage encryption benchmarks.
-fn make_storage_key() -> [u8; 32] {
-    let buf = m2m_lib::crypto::random_bytes(32);
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&buf);
-    key
+/// Helper: create a receiver DR from the same starting state.
+fn make_dr_receiver() -> (DoubleRatchet, [u8; 32]) {
+    let ek_a_pub = {
+        let ek_a = EphemeralKeypair::generate();
+        ek_a.public_key_bytes()
+    };
+    let ek_b = EphemeralKeypair::generate();
+    let x3dh = X3DHSessionKeys {
+        root_key: *b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        chain_key: *b"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    };
+    (DoubleRatchet::new(x3dh, ek_b, ek_a_pub, false), ek_a_pub)
+}
+
+/// Inline storage-style encrypt (XChaCha20-Poly1305) so we don't need
+/// private module access to `commands::util`.
+fn storage_encrypt(plaintext: &[u8], key: &[u8; 32], aad: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
+    let nonce = aead::gen_nonce();
+    let key_bytes = aead::Key::from_slice(key).unwrap();
+    let ct = aead::seal(plaintext, Some(aad), &nonce, &key_bytes);
+    (nonce.0.to_vec(), ct)
+}
+
+/// Inline storage-style decrypt.
+fn storage_decrypt(ciphertext: &[u8], nonce: &[u8], key: &[u8; 32], aad: &[u8]) -> Vec<u8> {
+    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
+    let nonce_bytes = aead::Nonce::from_slice(nonce).unwrap();
+    let key_bytes = aead::Key::from_slice(key).unwrap();
+    aead::open(ciphertext, Some(aad), &nonce_bytes, &key_bytes).unwrap()
 }
 
 // ── Benchmarks ─────────────────────────────────────────────────────────
 
 fn bench_dr_encrypt(c: &mut Criterion) {
-    let mut dr = make_dr();
     let plaintext = b"Hello, M2M! This is a benchmark message for measuring DR encrypt latency.";
     let aad = b"encrypted-message\x01";
 
     c.bench_function("dr_encrypt_100B_no_ratchet", |b| {
         b.iter(|| {
+            let mut dr = make_dr();
             let _ = black_box(
                 dr.encrypt(black_box(plaintext), black_box(aad), false),
             );
@@ -52,7 +75,6 @@ fn bench_dr_encrypt(c: &mut Criterion) {
 }
 
 fn bench_dr_encrypt_with_ratchet(c: &mut Criterion) {
-    let mut dr = make_dr();
     let plaintext = b"Hello, M2M! This is a benchmark message for measuring DR encrypt latency.";
     let aad = b"encrypted-message\x01";
 
@@ -68,26 +90,18 @@ fn bench_dr_encrypt_with_ratchet(c: &mut Criterion) {
 
 fn bench_dr_decrypt(c: &mut Criterion) {
     let mut dr_sender = make_dr();
-    let mut dr_receiver = {
-        let ek_b = EphemeralKeypair::generate();
-        let x3dh = X3DHSessionKeys {
-            root_key: *b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            chain_key: *b"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-        };
-        // The receiver's DR is the responder: its DH keypair is ek_b, peer's is ek_a's pub
-        let ek_a_pub = EphemeralKeypair::generate().public_key_bytes();
-        DoubleRatchet::new(x3dh, ek_b, ek_a_pub, false)
-    };
-    let plaintext = b"Hello, M2M! This is a benchmark message for measuring DR decrypt latency.";
+    let plaintext = b"Hello, M2M! This is a DR decrypt benchmark message.";
     let aad = b"encrypted-message\x01";
 
-    // Pre-encrypt a message so we can benchmark just the decrypt path
-    let (ratchet_key, msg_num, nonce, ciphertext) = dr_sender.encrypt(plaintext, aad, false).unwrap();
+    // Pre-encrypt a message so we benchmark just the decrypt path
+    let (ratchet_key, msg_num, nonce, ciphertext) =
+        dr_sender.encrypt(plaintext, aad, false).unwrap();
 
     c.bench_function("dr_decrypt_100B_no_ratchet", |b| {
         b.iter(|| {
+            let (mut dr, _) = make_dr_receiver();
             let _ = black_box(
-                dr_receiver.decrypt(
+                dr.decrypt(
                     black_box(&ciphertext),
                     black_box(&nonce),
                     black_box(aad),
@@ -99,51 +113,59 @@ fn bench_dr_decrypt(c: &mut Criterion) {
     });
 }
 
+fn bench_dr_roundtrip(c: &mut Criterion) {
+    let plaintext = b"Hello, M2M! DR roundtrip benchmark.";
+    let aad = b"encrypted-message\x01";
+
+    c.bench_function("dr_encrypt_decrypt_roundtrip", |b| {
+        b.iter(|| {
+            let mut sender = make_dr();
+            let (mut receiver, _) = make_dr_receiver();
+            let (rk, mn, nonce, ct) = sender.encrypt(black_box(plaintext), black_box(aad), false).unwrap();
+            let decrypted = receiver.decrypt(
+                black_box(&ct), black_box(&nonce), black_box(aad),
+                black_box(mn), black_box(rk.as_ref()),
+            ).unwrap();
+            black_box(decrypted);
+        })
+    });
+}
+
 fn bench_storage_encrypt(c: &mut Criterion) {
-    let key_bytes = make_storage_key();
-    let key = m2m_lib::secure_key::StorageKey::from_bytes_for_test(&key_bytes);
-    let plaintext = b"Hello, M2M! This is a benchmark message for storage encryption.";
+    let key = m2m_lib::crypto::random_bytes(32);
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(&key);
+    let plaintext = b"Hello, M2M! This is a storage encryption benchmark message.";
     let aad = b"msg_store_v1";
 
     c.bench_function("storage_encrypt_100B", |b| {
         b.iter(|| {
-            let _ = black_box(
-                m2m_lib::commands::util::crypto_encrypt_storage(
-                    black_box(plaintext),
-                    black_box(&key),
-                    black_box(aad),
-                ),
-            );
+            let _ = black_box(storage_encrypt(black_box(plaintext), black_box(&key_arr), black_box(aad)));
         })
     });
 }
 
 fn bench_storage_decrypt(c: &mut Criterion) {
-    let key_bytes = make_storage_key();
-    let key = m2m_lib::secure_key::StorageKey::from_bytes_for_test(&key_bytes);
-    let plaintext = b"Hello, M2M! This is a benchmark message for storage decryption.";
+    let key = m2m_lib::crypto::random_bytes(32);
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(&key);
+    let plaintext = b"Hello, M2M! This is a storage decryption benchmark message.";
     let aad = b"msg_store_v1";
 
-    let (nonce, ciphertext) =
-        m2m_lib::commands::util::crypto_encrypt_storage(plaintext, &key, aad).unwrap();
+    let (nonce, ciphertext) = storage_encrypt(plaintext, &key_arr, aad);
 
     c.bench_function("storage_decrypt_100B", |b| {
         b.iter(|| {
-            let _ = black_box(
-                m2m_lib::commands::util::crypto_decrypt_storage(
-                    black_box(&ciphertext),
-                    black_box(&nonce),
-                    black_box(&key),
-                    black_box(aad),
-                ),
-            );
+            let _ = black_box(storage_decrypt(
+                black_box(&ciphertext), black_box(&nonce), black_box(&key_arr), black_box(aad),
+            ));
         })
     });
 }
 
 fn bench_pad_message(c: &mut Criterion) {
     let small = b"hi";
-    let medium = b"Hello, M2M! How are you today? This is a longer message for variable padding.";
+    let medium = b"Hello, M2M! How are you today? This is a longer message.";
     let large = &b"A".repeat(5000);
 
     c.bench_function("pad_message_small_2B", |b| {
@@ -166,30 +188,28 @@ fn bench_pad_message(c: &mut Criterion) {
 }
 
 fn bench_unpad_message(c: &mut Criterion) {
-    let small = pad_message_variable(b"hi");
-    let medium = pad_message_variable(b"Hello, M2M! How are you today?");
-    let large = pad_message_variable(&b"A".repeat(5000));
+    let small_padded = pad_message_variable(b"hi");
+    let medium_padded = pad_message_variable(b"Hello, M2M! How are you today?");
+    let large_padded = pad_message_variable(&b"A".repeat(5000));
 
     c.bench_function("unpad_message_small", |b| {
         b.iter(|| {
-            let _ = black_box(unpad_message_variable(black_box(&small)));
+            let _ = black_box(unpad_message_variable(black_box(&small_padded)));
         })
     });
 
     c.bench_function("unpad_message_medium", |b| {
         b.iter(|| {
-            let _ = black_box(unpad_message_variable(black_box(&medium)));
+            let _ = black_box(unpad_message_variable(black_box(&medium_padded)));
         })
     });
 
     c.bench_function("unpad_message_large", |b| {
         b.iter(|| {
-            let _ = black_box(unpad_message_variable(black_box(&large)));
+            let _ = black_box(unpad_message_variable(black_box(&large_padded)));
         })
     });
 }
-
-// ── Key generation benchmarks ──
 
 fn bench_keypair_generation(c: &mut Criterion) {
     c.bench_function("generate_x25519_keypair", |b| {
@@ -234,24 +254,15 @@ fn bench_x3dh_respond(c: &mut Criterion) {
     let spk_b = EphemeralKeypair::generate();
     let opk_b = EphemeralKeypair::generate();
 
-    let x3dh = m2m_lib::crypto::x3dh_initiate(
-        &ik_a,
-        &ek_a,
-        &ik_b.public_key_bytes(),
-        &spk_b.public_key_bytes(),
-        Some(&opk_b.public_key_bytes()),
-    )
-    .unwrap();
-
     c.bench_function("x3dh_respond", |b| {
         b.iter(|| {
             let _ = black_box(
                 m2m_lib::crypto::x3dh_respond(
                     black_box(&ik_b),
                     black_box(&spk_b),
-                    black_box(&ik_a.public_key_bytes()),
+                    black_box(Some(&opk_b)),
                     black_box(&ek_a.public_key_bytes()),
-                    black_box(Some(&opk_b.secret_key_bytes())),
+                    black_box(&ik_a.public_key_bytes()),
                 ),
             );
         })
@@ -265,6 +276,7 @@ criterion_group! {
         bench_dr_encrypt,
         bench_dr_encrypt_with_ratchet,
         bench_dr_decrypt,
+        bench_dr_roundtrip,
         bench_storage_encrypt,
         bench_storage_decrypt,
         bench_pad_message,
