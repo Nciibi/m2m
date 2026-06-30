@@ -374,6 +374,7 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
     Ok(peers)
 }
 
+#[expect(dead_code, reason = "Reserved for DHT-based peer discovery flow")]
 /// Look up a peer by their public key hash.
 ///
 /// Queries the configured bootstrap nodes and returns the first valid response.
@@ -625,4 +626,7 @@ mod dht_tests {
         let original = b"m2m-dht-test-payload";
         let msg = build_dht_message(DHT_ANNOUNCE, original);
         let (typ, parsed) = parse_dht_message(&msg).unwrap();
-        assert_eq!
+        assert_eq!(typ, DHT_ANNOUNCE);
+        assert_eq!(parsed, original);
+    }
+}
