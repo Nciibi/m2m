@@ -34,6 +34,7 @@
 ///
 /// Peers behind symmetric NATs act as "client-only" nodes (query and
 /// announce only, don't serve routing table entries).
+#![allow(dead_code)]
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
