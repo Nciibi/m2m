@@ -303,7 +303,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       addToast("Delete failed: " + e, "error");
     }
-  }, [connection?.peer_key_hex, app]);
+  }, [connection?.peer_key_hex, addToast]);
 
   // ─── Invite validation effect ───
   useEffect(() => {
