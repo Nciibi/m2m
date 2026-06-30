@@ -859,6 +859,8 @@ pub fn spawn_receive_loop(
                                             content: content.clone(),
                                             direction: "received".to_string(),
                                             timestamp: now,
+                                            read_at: None,
+                                            reactions: std::collections::HashMap::new(),
                                         },
                                     });
                                 }
