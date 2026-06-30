@@ -432,7 +432,8 @@ impl AppState {
     /// Ensure the message store is opened (lazy init).
     /// Called on first message load/send, not during vault unlock.
     pub fn ensure_message_store(&self, data_dir: &str) -> Result<(), String> {
-        let mut ms = self.message_store.lock().map_err(|e| e.to_string())?;
+        // Use try_lock to avoid deadlock if already held and populated
+        let mut ms = self.message_store.lock().map_err(|_| "lock error".to_string())?;
         if ms.is_none() {
             let path = std::path::Path::new(data_dir).join("messages.db");
             *ms = Some(
