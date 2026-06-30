@@ -45,7 +45,8 @@ pub struct ReconnectInfo {
 /// Compute exponential backoff delay for a given attempt.
 /// Attempt 0 → 1s, 1 → 2s, 2 → 4s, ..., capped at MAX_BACKOFF_SECS.
 pub fn compute_backoff(attempt: u32) -> Duration {
-    let secs = INITIAL_BACKOFF_SECS * 2u64.pow(attempt);
+    let multiplier = 2u64.saturating_pow(attempt);
+    let secs = INITIAL_BACKOFF_SECS.saturating_mul(multiplier);
     Duration::from_secs(secs.min(MAX_BACKOFF_SECS))
 }
 
