@@ -64,6 +64,7 @@ const LAN_DISCOVERY_VERSION: u8 = 0x01;
 #[derive(Debug, Clone)]
 pub struct LanPeer {
     /// Ephemeral session token (rotates hourly, NOT a permanent key).
+    #[expect(dead_code, reason = "Used in tests only — preserved for serialization")]
     pub session_token: [u8; 32],
     /// Hex of the session token (for display/lookup).
     pub token_hex: String,
@@ -89,11 +90,6 @@ impl LanDiscoveryState {
         }
     }
 
-    /// Check whether LAN discovery is enabled.
-    pub fn enabled(&self) -> bool {
-        self.enabled
-    }
-
     /// Remove peers that haven't announced within the expiry window.
     pub fn expire_stale_peers(&mut self) {
         let now = now_unix_secs();
@@ -109,10 +105,6 @@ pub enum LanDiscoveryError {
     Io(#[from] std::io::Error),
     #[error("crypto error: {0}")]
     Crypto(#[from] crate::crypto::CryptoError),
-    #[error("invalid packet: {0}")]
-    InvalidPacket(String),
-    #[error("LAN discovery not enabled")]
-    NotEnabled,
 }
 
 /// Build a LAN discovery announcement packet using an ephemeral session token.
@@ -334,15 +326,6 @@ pub async fn start(
     });
 
     Ok(())
-}
-
-/// Get the list of currently-discovered LAN peers.
-pub async fn get_peers(
-    lan_state: &RwLock<LanDiscoveryState>,
-) -> Vec<LanPeer> {
-    let mut state = lan_state.write().await;
-    state.expire_stale_peers();
-    state.peers.values().cloned().collect()
 }
 
 fn now_unix_secs() -> u64 {
