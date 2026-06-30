@@ -395,6 +395,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }));
     });
 
+    const unlistenEdit = listen<any>("m2m://edit", (event) => {
+      const { message_id, new_content, edited_at, peer_key_hex: _peer } = event.payload;
+      setMessages((prev) => prev.map((m) =>
+        m.id === message_id
+          ? { ...m, content: new_content, edited_at }
+          : m
+      ));
+    });
+
+    const unlistenDelete = listen<any>("m2m://delete", (event) => {
+      const { message_id } = event.payload;
+      setMessages((prev) => prev.map((m) =>
+        m.id === message_id
+          ? { ...m, deleted: true, content: "[deleted]" }
+          : m
+      ));
+    });
+
     return () => {
       unlistenMsg.then((f) => f());
       unlistenConn.then((f) => f());
@@ -402,6 +420,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unlistenFileComp.then((f) => f());
       unlistenConvMeta.then((f) => f());
       unlistenReaction.then((f) => f());
+      unlistenEdit.then((f) => f());
+      unlistenDelete.then((f) => f());
     };
   }, [setView, notifPermission]);
 
