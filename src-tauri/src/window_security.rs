@@ -11,7 +11,6 @@
 /// - **Linux**: Best-effort X11 hints; Wayland isolates by default.
 ///
 /// All protection is **OFF by default**. Must be explicitly enabled by user.
-
 use tauri::Manager;
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -39,7 +38,7 @@ fn apply_to_window(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), S
 
     let raw = handle.as_raw();
     let hwnd: isize = match raw {
-        raw_window_handle::RawWindowHandle::Win32(h) => h.hwnd.get() as isize,
+        raw_window_handle::RawWindowHandle::Win32(h) => h.hwnd.get(),
         _ => return Err("unexpected window handle type".into()),
     };
 
