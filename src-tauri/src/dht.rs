@@ -381,7 +381,7 @@ pub async fn lookup_peer(
 
             let (resp_type, resp_body) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
                 .await
-                .map_err(|_| DhtError::Timeout)?
+                .map_err(|_| DhtError::Timeout)??
                 .map_err(|_| DhtError::Timeout)?;
 
             if resp_type != DHT_NODE_RESPONSE {
