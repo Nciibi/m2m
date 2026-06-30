@@ -1,0 +1,17 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   M2M Component Styles - Modular Import
+   Imports all component CSS modules in dependency order.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Core Components */
+@import './button.css';
+@import './input.css';
+@import './card.css';
+@import './badge.css';
+@import './modal.css';
+@import './select.css';
+@import './toast.css';
+@import './spinner.css';
+
+/* View-Specific & Utilities */
+@import './utilities.css';
