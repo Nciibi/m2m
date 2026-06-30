@@ -254,7 +254,7 @@ async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
 
 /// Build an announce body for our identity.
 fn build_announce_body(identity: &IdentityKeypair, listen_addr: SocketAddr) -> Result<Vec<u8>, DhtError> {
-    let peer_id = crate::crypto::fingerprint_sha256(&identity.public_key_bytes());
+    let peer_id = sodiumoxide::crypto::hash::sha256::hash(&identity.public_key_bytes()).0;
     let mut body = Vec::with_capacity(32 + 32 + 4 + 2 + 64);
     body.extend_from_slice(&peer_id);
     body.extend_from_slice(&identity.public_key_bytes());
