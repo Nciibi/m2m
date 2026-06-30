@@ -206,6 +206,57 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loadConversations();
   }, [loadConversations]);
 
+  // ─── Reaction handlers ───
+
+  const handleSendReaction = useCallback(async (messageId: string, reaction: string) => {
+    if (!connection?.peer_key_hex) return;
+    try {
+      await invoke("send_reaction", { peerKeyHex: connection.peer_key_hex, messageId, reaction });
+      // Optimistically update UI
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...m.reactions };
+        const reactors = reactions[reaction] || [];
+        if (!reactors.includes("self")) {
+          reactions[reaction] = [...reactors, "self"];
+        }
+        return { ...m, reactions };
+      }));
+    } catch { /* noop */ }
+  }, [connection?.peer_key_hex]);
+
+  const handleRemoveReaction = useCallback(async (messageId: string, reaction: string) => {
+    if (!connection?.peer_key_hex) return;
+    try {
+      await invoke("remove_reaction", { peerKeyHex: connection.peer_key_hex, messageId, reaction });
+      // Optimistically update UI
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...m.reactions };
+        const reactors = (reactions[reaction] || []).filter((r: string) => r !== "self");
+        if (reactors.length === 0) {
+          delete reactions[reaction];
+        } else {
+          reactions[reaction] = reactors;
+        }
+        return { ...m, reactions };
+      }));
+    } catch { /* noop */ }
+  }, [connection?.peer_key_hex]);
+
+  const handleMarkConversationRead = useCallback(async () => {
+    if (!activeConversationId) return;
+    try {
+      await invoke("mark_messages_read", { conversationId: activeConversationId });
+      setMessages((prev) => prev.map((m) => {
+        if (m.direction === "received" && m.read_at === null) {
+          return { ...m, read_at: Math.floor(Date.now() / 1000) };
+        }
+        return m;
+      }));
+    } catch { /* noop */ }
+  }, [activeConversationId]);
+
   // ─── Invite validation effect ───
   useEffect(() => {
     if (inviteToConnect.length > 30) {
