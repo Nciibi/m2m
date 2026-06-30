@@ -247,7 +247,7 @@ pub async fn start(
                     let packet = &buf[..n];
                     if let Some(peer) = parse_announcement(packet, sender) {
                         let mut state = lan_state_clone.write().await;
-                        let peer_key_hex = hex::encode(peer.identity_pub);
+                        let peer_key_hex = peer.token_hex.clone();
 
                         // Update or insert the peer
                         state.peers.insert(peer_key_hex, peer);
