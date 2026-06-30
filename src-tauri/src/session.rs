@@ -671,28 +671,14 @@ impl Session {
     pub async fn send_file_request_v2<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
-        transfer_id: &str,
-        filename: &str,
-        total_size: u64,
-        total_chunks: u32,
-        file_hash: Vec<u8>,
-        chunk_hashes: Vec<Vec<u8>>,
+        req: &FileTransferRequestData,
     ) -> Result<(), SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
         }
         self.check_expiry()?;
 
-        let req = FileTransferRequestData {
-            transfer_id: transfer_id.to_string(),
-            filename: filename.to_string(),
-            total_size,
-            total_chunks,
-            file_hash,
-            chunk_hashes,
-            file_transfer_version: protocol::PROTOCOL_FILE_TRANSFER_VERSION,
-        };
-        let body_bytes = protocol::serialize(&req)?;
+        let body_bytes = protocol::serialize(req)?;
         self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes).await
     }
 

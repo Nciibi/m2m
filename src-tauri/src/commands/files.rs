@@ -102,14 +102,18 @@ pub async fn send_file(
     let result = {
         let mut conn = conn_arc.lock().await;
         let PeerConnection { session, write_half, .. } = &mut *conn;
-        session.send_file_request_v2(
-            &mut *write_half,
-            &transfer_id,
-            &filename,
+        let req = crate::protocol::FileTransferRequestData {
+            transfer_id: transfer_id.to_string(),
+            filename: filename.to_string(),
             total_size,
             total_chunks,
-            file_hash.to_vec(),
-            wire_chunk_hashes,
+            file_hash: file_hash.to_vec(),
+            chunk_hashes: wire_chunk_hashes,
+            file_transfer_version: crate::protocol::PROTOCOL_FILE_TRANSFER_VERSION,
+        };
+        session.send_file_request_v2(
+            &mut *write_half,
+            &req,
         ).await
     };
 
