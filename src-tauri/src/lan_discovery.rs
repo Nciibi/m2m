@@ -42,14 +42,11 @@ use tokio::sync::RwLock;
 /// Using 239.255.27.3:38553 — a non-standard multicast address in the
 /// administratively-scoped range (239.255.0.0/16) to avoid conflicts
 /// with other LAN services.
-#[expect(dead_code, reason = "Used in start() which is called from commands")]
 const MULTICAST_ADDR: Ipv4Addr = Ipv4Addr::new(239, 255, 27, 3);
 
-#[expect(dead_code, reason = "Used in start() which is called from commands")]
 const MULTICAST_PORT: u16 = 38553;
 
 /// Interval between successive LAN announcements (30 seconds).
-#[expect(dead_code, reason = "Used in start() which is called from commands")]
 const ANNOUNCE_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Time after which a peer is considered offline if no announcement
