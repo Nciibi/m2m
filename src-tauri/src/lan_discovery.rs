@@ -32,7 +32,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::RwLock;
 
-use crate::protocol;
+// Protocol module imported for potential future packet types
 
 /// Multicast group address and port for LAN discovery.
 /// Using 239.255.27.3:38553 — a non-standard multicast address in the
