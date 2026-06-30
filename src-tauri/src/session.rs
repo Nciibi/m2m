@@ -1298,7 +1298,7 @@ mod session_tests {
         let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
         let body = bob.decrypt_message(&frame).unwrap();
         match &body {
-            crate::protocol::MessageBody::Text { id, content } => {
+            crate::protocol::MessageBody::Text { id, content, .. } => {
                 assert_eq!(content, test_text);
                 assert_eq!(id, &msg_id);
             }
