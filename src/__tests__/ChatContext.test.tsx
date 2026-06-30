@@ -114,7 +114,70 @@ describe("ChatContext", () => {
     await user.click(screen.getByText("Set Invite"));
     expect(screen.getByText("Set Invite")).toBeInTheDocument();
   });
+
+  // ─── Reaction tests ───
+
+  it("handleSendReaction calls Tauri invoke with reaction args", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue(undefined);
+
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    await user.click(screen.getByText("Send Reaction"));
+    expect(mockInvoke).toHaveBeenCalledWith("send_reaction", {
+      peerKeyHex: "abc",
+      messageId: "msg-1",
+      reaction: "👍",
+    });
+  });
+
+  it("handleRemoveReaction calls Tauri invoke with remove_reaction", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue(undefined);
+
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    await user.click(screen.getByText("Remove Reaction"));
+    expect(mockInvoke).toHaveBeenCalledWith("remove_reaction", {
+      peerKeyHex: "abc",
+      messageId: "msg-1",
+      reaction: "👍",
+    });
+  });
+
+  it("handleMarkConversationRead calls mark_messages_read", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue(0);
+
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    await user.click(screen.getByText("Mark Read"));
+    expect(mockInvoke).toHaveBeenCalledWith("mark_messages_read", {
+      conversationId: "abc",
+    });
+  });
+
+  it("reaction handlers are no-ops when no connection", async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    await user.click(screen.getByText("Send Reaction"));
+    expect(mockInvoke).not.toHaveBeenCalled();
+  });
 });
- 
- 
- 
