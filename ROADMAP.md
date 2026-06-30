@@ -124,6 +124,38 @@ No `#[allow(dead_code)]` on heartbeat constants.
 
 ---
 
+## ✅ Completed: Phase 4 — Message Features (Reactions, Edit, Delete, Self-Destruct, Markdown)
+
+### 4.1 — Message Reactions
+Emoji reactions on messages with encrypted typed frames (0x41):
+- Backend: `send_reaction`, `remove_reaction` commands, `reactions` table, `m2m://reaction` events
+- Frontend: Emoji picker on hover, reaction badges under messages, toggling on/off
+- Wire format: `MessageReactionData { message_id, reaction (emoji), remove (bool) }`
+
+### 4.2 — Read Receipts
+Track when received messages have been viewed:
+- Backend: `mark_messages_read` command, `read_at` column on messages table
+- Frontend: "✓✓" indicator on read messages, auto-mark-read after 1s delay
+
+### 4.3 — Self-Destruct Timer
+Messages with optional auto-delete countdown:
+- Backend: `disappear_after` field in `MessageBody::Text`, `expires_at` column, `cleanup_expired_messages`, periodic pruner
+- Frontend: Timer selector (5s–24h), 🔥 countdown display, auto-removal when expired
+- Wire format: `Text { id, content, disappear_after: Option<u64> }`
+
+### 4.4 — Message Edit & Delete
+Full edit/delete lifecycle:
+- Packet types 0x42 (MessageEdit) and 0x43 (MessageDelete)
+- Backend: `edit_message`, `delete_message` commands + network handlers + `m2m://edit`/`m2m://delete` events
+- Frontend: Right-click context menu, inline edit mode, "edited" badge, "Message deleted" placeholder
+
+### 4.5 — Rich Text / Markdown
+Message rendering in ChatView:
+- Bold (`**text**` / `__text__`), italic (`*text*` / `_text_`), inline code (`` `code` ``), clickable link detection
+- Content inside backticks is rendered raw (no markdown parsing)
+
+---
+
 ## ✅ Completed: Phase 7 — Docs, Tests & Polish
 
 ### X3DH Bug Fix (2026-06-28)
