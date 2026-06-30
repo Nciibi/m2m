@@ -20,9 +20,11 @@ export default function HubView() {
     handleDeleteConversation, conversations,
   } = useChat();
   const { networkSettings, privateMode, openSettings } = useSettings();
-  const [tab, setTab] = useState<"connect" | "chats">("connect");
+  const [tab, setTab] = useState<"connect" | "chats" | "family">("connect");
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
+  const [family, setFamily] = useState<FamilyMember[]>([]);
+  const [familyLoading, setFamilyLoading] = useState(false);
 
   const handleCopy = () => { copyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
