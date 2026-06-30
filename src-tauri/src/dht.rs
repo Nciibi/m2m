@@ -491,6 +491,7 @@ fn now_unix_secs() -> u64 {
 #[cfg(test)]
 mod dht_tests {
     use super::*;
+    use crate::crypto::IdentityKeypair;
 
     fn init_crypto() {
         let _ = sodiumoxide::init();
