@@ -121,6 +121,7 @@ pub enum PacketType {
     Disconnect = 0x30,
     Error = 0x31,
     ConversationMeta = 0x40,
+    MessageReaction = 0x41,
 }
 
 impl PacketType {
