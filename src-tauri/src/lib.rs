@@ -120,6 +120,11 @@ pub fn run() {
             // Export/Import
             commands::vault::export_identity,
             commands::vault::import_identity,
+            // Reactions
+            commands::chat::send_reaction,
+            commands::chat::remove_reaction,
+            // Read Receipts
+            commands::chat::mark_messages_read,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
