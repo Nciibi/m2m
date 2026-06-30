@@ -33,7 +33,6 @@ const state = {
   discoveryConfig: null as any,
   discoveredPeers: [] as any[],
 };
-};
 
 vi.mock("../context/AppContext", () => ({
   useApp: () => ({
