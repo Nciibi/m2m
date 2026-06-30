@@ -30,6 +30,9 @@ const state = {
   removeToast: vi.fn(),
   addToast: vi.fn(),
   setView: vi.fn(),
+  discoveryConfig: null as any,
+  discoveredPeers: [] as any[],
+};
 };
 
 vi.mock("../context/AppContext", () => ({
@@ -67,6 +70,12 @@ vi.mock("../context/SettingsContext", () => ({
     networkSettings: state.networkSettings,
     privateMode: state.privateMode,
     openSettings: state.openSettings,
+    discoveryConfig: state.discoveryConfig,
+    discoveredPeers: state.discoveredPeers,
+    handleConnectDiscoveredPeer: vi.fn(),
+    handleRefreshDiscovery: vi.fn(),
+    handleLanToggle: vi.fn(),
+    handleDhtToggle: vi.fn(),
   }),
 }));
 
@@ -86,6 +95,8 @@ describe("HubView", () => {
     state.networkSettings = null;
     state.privateMode = false;
     state.toasts = [];
+    state.discoveryConfig = null;
+    state.discoveredPeers = [];
     vi.clearAllMocks();
   });
 
