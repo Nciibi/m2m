@@ -543,7 +543,7 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Store a message with an optional self-destruct timer.
+    /// Store a message with an optional self-destruct timer (idempotent).
     pub fn store_message_with_expiry(
         &self,
         id: &str,
@@ -555,7 +555,7 @@ impl MessageStore {
         expires_at: Option<i64>,
     ) -> Result<(), StorageError> {
         self.conn.execute(
-            "INSERT INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at],
         )?;
         self.conn.execute(
