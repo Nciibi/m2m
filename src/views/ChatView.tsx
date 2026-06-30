@@ -72,7 +72,15 @@ export default function ChatView() {
     e.preventDefault();
     if (!text.trim() || sending) return;
     setSending(true);
-    try { await handleSendMessage(text.trim().slice(0, 64 * 1024)); setText(""); } finally { setSending(false); }
+    try {
+      if (timerSecs > 0) {
+        await handleSendMessageWithTimer(text.trim().slice(0, 64 * 1024), timerSecs);
+      } else {
+        await handleSendMessage(text.trim().slice(0, 64 * 1024));
+      }
+      setText("");
+      setTimerSecs(0);
+    } finally { setSending(false); }
   };
 
   // Close context menu on click outside
