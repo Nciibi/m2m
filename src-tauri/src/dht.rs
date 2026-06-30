@@ -146,6 +146,7 @@ pub struct DhtConfig {
     /// Bootstrap nodes to connect to on startup.
     pub bootstrap_nodes: Vec<BootstrapNode>,
     /// Whether we're behind a symmetric NAT (client-only mode).
+    #[expect(dead_code, reason = "Reserved for DHT client-only mode logic")]
     pub is_symmetric_nat: bool,
 }
 
