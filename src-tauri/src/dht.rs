@@ -363,6 +363,7 @@ pub async fn lookup_peer(
         return Err(DhtError::NotBootstrapped);
     }
 
+    let target_id = *peer_id; // Copy for the closure
     let body = build_find_node_body(peer_id);
 
     // Query all bootstrap nodes in parallel, take first success
@@ -378,20 +379,19 @@ pub async fn lookup_peer(
 
             dht_send(&mut stream, DHT_FIND_NODE, &body_clone).await?;
 
-            let Ok((resp_type, resp_body)) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
+            let (resp_type, resp_body) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
                 .await
                 .map_err(|_| DhtError::Timeout)?
-                else {
-                    return Err(DhtError::Timeout);
-                };
+                .map_err(|_| DhtError::Timeout)?;
 
             if resp_type != DHT_NODE_RESPONSE {
                 return Err(DhtError::BadResponse("expected NODE_RESPONSE".into()));
             }
 
             let peers = parse_node_response(&resp_body)?;
-            peers.into_iter().find(|p| p.peer_id == *peer_id)
+            peers.into_iter().find(|p| p.peer_id == target_id)
                 .ok_or(DhtError::PeerNotFound)
+        }));
         }));
     }
 
