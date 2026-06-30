@@ -807,65 +807,6 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Load messages by direction (used for flushing pending messages on reconnect).
-    #[cfg(test)]
-    pub fn load_messages_by_direction(
-        &self,
-        conversation_id: &str,
-        direction: &str,
-    ) -> Result<Vec<StoredMessage>, StorageError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at
-             FROM messages WHERE conversation_id = ?1 AND direction = ?2
-             ORDER BY timestamp ASC",
-        )?;
-        let rows = stmt.query_map(params![conversation_id, direction], |row| {
-            Ok(StoredMessage {
-                id: row.get(0)?,
-                direction: row.get(1)?,
-                content_encrypted: row.get(2)?,
-                content_nonce: row.get(3)?,
-                timestamp: row.get(4)?,
-                read_at: row.get(5)?,
-                edited_at: None,
-                deleted: false,
-                expires_at: None,
-            })
-        })?;
-        let mut messages = Vec::new();
-        for row in rows {
-            messages.push(row?);
-        }
-        Ok(messages)
-    }
-
-    /// Update the direction field of a message (e.g., "pending" → "sent" after flush).
-    #[cfg(test)]
-    pub fn update_message_direction(
-        &self,
-        message_id: &str,
-        new_direction: &str,
-    ) -> Result<(), StorageError> {
-        self.conn.execute(
-            "UPDATE messages SET direction = ?1 WHERE id = ?2",
-            params![new_direction, message_id],
-        )?;
-        Ok(())
-    }
-
-    /// Store a message with direction="pending" (queued for delivery when peer comes online).
-    #[cfg(test)]
-    pub fn store_pending_message(
-        &self,
-        id: &str,
-        conversation_id: &str,
-        content_encrypted: &[u8],
-        content_nonce: &[u8],
-        timestamp: i64,
-    ) -> Result<(), StorageError> {
-        self.store_message(id, conversation_id, "pending", content_encrypted, content_nonce, timestamp)
-    }
-
     // ─── Reactions ─────────────────────────────────────
 
     /// Store or remove a reaction on a message.
