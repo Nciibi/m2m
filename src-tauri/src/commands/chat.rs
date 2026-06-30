@@ -70,12 +70,7 @@ pub async fn send_message(
         }
     }
 
-    Ok(ChatMessage {
-        id: msg_id,
-        content,
-        direction: "sent".to_string(),
-        timestamp: now,
-    })
+    Ok(ChatMessage::new(msg_id, content, "sent".to_string(), now))
 }
 
 /// Load message history for a peer.
