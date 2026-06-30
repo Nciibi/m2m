@@ -1318,20 +1318,22 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(edit) = crate::protocol::deserialize::<crate::protocol::MessageEditData>(&plaintext) {
-                                    // Update local storage
-                                    let ms = state.message_store.lock().await;
-                                    if let Some(ref store) = *ms {
+                                    // Encrypt new content first (no lock held yet)
+                                    let encrypted_result = {
                                         let sk = state.storage_key.read().await;
-                                        if let Some(key) = sk.as_ref() {
-                                            if let Ok((nonce, encrypted)) = util::crypto_encrypt_storage(
+                                        sk.as_ref().and_then(|key| {
+                                            util::crypto_encrypt_storage(
                                                 edit.new_content.as_bytes(), key, util::AAD_MSG_STORE,
-                                            ) {
-                                                drop(sk);
-                                                let _ = store.edit_message(&edit.message_id, &encrypted, &nonce);
-                                            }
+                                            ).ok()
+                                        })
+                                    };
+                                    // Then update storage (separate lock scope)
+                                    if let Some((nonce, encrypted)) = encrypted_result {
+                                        let ms = state.message_store.lock().await;
+                                        if let Some(ref store) = *ms {
+                                            let _ = store.edit_message(&edit.message_id, &encrypted, &nonce);
                                         }
                                     }
-                                    drop(ms);
 
                                     // Notify frontend
                                     let _ = app_handle.emit("m2m://edit", serde_json::json!({
