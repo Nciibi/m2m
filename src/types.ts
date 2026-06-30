@@ -90,6 +90,12 @@ export interface FamilyMember {
   last_address: string | null;
 }
 
+export interface SecurityConfig {
+  screen_capture_protection: boolean;
+  clipboard_clear_secs: number;
+  idle_lock_secs: number;
+}
+
 export interface NatTypeInfo {
   nat_type: string;
   stun_servers: Array<{
