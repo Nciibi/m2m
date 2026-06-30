@@ -38,19 +38,10 @@ export default function HubView() {
   }, []);
 
   const handleFamilyConnect = useCallback(async (peerKeyHex: string) => {
+    // connect emits m2m://connection event which ChatContext picks up
     const info = await invoke<any>("connect_family_member", { peerKeyHex });
     setView("chat");
-    setConnection({
-      state: "established",
-      peer_fingerprint: info.peer_fingerprint,
-      peer_verified: true,
-      peer_key_hex: info.peer_key_hex,
-    });
-    setActiveConversationId(info.peer_key_hex || null);
-    try {
-      setMessages(await invoke<any[]>("load_messages", { peerKeyHex: info.peer_key_hex }));
-    } catch { /* noop */ }
-  }, [setView, setConnection, setActiveConversationId, setMessages]);
+  }, [setView]);
 
   // Load family on mount and when switching to family tab
   useEffect(() => {
