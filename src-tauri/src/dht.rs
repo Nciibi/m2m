@@ -124,13 +124,15 @@ pub struct DhtPeer {
 #[derive(Debug, Clone)]
 pub struct BootstrapNode {
     pub address: SocketAddr,
-    pub public_key: Option<[u8; 32]>,
 }
 
 /// DHT configuration.
+///
+/// **Default is OFF** — DHT must be explicitly enabled by the user.
 #[derive(Debug, Clone)]
 pub struct DhtConfig {
-    /// Whether DHT discovery is enabled.
+    /// Whether DHT discovery is enabled. **OFF by default.**
+    /// Enabling this makes your IP visible to DHT nodes.
     pub enabled: bool,
     /// Bootstrap nodes to connect to on startup.
     pub bootstrap_nodes: Vec<BootstrapNode>,
@@ -141,7 +143,7 @@ pub struct DhtConfig {
 impl Default for DhtConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: false,  // ⚠️ OFF by default — privacy first
             bootstrap_nodes: Vec::new(),
             is_symmetric_nat: false,
         }
