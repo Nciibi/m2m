@@ -166,7 +166,6 @@ function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
       <div className="modal-form">
         <label>
           Peer Key
-          <datalist id="peer-list">
           <Input
             placeholder="Peer public key hex"
             value={peerKeyHex}
