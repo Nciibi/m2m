@@ -766,6 +766,9 @@ impl MessageStore {
                 content_nonce: row.get(3)?,
                 timestamp: row.get(4)?,
                 read_at: row.get(5)?,
+                edited_at: None,
+                deleted: false,
+                expires_at: None,
             })
         })?;
         let mut messages = Vec::new();
