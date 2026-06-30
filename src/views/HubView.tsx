@@ -85,6 +85,12 @@ export default function HubView() {
           </span>
           M2M
         </h1>
+        <div className="app-header__title">
+          <span className="app-header__icon-bg app-header__icon-bg--accent">
+            <img src="logo.png" alt="M2M" width="20" height="20" style={{ borderRadius: '4px' }} />
+          </span>
+          M2M
+        </h1>
         <div className="app-header__actions">
           <Badge variant={connectionBadge.variant} compact>
             {connectionBadge.dot} {connectionBadge.label}
