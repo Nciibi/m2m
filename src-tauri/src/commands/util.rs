@@ -378,3 +378,72 @@ pub fn create_temp_file(size: u64) -> std::io::Result<(std::fs::File, std::path:
 
     Ok((file, path))
 }
+
+#[cfg(test)]
+mod entropy_tests {
+    use super::*;
+
+    #[test]
+    fn test_diceware_phrase_high_entropy() {
+        // Five random diceware words should score 60+ bits
+        let e = estimate_passphrase_entropy("correct-horse-battery-staple-clock");
+        assert!(e >= 40.0, "diceware phrase should score >= 40 bits, got {e}");
+    }
+
+    #[test]
+    fn test_short_passphrase_low_entropy() {
+        let e = estimate_passphrase_entropy("abc123");
+        assert!(e < 30.0, "short simple passphrase should score < 30 bits, got {e}");
+    }
+
+    #[test]
+    fn test_single_word_low_entropy() {
+        let e = estimate_passphrase_entropy("password");
+        assert!(e < 25.0, "single common word should score < 25 bits, got {e}");
+    }
+
+    #[test]
+    fn test_sequential_penalty() {
+        let e = estimate_passphrase_entropy("abcdefgh12345678");
+        // Sequential characters should be penalized
+        let base_entropy = estimate_passphrase_entropy("xzhfmkqg94736281"); // random-looking
+        assert!(e < base_entropy, "sequential passphrase {e} should be lower than random {base_entropy}");
+    }
+
+    #[test]
+    fn test_repeating_penalty() {
+        let e = estimate_passphrase_entropy("aaaabbbbcccc");
+        assert!(e < 30.0, "repeating pattern should score < 30 bits, got {e}");
+    }
+
+    #[test]
+    fn test_keyboard_penalty() {
+        let e = estimate_passphrase_entropy("qwerty1234");
+        assert!(e < 28.0, "keyboard pattern should score < 28 bits, got {e}");
+    }
+
+    #[test]
+    fn test_unicode_mixed_high_entropy() {
+        let e = estimate_passphrase_entropy("κρυπτό-密码-パスワード-123!");
+        assert!(e >= 40.0, "unicode passphrase should score >= 40 bits, got {e}");
+    }
+
+    #[test]
+    fn test_empty_passphrase() {
+        let e = estimate_passphrase_entropy("");
+        assert_eq!(e, 0.0);
+    }
+
+    #[test]
+    fn test_minimum_floor_applied() {
+        // Even very weak passphrases should have a minimum floor
+        let e = estimate_passphrase_entropy("a");
+        assert!(e > 0.0, "single char should have floor > 0");
+    }
+
+    #[test]
+    fn test_strong_passphrase_high_score() {
+        let e = estimate_passphrase_entropy("kX9#mP2$vL8@nR5&jW3!");
+        assert!(e >= 60.0, "strong passphrase should score >= 60 bits, got {e}");
+    }
+}
