@@ -221,6 +221,187 @@ impl KeyStore {
         Ok(())
     }
 
+    // ─── Family (Persistent Contact List) ───────────────────────
+
+    /// A family member — a peer the user has explicitly saved as a contact.
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+    pub struct FamilyMember {
+        /// Current public key of this peer (hex-encoded for frontend).
+        pub public_key_hex: String,
+        /// Your label for them.
+        pub nickname: String,
+        /// When they were added (unix seconds).
+        pub added_at: i64,
+        /// When they expire (null = forever).
+        pub expires_at: Option<i64>,
+        /// Last known address (best-effort, may be stale).
+        pub last_address: Option<String>,
+    }
+
+    /// Add a peer to the family list. Fails if already present.
+    pub fn add_family_member(
+        &self,
+        public_key: &[u8; 32],
+        nickname: &str,
+        expires_in_days: Option<u64>,
+        last_address: Option<&str>,
+    ) -> Result<FamilyMember, StorageError> {
+        use rusqlite::Error::SqliteFailure;
+
+        let now = chrono::Utc::now().timestamp();
+        let expires_at = expires_in_days.map(|days| now + (days as i64) * 86400);
+
+        let result = self.conn.execute(
+            "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![public_key.as_slice(), nickname, now, expires_at, last_address],
+        );
+
+        match result {
+            Ok(_) => Ok(FamilyMember {
+                public_key_hex: hex::encode(public_key),
+                nickname: nickname.to_string(),
+                added_at: now,
+                expires_at,
+                last_address: last_address.map(|s| s.to_string()),
+            }),
+            Err(SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation => {
+                Err(StorageError::Database(rusqlite::Error::SqliteFailure(e, Some("peer already in family".to_string()))))
+            }
+            Err(e) => Err(StorageError::Database(e)),
+        }
+    }
+
+    /// List all non-expired family members.
+    pub fn list_family(&self) -> Result<Vec<FamilyMember>, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        let mut stmt = self.conn.prepare(
+            "SELECT public_key, nickname, added_at, expires_at, last_address
+             FROM family WHERE expires_at IS NULL OR expires_at > ?1
+             ORDER BY nickname ASC",
+        )?;
+        let rows = stmt.query_map(params![now], |row| {
+            let pk_bytes: Vec<u8> = row.get(0)?;
+            let mut pk_arr = [0u8; 32];
+            if pk_bytes.len() == 32 {
+                pk_arr.copy_from_slice(&pk_bytes);
+            }
+            Ok(FamilyMember {
+                public_key_hex: hex::encode(&pk_bytes),
+                nickname: row.get(1)?,
+                added_at: row.get(2)?,
+                expires_at: row.get(3)?,
+                last_address: row.get(4)?,
+            })
+        })?;
+        let mut members = Vec::new();
+        for row in rows {
+            members.push(row?);
+        }
+        Ok(members)
+    }
+
+    /// Remove a peer from the family list.
+    pub fn remove_family_member(&self, public_key: &[u8; 32]) -> Result<(), StorageError> {
+        self.conn.execute(
+            "DELETE FROM family WHERE public_key = ?1",
+            params![public_key.as_slice()],
+        )?;
+        Ok(())
+    }
+
+    /// Update nickname for a family member.
+    pub fn set_family_nickname(
+        &self,
+        public_key: &[u8; 32],
+        nickname: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE family SET nickname = ?1 WHERE public_key = ?2",
+            params![nickname, public_key.as_slice()],
+        )?;
+        Ok(())
+    }
+
+    /// Replace a family member's public key, address, and fingerprint.
+    /// Nickname and expiry stay unchanged.
+    pub fn update_family_member(
+        &self,
+        old_public_key: &[u8; 32],
+        new_public_key: &[u8; 32],
+        new_address: Option<&str>,
+    ) -> Result<FamilyMember, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+
+        // Update the existing row's key and address
+        self.conn.execute(
+            "UPDATE family SET public_key = ?1, last_address = ?2 WHERE public_key = ?3",
+            params![new_public_key.as_slice(), new_address, old_public_key.as_slice()],
+        )?;
+
+        // Read back the updated row
+        let mut stmt = self.conn.prepare(
+            "SELECT public_key, nickname, added_at, expires_at, last_address
+             FROM family WHERE public_key = ?1",
+        )?;
+        let result = stmt.query_row(params![new_public_key.as_slice()], |row| {
+            let pk_bytes: Vec<u8> = row.get(0)?;
+            Ok(FamilyMember {
+                public_key_hex: hex::encode(&pk_bytes),
+                nickname: row.get(1)?,
+                added_at: row.get(2)?,
+                expires_at: row.get(3)?,
+                last_address: row.get(4)?,
+            })
+        });
+        match result {
+            Ok(m) => Ok(m),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(StorageError::Database(rusqlite::Error::QueryReturnedNoRows))
+            }
+            Err(e) => Err(StorageError::Database(e)),
+        }
+    }
+
+    /// Check if a public key is in the family list.
+    pub fn is_family_member(&self, public_key: &[u8; 32]) -> Result<bool, StorageError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM family WHERE public_key = ?1",
+            params![public_key.as_slice()],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Get all family members including expired ones (for export).
+    pub fn list_family_all(&self) -> Result<Vec<FamilyMember>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT public_key, nickname, added_at, expires_at, last_address
+             FROM family ORDER BY nickname ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let pk_bytes: Vec<u8> = row.get(0)?;
+            Ok(FamilyMember {
+                public_key_hex: hex::encode(&pk_bytes),
+                nickname: row.get(1)?,
+                added_at: row.get(2)?,
+                expires_at: row.get(3)?,
+                last_address: row.get(4)?,
+            })
+        })?;
+        let mut members = Vec::new();
+        for row in rows {
+            members.push(row?);
+        }
+        Ok(members)
+    }
+
+    /// Clear all family members (used during import).
+    pub fn clear_family(&self) -> Result<(), StorageError> {
+        self.conn.execute("DELETE FROM family", [])?;
+        Ok(())
+    }
+
 }
 
 /// The message store: holds chat history (optional).
