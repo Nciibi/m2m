@@ -11,6 +11,8 @@ import type {
 interface ChatContextValue {
   connection: ConnectionInfo | null;
   isConnecting: boolean;
+  reconnecting: boolean;
+  reconnectAttempt: number;
   messages: ChatMessage[];
   fileRequests: FileRequest[];
   conversations: ConversationEntry[];
@@ -30,6 +32,7 @@ interface ChatContextValue {
   handleSendMessage: (content: string) => Promise<void>;
   handleVerify: () => Promise<void>;
   handleDisconnect: () => Promise<void>;
+  handleReconnect: () => Promise<void>;
   handleSendFile: () => Promise<void>;
   handleExportConversation: () => Promise<void>;
   handleSetRetention: (policy: string, durationSecs: number | null) => Promise<void>;
