@@ -419,3 +419,195 @@ pub async fn mark_messages_read(
     store.mark_messages_read(&conversation_id)
         .map_err(|e| format!("mark read failed: {e}"))
 }
+
+/// Send a message with an optional self-destruct timer.
+/// `disappear_after` = seconds until the message auto-deletes (0 = never).
+#[tauri::command]
+pub async fn send_message_with_timer(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    content: String,
+    disappear_after: Option<u64>,
+) -> Result<ChatMessage, String> {
+    if content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
+        return Err(format!(
+            "message too large: {} bytes exceeds {} byte limit",
+            content.len(),
+            protocol::MAX_TEXT_MESSAGE_SIZE
+        ));
+    }
+
+    let conns = state.connections.read().await;
+    let conn_arc = conns
+        .get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
+
+    let mut conn = conn_arc.lock().await;
+    let msg_id = {
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session
+            .send_text_with_timer(write_half, &content, disappear_after)
+            .await
+            .map_err(|e| format!("send failed: {e}"))?
+    };
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let expires_at = disappear_after.map(|secs| (now + secs) as i64);
+
+    // Persist to local storage
+    let history = *state.history_enabled.read().await;
+    if history {
+        let sk = state.storage_key.read().await;
+        let ms = state.message_store.lock().await;
+        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            match util::crypto_encrypt_storage(content.as_bytes(), key, util::AAD_MSG_STORE) {
+                Ok((nonce, encrypted)) => {
+                    if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
+                        let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
+                        let _ = store.store_message_with_expiry(
+                            &msg_id, &peer_key_hex, "sent",
+                            &encrypted, &nonce, now as i64, expires_at,
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to encrypt message for storage");
+                }
+            }
+        }
+    }
+
+    Ok(ChatMessage {
+        id: msg_id,
+        content,
+        direction: "sent".to_string(),
+        timestamp: now,
+        read_at: None,
+        edited_at: None,
+        deleted: false,
+        expires_at,
+        reactions: std::collections::HashMap::new(),
+    })
+}
+
+/// Edit a previously-sent message.
+/// Updates the message content both locally and for the peer.
+#[tauri::command]
+pub async fn edit_message(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    message_id: String,
+    new_content: String,
+) -> Result<ChatMessage, String> {
+    if new_content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
+        return Err("edited message too large".to_string());
+    }
+
+    let conns = state.connections.read().await;
+    let conn_arc = conns
+        .get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // Send edit packet to peer
+    {
+        let mut conn = conn_arc.lock().await;
+        let edit_data = crate::protocol::MessageEditData {
+            message_id: message_id.clone(),
+            new_content: new_content.clone(),
+            edited_at: now,
+        };
+        let serialized = protocol::serialize(&edit_data)
+            .map_err(|e| format!("serialization error: {e}"))?;
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session.send_encrypted_typed(write_half, protocol::PacketType::MessageEdit, &serialized)
+            .await
+            .map_err(|e| format!("send edit failed: {e}"))?;
+    }
+
+    // Update local storage
+    let history = *state.history_enabled.read().await;
+    if history {
+        let sk = state.storage_key.read().await;
+        let ms = state.message_store.lock().await;
+        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            match util::crypto_encrypt_storage(new_content.as_bytes(), key, util::AAD_MSG_STORE) {
+                Ok((nonce, encrypted)) => {
+                    let _ = store.edit_message(&message_id, &encrypted, &nonce);
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to encrypt edit for storage");
+                }
+            }
+        }
+    }
+
+    Ok(ChatMessage {
+        id: message_id,
+        content: new_content,
+        direction: "sent".to_string(),
+        timestamp: now,
+        read_at: None,
+        edited_at: Some(now as i64),
+        deleted: false,
+        expires_at: None,
+        reactions: std::collections::HashMap::new(),
+    })
+}
+
+/// Delete a message (soft-delete — shows placeholder to both sides).
+#[tauri::command]
+pub async fn delete_message(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    message_id: String,
+) -> Result<(), String> {
+    let conns = state.connections.read().await;
+    let conn_arc = conns
+        .get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
+
+    // Send delete packet to peer
+    {
+        let mut conn = conn_arc.lock().await;
+        let delete_data = crate::protocol::MessageDeleteData {
+            message_id: message_id.clone(),
+        };
+        let serialized = protocol::serialize(&delete_data)
+            .map_err(|e| format!("serialization error: {e}"))?;
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session.send_encrypted_typed(write_half, protocol::PacketType::MessageDelete, &serialized)
+            .await
+            .map_err(|e| format!("send delete failed: {e}"))?;
+    }
+
+    // Update local storage
+    let ms = state.message_store.lock().await;
+    if let Some(ref store) = *ms {
+        let _ = store.delete_message(&message_id);
+    }
+
+    Ok(())
+}
+
+/// Clean up expired (self-destructed) messages from the database.
+#[tauri::command]
+pub async fn cleanup_expired_messages(
+    state: State<'_, Arc<AppState>>,
+) -> Result<u32, String> {
+    let ms = state.message_store.lock().await;
+    let store = ms.as_ref().ok_or("message store not initialised")?;
+    store.delete_expired_messages()
+        .map_err(|e| format!("cleanup failed: {e}"))
+}
