@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
   ShieldIcon, GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
-  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot,
+  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
+import FamilyTab from "../components/FamilyTab";
+import type { FamilyMember } from "../types";
 
 export default function HubView() {
   const { identity, toasts, removeToast } = useApp();
