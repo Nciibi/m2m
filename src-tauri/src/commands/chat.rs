@@ -50,6 +50,9 @@ pub async fn send_message(
     // Persist message to local storage if history is enabled
     let history = *state.history_enabled.read().await;
     if history {
+        // Lazy init: open message store on first send if not already opened
+        state.ensure_message_store(&state.data_dir).map_err(|e| format!("message store init: {e}"))?;
+
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
