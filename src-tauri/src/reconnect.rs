@@ -1,18 +1,23 @@
-/// M2M — Reconnection Logic
+/// M2M — Reconnection Metadata
 ///
-/// Automatic reconnection on connection loss with exponential backoff.
+/// Stores metadata needed to reconnect to a peer after a connection drop.
+/// The reconnection is **NOT automatic** — it waits for the user to confirm.
+/// This preserves M2M's anti-tracking property: network changes result in
+/// fresh sessions with new ephemeral keys.
 ///
 /// ## Design
 ///
-/// When a TCP connection drops, we save the peer metadata and attempt
-/// to re-establish with exponential backoff (1s, 2s, 4s, 8s, 16s, 30s cap).
-/// Each attempt performs a fresh X3DH handshake (forward secrecy preserved).
-/// On success, pending messages are flushed from the message store.
+/// When a TCP connection drops, we save the peer metadata (strategy,
+/// address, candidates) so the UI can show a "Reconnect?" prompt.
+/// If the user agrees, we attempt a fresh X3DH handshake with exponential
+/// backoff (1s, 2s, 4s, 8s, 16s, 30s cap). Pending messages saved while
+/// offline are flushed after successful reconnection.
 ///
-/// ## Why not reuse the session?
+/// ## Privacy
 ///
-/// X3DH provides forward secrecy via ephemeral session keys. Reusing old
-/// keys defeats this. Each connection gets a fresh handshake.
+/// Auto-reconnect would defeat M2M's anti-tracking mission — it would
+/// prove to the network that the same identity is reconnecting. Instead,
+/// we save the *capability* to reconnect and let the user *choose*.
 use std::time::Duration;
 
 use crate::protocol::WireCandidate;
