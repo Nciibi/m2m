@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import "./styles/tokens.css";
 import "./styles/theme.css";
 import "./styles/animations.css";
@@ -9,8 +10,9 @@ import "./styles/components/index.css";
 import { AppProvider, useApp } from "./context/AppContext";
 import { VaultProvider } from "./context/VaultContext";
 import { ChatProvider } from "./context/ChatContext";
-import { SettingsProvider } from "./context/SettingsContext";
+import { SettingsProvider, useSettings } from "./context/SettingsContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useIdleDetection } from "./hooks/useIdleDetection";
 import ShortcutHelp from "./components/ShortcutHelp";
 import SetupView from "./views/SetupView";
 import VaultView from "./views/VaultView";
@@ -21,6 +23,13 @@ import SettingsView from "./views/SettingsView";
 function AppInner() {
   const { view } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
+  const { securityConfig } = useSettings();
+
+  // Idle detection for auto-lock
+  useIdleDetection({
+    timeoutSecs: securityConfig?.idle_lock_secs ?? 0,
+    onIdle: () => { invoke("lock_vault").catch(() => {}); },
+  });
 
   // Global keyboard shortcut: ? opens help modal
   useEffect(() => {
