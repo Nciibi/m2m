@@ -45,6 +45,22 @@ impl StorageKey {
     ///
     /// Locks the memory immediately. Panics if locking fails.
     pub fn new(key: [u8; 32]) -> Self {
+
+    /// Create a new key for testing without memory locking.
+    /// The key is NOT locked in RAM — only use in tests/benchmarks.
+    #[cfg(any(test, benches))]
+    pub fn from_bytes_for_test(key: &[u8; 32]) -> Self {
+        Self { key: *key }
+    }
+
+    /// Create a new locked key from raw bytes.
+    ///
+    /// Locks the memory immediately. Panics if locking fails.
+    #[cfg(not(any(test, benches)))]
+    pub fn from_bytes_for_test(key: &[u8; 32]) -> Self {
+        Self::new(*key) // fallback that still locks (only reached in release)
+    }
+
         let s = Self { key };
         s.lock();
         s
