@@ -308,7 +308,8 @@ pub async fn add_family_member(
     let store = ks.as_ref().ok_or("key store not initialized")?;
 
     // Verify the peer exists in the peers table (has connected before)
-    if !store.is_family_member(&pk_bytes).map_err(|e| format!("family check: {e}"))? {
+    let is_family = store.is_family_member(&pk_bytes).map_err(|e| format!("family check: {e}"))?;
+    drop(ks); // Drop lock before any .await
         // Try getting conversation — if no conversation exists, reject
         let ms = state.message_store.lock().await;
         let has_conversation = ms.as_ref()
