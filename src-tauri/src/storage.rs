@@ -658,6 +658,13 @@ impl MessageStore {
         Ok(messages)
     }
 
+    /// Run PRAGMA optimize to keep the database performant over time.
+    /// Should be called periodically (e.g. after write operations, but at most once per minute).
+    pub fn optimize(&self) -> Result<(), StorageError> {
+        self.conn.execute_batch("PRAGMA optimize;")?;
+        Ok(())
+    }
+
     /// List all conversations with summary info.
     pub fn list_conversations(&self) -> Result<Vec<ConversationSummary>, StorageError> {
         let mut stmt = self.conn.prepare(
