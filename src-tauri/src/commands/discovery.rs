@@ -328,6 +328,7 @@ pub async fn connect_discovered_peer(
         state.inner().clone(),
         read_half,
         peer_key_hex.clone(),
+        None,
     );
 
     Ok(ConnectionInfo {
