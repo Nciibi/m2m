@@ -50,13 +50,6 @@ impl StorageKey {
         s
     }
 
-    /// Create a new key from pre-existing bytes without memory locking.
-    /// The key is NOT locked in RAM — only use in tests and benchmarks.
-    /// This avoids the mlock/VirtualLock call which would fail in CI/test environments.
-    pub fn from_bytes_for_test(key: &[u8; 32]) -> Self {
-        Self { key: *key }
-    }
-
     /// Access the key bytes for read-only operations.
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.key
