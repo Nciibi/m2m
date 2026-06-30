@@ -112,35 +112,30 @@ pub enum LanDiscoveryError {
     NotEnabled,
 }
 
-/// Build a signed LAN discovery announcement packet.
+/// Build a LAN discovery announcement packet using an ephemeral session token.
 ///
 /// Packet format:
-///   [version: u8] [listen_port: u16 BE] [identity_pub: 32B]
-///   [timestamp: u64 BE] [signature: 64B Ed25519]
+///   [version: u8] [listen_port: u16 BE] [session_token: 32B]
+///   [timestamp: u64 BE]
 ///
-/// The signature covers: version || listen_port || identity_pub || timestamp
+/// No signature needed — the session token is ephemeral and carries
+/// no linkable information. Identity is established during X3DH
+/// handshake after connection.
+///
+/// Total: 1 + 2 + 32 + 8 = 43 bytes
 fn build_announcement(
-    identity: &crate::crypto::IdentityKeypair,
     listen_port: u16,
-) -> Result<Vec<u8>, LanDiscoveryError> {
+    session_token: &[u8; 32],
+) -> Vec<u8> {
     let timestamp = now_unix_secs();
 
-    let mut sign_data = Vec::with_capacity(1 + 2 + 32 + 8);
-    sign_data.push(LAN_DISCOVERY_VERSION);
-    sign_data.extend_from_slice(&listen_port.to_be_bytes());
-    sign_data.extend_from_slice(&identity.public_key_bytes());
-    sign_data.extend_from_slice(&timestamp.to_be_bytes());
-
-    let signature = identity.sign(&sign_data);
-
-    let mut packet = Vec::with_capacity(1 + 2 + 32 + 8 + 64);
+    let mut packet = Vec::with_capacity(1 + 2 + 32 + 8);
     packet.push(LAN_DISCOVERY_VERSION);
     packet.extend_from_slice(&listen_port.to_be_bytes());
-    packet.extend_from_slice(&identity.public_key_bytes());
+    packet.extend_from_slice(session_token);
     packet.extend_from_slice(&timestamp.to_be_bytes());
-    packet.extend_from_slice(&signature);
 
-    Ok(packet)
+    packet
 }
 
 /// Parse a received LAN discovery announcement packet.
