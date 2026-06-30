@@ -1,6 +1,6 @@
 <div align="center">
   <picture>
-    <img src="logo.png" alt="M2M Logo" width="80" height="80">
+    <img src="banner.png" alt="M2M Banner" width="794" height="318">
   </picture>
   <h1>M2M Secure Messenger</h1>
   <p><strong>A zero-trust, peer-to-peer, end-to-end encrypted desktop messenger</strong></p>
