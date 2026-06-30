@@ -357,10 +357,12 @@ pub async fn send_reaction(
         reaction,
         remove: false,
     };
+    let plaintext = crate::protocol::serialize(&data)
+        .map_err(|e| format!("serialize reaction: {e}"))?;
     conn.session.send_encrypted_typed(
         &mut conn.write_half,
         crate::protocol::PacketType::MessageReaction,
-        &data,
+        &plaintext,
     ).await.map_err(|e| format!("send reaction failed: {e}"))
 }
 
