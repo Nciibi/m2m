@@ -394,10 +394,12 @@ pub async fn remove_reaction(
         reaction,
         remove: true,
     };
+    let plaintext = crate::protocol::serialize(&data)
+        .map_err(|e| format!("serialize reaction: {e}"))?;
     conn.session.send_encrypted_typed(
         &mut conn.write_half,
         crate::protocol::PacketType::MessageReaction,
-        &data,
+        &plaintext,
     ).await.map_err(|e| format!("remove reaction failed: {e}"))
 }
 
