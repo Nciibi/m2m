@@ -90,13 +90,10 @@ pub enum DhtError {
     Timeout,
     #[error("bad response: {0}")]
     BadResponse(String),
-    #[expect(dead_code, reason = "Reserved error variant for peer lookup failures")]
     #[error("peer not found")]
     PeerNotFound,
-    #[expect(dead_code, reason = "Error when DHT has not bootstrapped yet")]
     #[error("not bootstrapped")]
     NotBootstrapped,
-    #[expect(dead_code, reason = "Error when DHT is disabled")]
     #[error("DHT not enabled")]
     NotEnabled,
 }
@@ -115,7 +112,6 @@ pub struct DhtPeer {
     /// Current TCP address for connecting.
     pub connect_addr: Option<SocketAddr>,
     /// Protocol version the peer supports.
-    #[expect(dead_code, reason = "Reserved for future protocol negotiation")]
     pub protocol_version: u8,
     /// Last time this peer was seen (unix seconds).
     pub last_seen: u64,
@@ -130,28 +126,17 @@ pub struct BootstrapNode {
 /// DHT configuration.
 ///
 /// **Default is OFF** — DHT must be explicitly enabled by the user.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DhtConfig {
     /// Whether DHT discovery is enabled. **OFF by default.**
     /// Enabling this makes your IP visible to DHT nodes.
-    #[expect(dead_code, reason = "Read via DhtState::enabled() wrapper")]
     pub enabled: bool,
     /// Bootstrap nodes to connect to on startup.
     pub bootstrap_nodes: Vec<BootstrapNode>,
     /// Whether we're behind a symmetric NAT (client-only mode).
-    #[expect(dead_code, reason = "Reserved for DHT client-only mode logic")]
     pub is_symmetric_nat: bool,
 }
 
-impl Default for DhtConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,  // ⚠️ OFF by default — privacy first
-            bootstrap_nodes: Vec::new(),
-            is_symmetric_nat: false,
-        }
-    }
-}
 
 /// Active DHT state.
 pub struct DhtState {
@@ -160,10 +145,8 @@ pub struct DhtState {
     /// DHT config.
     pub config: DhtConfig,
     /// Whether we've bootstrapped into the DHT network.
-    #[expect(dead_code, reason = "Read externally by DHT operations")]
     pub bootstrapped: bool,
     /// Whether the DHT background task is running.
-    #[expect(dead_code, reason = "Read externally by DHT operations")]
     pub running: bool,
 }
 
@@ -203,7 +186,6 @@ fn build_dht_message(msg_type: u8, body: &[u8]) -> Vec<u8> {
     msg
 }
 
-#[expect(dead_code, reason = "Reserved for DHT message parsing")]
 /// Parse a DHT message: returns (type, body).
 fn parse_dht_message(data: &[u8]) -> Result<(u8, &[u8]), DhtError> {
     if data.len() < 5 {
@@ -248,7 +230,6 @@ async fn dht_recv(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), DhtError> {
     Ok((body[0], body[1..].to_vec()))
 }
 
-#[expect(dead_code, reason = "Reserved for DHT connectivity checks")]
 /// Connect to a DHT node and exchange a ping/pong to verify it's alive.
 async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
     let start = std::time::Instant::now();
@@ -322,21 +303,19 @@ pub async fn announce_to_node(
     Ok(())
 }
 
-#[expect(dead_code, reason = "Reserved for DHT lookup operations")]
 /// Build a FIND_NODE body for a peer ID.
 fn build_find_node_body(peer_id: &[u8; 32]) -> Vec<u8> {
     peer_id.to_vec()
 }
 
-#[expect(dead_code, reason = "Reserved for DHT response parsing")]
 /// Parse a NODE_RESPONSE body into a list of DHT peers.
 ///
 /// Wire format per entry: [ephemeral_id(32B) ip(4B) port(2B)]
 /// Note: NO permanent identity key is transmitted.
 fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
-    let entry_size = 32 + 4 + 2;
+    let entry_size = 32usize + 4 + 2;
     let count = body.len() / entry_size;
-    if body.len() % entry_size != 0 {
+    if !body.len().is_multiple_of(entry_size) {
         return Err(DhtError::BadResponse("malformed node response".into()));
     }
 
@@ -367,7 +346,6 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
     Ok(peers)
 }
 
-#[expect(dead_code, reason = "Reserved for DHT-based peer discovery flow")]
 /// Look up a peer by their public key hash.
 ///
 /// Queries the configured bootstrap nodes and returns the first valid response.
