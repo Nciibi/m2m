@@ -98,6 +98,10 @@ export default function HubView() {
           <MessageIcon size={16} /> Chats
           {conversations.length > 0 && <span className="tab-bar__badge">{conversations.length}</span>}
         </button>
+        <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" aria-selected={tab === "family"}>
+          <HomeIcon size={16} /> Family
+          {family.length > 0 && <span className="tab-bar__badge">{family.length}</span>}
+        </button>
       </div>
 
       <div className="app-content">
