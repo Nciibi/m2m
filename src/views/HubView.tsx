@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
   ShieldIcon, GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
-  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon,
+  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
@@ -93,6 +93,10 @@ export default function HubView() {
           <MessageIcon size={16} /> Chats
           {conversations.length > 0 && <span className="tab-bar__badge">{conversations.length}</span>}
         </button>
+        <button className={`tab-bar__tab ${tab === "nearby" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("nearby")} role="tab" aria-selected={tab === "nearby"}>
+          <WifiIcon size={16} /> Nearby
+          {discoveredPeers.length > 0 && <span className="tab-bar__badge">{discoveredPeers.length}</span>}
+        </button>
         <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" aria-selected={tab === "family"}>
           <HomeIcon size={16} /> Family
           {family.length > 0 && <span className="tab-bar__badge">{family.length}</span>}
@@ -109,6 +113,15 @@ export default function HubView() {
             setInviteToConnect={setInviteToConnect} onConnect={handleConnect}
             setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
             networkSettings={networkSettings} privateMode={privateMode} identity={identity}
+          />
+        ) : tab === "nearby" ? (
+          <NearbyTab
+            discoveryConfig={discoveryConfig}
+            discoveredPeers={discoveredPeers}
+            onConnect={handleConnectDiscoveredPeer}
+            onRefresh={handleRefreshDiscovery}
+            onOpenSettings={openSettings}
+            onOpenChat={handleOpenChat}
           />
         ) : tab === "family" ? (
           <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
