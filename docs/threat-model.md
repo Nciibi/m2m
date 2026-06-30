@@ -98,6 +98,10 @@
 | SYM flooding | tokio Accept with backpressure |
 | DoS (large frames) | Frame size validation (16 MiB cap) |
 | DoS (file transfer) | Streaming to temp file, chunk hash verification |
+| Reaction injection | Max 10-char reaction string, validated emoji, no persistent storage without verification |
+| Edit injection | Only replaces content for known message_id. Old content zeroized. |
+| Delete injection | Only marks deleted=1. Original ciphertext stays in DB. |
+| Self-destruct bypass | Timer is a client-side UX hint. Expired messages pruned by both storage query filter and periodic cleanup. |
 
 ## 6. Data Flow Security
 
