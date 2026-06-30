@@ -20,8 +20,6 @@
 /// we save the *capability* to reconnect and let the user *choose*.
 use std::time::Duration;
 
-use crate::protocol::WireCandidate;
-
 /// Maximum number of reconnection attempts before giving up.
 pub const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 
@@ -40,9 +38,8 @@ pub struct ReconnectInfo {
     pub peer_fingerprint: String,
     /// The connection strategy that worked before.
     pub strategy_name: String,
-    /// Peer's last-known address and candidates for reconnect.
+    /// Peer's last-known address for reconnect.
     pub peer_address_hint: String,
-    pub peer_candidates: Vec<WireCandidate>,
     pub peer_verified: bool,
     pub ratchet_interval: u64,
 }
