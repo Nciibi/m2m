@@ -332,7 +332,7 @@ impl KeyStore {
         new_public_key: &[u8; 32],
         new_address: Option<&str>,
     ) -> Result<FamilyMember, StorageError> {
-        let now = chrono::Utc::now().timestamp();
+        let _now = chrono::Utc::now().timestamp();
 
         // Update the existing row's key and address
         self.conn.execute(

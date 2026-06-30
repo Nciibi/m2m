@@ -137,7 +137,7 @@ pub async fn unlock_vault(
         ));
     }
 
-    let data_dir = storage::ensure_data_dir()
+    let _data_dir = storage::ensure_data_dir()
         .map_err(|e| format!("data dir error: {e}"))?;
     // Note: messages.db and transfers.db paths are used by
     // ensure_message_store / ensure_transfer_store lazy init in chat.rs/state.rs
