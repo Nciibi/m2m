@@ -63,7 +63,7 @@ pub async fn set_discovery_config(
     // ── LAN Discovery ──
     if config.lan_enabled && !state.lan_cancel.read().await.is_some() {
         // Start LAN discovery
-        let lan_state = Arc::new(RwLock::new(lan_discovery::LanDiscoveryState::default()));
+        let lan_state = Arc::new(RwLock::new(lan_discovery::LanDiscoveryState::new()));
         let lan_cancel = Arc::new(AtomicBool::new(false));
 
         let listen_addr = {
