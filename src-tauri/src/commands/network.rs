@@ -652,7 +652,6 @@ pub async fn connect_to_peer(
         peer_fingerprint: peer_fingerprint.clone(),
         strategy_name: strategy_name.to_string(),
         peer_address_hint: remote_addr.to_string(),
-        peer_candidates: session.peer_candidates.clone(),
         peer_verified: session.peer_verified,
         ratchet_interval: session.ratchet_interval,
     });
