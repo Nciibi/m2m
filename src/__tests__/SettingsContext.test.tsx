@@ -24,6 +24,8 @@ function TestConsumer() {
     handleTorToggle, setStunServerInput,
     discoveryConfig, discoveredPeers,
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
+    securityConfig,
+    handleScreenCaptureToggle, handleLockVault, handleClearClipboard,
   } = useSettings();
   return (
     <div>
@@ -33,6 +35,7 @@ function TestConsumer() {
       <span data-testid="lan-enabled">{String(discoveryConfig?.lan_enabled ?? false)}</span>
       <span data-testid="dht-enabled">{String(discoveryConfig?.dht_enabled ?? false)}</span>
       <span data-testid="discovered-count">{discoveredPeers.length}</span>
+      <span data-testid="screen-capture">{String(securityConfig?.screen_capture_protection ?? false)}</span>
       <button onClick={handleStunDiscover}>STUN Discover</button>
       <button onClick={handlePrivateModeToggle}>Toggle Private</button>
       <button onClick={handleTorToggle}>Toggle Tor</button>
@@ -44,6 +47,9 @@ function TestConsumer() {
       <button onClick={handleLanToggle}>Toggle LAN</button>
       <button onClick={handleDhtToggle}>Toggle DHT</button>
       <button onClick={handleRefreshDiscovery}>Refresh Discovery</button>
+      <button onClick={handleScreenCaptureToggle}>Toggle Screen Capture</button>
+      <button onClick={handleLockVault}>Lock Vault</button>
+      <button onClick={handleClearClipboard}>Clear Clipboard</button>
     </div>
   );
 }
