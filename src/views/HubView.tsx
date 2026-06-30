@@ -106,6 +106,8 @@ export default function HubView() {
             setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
             networkSettings={networkSettings} privateMode={privateMode} identity={identity}
           />
+        ) : tab === "family" ? (
+          <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
         ) : (
           <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} />
         )}
