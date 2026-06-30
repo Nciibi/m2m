@@ -303,13 +303,12 @@ pub async fn start(
             tokio::time::sleep(ANNOUNCE_INTERVAL).await;
 
             // Get current identity and listen port
-            let (identity_guard, listen_guard) = {
+            let has_identity = {
                 let id = identity.read().await;
-                let addr = listen_addr.read().await;
-                (id.is_some(), addr.is_some())
+                id.is_some()
             };
 
-            if !identity_guard {
+            if !has_identity {
                 continue; // No identity yet — wait for vault unlock
             }
 
