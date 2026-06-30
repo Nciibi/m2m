@@ -10,7 +10,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use m2m_lib::crypto::{
     self, pad_message_variable, unpad_message_variable, DoubleRatchet, EphemeralKeypair,
-    X3DHSessionKeys, X25519IdentityKeypair,
+    PrekeyBundle, X3DHSessionKeys, X25519IdentityKeypair,
 };
 
 /// Helper: create a DoubleRatchet in a known state for benchmarking.
