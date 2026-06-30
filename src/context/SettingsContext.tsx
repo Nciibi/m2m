@@ -37,6 +37,7 @@ interface SettingsContextValue {
   handleIdleLockSecsChange: (secs: number) => Promise<void>;
   handleLockVault: () => Promise<void>;
   handleClearClipboard: () => Promise<void>;
+  scheduleClipboardClear: (secs: number) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -310,6 +311,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       securityConfig,
       handleScreenCaptureToggle, handleClipboardClearSecsChange,
       handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
+      scheduleClipboardClear,
     }}>
       {children}
     </SettingsContext.Provider>
