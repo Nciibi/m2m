@@ -324,12 +324,38 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     const unlistenFileComp = listen<any>("m2m://file-complete", () => {});
 
+    const unlistenFileComp = listen<any>("m2m://file-complete", () => {});
+
+    const unlistenReaction = listen<any>("m2m://reaction", (event) => {
+      const { message_id, reaction, peer_key_hex, remove } = event.payload;
+      // Only apply if this reaction is for a message in the current conversation
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== message_id) return m;
+        const reactions = { ...m.reactions };
+        if (remove) {
+          const reactors = (reactions[reaction] || []).filter((r: string) => r !== peer_key_hex);
+          if (reactors.length === 0) {
+            delete reactions[reaction];
+          } else {
+            reactions[reaction] = reactors;
+          }
+        } else {
+          const reactors = reactions[reaction] || [];
+          if (!reactors.includes(peer_key_hex)) {
+            reactions[reaction] = [...reactors, peer_key_hex];
+          }
+        }
+        return { ...m, reactions };
+      }));
+    });
+
     return () => {
       unlistenMsg.then((f) => f());
       unlistenConn.then((f) => f());
       unlistenFileReq.then((f) => f());
       unlistenFileComp.then((f) => f());
       unlistenConvMeta.then((f) => f());
+      unlistenReaction.then((f) => f());
     };
   }, [setView, notifPermission]);
 
@@ -345,6 +371,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       handleExportConversation, handleSetRetention,
       handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
       handleDeleteConversation,
+      handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
     }}>
       {children}
     </ChatContext.Provider>
