@@ -160,7 +160,6 @@ impl DhtState {
         }
     }
 
-    #[expect(dead_code, reason = "Used by external DHT orchestration code")]
     /// Check whether DHT discovery is enabled.
     pub fn enabled(&self) -> bool {
         self.config.enabled
