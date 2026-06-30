@@ -222,10 +222,6 @@ impl KeyStore {
     }
 
     // ─── Family (Persistent Contact List) ───────────────────────
-
-    /// A family member — a peer the user has explicitly saved as a contact.
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct FamilyMember {
         /// Current public key of this peer (hex-encoded for frontend).
         pub public_key_hex: String,
         /// Your label for them.
