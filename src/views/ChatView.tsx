@@ -134,6 +134,19 @@ export default function ChatView() {
             ))}
           </div>
         ))}
+
+        {messages.length === 0 && (
+          <div className="conv-empty" style={{ marginTop: 'var(--space-2xl)' }}>
+            <SendIcon size={48} color="var(--color-text-muted)" />
+            <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              Start the conversation
+            </span>
+            <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6 }}>
+              Send a message below to begin your encrypted conversation. All messages are protected with end-to-end encryption.
+            </span>
+          </div>
+        )}
+
         <div ref={endRef} />
       </div>
 
