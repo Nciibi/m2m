@@ -645,6 +645,17 @@ pub async fn connect_to_peer(
     let peer_fingerprint = session.peer_fingerprint();
     let peer_key_hex = hex::encode(session.peer_identity_pub);
 
+    // Build reconnect info for possible future reconnection
+    let reconnect_info = Some(crate::reconnect::ReconnectInfo {
+        peer_key_hex: peer_key_hex.clone(),
+        peer_fingerprint: peer_fingerprint.clone(),
+        strategy_name: strategy_name.to_string(),
+        peer_address_hint: remote_addr.to_string(),
+        peer_candidates: session.peer_candidates.clone(),
+        peer_verified: session.peer_verified,
+        ratchet_interval: session.ratchet_interval,
+    });
+
     // Split the stream
     let (read_half, write_half) = stream.into_split();
 
@@ -660,7 +671,7 @@ pub async fn connect_to_peer(
     drop(conns);
 
     // Start the receive loop for this peer
-    spawn_receive_loop(app_handle, state.inner().clone(), read_half, peer_key_hex.clone());
+    spawn_receive_loop(app_handle, state.inner().clone(), read_half, peer_key_hex.clone(), reconnect_info);
 
     Ok(ConnectionInfo {
         state: "established".to_string(),
