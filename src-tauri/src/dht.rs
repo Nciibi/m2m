@@ -165,7 +165,7 @@ pub struct DhtState {
 }
 
 impl DhtState {
-    fn new(config: DhtConfig) -> Self {
+    pub fn new(config: DhtConfig) -> Self {
         Self {
             peers: HashMap::new(),
             config,
@@ -180,7 +180,7 @@ impl DhtState {
     }
 
     /// Remove peers that haven't been seen within the expiry window.
-    fn expire_stale_peers(&mut self) {
+    pub fn expire_stale_peers(&mut self) {
         let now = now_unix_secs();
         let cutoff = now.saturating_sub(PEER_EXPIRY_SECS);
         self.peers.retain(|_, peer| peer.last_seen >= cutoff);
