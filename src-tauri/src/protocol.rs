@@ -395,6 +395,28 @@ pub struct MessageReactionData {
     pub remove: bool,
 }
 
+// --- Message Edit (0x42) ---
+
+/// An edit to a previously-sent message, sent as a typed encrypted frame (type 0x42).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageEditData {
+    /// The ID of the message being edited.
+    pub message_id: String,
+    /// The new content replacing the original.
+    pub new_content: String,
+    /// Server timestamp of the edit (unix seconds).
+    pub edited_at: u64,
+}
+
+// --- Message Delete (0x43) ---
+
+/// A request to delete a previously-sent message, sent as a typed encrypted frame (type 0x43).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageDeleteData {
+    /// The ID of the message being deleted.
+    pub message_id: String,
+}
+
 // --- Disconnect ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
