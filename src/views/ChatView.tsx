@@ -29,6 +29,15 @@ export default function ChatView() {
 
   useEffect(() => { if (!scrolledUp && msgRef.current) msgRef.current.scrollTop = msgRef.current.scrollHeight; }, [messages, scrolledUp]);
 
+  // Mark messages as read when viewing the chat
+  useEffect(() => {
+    const hasUnreadReceived = messages.some((m) => m.direction === "received" && m.read_at === null);
+    if (hasUnreadReceived && activeConversationId) {
+      const timer = setTimeout(() => handleMarkConversationRead(), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, activeConversationId, handleMarkConversationRead]);
+
   const onScroll = () => {
     const el = msgRef.current;
     if (!el) return;
@@ -128,10 +137,64 @@ export default function ChatView() {
               <span className="date-sep__label">{label}</span>
               <span className="date-sep__line" />
             </div>
-            {msgs.map((m: any, i: number) => (
-              <div key={m.id} className={`msg-bubble msg-bubble--${m.direction}`} style={{ animationDelay: `${i * 0.05}s` }}>
+            {msgs.map((m: ChatMessage, i: number) => (
+              <div key={m.id} className={`msg-bubble msg-bubble--${m.direction}`} style={{ animationDelay: `${i * 0.05}s` }}
+                onMouseEnter={() => setPickerMsgId(m.id)}
+                onMouseLeave={() => setPickerMsgId(null)}>
                 {formatMsg(m.content)}
-                <span className="msg-time">{new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="msg-footer-row">
+                  <span className="msg-time">{new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  {/* Read receipt for received messages */}
+                  {m.direction === "received" && m.read_at !== null && (
+                    <span className="msg-read-badge" title={`Read ${new Date(m.read_at * 1000).toLocaleString()}`}>
+                      ✓✓
+                    </span>
+                  )}
+                </span>
+                {/* Reactions */}
+                {Object.keys(m.reactions || {}).length > 0 && (
+                  <div className="msg-reactions">
+                    {Object.entries(m.reactions).map(([emoji, reactors]) => (
+                      <button
+                        key={emoji}
+                        className={`msg-reaction ${reactors.includes("self") ? "msg-reaction--self" : ""}`}
+                        onClick={() => {
+                          if (reactors.includes("self")) {
+                            handleRemoveReaction(m.id, emoji);
+                          } else {
+                            handleSendReaction(m.id, emoji);
+                          }
+                        }}
+                        title={reactors.join(", ")}
+                      >
+                        {emoji} {reactors.length}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Reaction picker on hover */}
+                {pickerMsgId === m.id && (
+                  <div className="reaction-picker">
+                    {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                      <button
+                        key={emoji}
+                        className={`reaction-picker__btn ${(m.reactions?.[emoji] || []).includes("self") ? "reaction-picker__btn--active" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const reactors = m.reactions?.[emoji] || [];
+                          if (reactors.includes("self")) {
+                            handleRemoveReaction(m.id, emoji);
+                          } else {
+                            handleSendReaction(m.id, emoji);
+                          }
+                          setPickerMsgId(null);
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
