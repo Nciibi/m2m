@@ -315,9 +315,11 @@ fn build_find_node_body(peer_id: &[u8; 32]) -> Vec<u8> {
 }
 
 /// Parse a NODE_RESPONSE body into a list of DHT peers.
+///
+/// Wire format per entry: [ephemeral_id(32B) ip(4B) port(2B)]
+/// Note: NO permanent identity key is transmitted.
 fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
-    // Format: [peer_id(32B) identity_pub(32B) ip(4B) port(2B)]*
-    let entry_size = 32 + 32 + 4 + 2;
+    let entry_size = 32 + 4 + 2;
     let count = body.len() / entry_size;
     if body.len() % entry_size != 0 {
         return Err(DhtError::BadResponse("malformed node response".into()));
@@ -328,8 +330,8 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
         let offset = i * entry_size;
         let mut peer_id = [0u8; 32];
         peer_id.copy_from_slice(&body[offset..offset + 32]);
-        let mut identity_pub = [0u8; 32];
-        identity_pub.copy_from_slice(&body[offset + 32..offset + 64]);
+        // No identity_pub — ephemeral IDs are not linked to permanent identities
+        let identity_pub = [0u8; 32];
         let ip_bytes: [u8; 4] = [
             body[offset + 64], body[offset + 65],
             body[offset + 66], body[offset + 67],
