@@ -203,13 +203,17 @@ fn parse_announcement(
 ///
 /// This spawns two background tasks:
 /// 1. **Listener**: Binds a UDP multicast socket and processes incoming announcements
-/// 2. **Announcer**: Periodically broadcasts our own identity
+/// 2. **Announcer**: Periodically broadcasts our ephemeral session token
 ///
-/// The identity must be set (loaded from vault) before calling this.
+/// The session token is ephemeral (rotates hourly) and is NOT your
+/// permanent Ed25519 identity key. Observers on the same WiFi see
+/// only a random token that changes frequently.
+///
+/// LAN discovery is **OFF by default**. Enable it in Settings.
 pub async fn start(
-    identity: Arc<RwLock<Option<crate::crypto::IdentityKeypair>>>,
     listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
     lan_state: Arc<RwLock<LanDiscoveryState>>,
+    ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
 ) -> Result<(), LanDiscoveryError> {
     // Bind to a random UDP port for multicast
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))
