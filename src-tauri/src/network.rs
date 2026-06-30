@@ -130,7 +130,7 @@ impl ConnectionLimiter {
     }
 
     /// Get the current number of active connections.
-    #[expect(dead_code, reason = "Used in tests only")]
+    #[allow(dead_code, reason = "Used in tests only")]
     pub fn active_count(&self) -> usize {
         self.active_connections.load(Ordering::Relaxed)
     }
@@ -233,7 +233,7 @@ impl std::fmt::Display for ConnectionState {
 /// A raw frame read from the wire.
 pub struct RawFrame {
     /// Protocol version.
-    #[expect(dead_code, reason = "Reserved for protocol version negotiation")]
+    #[allow(dead_code, reason = "Reserved for protocol version negotiation")]
     pub version: u8,
     pub packet_type: PacketType,
     pub body: Vec<u8>,

@@ -208,7 +208,7 @@ pub fn is_one_time(invite: &SignedInvite) -> bool {
 }
 
 /// Check if the inviter is the TCP listener.
-#[expect(dead_code, reason = "Reserved for listener role detection")]
+#[allow(dead_code, reason = "Reserved for listener role detection")]
 pub fn is_listener(invite: &SignedInvite) -> bool {
     invite.payload.flags & INVITE_FLAG_LISTENER != 0
 }
