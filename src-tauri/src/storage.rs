@@ -521,7 +521,7 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Store a message.
+    /// Store a message (idempotent — duplicate message IDs are silently ignored).
     pub fn store_message(
         &self,
         id: &str,
@@ -532,7 +532,7 @@ impl MessageStore {
         timestamp: i64,
     ) -> Result<(), StorageError> {
         self.conn.execute(
-            "INSERT INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp)
+            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp],
         )?;
