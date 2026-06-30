@@ -59,18 +59,20 @@ const PEER_EXPIRY_SECS: u64 = 90;
 const LAN_DISCOVERY_VERSION: u8 = 0x01;
 
 /// A peer discovered on the local network.
+///
+/// Contains only an **ephemeral session token** — NOT the peer's
+/// permanent identity key. The token changes every hour, preventing
+/// linkability across sessions or networks.
 #[derive(Debug, Clone)]
 pub struct LanPeer {
-    /// Ed25519 public key of the peer.
-    pub identity_pub: [u8; 32],
-    /// Human-readable fingerprint (hex with colons).
-    pub fingerprint: String,
+    /// Ephemeral session token (rotates hourly, NOT a permanent key).
+    pub session_token: [u8; 32],
+    /// Hex of the session token (for display/lookup).
+    pub token_hex: String,
     /// TCP address to connect to (for direct TCP or hole-punch).
     pub connect_addr: SocketAddr,
     /// Timestamp of the most recent announcement from this peer.
     pub last_seen: u64,
-    /// Whether this peer has been verified (fingerprint confirmed out-of-band).
-    pub verified: bool,
 }
 
 /// Active LAN discovery state.
