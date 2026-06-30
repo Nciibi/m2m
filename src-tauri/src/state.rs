@@ -110,6 +110,7 @@ impl OutgoingFileTransfer {
 /// which chunks have been received. This prevents OOM attacks from peers
 /// claiming large files (e.g. 4GB).
 pub struct IncomingFileTransfer {
+    #[allow(dead_code)]
     pub transfer_id: String,
     pub peer_key_hex: String,
     pub filename: String,
@@ -134,8 +135,10 @@ pub struct IncomingFileTransfer {
     pub chunks_bitmask: Vec<bool>,
     pub state: TransferState,
     /// Created timestamp (unix seconds).
+    #[allow(dead_code)]
     pub created_at: u64,
     /// Error description if state = Failed.
+    #[allow(dead_code)]
     pub error: Option<String>,
 }
 
@@ -212,7 +215,7 @@ pub struct ManualForward {
 /// Security configuration (screen capture, clipboard, idle lock).
 ///
 /// All features are OFF by default — user must opt in.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct SecurityConfig {
     /// Prevent screen capture of the app window (Windows/macOS/Linux).
     /// OFF by default — user should enable only if they trust the OS.
@@ -225,16 +228,6 @@ pub struct SecurityConfig {
     pub idle_lock_secs: u64,
 }
 
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            screen_capture_protection: false, // OFF — avoid surprising behavior
-            clipboard_clear_secs: 0,           // OFF — don't break clipboard expectations
-            idle_lock_secs: 0,                 // OFF — don't auto-lock without consent
-        }
-    }
-}
-
 /// Peer discovery method configuration.
 ///
 /// **All methods are OFF by default.** Enabling a discovery method makes
@@ -242,7 +235,7 @@ impl Default for SecurityConfig {
 /// or the wider internet (DHT). Both use ephemeral IDs that rotate
 /// periodically to prevent long-term tracking, but your IP address is
 /// still visible to anyone monitoring the discovery channel.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct DiscoveryConfig {
     /// LAN multicast discovery — OFF by default.
     /// Broadcasts an ephemeral announcement every 30 seconds over WiFi.
@@ -252,15 +245,6 @@ pub struct DiscoveryConfig {
     /// Publishes your ephemeral ID to a decentralized network of nodes.
     /// Your IP address is visible to DHT bootstrap nodes.
     pub dht_enabled: bool,
-}
-
-impl Default for DiscoveryConfig {
-    fn default() -> Self {
-        Self {
-            lan_enabled: false,  // ⚠️ OFF by default — privacy first
-            dht_enabled: false,  // ⚠️ OFF by default — privacy first
-        }
-    }
 }
 
 /// Central application state.
@@ -280,7 +264,7 @@ pub struct AppState {
     /// Whether message history is enabled.
     pub history_enabled: RwLock<bool>,
     /// Data directory path.
-    #[expect(dead_code, reason = "Reserved for diagnostics/settings display")]
+    #[allow(dead_code)]
     pub data_dir: String,
     /// Pending outgoing file transfers. Key: transfer_id, Value: transfer state.
     pub outgoing_transfers: RwLock<HashMap<String, OutgoingFileTransfer>>,
