@@ -1061,7 +1061,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_initiate_and_respond_produce_same_key() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1086,7 +1086,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_with_opk() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1113,7 +1113,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_wrong_identity_key_fails() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ik_evil = X25519IdentityKeypair::generate();
@@ -1139,7 +1139,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_wrong_signed_prekey_fails() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1166,7 +1166,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_without_opk_works() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1336,7 +1336,7 @@ mod crypto_tests {
 
     #[test]
     fn test_dr_encrypt_no_send_chain_fails() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let x3dh = X3DHSessionKeys {
             root_key: [0xAA; 32],
             chain_key: [0xBB; 32],
@@ -1354,7 +1354,7 @@ mod crypto_tests {
 
     #[test]
     fn test_dr_decrypt_no_recv_chain_fails() {
-        let _ = init_sodiumoxide();
+        init_sodiumoxide();
         let x3dh = X3DHSessionKeys {
             root_key: [0xAA; 32],
             chain_key: [0xBB; 32],

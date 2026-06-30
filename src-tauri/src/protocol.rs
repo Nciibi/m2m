@@ -862,9 +862,8 @@ mod protocol_tests {
         // A v2 client receiving a v1 request gets empty defaults for new fields
         let v1_req_bytes = {
             // Simulate v1 serialization: only the original fields
-            let mut buf = Vec::new();
             // Build a minimal MessagePack map for v1 fields
-            buf.push(0x86); // fixmap with 6 entries
+            let mut buf = vec![0x86u8]; // fixmap with 6 entries
             // ... We can just use serialize from a v1 struct:
             #[derive(Serialize)]
             struct V1Request {
