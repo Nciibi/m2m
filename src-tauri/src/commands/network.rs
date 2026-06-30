@@ -1326,6 +1326,7 @@ pub fn spawn_receive_loop(
                                             if let Ok((nonce, encrypted)) = util::crypto_encrypt_storage(
                                                 edit.new_content.as_bytes(), key, util::AAD_MSG_STORE,
                                             ) {
+                                                drop(sk);
                                                 let _ = store.edit_message(&edit.message_id, &encrypted, &nonce);
                                             }
                                         }
