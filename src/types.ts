@@ -78,6 +78,14 @@ export interface DiscoveredPeer {
   last_seen: number;
 }
 
+export interface FamilyMember {
+  public_key_hex: string;
+  nickname: string;
+  added_at: number;
+  expires_at: number | null;
+  last_address: string | null;
+}
+
 export interface NatTypeInfo {
   nat_type: string;
   stun_servers: Array<{
