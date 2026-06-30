@@ -27,6 +27,10 @@ export default function ChatView() {
   const [scrolledUp, setScrolledUp] = useState(false);
   const [sending, setSending] = useState(false);
   const [pickerMsgId, setPickerMsgId] = useState<string | null>(null);
+  const [contextMsgId, setContextMsgId] = useState<string | null>(null);
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [timerSecs, setTimerSecs] = useState<number>(0);
   const endRef = useRef<HTMLDivElement>(null);
   const msgRef = useRef<HTMLDivElement>(null);
 
