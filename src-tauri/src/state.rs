@@ -417,6 +417,7 @@ impl AppState {
             dht_cancel: RwLock::new(None),
             lan_state: RwLock::new(None),
             lan_cancel: RwLock::new(None),
+            last_optimize_at: RwLock::new(0),
         }
     }
 
