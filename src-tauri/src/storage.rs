@@ -499,7 +499,7 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Migrate the messages table — add `read_at` column.
+    /// Migrate the messages table — add `read_at`, `edited_at`, `deleted`, `expires_at` columns.
     fn migrate_messages_table(conn: &Connection) -> Result<(), StorageError> {
         let mut stmt = conn.prepare("PRAGMA table_info(messages)")?;
         let existing_columns: Vec<String> = stmt
@@ -508,6 +508,15 @@ impl MessageStore {
             .collect();
         if !existing_columns.contains(&"read_at".to_string()) {
             conn.execute("ALTER TABLE messages ADD COLUMN read_at INTEGER", [])?;
+        }
+        if !existing_columns.contains(&"edited_at".to_string()) {
+            conn.execute("ALTER TABLE messages ADD COLUMN edited_at INTEGER", [])?;
+        }
+        if !existing_columns.contains(&"deleted".to_string()) {
+            conn.execute("ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !existing_columns.contains(&"expires_at".to_string()) {
+            conn.execute("ALTER TABLE messages ADD COLUMN expires_at INTEGER", [])?;
         }
         Ok(())
     }
