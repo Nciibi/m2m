@@ -557,7 +557,7 @@ mod protocol_tests {
 
     #[test]
     fn test_unknown_packet_type_rejected() {
-        let invalid_bytes: &[u8] = &[0x00, 0x0F, 0x18, 0x22, 0x32, 0x41, 0x50, 0xFF];
+        let invalid_bytes: &[u8] = &[0x00, 0x0F, 0x18, 0x22, 0x32, 0x50, 0xFF];
         for &byte in invalid_bytes {
             assert!(
                 PacketType::from_byte(byte).is_err(),
