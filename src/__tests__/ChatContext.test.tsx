@@ -119,11 +119,18 @@ describe("ChatContext", () => {
 
   it("handleSendReaction calls Tauri invoke with reaction args", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue([]); // load_messages
-    mockInvoke.mockResolvedValueOnce([]); // list_conversations in Open Chat
+    mockInvoke.mockResolvedValue([]); // default for load_messages
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
     // Need connection first — open a chat
     await user.click(screen.getByText("Open Chat"));
-    mockInvoke.mockResolvedValueOnce(undefined); // send_reaction
+    // Clear call history so we only check the reaction call
+    mockInvoke.mockClear();
+    mockInvoke.mockResolvedValue(undefined);
 
     await user.click(screen.getByText("Send Reaction"));
     expect(mockInvoke).toHaveBeenCalledWith("send_reaction", {
@@ -135,11 +142,17 @@ describe("ChatContext", () => {
 
   it("handleRemoveReaction calls Tauri invoke with remove_reaction", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue([]); // load_messages
-    mockInvoke.mockResolvedValueOnce([]); // list_conversations in Open Chat
+    mockInvoke.mockResolvedValue([]); // default for load_messages
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
     // Need connection first — open a chat
     await user.click(screen.getByText("Open Chat"));
-    mockInvoke.mockResolvedValueOnce(undefined); // remove_reaction
+    mockInvoke.mockClear();
+    mockInvoke.mockResolvedValue(undefined);
 
     await user.click(screen.getByText("Remove Reaction"));
     expect(mockInvoke).toHaveBeenCalledWith("remove_reaction", {
@@ -151,11 +164,17 @@ describe("ChatContext", () => {
 
   it("handleMarkConversationRead calls mark_messages_read", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue([]); // load_messages
-    mockInvoke.mockResolvedValueOnce([]); // list_conversations in Open Chat
+    mockInvoke.mockResolvedValue([]); // default for load_messages
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
     // Need activeConversationId first — open a chat
     await user.click(screen.getByText("Open Chat"));
-    mockInvoke.mockResolvedValueOnce(0); // mark_messages_read
+    mockInvoke.mockClear();
+    mockInvoke.mockResolvedValue(0);
 
     await user.click(screen.getByText("Mark Read"));
     expect(mockInvoke).toHaveBeenCalledWith("mark_messages_read", {
