@@ -619,6 +619,45 @@ impl MessageStore {
         Ok(messages)
     }
 
+    /// Load messages older than a given timestamp (cursor-based pagination).
+    /// Returns messages with timestamp < `before`, ordered most-recent-first, limited to `limit`.
+    /// Skips expired messages.
+    pub fn load_messages_before(
+        &self,
+        conversation_id: &str,
+        before_timestamp: i64,
+        limit: i64,
+    ) -> Result<Vec<StoredMessage>, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        let mut stmt = self.conn.prepare(
+            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
+                    edited_at, deleted, expires_at
+             FROM messages WHERE conversation_id = ?1
+             AND (expires_at IS NULL OR expires_at > ?2)
+             AND timestamp < ?3
+             ORDER BY timestamp DESC LIMIT ?4",
+        )?;
+        let rows = stmt.query_map(params![conversation_id, now, before_timestamp, limit], |row| {
+            Ok(StoredMessage {
+                id: row.get(0)?,
+                direction: row.get(1)?,
+                content_encrypted: row.get(2)?,
+                content_nonce: row.get(3)?,
+                timestamp: row.get(4)?,
+                read_at: row.get(5)?,
+                edited_at: row.get(6)?,
+                deleted: row.get::<_, i64>(7)? != 0,
+                expires_at: row.get(8)?,
+            })
+        })?;
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+        messages.reverse();
+        Ok(messages)
+    }
+
     /// List all conversations with summary info.
     pub fn list_conversations(&self) -> Result<Vec<ConversationSummary>, StorageError> {
         let mut stmt = self.conn.prepare(
