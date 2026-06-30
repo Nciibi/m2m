@@ -85,7 +85,6 @@ export default function HubView() {
           </span>
           M2M
         </h1>
-        </h1>
         <div className="app-header__actions">
           <Badge variant={connectionBadge.variant} compact>
             {connectionBadge.dot} {connectionBadge.label}
