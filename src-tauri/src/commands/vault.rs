@@ -655,15 +655,9 @@ pub async fn import_identity(
     let key_store = KeyStore::open(&keys_db_path)
         .map_err(|e| format!("key store error: {e}"))?;
 
-    // Encrypt the private key with the vault's storage key
-    // If vault was initialized, use the existing storage key. Otherwise derive from public key.
-    let storage_key = if key_store.is_vault_initialized().unwrap_or(false) {
-        let sk_guard = state.storage_key.read().await;
-        sk_guard.clone().ok_or("storage key not available")?
-    } else {
-        // First import — use legacy derivation to store, then vault setup will upgrade
-        util::derive_storage_key(&pub_bytes)
-    };
+    // Encrypt the private key with a storage key derived from the public key.
+    // The user will set a vault passphrase on next unlock.
+    let storage_key = util::derive_storage_key(&pub_bytes);
 
     let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
         .map_err(|e| format!("encryption failed: {e}"))?;
