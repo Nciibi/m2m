@@ -63,11 +63,50 @@ export default function ChatView() {
     }
   }, [messages, activeConversationId, handleMarkConversationRead]);
 
-  const onScroll = () => {
+  // Load older messages when user scrolls to top
+  const onScroll = useCallback(async () => {
     const el = msgRef.current;
     if (!el) return;
+    const atTop = el.scrollTop <= 50;
     setScrolledUp(el.scrollHeight - el.scrollTop - el.clientHeight > 100);
-  };
+
+    if (atTop && hasOlder && !loadingOlder && messages.length > 0 && activeConversationId) {
+      setLoadingOlder(true);
+      const oldestTimestamp = messages.reduce((minT, m) => Math.min(minT, m.timestamp), Infinity);
+      try {
+        const older = await invoke<ChatMessage[]>("load_messages", {
+          peerKeyHex: activeConversationId,
+          beforeTimestamp: oldestTimestamp,
+          limit: 100,
+        });
+        if (older.length === 0) {
+          setHasOlder(false);
+        } else {
+          // Preserve scroll position by tracking height before prepend
+          const prevHeight = el.scrollHeight;
+          setMessages((prev: ChatMessage[]) => {
+            // Deduplicate by ID in case of overlap
+            const existingIds = new Set(prev.map(m => m.id));
+            const newMsgs = older.filter(m => !existingIds.has(m.id));
+            return [...newMsgs, ...prev];
+          });
+          // On next frame, adjust scroll to keep position after prepend
+          requestAnimationFrame(() => {
+            const newHeight = el.scrollHeight;
+            el.scrollTop = newHeight - prevHeight;
+          });
+          setPageLoadKey(k => k + 1);
+        }
+      } catch { /* noop — older messages may not exist */ }
+      setLoadingOlder(false);
+    }
+  }, [messages, hasOlder, loadingOlder, activeConversationId]);
+
+  // Reset pagination state when conversation changes
+  useEffect(() => {
+    setHasOlder(true);
+    setLoadingOlder(false);
+  }, [activeConversationId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
