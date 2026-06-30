@@ -4,7 +4,7 @@ import "./styles/theme.css";
 import "./styles/animations.css";
 import "./styles/reset.css";
 import "./styles/layout.css";
-import "./styles/components.css";
+import "./styles/components/index.css";
 
 import { AppProvider, useApp } from "./context/AppContext";
 import { VaultProvider } from "./context/VaultContext";
