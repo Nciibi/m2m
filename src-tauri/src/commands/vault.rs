@@ -376,11 +376,14 @@ pub async fn connect_family_member(
     let pk_bytes = util::decode_peer_key(&peer_key_hex)
         .map_err(|e| format!("invalid peer key: {e}"))?;
 
-    // Get identity pub key (for handshake) — drop guard before any .await
-    let (kp_pub, kp_sk) = {
+    // Extract the identity keypair bytes — drop guard before any .await
+    let identity_keypair = {
         let identity = state.identity.read().await;
         let kp = identity.as_ref().ok_or("identity not initialized")?;
-        (kp.public_key_bytes(), kp.secret_key_bytes())
+        let pub_bytes = kp.public_key_bytes();
+        let sk_bytes = kp.secret_key_bytes();
+        IdentityKeypair::from_bytes(&pub_bytes, &sk_bytes)
+            .map_err(|e| format!("identity error: {e}"))?
     };
 
     // Look up the family member — drop key_store lock before any .await
