@@ -84,7 +84,7 @@ pub async fn load_messages(
     limit: Option<i64>,
 ) -> Result<Vec<ChatMessage>, String> {
     // Lazy init: open message store on first load if not already opened
-    state.ensure_message_store(&state.data_dir).map_err(|e| format!("message store init: {e}"))?;
+    state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
 
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
