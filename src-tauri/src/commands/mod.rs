@@ -39,6 +39,21 @@ pub struct ChatMessage {
     pub content: String,
     pub direction: String,
     pub timestamp: u64,
+    /// When this message was read (null = unread, only for received messages).
+    pub read_at: Option<i64>,
+    /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
+    #[serde(default)]
+    pub reactions: std::collections::HashMap<String, Vec<String>>,
+}
+
+impl ChatMessage {
+    pub fn new(id: String, content: String, direction: String, timestamp: u64) -> Self {
+        Self {
+            id, content, direction, timestamp,
+            read_at: None,
+            reactions: std::collections::HashMap::new(),
+        }
+    }
 }
 
 impl Drop for ChatMessage {
