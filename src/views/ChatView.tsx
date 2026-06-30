@@ -151,7 +151,15 @@ export default function ChatView() {
         </h1>
         <div className="app-header__actions">
           <Button variant="secondary" size="sm" onClick={backToHub}><ArrowLeftIcon size={16} /> Hub</Button>
-          <Badge variant={connection?.state === "established" ? "success" : "danger"} dot compact>{connection?.state || "unknown"}</Badge>
+          {connection?.state === "disconnected" && connection?.peer_verified ? (
+            <Button variant="warning" size="sm" onClick={handleReconnect} disabled={reconnecting}>
+              {reconnecting ? `Reconnecting (${reconnectAttempt}/5)…` : "Reconnect"}
+            </Button>
+          ) : (
+            <Badge variant={connection?.state === "established" ? "success" : "danger"} dot compact>
+              {reconnecting ? `Reconnecting…` : (connection?.state || "unknown")}
+            </Badge>
+          )}
           {connection?.state === "established" && <Button variant="danger" size="sm" onClick={handleDisconnect} id="disconnect-btn">Disconnect</Button>}
         </div>
       </div>
