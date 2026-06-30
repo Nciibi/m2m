@@ -9,7 +9,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use m2m_lib::crypto::{
-    self, pad_message_variable, unpad_message_variable, DoubleRatchet, EphemeralKeypair,
+    pad_message_variable, unpad_message_variable, DoubleRatchet, EphemeralKeypair,
     PrekeyBundle, X3DHSessionKeys, X25519IdentityKeypair,
 };
 
