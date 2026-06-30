@@ -25,6 +25,7 @@ function TestConsumer() {
     handleSendMessage, handleConnect, handleDisconnect, handleGenerateInvite,
     handleOpenChat, handleDeleteConversation, setInviteToConnect,
     copyInvite, handleVerify, handleSendFile, handleExportConversation,
+    handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
   } = useChat();
   return (
     <div>
@@ -41,6 +42,9 @@ function TestConsumer() {
       <button onClick={handleExportConversation}>Export</button>
       <button onClick={handleDeleteConversation}>Delete Conv</button>
       <button onClick={() => handleOpenChat({ id: "c1", peer_key_hex: "abc", display_name: null, peer_display_name: null, last_message_at: null, last_message_preview: null, message_count: 0, is_online: false, auto_delete_at: null, retention_policy: "none", created_at: 0 })}>Open Chat</button>
+      <button onClick={() => handleSendReaction("msg-1", "👍")}>Send Reaction</button>
+      <button onClick={() => handleRemoveReaction("msg-1", "👍")}>Remove Reaction</button>
+      <button onClick={handleMarkConversationRead}>Mark Read</button>
     </div>
   );
 }
