@@ -168,7 +168,6 @@ function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
           Peer Key
           <datalist id="peer-list">
           <Input
-            list="peer-list"
             placeholder="Peer public key hex"
             value={peerKeyHex}
             onChange={e => setPeerKeyHex(e.target.value)}
