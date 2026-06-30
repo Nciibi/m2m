@@ -241,23 +241,11 @@ pub async fn unlock_vault(
     // Drop key_store lock before acquiring other locks
     drop(ks_guard);
 
-    // Initialize message store (deferred from init_identity to here)
-    let msg_store = storage::MessageStore::open(&msgs_db_path)
-        .map_err(|e| format!("message store error: {e}"))?;
-    {
-        let mut ms = state.message_store.lock().await;
-        *ms = Some(msg_store);
-    }
-
-    // Initialize transfer history store
-    let transfer_store = storage::TransferStore::open(&transfers_db_path)
-        .map_err(|e| format!("transfer store error: {e}"))?;
-    {
-        let mut ts = state.transfer_store.lock().await;
-        *ts = Some(transfer_store);
-    }
-
     // Store the full keypair in state
+    // NOTE: MessageStore and TransferStore are opened lazily on first use
+    // (see load_messages, send_message, file transfer commands). This keeps
+    // vault unlock fast and avoids unnecessary DB opens when the user only
+    // changes settings without loading messages.
     {
         let mut id_lock = state.identity.write().await;
         *id_lock = Some(keypair);
