@@ -121,6 +121,10 @@ pub struct ConnectionEvent {
     pub peer_key_hex: String,
     pub state: String,
     pub peer_fingerprint: Option<String>,
+    /// Whether the peer was verified before the connection dropped.
+    /// Used by the frontend to decide whether to show a Reconnect button.
+    #[serde(default)]
+    pub peer_verified: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
