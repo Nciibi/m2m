@@ -498,6 +498,20 @@ impl MessageStore {
         Ok(())
     }
 
+    /// Migrate the messages table — add `read_at` column.
+    fn migrate_messages_table(conn: &Connection) -> Result<(), StorageError> {
+        let mut stmt = conn.prepare("PRAGMA table_info(messages)")?;
+        let existing_columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(|r| r.ok())
+            .collect();
+        if !existing_columns.contains(&"read_at".to_string()) {
+            conn.execute("ALTER TABLE messages ADD COLUMN read_at INTEGER", [])?;
+        }
+        Ok(())
+    }
+    }
+
     /// Store a message.
     pub fn store_message(
         &self,
