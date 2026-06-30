@@ -523,6 +523,7 @@ async fn handle_relay_incoming_with_frame(
         peer_key_hex: peer_key_hex.clone(),
         state: "established".to_string(),
         peer_fingerprint: Some(peer_fingerprint.clone()),
+        peer_verified: false,
     });
 
     tracing::info!(peer = %peer_key_hex, "peer connected via relay");
