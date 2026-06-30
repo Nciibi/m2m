@@ -47,7 +47,14 @@ export default function SettingsView() {
               <span className="settings-label">Fingerprint</span>
               <span className="settings-mono">{identity?.fingerprint || "—"}</span>
               <button className="btn btn--ghost btn--icon-sm" onClick={() => {
-                if (identity?.fingerprint) { navigator.clipboard.writeText(identity.fingerprint); setFpCopied(true); setTimeout(() => setFpCopied(false), 2000); }
+                if (identity?.fingerprint) {
+                  navigator.clipboard.writeText(identity.fingerprint);
+                  setFpCopied(true);
+                  setTimeout(() => setFpCopied(false), 2000);
+                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                  }
+                }
               }} aria-label="Copy fingerprint">
                 {fpCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
               </button>
