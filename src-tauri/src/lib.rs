@@ -136,6 +136,9 @@ pub fn run() {
             commands::chat::edit_message,
             commands::chat::delete_message,
             commands::chat::cleanup_expired_messages,
+            // Reconnection
+            commands::attempt_reconnect,
+            commands::list_pending_reconnects,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
