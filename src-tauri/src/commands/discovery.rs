@@ -66,7 +66,7 @@ pub async fn set_discovery_config(
         let lan_state = Arc::new(RwLock::new(lan_discovery::LanDiscoveryState::default()));
         let lan_cancel = Arc::new(AtomicBool::new(false));
 
-        let listen_addr = state.listen_addr.clone();
+        let listen_addr = match *state.listen_addr.read().await {
         let lan_state_clone = lan_state.clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let cancel_clone = lan_cancel.clone();
@@ -109,7 +109,7 @@ pub async fn set_discovery_config(
         let dht_state = Arc::new(RwLock::new(dht::DhtState::new(dht::DhtConfig::default())));
         let dht_cancel = Arc::new(AtomicBool::new(false));
 
-        let listen_addr = state.listen_addr.clone();
+        let listen_addr = match *state.listen_addr.read().await {
         let dht_state_clone = dht_state.clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let network_monitor = Arc::new(RwLock::new(ephemeral_id::NetworkMonitor::new()));
