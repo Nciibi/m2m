@@ -336,7 +336,7 @@ pub async fn connect_discovered_peer(
 #[tauri::command]
 pub async fn refresh_discovery(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<crate::commands::discovery::DiscoveredPeer>, String> {
+) -> Result<Vec<DiscoveredPeer>, String> {
     // LAN: expire stale peers explicitly
     if let Some(ref lan_state_arc) = *state.lan_state.read().await {
         let mut lan = lan_state_arc.write().await;
