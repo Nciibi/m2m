@@ -260,41 +260,32 @@ async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
 
 // ─── Announce / Lookup ─────────────────────────────────────────────────────────
 
-/// Build an announce body for our identity.
-fn build_announce_body(identity: &IdentityKeypair, listen_addr: SocketAddr) -> Result<Vec<u8>, DhtError> {
-    let peer_id = sodiumoxide::crypto::hash::sha256::hash(&identity.public_key_bytes()).0;
-
-    // Encode the IP address: 4 bytes for IPv4, 16 bytes for IPv6.
-    // Prefix with a 1-byte address family tag (4=IPv4, 6=IPv6).
+/// Build an announce body using an ephemeral peer ID.
+///
+/// The body contains ONLY the ephemeral ID and IP address — NO permanent
+/// identity key, NO signature. This prevents observers from linking the
+/// ephemeral ID to your real identity.
+///
+/// Format:
+///   [ephemeral_id(32B)] [af_tag(1B)] [ip(4/16B)] [port(2B)]
+fn build_announce_body(ephemeral_id: &[u8; 32], listen_addr: SocketAddr) -> Vec<u8> {
     let (af_tag, ip_bytes) = match listen_addr.ip() {
         std::net::IpAddr::V4(v4) => (4u8, v4.octets().to_vec()),
         std::net::IpAddr::V6(v6) => (6u8, v6.octets().to_vec()),
     };
 
-    // body = peer_id(32) + identity_pub(32) + af_tag(1) + ip(variable 4/16) + port(2) + sig(64)
-    let body_size = 32 + 32 + 1 + ip_bytes.len() + 2 + 64;
-    let mut body = Vec::with_capacity(body_size);
-    body.extend_from_slice(&peer_id);
-    body.extend_from_slice(&identity.public_key_bytes());
+    let mut body = Vec::with_capacity(32 + 1 + ip_bytes.len() + 2);
+    body.extend_from_slice(ephemeral_id);
     body.push(af_tag);
     body.extend_from_slice(&ip_bytes);
     body.extend_from_slice(&listen_addr.port().to_be_bytes());
-
-    // Sign the announce (peer_id + ip + port)
-    let mut sign_data = Vec::with_capacity(32 + ip_bytes.len() + 2);
-    sign_data.extend_from_slice(&peer_id);
-    sign_data.extend_from_slice(&ip_bytes);
-    sign_data.extend_from_slice(&listen_addr.port().to_be_bytes());
-    let signature = identity.sign(&sign_data);
-    body.extend_from_slice(&signature);
-
-    Ok(body)
+    body
 }
 
 /// Announce our presence to a bootstrap node.
 pub async fn announce_to_node(
     node_addr: SocketAddr,
-    identity: &IdentityKeypair,
+    ephemeral_id: &[u8; 32],
     listen_addr: SocketAddr,
 ) -> Result<(), DhtError> {
     let mut stream = time::timeout(DHT_CONNECT_TIMEOUT, TcpStream::connect(node_addr))
