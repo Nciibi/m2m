@@ -305,7 +305,7 @@ async fn query_single_server(
         Ok(s) => s,
         Err(_) => UdpSocket::bind("[::]:0")
             .await
-            .map_err(|e| StunError::Io(e))?,
+            .map_err(StunError::Io)?,
     };
 
     // Socket timeout is handled entirely by the outer tokio::time::timeout
