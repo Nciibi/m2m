@@ -12,7 +12,7 @@ import FamilyTab from "../components/FamilyTab";
 import type { FamilyMember } from "../types";
 
 export default function HubView() {
-  const { identity, toasts, removeToast } = useApp();
+  const { identity, setView, toasts, removeToast } = useApp();
   const {
     connection, generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
     isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
