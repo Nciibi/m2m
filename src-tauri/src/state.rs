@@ -99,16 +99,6 @@ pub struct OutgoingFileTransfer {
 }
 
 impl OutgoingFileTransfer {
-    /// Check if all chunks have been sent and acked.
-    pub fn is_complete(&self) -> bool {
-        self.chunks_acked >= self.total_chunks
-    }
-
-    /// Fraction [0.0, 1.0] of chunks completed.
-    pub fn progress_fraction(&self) -> f64 {
-        if self.total_chunks == 0 { return 1.0; }
-        self.chunks_acked as f64 / self.total_chunks as f64
-    }
 }
 
 /// State for an in-progress file transfer (receiving side).
@@ -148,22 +138,6 @@ pub struct IncomingFileTransfer {
 }
 
 impl IncomingFileTransfer {
-    pub fn progress_fraction(&self) -> f64 {
-        if self.total_chunks == 0 { return 1.0; }
-        self.chunks_received as f64 / self.total_chunks as f64
-    }
-
-    /// Check if all chunks have been received (bitmask fully true).
-    pub fn all_chunks_received(&self) -> bool {
-        if self.chunks_bitmask.is_empty() {
-            return self.chunks_received >= self.total_chunks;
-        }
-        self.chunks_bitmask.iter().all(|&b| b)
-    }
-
-    pub fn bytes_received(&self) -> u64 {
-        self.bytes_received
-    }
 }
 
 /// Transfer queue with concurrency limits.
@@ -212,11 +186,6 @@ impl TransferQueue {
         Some(id)
     }
 
-    /// Mark a transfer as done (completed/failed/cancelled). Returns the next queued transfer.
-    pub fn finish(&mut self, transfer_id: &str) -> Option<String> {
-        self.active.remove(transfer_id);
-        self.dequeue()
-    }
 }
 
 /// A port forwarding rule the user configured manually on their router.
