@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(frame.msg_type, RelayRequest::Register as u8);
 
         // Send REGISTERED with relay_id "test123"
-        let body = vec![7u8]; // id_len
+        let body = [7u8]; // id_len
         let mut resp = vec![b't', b'e', b's', b't', b'1', b'2', b'3'];
         resp.insert(0, body[0]);
         write_relay_frame(&mut rx, RelayResponse::Registered as u8, &resp)

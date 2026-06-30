@@ -1,6 +1,5 @@
 use sodiumoxide::crypto::sign;
 use sodiumoxide::crypto::hash::sha256;
-use hex;
 
 fn fingerprint_from_public_key(public_key: &[u8; 32]) -> String {
     let hash = sha256::hash(public_key);
