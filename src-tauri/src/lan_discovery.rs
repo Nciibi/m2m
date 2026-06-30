@@ -64,7 +64,7 @@ const LAN_DISCOVERY_VERSION: u8 = 0x01;
 #[derive(Debug, Clone)]
 pub struct LanPeer {
     /// Ephemeral session token (rotates hourly, NOT a permanent key).
-    #[expect(dead_code, reason = "Used in tests only — preserved for serialization")]
+    #[allow(dead_code)]
     pub session_token: [u8; 32],
     /// Hex of the session token (for display/lookup).
     pub token_hex: String,
