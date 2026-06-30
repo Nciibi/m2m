@@ -301,7 +301,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         m.id === messageId ? { ...m, deleted: true, content: "[deleted]" } : m
       ));
     } catch (e) {
-      app.addToast("Delete failed: " + e, "error");
+      addToast("Delete failed: " + e, "error");
     }
   }, [connection?.peer_key_hex, app]);
 
