@@ -511,7 +511,6 @@ impl MessageStore {
         }
         Ok(())
     }
-    }
 
     /// Store a message.
     pub fn store_message(
