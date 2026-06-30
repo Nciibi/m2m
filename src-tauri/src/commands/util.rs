@@ -12,6 +12,10 @@ pub const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
 /// Domain-separates export files from on-disk storage.
 pub const AAD_EXPORT: &[u8] = b"m2m-export-v1";
 
+/// AAD context for identity export/import encryption.
+/// Domain-separates identity backup files from other ciphertext.
+pub const AAD_EXPORT_V2: &[u8] = b"m2m-export-v2";
+
 /// Decode a 64-char hex string into a 32-byte peer key.
 /// Returns an error if the hex string is malformed or wrong length.
 pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
