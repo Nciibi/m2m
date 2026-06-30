@@ -16,7 +16,7 @@ export default function ChatView() {
   const { discoveryConfig } = useSettings();
   const {
     connection, messages, fileRequests, activeConversationId,
-    handleSendMessage, handleSendFile, handleVerify, handleDisconnect,
+    handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
     handleExportConversation, handleSetRetention,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
     handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
