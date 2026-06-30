@@ -473,6 +473,8 @@ pub async fn send_message_with_timer(
     // Persist to local storage
     let history = *state.history_enabled.read().await;
     if history {
+        state.ensure_message_store(&state.data_dir).map_err(|e| format!("message store init: {e}"))?;
+
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
