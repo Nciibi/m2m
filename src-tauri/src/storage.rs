@@ -457,10 +457,8 @@ impl MessageStore {
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conversation
                 ON messages(conversation_id, timestamp);
-            CREATE INDEX IF NOT EXISTS idx_messages_expires_at
-                ON messages(expires_at);
-            CREATE INDEX IF NOT EXISTS idx_messages_read_status
-                ON messages(conversation_id, direction, read_at);
+            -- idx_messages_expires_at and idx_messages_read_status are created
+            -- in migrate_messages_table() after the expires_at column is guaranteed to exist.
             CREATE TABLE IF NOT EXISTS reactions (
                 message_id TEXT NOT NULL,
                 reaction TEXT NOT NULL,
