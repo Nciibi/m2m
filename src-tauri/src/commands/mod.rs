@@ -33,7 +33,7 @@ pub struct ConnectionInfo {
     pub peer_key_hex: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, zeroize::Zeroize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: String,
     pub content: String,
