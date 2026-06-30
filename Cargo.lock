@@ -2192,6 +2192,7 @@ dependencies = [
  "hmac 0.12.1",
  "libloading 0.8.9",
  "rand 0.9.4",
+ "raw-window-handle",
  "rmp-serde",
  "rusqlite",
  "serde",
