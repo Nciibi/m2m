@@ -131,7 +131,7 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
 }
 
 function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> }) {
-  const { addToast, conversations } = useApp();
+  const { addToast } = useApp();
   const [peerKeyHex, setPeerKeyHex] = useState("");
   const [nickname, setNickname] = useState("");
   const [duration, setDuration] = useState("forever");
