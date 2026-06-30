@@ -66,25 +66,18 @@ const ANNOUNCE_INTERVAL: Duration = Duration::from_secs(600);
 /// How long until a peer's announcement expires (30 minutes).
 const PEER_EXPIRY_SECS: u64 = 1800;
 
-#[expect(dead_code, reason = "Reserved for DHT bootstrap limiting")]
 const MAX_BOOTSTRAP_NODES: usize = 5;
 
-#[expect(dead_code, reason = "Reserved for DHT parallel lookup limiting")]
 const MAX_LOOKUP_PARALLEL: usize = 3;
 
 // ─── DHT Message Types ─────────────────────────────────────────────────────────
 
-#[expect(dead_code, reason = "Reserved DHT wire protocol message types")]
 const DHT_PING: u8 = 0x01;
-#[expect(dead_code, reason = "Reserved for DHT pong response")]
 const DHT_PONG: u8 = 0x02;
 const DHT_ANNOUNCE: u8 = 0x03;
 const DHT_ANNOUNCE_OK: u8 = 0x04;
-#[expect(dead_code, reason = "Reserved for DHT node lookup protocol")]
 const DHT_FIND_NODE: u8 = 0x05;
-#[expect(dead_code, reason = "Reserved for DHT node response protocol")]
 const DHT_NODE_RESPONSE: u8 = 0x06;
-#[expect(dead_code, reason = "Reserved for DHT error responses")]
 const DHT_ERROR: u8 = 0xFF;
 
 // ─── Error ─────────────────────────────────────────────────────────────────────
