@@ -112,7 +112,10 @@ pub async fn set_discovery_config(
         let dht_state = Arc::new(RwLock::new(dht::DhtState::new(dht::DhtConfig::default())));
         let dht_cancel = Arc::new(AtomicBool::new(false));
 
-        let listen_addr = match *state.listen_addr.read().await {
+        let listen_addr = {
+            let val = state.listen_addr.read().await;
+            Arc::new(RwLock::new(*val))
+        };
         let dht_state_clone = dht_state.clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let network_monitor = Arc::new(RwLock::new(ephemeral_id::NetworkMonitor::new()));
@@ -222,7 +225,7 @@ pub async fn connect_discovered_peer(
         .ok_or("identity not initialized")?;
 
     // Connect via TCP (respects Tor setting)
-    let stream = tor::connect(peer_addr)
+    let mut stream = tor::connect(peer_addr)
         .await
         .map_err(|e| format!("connection failed: {e}"))?;
 
