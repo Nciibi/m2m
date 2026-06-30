@@ -1,18 +1,18 @@
 //! Vault and identity commands.
 //!
 //! Handles keypair generation, passphrase-based vault locking/unlocking,
-//! and identity info queries.
+//! identity info queries, family contact management, and identity export/import.
 
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::crypto::{self, IdentityKeypair};
 use crate::state::AppState;
 use crate::storage::{self, KeyStore};
 
 use super::util;
-use super::{IdentityInfo, VaultStatus};
+use super::{ConnectionEvent, ConnectionInfo, FamilyMember, IdentityInfo, VaultStatus};
 
 /// Initialize the crypto library and check for existing identity.
 /// Does NOT decrypt the private key — that is deferred to `unlock_vault`.
