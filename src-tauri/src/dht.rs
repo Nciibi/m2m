@@ -66,10 +66,10 @@ const ANNOUNCE_INTERVAL: Duration = Duration::from_secs(600);
 /// How long until a peer's announcement expires (30 minutes).
 const PEER_EXPIRY_SECS: u64 = 1800;
 
-/// Maximum number of bootstrap nodes to connect to.
+#[expect(dead_code, reason = "Reserved for DHT bootstrap limiting")]
 const MAX_BOOTSTRAP_NODES: usize = 5;
 
-/// Maximum number of lookup nodes to query in parallel.
+#[expect(dead_code, reason = "Reserved for DHT parallel lookup limiting")]
 const MAX_LOOKUP_PARALLEL: usize = 3;
 
 // ─── DHT Message Types ─────────────────────────────────────────────────────────
