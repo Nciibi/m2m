@@ -376,6 +376,21 @@ pub struct ConversationMetaData {
     pub your_display_name: String,
 }
 
+// --- Message Reactions ---
+
+/// A reaction (emoji) on a message, sent as a typed encrypted frame (type 0x41).
+/// The peer_key_hex is implicit from the session — not serialized in the packet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageReactionData {
+    /// The message ID being reacted to.
+    pub message_id: String,
+    /// The emoji reaction (e.g. "👍", "❤️", "😂").
+    pub reaction: String,
+    /// Whether this is an add (false) or remove (true).
+    #[serde(default)]
+    pub remove: bool,
+}
+
 // --- Disconnect ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
