@@ -335,10 +335,13 @@ pub async fn remove_family_member(
 ) -> Result<(), String> {
     let pk_bytes = util::decode_peer_key(&peer_key_hex)
         .map_err(|e| format!("invalid peer key: {e}"))?;
-    let ks = state.key_store.lock().await;
-    let store = ks.as_ref().ok_or("key store not initialized")?;
-    store.remove_family_member(&pk_bytes)
-        .map_err(|e| format!("failed to remove family member: {e}"))
+    {
+        let ks = state.key_store.lock().await;
+        let store = ks.as_ref().ok_or("key store not initialized")?;
+        store.remove_family_member(&pk_bytes)
+            .map_err(|e| format!("failed to remove family member: {e}"))?
+    }
+    Ok(())
 }
 
 /// Update a family member's nickname.
