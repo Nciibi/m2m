@@ -110,6 +110,16 @@ pub fn run() {
             commands::discovery::get_discovered_peers,
             commands::discovery::connect_discovered_peer,
             commands::discovery::refresh_discovery,
+            // Family
+            commands::vault::list_family,
+            commands::vault::add_family_member,
+            commands::vault::remove_family_member,
+            commands::vault::set_family_nickname,
+            commands::vault::connect_family_member,
+            commands::vault::update_family_member,
+            // Export/Import
+            commands::vault::export_identity,
+            commands::vault::import_identity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
