@@ -768,6 +768,7 @@ pub fn spawn_receive_loop(
     state: Arc<AppState>,
     mut read_half: tokio::net::tcp::OwnedReadHalf,
     peer_key_hex: String,
+    reconnect_info: Option<crate::reconnect::ReconnectInfo>,
 ) {
     let hb_peer = peer_key_hex.clone();
     let hb_state = state.clone();
