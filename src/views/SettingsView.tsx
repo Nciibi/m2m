@@ -17,6 +17,7 @@ export default function SettingsView() {
     securityConfig,
     handleScreenCaptureToggle, handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
+    scheduleClipboardClear,
   } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
