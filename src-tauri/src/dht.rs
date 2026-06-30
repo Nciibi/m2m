@@ -51,6 +51,7 @@ use thiserror::Error;
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 /// DHT protocol version.
+#[expect(dead_code, reason = "Reserved for DHT wire protocol negotiation")]
 const DHT_PROTOCOL_VERSION: u8 = 0x01;
 
 /// Maximum DHT message body size (64 KiB).
