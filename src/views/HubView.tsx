@@ -10,6 +10,7 @@ import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
 import type { FamilyMember } from "../types";
+import { hashToColor, formatTime } from "../utils";
 
 export default function HubView() {
   const { identity, setView, toasts, removeToast } = useApp();
