@@ -446,6 +446,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unlistenConvMeta.then((f) => f());
       unlistenReaction.then((f) => f());
       unlistenEdit.then((f) => f());
+      unlistenReconnectAttempt.then((f) => f());
       unlistenDelete.then((f) => f());
     };
   }, [setView, notifPermission]);
