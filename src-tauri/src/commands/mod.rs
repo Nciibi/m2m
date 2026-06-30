@@ -7,6 +7,7 @@
 pub mod chat;
 pub mod discovery;
 pub mod files;
+pub mod security;
 pub mod forwards;
 pub mod network;
 pub mod relay;

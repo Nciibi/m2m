@@ -111,6 +111,11 @@ pub fn run() {
             commands::discovery::get_discovered_peers,
             commands::discovery::connect_discovered_peer,
             commands::discovery::refresh_discovery,
+            // Security
+            commands::security::get_security_config,
+            commands::security::set_security_config,
+            commands::security::clear_clipboard,
+            commands::vault::lock_vault,
             // Family
             commands::vault::list_family,
             commands::vault::add_family_member,
