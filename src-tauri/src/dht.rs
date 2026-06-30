@@ -1,40 +1,40 @@
-/// M2M — DHT Peer Discovery
-///
-/// ⚠️ **PRIVACY WARNING** ⚠️
-///
-/// This module is **OFF by default** for a reason: publishing your
-/// presence to a DHT makes you *discoverable* but also *traceable*.
-/// Anyone monitoring the DHT can see when you're online and what IP
-/// you're using.
-///
-/// If you enable this, M2M uses an **ephemeral peer ID** — a random
-/// 32-byte token that changes every 24 hours or whenever your IP
-/// changes. This is NOT your permanent Ed25519 identity key, so
-/// observers cannot link your DHT activity back to your real identity.
-/// However: your IP address is still visible to DHT nodes.
-///
-/// ## When to use
-///
-/// - **Safe**: You want friends to find you without sharing invite links
-/// - **Unsafe**: You're in a high-risk environment, using Tor, or want
-///   maximum metadata protection — leave it OFF and use invite links.
-///
-/// ## Design
-///
-/// Lightweight Kademlia-style DHT client that uses configurable
-/// bootstrap nodes for peer discovery. Announced peer IDs are
-/// ephemeral (rotated periodically and on network change), NOT
-/// your permanent identity key.
-///
-/// - **Announce**: Publish `(ephemeral_id, listen_addr)` — no permanent key exposed
-/// - **Lookup**: Query for a peer by their ephemeral ID
-/// - **Bootstrap**: Connect to bootstrap nodes to join the DHT network
-///
-/// ## NAT Awareness
-///
-/// Peers behind symmetric NATs act as "client-only" nodes (query and
-/// announce only, don't serve routing table entries).
 #![allow(dead_code)]
+//! M2M — DHT Peer Discovery
+//!
+//! ⚠️ **PRIVACY WARNING** ⚠️
+//!
+//! This module is **OFF by default** for a reason: publishing your
+//! presence to a DHT makes you *discoverable* but also *traceable*.
+//! Anyone monitoring the DHT can see when you're online and what IP
+//! you're using.
+//!
+//! If you enable this, M2M uses an **ephemeral peer ID** — a random
+//! 32-byte token that changes every 24 hours or whenever your IP
+//! changes. This is NOT your permanent Ed25519 identity key, so
+//! observers cannot link your DHT activity back to your real identity.
+//! However: your IP address is still visible to DHT nodes.
+//!
+//! ## When to use
+//!
+//! - **Safe**: You want friends to find you without sharing invite links
+//! - **Unsafe**: You're in a high-risk environment, using Tor, or want
+//!   maximum metadata protection — leave it OFF and use invite links.
+//!
+//! ## Design
+//!
+//! Lightweight Kademlia-style DHT client that uses configurable
+//! bootstrap nodes for peer discovery. Announced peer IDs are
+//! ephemeral (rotated periodically and on network change), NOT
+//! your permanent identity key.
+//!
+//! - **Announce**: Publish `(ephemeral_id, listen_addr)` — no permanent key exposed
+//! - **Lookup**: Query for a peer by their ephemeral ID
+//! - **Bootstrap**: Connect to bootstrap nodes to join the DHT network
+//!
+//! ## NAT Awareness
+//!
+//! Peers behind symmetric NATs act as "client-only" nodes (query and
+//! announce only, don't serve routing table entries).
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -52,7 +52,6 @@ use thiserror::Error;
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 /// DHT protocol version.
-#[expect(dead_code, reason = "Reserved for DHT wire protocol negotiation")]
 const DHT_PROTOCOL_VERSION: u8 = 0x01;
 
 /// Maximum DHT message body size (64 KiB).
