@@ -283,6 +283,7 @@ fn build_announce_body(ephemeral_id: &[u8; 32], listen_addr: SocketAddr) -> Vec<
 }
 
 /// Announce our presence to a bootstrap node.
+/// Uses an ephemeral peer ID — NOT your permanent identity key.
 pub async fn announce_to_node(
     node_addr: SocketAddr,
     ephemeral_id: &[u8; 32],
@@ -293,7 +294,7 @@ pub async fn announce_to_node(
         .map_err(|_| DhtError::Timeout)?
         .map_err(DhtError::Io)?;
 
-    let body = build_announce_body(identity, listen_addr)?;
+    let body = build_announce_body(ephemeral_id, listen_addr);
     dht_send(&mut stream, DHT_ANNOUNCE, &body).await?;
 
     let (resp_type, _) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
