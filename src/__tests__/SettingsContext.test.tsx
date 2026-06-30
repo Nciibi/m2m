@@ -204,4 +204,59 @@ describe("SettingsContext", () => {
     expect(() => render(<TestConsumer />)).toThrow();
     spy.mockRestore();
   });
+
+  // ─── Security tests ───
+
+  it("provides default security config", () => {
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+    expect(screen.getByTestId("screen-capture").textContent).toBe("false");
+  });
+
+  it("handleScreenCaptureToggle calls set_security_config", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue({ screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0 });
+
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+
+    await user.click(screen.getByText("Toggle Screen Capture"));
+    expect(mockInvoke).toHaveBeenCalledWith("set_security_config", {
+      config: { screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0 },
+    });
+  });
+
+  it("handleLockVault calls lock_vault", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue(undefined);
+
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+
+    await user.click(screen.getByText("Lock Vault"));
+    expect(mockInvoke).toHaveBeenCalledWith("lock_vault");
+  });
+
+  it("handleClearClipboard calls clear_clipboard", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue(undefined);
+
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+
+    await user.click(screen.getByText("Clear Clipboard"));
+    expect(mockInvoke).toHaveBeenCalledWith("clear_clipboard");
+  });
 });
