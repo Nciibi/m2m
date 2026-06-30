@@ -557,6 +557,7 @@ impl MessageStore {
     }
 
     /// Store a message with an optional self-destruct timer (idempotent).
+    #[allow(clippy::too_many_arguments)]
     pub fn store_message_with_expiry(
         &self,
         id: &str,
@@ -1085,6 +1086,7 @@ impl TransferStore {
     }
 
     /// Insert or update a transfer record.
+    #[allow(clippy::too_many_arguments)]
     pub fn store_transfer(
         &self,
         id: &str,
@@ -1094,7 +1096,6 @@ impl TransferStore {
         direction: &str,
         state: &str,
         chunks_total: u32,
-        _completed_at: Option<i64>,
     ) -> Result<(), StorageError> {
         let now = chrono::Utc::now().timestamp();
         self.conn.execute(
