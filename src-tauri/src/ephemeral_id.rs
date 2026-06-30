@@ -50,6 +50,7 @@ impl EphemeralPeerId {
     }
 
     /// Get the hex-encoded ephemeral ID.
+    #[cfg(test)]
     pub fn hex(&self) -> String {
         hex::encode(self.id)
     }
