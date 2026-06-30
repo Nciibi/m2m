@@ -1,4 +1,12 @@
 /// Estimate passphrase entropy in bits using character-pool + pattern detection.
+///
+/// Uses a character-pool base model, then applies pattern-based penalties:
+/// - Sequential characters ("abcd", "1234") → penalize
+/// - Repeating characters ("aaa", "1111") → penalize
+/// - Keyboard patterns ("qwerty", "asdf") → penalize
+/// - Short length (< 12 chars) → heavy penalty
+///
+/// Implements NIST SP 800-63B guidance for minimum floor.
 export function estimateEntropy(passphrase: string): number {
   if (!passphrase) return 0;
   const len = passphrase.length;
