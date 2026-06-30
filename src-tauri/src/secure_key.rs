@@ -51,8 +51,8 @@ impl StorageKey {
     }
 
     /// Create a new key from pre-existing bytes without locking.
-    /// The key is NOT locked in RAM — only use in tests.
-    #[cfg(test)]
+    /// The key is NOT locked in RAM — only use in tests and benchmarks.
+    #[cfg(any(test, bench))]
     pub fn from_bytes_for_test(key: &[u8; 32]) -> Self {
         Self { key: *key }
     }
