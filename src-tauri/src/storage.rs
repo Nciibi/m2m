@@ -771,6 +771,8 @@ pub struct StoredMessage {
     pub content_encrypted: Vec<u8>,
     pub content_nonce: Vec<u8>,
     pub timestamp: i64,
+    /// When this message was read by the recipient (null = unread).
+    pub read_at: Option<i64>,
 }
 
 /// Summary of a conversation for the frontend.
