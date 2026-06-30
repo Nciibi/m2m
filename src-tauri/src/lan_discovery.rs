@@ -249,7 +249,7 @@ pub async fn start(
         .map_err(LanDiscoveryError::Io)?;
 
     // Join the multicast group
-    socket.join_multicast_v4(MULTICAST_ADDR, Ipv4Addr::UNSPECIFIED)
+    socket.join_multicast_v4(&MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED)
         .map_err(LanDiscoveryError::Io)?;
 
     let socket = Arc::new(socket);
