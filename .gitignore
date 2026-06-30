@@ -25,3 +25,6 @@ dist-ssr
 src-tauri/fuzz/target
 src-tauri/target2
 
+target
+relay-server/target
+

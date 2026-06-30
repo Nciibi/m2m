@@ -1,0 +1,11 @@
+node_modules/
+src/
+frontend/
+public/
+dist/
+target/
+.git/
+*.md
+docs/
+plans/
+skills/
