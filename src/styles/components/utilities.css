@@ -1388,3 +1388,149 @@
   color: var(--color-text-muted);
   border-top: 1px solid var(--color-border-default);
 }
+
+/* ─── Self-destruct timer ─── */
+
+.msg-timer {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* ─── Edited badge ─── */
+
+.msg-edited-badge {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* ─── Deleted message ─── */
+
+.msg-bubble--deleted {
+  opacity: 0.6;
+  background: var(--color-bg-tertiary);
+  border: 1px dashed var(--color-border-default);
+}
+
+/* ─── Inline edit mode ─── */
+
+.msg-edit-inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.msg-edit-input {
+  width: 100%;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-accent-bright);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  resize: vertical;
+  min-height: 2.5em;
+}
+
+.msg-edit-actions {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+}
+
+/* ─── Context menu (right-click) ─── */
+
+.msg-context-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: fadeIn 0.1s var(--ease-out-expo);
+  min-width: 100px;
+}
+
+.msg-bubble--received .msg-context-menu {
+  right: auto;
+  left: 0;
+}
+
+.msg-context-item {
+  all: unset;
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  transition: background var(--transition-fast);
+}
+
+.msg-context-item:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.msg-context-item--danger {
+  color: var(--color-danger);
+}
+
+.msg-context-item--danger:hover {
+  background: var(--color-danger-bg);
+}
+
+/* ─── Markdown in messages ─── */
+
+.msg-content {
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.msg-content strong {
+  font-weight: 700;
+}
+
+.msg-content em {
+  font-style: italic;
+}
+
+.msg-content code.msg-code-inline {
+  background: var(--color-bg-tertiary);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.msg-link {
+  color: var(--color-accent-bright);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.msg-link:hover {
+  opacity: 0.8;
+}
+
+/* ─── Message input timer selector ─── */
+
+.msg-input-timer {
+  flex-shrink: 0;
+}
+
+.msg-input-timer select {
+  font-size: var(--text-xs);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}

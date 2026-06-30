@@ -287,7 +287,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       app.addToast("Edit failed: " + e, "error");
     }
-  }, [connection?.peer_key_hex, app]);
+  }, [connection?.peer_key_hex, addToast]);
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     if (!connection?.peer_key_hex) return;
