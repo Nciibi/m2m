@@ -60,6 +60,8 @@ impl Drop for ChatMessage {
     fn drop(&mut self) {
         use zeroize::Zeroize;
         self.content.zeroize();
+        // HashMap is zeroized via clear + shrink
+        self.reactions.clear();
     }
 }
 
