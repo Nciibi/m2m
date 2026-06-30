@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
+use tokio::sync::RwLock;
 
 use crate::dht;
 use crate::ephemeral_id;
@@ -353,5 +354,3 @@ pub async fn refresh_discovery(
     // Return the updated list
     get_discovered_peers(state).await
 }
-
-use tokio::sync::RwLock;

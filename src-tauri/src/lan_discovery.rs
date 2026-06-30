@@ -85,7 +85,7 @@ pub struct LanDiscoveryState {
 }
 
 impl LanDiscoveryState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             peers: HashMap::new(),
             enabled: false,  // ⚠️ OFF by default — privacy first
@@ -98,7 +98,7 @@ impl LanDiscoveryState {
     }
 
     /// Remove peers that haven't announced within the expiry window.
-    fn expire_stale_peers(&mut self) {
+    pub fn expire_stale_peers(&mut self) {
         let now = now_unix_secs();
         let cutoff = now.saturating_sub(PEER_EXPIRY_SECS);
         self.peers.retain(|_, peer| peer.last_seen >= cutoff);
