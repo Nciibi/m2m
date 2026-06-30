@@ -909,23 +909,6 @@ impl MessageStore {
 
     // ─── Self-Destruct (Expired Messages) ─────────────
 
-    /// Get message IDs that have expired (expires_at is in the past).
-    #[cfg(test)]
-    pub fn get_expired_message_ids(&self) -> Result<Vec<String>, StorageError> {
-        let now = chrono::Utc::now().timestamp();
-        let mut stmt = self.conn.prepare(
-            "SELECT id FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
-        )?;
-        let rows = stmt.query_map(rusqlite::params![now], |row| {
-            row.get::<_, String>(0)
-        })?;
-        let mut ids = Vec::new();
-        for row in rows {
-            ids.push(row?);
-        }
-        Ok(ids)
-    }
-
     /// Permanently delete expired messages from the database.
     pub fn delete_expired_messages(&self) -> Result<u32, StorageError> {
         let now = chrono::Utc::now().timestamp();
