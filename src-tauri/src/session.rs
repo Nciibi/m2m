@@ -515,10 +515,15 @@ impl Session {
         self.check_expiry()?;
 
         let msg_id = uuid::Uuid::new_v4().to_string();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         let body = MessageBody::Text {
             id: msg_id.clone(),
             content: text.to_string(),
             disappear_after,
+            timestamp: now,
         };
         let body_bytes = protocol::serialize(&body)?;
 

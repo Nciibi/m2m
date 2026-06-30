@@ -298,7 +298,16 @@ pub struct EncryptedEnvelope {
 #[serde(tag = "type")]
 pub enum MessageBody {
     #[serde(rename = "text")]
-    Text { id: String, content: String, disappear_after: Option<u64> },
+    Text {
+        id: String,
+        content: String,
+        #[serde(default)]
+        disappear_after: Option<u64>,
+        /// Unix timestamp when the message was created (sender's clock).
+        /// Defaults to 0 for backward-compatible deserialization with older clients.
+        #[serde(default)]
+        timestamp: u64,
+    },
     #[serde(rename = "ack")]
     Ack { id: String },
 }
