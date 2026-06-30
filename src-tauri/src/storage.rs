@@ -531,7 +531,16 @@ impl MessageStore {
         content_nonce: &[u8],
         timestamp: i64,
     ) -> Result<(), StorageError> {
-        self.store_message_with_expiry(id, conversation_id, direction, content_encrypted, content_nonce, timestamp, None)
+        self.conn.execute(
+            "INSERT INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp],
+        )?;
+        self.conn.execute(
+            "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
+            params![timestamp, conversation_id],
+        )?;
+        Ok(())
     }
 
     /// Store a message with an optional self-destruct timer.
@@ -548,24 +557,6 @@ impl MessageStore {
         self.conn.execute(
             "INSERT INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at],
-        )?;
-        Ok(())
-    }
-
-    /// Legacy store message (kept for backward compat).
-    pub fn store_message_legacy(
-        &self,
-        id: &str,
-        conversation_id: &str,
-        direction: &str,
-        content_encrypted: &[u8],
-        content_nonce: &[u8],
-        timestamp: i64,
-    ) -> Result<(), StorageError> {
-        self.conn.execute(
-            "INSERT INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp],
         )?;
         self.conn.execute(
             "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
