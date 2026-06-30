@@ -66,6 +66,18 @@ export interface StunConfig {
   private_mode: boolean;
 }
 
+export interface DiscoveryConfig {
+  lan_enabled: boolean;
+  dht_enabled: boolean;
+}
+
+export interface DiscoveredPeer {
+  id_hex: string;
+  address: string;
+  method: "lan" | "dht";
+  last_seen: number;
+}
+
 export interface NatTypeInfo {
   nat_type: string;
   stun_servers: Array<{
