@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Input Component Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  position: relative;
+}
+
+.input-wrap--compact {
+  padding: 6px 12px;
+}
+
+.input-wrap--error {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.input-wrap--focused {
+  border-color: var(--color-border-active);
+  background: var(--color-bg-input-focus);
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+}
+
+.input-wrap > input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  padding: 0;
+  width: 100%;
+  font-size: var(--text-md);
+  -webkit-appearance: none;
+}
+
+.input-wrap--compact > input {
+  font-size: var(--text-base);
+}
+
+.input-wrap > input.input--mono {
+  font-family: var(--font-mono);
+}
+
+.input-wrap > input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.input__icon {
+  color: var(--color-text-muted);
+  font-size: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+}
+
+.input__clear {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  transition: color 150ms ease;
+}
+
+.input__clear:hover {
+  color: var(--color-text-secondary);
+}
+
+.input__error {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  padding-left: 4px;
+}
