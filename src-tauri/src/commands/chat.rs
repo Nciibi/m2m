@@ -362,8 +362,9 @@ pub async fn send_reaction(
     };
     let plaintext = crate::protocol::serialize(&data)
         .map_err(|e| format!("serialize reaction: {e}"))?;
-    conn.session.send_encrypted_typed(
-        &mut conn.write_half,
+    let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
+    session.send_encrypted_typed(
+        write_half,
         crate::protocol::PacketType::MessageReaction,
         &plaintext,
     ).await.map_err(|e| format!("send reaction failed: {e}"))
