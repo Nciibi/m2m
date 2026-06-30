@@ -1,0 +1,167 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Progress Bar Component Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--color-bg-input);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  background: var(--color-accent-gradient);
+  border-radius: var(--radius-full);
+  transition: width 300ms var(--ease-out-expo);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar__fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: progressShimmer 1.5s ease-in-out infinite;
+}
+
+.progress-bar--small {
+  height: 4px;
+}
+
+.progress-bar--success .progress-bar__fill {
+  background: var(--color-success);
+}
+
+.progress-bar--danger .progress-bar__fill {
+  background: var(--color-danger);
+}
+
+.progress-bar--warning .progress-bar__fill {
+  background: var(--color-warning);
+}
+
+/* Progress info text */
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-xxs);
+}
+
+.progress-info__label {
+  font-weight: 500;
+}
+
+.progress-info__value {
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}
+
+/* File transfer card with progress */
+.file-transfer {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  animation: msgSlide 300ms ease;
+}
+
+.file-transfer__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: space-between;
+}
+
+.file-transfer__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+  min-width: 0;
+}
+
+.file-transfer__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-glow-subtle);
+  border: 1px solid var(--color-border-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-transfer__details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-transfer__name {
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-transfer__meta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.file-transfer__status {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.file-transfer__status--sending {
+  background: var(--color-accent-glow-subtle);
+  color: var(--color-accent-bright);
+}
+
+.file-transfer__status--receiving {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.file-transfer__status--complete {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.file-transfer__status--failed {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.file-transfer__actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
