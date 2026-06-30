@@ -162,7 +162,7 @@ function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   }, [peerKeyHex, nickname, duration, customDays, onClose, onDone, addToast]);
 
   return (
-    <Modal title="Add to Family" onClose={onClose}>
+    <Modal open={true} title="Add to Family" onClose={onClose}>
       <div className="modal-form">
         <label>
           Peer Key
