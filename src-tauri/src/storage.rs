@@ -100,6 +100,13 @@ impl KeyStore {
             CREATE TABLE IF NOT EXISTS vault_meta (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS family (
+                public_key BLOB NOT NULL PRIMARY KEY,
+                nickname TEXT NOT NULL,
+                added_at INTEGER NOT NULL,
+                expires_at INTEGER,
+                last_address TEXT
             );",
         )?;
 
