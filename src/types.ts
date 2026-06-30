@@ -34,6 +34,12 @@ export interface ChatMessage {
   timestamp: number;
   /// When this message was read (null = unread, only for received messages).
   read_at: number | null;
+  /// When this message was edited (null = never).
+  edited_at: number | null;
+  /// Whether this message has been soft-deleted.
+  deleted: boolean;
+  /// When this message self-destructs (null = never, 0 = already expired).
+  expires_at: number | null;
   /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
   reactions: Record<string, string[]>;
 }
