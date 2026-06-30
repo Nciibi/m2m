@@ -1,7 +1,6 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="public/tauri.svg">
-    <img src="public/tauri.svg" alt="M2M Logo" width="80" height="80">
+    <img src="logo.png" alt="M2M Logo" width="80" height="80">
   </picture>
   <h1>M2M Secure Messenger</h1>
   <p><strong>A zero-trust, peer-to-peer, end-to-end encrypted desktop messenger</strong></p>
