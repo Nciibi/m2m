@@ -1,9 +1,9 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, Input, Modal } from "../ui";
-import { PlusIcon, OnlineDot, OfflineDot, AlertTriangleIcon } from "../ui/Icons";
-import { useApp } from "../../context/AppContext";
-import type { FamilyMember } from "../../types";
+import { Button, Input, Modal } from "./ui";
+import { PlusIcon, AlertTriangleIcon } from "./ui/Icons";
+import { useApp } from "../context/AppContext";
+import type { FamilyMember } from "../types";
 
 interface FamilyTabProps {
   family: FamilyMember[];
