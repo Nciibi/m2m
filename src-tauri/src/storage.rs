@@ -849,6 +849,57 @@ impl MessageStore {
         Ok(count as u32)
     }
 
+    // ─── Message Editing ──────────────────────────────
+
+    /// Update a message's content (edit). Stores the edit timestamp.
+    pub fn edit_message(&self, message_id: &str, new_content_encrypted: &[u8], new_content_nonce: &[u8]) -> Result<(), StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2, edited_at = ?3 WHERE id = ?4",
+            rusqlite::params![new_content_encrypted, new_content_nonce, now, message_id],
+        )?;
+        Ok(())
+    }
+
+    // ─── Message Deletion ─────────────────────────────
+
+    /// Soft-delete a message (mark as deleted so peers see a placeholder).
+    pub fn delete_message(&self, message_id: &str) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE messages SET deleted = 1 WHERE id = ?1",
+            rusqlite::params![message_id],
+        )?;
+        Ok(())
+    }
+
+    // ─── Self-Destruct (Expired Messages) ─────────────
+
+    /// Get message IDs that have expired (expires_at is in the past).
+    pub fn get_expired_message_ids(&self) -> Result<Vec<String>, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![now], |row| {
+            row.get::<_, String>(0)
+        })?;
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row?);
+        }
+        Ok(ids)
+    }
+
+    /// Permanently delete expired messages from the database.
+    pub fn delete_expired_messages(&self) -> Result<u32, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        let count = self.conn.execute(
+            "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
+            rusqlite::params![now],
+        )?;
+        Ok(count as u32)
+    }
+
 }
 
 /// A stored message row.
