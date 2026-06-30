@@ -963,7 +963,7 @@ impl Session {
             let padded = ratchet
                 .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
                          dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
-                .map_err(|e| SessionError::Crypto(e))?;
+                .map_err(SessionError::Crypto)?;
             let plaintext = crate::crypto::unpad_message_variable(&padded)?;
             return Ok(plaintext);
         }
