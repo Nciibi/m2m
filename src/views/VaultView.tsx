@@ -23,7 +23,7 @@ export default function VaultView() {
     const entropy = estimateEntropy(passphrase);
     let percent: number, label: string, cls: string;
     if (passphrase.length === 0) { percent = 0; label = ""; cls = ""; }
-    else if (passphrase.length < 12) { percent = Math.min(30, passphrase.length * 5); label = "Too short"; cls = "weak"; }
+    else if (passphrase.length < 12) { percent = Math.min(30, passphrase.length * 5); label = "Too short (min 12)"; cls = "weak"; }
     else if (entropy < 40) { percent = 40; label = "Weak"; cls = "weak"; }
     else if (entropy < 60) { percent = 65; label = "Fair"; cls = "fair"; }
     else if (entropy < 80) { percent = 85; label = "Strong"; cls = "strong"; }
