@@ -16,6 +16,7 @@ pub mod util;
 pub mod vault;
 
 use serde::{Deserialize, Serialize};
+use tauri::Emitter;
 
 // ─── Response types for the frontend — never contain secrets ───
 
