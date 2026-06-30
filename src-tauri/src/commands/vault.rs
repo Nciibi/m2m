@@ -687,10 +687,8 @@ pub async fn import_identity(
             let last_address = entry.get("last_address").and_then(|v| v.as_str());
 
             if let Ok(pk) = util::decode_peer_key(member_pk_hex) {
-                let _ = key_store.conn.execute(
-                    "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                    rusqlite::params![pk.as_slice(), nickname, added_at, expires_at, last_address],
+                let _ = key_store.insert_family_member_raw(
+                    &pk, nickname, added_at, expires_at, last_address,
                 );
             }
         }
