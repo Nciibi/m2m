@@ -124,3 +124,28 @@ function detectKeyboard(s: string): number {
   const ratio = matched / s.length;
   return Math.max(1.0 - ratio * 0.5, 0.3);
 }
+
+/// Deterministic HSL color derived from a string (used for avatar gradients).
+export function hashToColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${Math.abs(hash) % 360}, 55%, 48%)`;
+}
+
+/// Relative-time formatter for unix-seconds timestamps ("now", "5m ago", ...).
+export function formatTime(ts: number): string {
+  const d = Math.floor(Date.now() / 1000) - ts;
+  if (d < 60) return "now";
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
+  if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+  if (d < 604800) return `${Math.floor(d / 86400)}d ago`;
+  return new Date(ts * 1000).toLocaleDateString();
+}
+
+/// Default STUN servers used when resetting STUN config.
+export const DEFAULT_STUN_SERVERS: readonly string[] = [
+  "stun.l.google.com:19302",
+  "stun1.l.google.com:19302",
+  "stun.cloudflare.com:3478",
+  "stun.nextcloud.com:3478",
+];
