@@ -24,7 +24,7 @@ export default function HubView() {
     discoveryConfig, discoveredPeers,
     handleConnectDiscoveredPeer, handleRefreshDiscovery,
   } = useSettings();
-  const [tab, setTab] = useState<"connect" | "chats" | "family">("connect");
+  const [tab, setTab] = useState<"connect" | "chats" | "family" | "nearby">("connect");
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
   const [family, setFamily] = useState<FamilyMember[]>([]);
