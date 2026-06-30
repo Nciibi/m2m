@@ -349,20 +349,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setConnection({
         state: stateStr,
         peer_fingerprint: event.payload.peer_fingerprint,
-        peer_verified: false,
+        peer_verified: event.payload.peer_verified ?? false,
         peer_key_hex: event.payload.peer_key_hex,
       });
       if (stateStr === "established") {
+        setReconnecting(false);
+        setReconnectAttempt(0);
         setActiveConversationId(event.payload.peer_key_hex);
         setView("chat");
         try {
           setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: event.payload.peer_key_hex }));
         } catch { /* noop */ }
       } else if (stateStr === "disconnected") {
-        setView("hub");
-        setConnection(null);
-        setMessages([]);
-        setActiveConversationId(null);
+        // For verified peers, stay on ChatView so user can attempt reconnect.
+        // For unverified peers, go back to hub (no reconnect possible).
+        if (!event.payload.peer_verified) {
+          setView("hub");
+          setConnection(null);
+          setMessages([]);
+          setActiveConversationId(null);
+        }
       }
       try { setConversations(await invoke<ConversationEntry[]>("list_conversations")); } catch { /* noop */ }
     });
