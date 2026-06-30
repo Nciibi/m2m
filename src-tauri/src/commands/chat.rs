@@ -138,6 +138,9 @@ pub async fn list_conversations(
     let conns = state.connections.read().await;
     let sk = state.storage_key.read().await;
 
+    // Lazy init: open message store on first list if not already opened
+    let _ = state.ensure_message_store(&state.data_dir);
+
     let ms = state.message_store.lock().await;
     let store = match ms.as_ref() {
         Some(s) => s,
