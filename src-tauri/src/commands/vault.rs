@@ -609,11 +609,11 @@ pub async fn import_identity(
         .and_then(|v| v.as_str())
         .ok_or("invalid backup: missing nonce")?;
 
-    let pub_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, pub_bytes_base64)
+    let pub_bytes = STANDARD.decode(pub_bytes_base64)
         .map_err(|_| "invalid backup: corrupted public_key")?;
-    let enc_sk = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, enc_sk_base64)
+    let enc_sk = STANDARD.decode(enc_sk_base64)
         .map_err(|_| "invalid backup: corrupted encrypted_secret_key")?;
-    let nonce = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, nonce_base64)
+    let nonce = STANDARD.decode(nonce_base64)
         .map_err(|_| "invalid backup: corrupted nonce")?;
 
     // Derive key from passphrase + public key
