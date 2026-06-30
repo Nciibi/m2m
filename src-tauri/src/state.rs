@@ -238,6 +238,34 @@ pub struct ManualForward {
     pub order: u32,
 }
 
+/// Peer discovery method configuration.
+///
+/// **All methods are OFF by default.** Enabling a discovery method makes
+/// your presence known to other M2M users — on the local network (LAN)
+/// or the wider internet (DHT). Both use ephemeral IDs that rotate
+/// periodically to prevent long-term tracking, but your IP address is
+/// still visible to anyone monitoring the discovery channel.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DiscoveryConfig {
+    /// LAN multicast discovery — OFF by default.
+    /// Broadcasts an ephemeral announcement every 30 seconds over WiFi.
+    /// Anyone on the same network can see your presence.
+    pub lan_enabled: bool,
+    /// DHT (distributed hash table) peer discovery — OFF by default.
+    /// Publishes your ephemeral ID to a decentralized network of nodes.
+    /// Your IP address is visible to DHT bootstrap nodes.
+    pub dht_enabled: bool,
+}
+
+impl Default for DiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            lan_enabled: false,  // ⚠️ OFF by default — privacy first
+            dht_enabled: false,  // ⚠️ OFF by default — privacy first
+        }
+    }
+}
+
 /// Central application state.
 pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
@@ -304,6 +332,17 @@ pub struct AppState {
     /// Reconnection metadata for disconnected peers (keyed by peer_key_hex).
     /// Used by the reconnection logic to re-establish X3DH sessions.
     pub pending_reconnects: RwLock<HashMap<String, ReconnectInfo>>,
+    // ─── Discovery ───
+    /// Peer discovery configuration (LAN, DHT). Both OFF by default.
+    pub discovery_config: RwLock<DiscoveryConfig>,
+    /// DHT discovery state (None = not started).
+    pub dht_state: RwLock<Option<Arc<RwLock<dht::DhtState>>>>,
+    /// DHT announce loop cancel signal.
+    pub dht_cancel: RwLock<Option<Arc<AtomicBool>>>,
+    /// LAN discovery state (None = not started).
+    pub lan_state: RwLock<Option<Arc<RwLock<lan_discovery::LanDiscoveryState>>>>,
+    /// LAN discovery cancel signal.
+    pub lan_cancel: RwLock<Option<Arc<AtomicBool>>>,
 }
 
 impl AppState {
