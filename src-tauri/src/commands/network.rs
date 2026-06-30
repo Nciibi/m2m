@@ -823,7 +823,7 @@ pub fn spawn_receive_loop(
                         let mut conn = conn_arc.lock().await;
                         match conn.session.decrypt_message(&frame) {
                             Ok(body) => match &body {
-                                MessageBody::Text { id, content } => {
+                                MessageBody::Text { id, content, .. } => {
                                     let now = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
