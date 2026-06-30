@@ -119,13 +119,11 @@ describe("ChatContext", () => {
 
   it("handleSendReaction calls Tauri invoke with reaction args", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
-
-    render(
-      <ChatProvider>
-        <TestConsumer />
-      </ChatProvider>
-    );
+    mockInvoke.mockResolvedValue([]); // load_messages
+    mockInvoke.mockResolvedValueOnce([]); // list_conversations in Open Chat
+    // Need connection first — open a chat
+    await user.click(screen.getByText("Open Chat"));
+    mockInvoke.mockResolvedValueOnce(undefined); // send_reaction
 
     await user.click(screen.getByText("Send Reaction"));
     expect(mockInvoke).toHaveBeenCalledWith("send_reaction", {
@@ -137,13 +135,11 @@ describe("ChatContext", () => {
 
   it("handleRemoveReaction calls Tauri invoke with remove_reaction", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
-
-    render(
-      <ChatProvider>
-        <TestConsumer />
-      </ChatProvider>
-    );
+    mockInvoke.mockResolvedValue([]); // load_messages
+    mockInvoke.mockResolvedValueOnce([]); // list_conversations in Open Chat
+    // Need connection first — open a chat
+    await user.click(screen.getByText("Open Chat"));
+    mockInvoke.mockResolvedValueOnce(undefined); // remove_reaction
 
     await user.click(screen.getByText("Remove Reaction"));
     expect(mockInvoke).toHaveBeenCalledWith("remove_reaction", {
@@ -155,13 +151,11 @@ describe("ChatContext", () => {
 
   it("handleMarkConversationRead calls mark_messages_read", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(0);
-
-    render(
-      <ChatProvider>
-        <TestConsumer />
-      </ChatProvider>
-    );
+    mockInvoke.mockResolvedValue([]); // load_messages
+    mockInvoke.mockResolvedValueOnce([]); // list_conversations in Open Chat
+    // Need activeConversationId first — open a chat
+    await user.click(screen.getByText("Open Chat"));
+    mockInvoke.mockResolvedValueOnce(0); // mark_messages_read
 
     await user.click(screen.getByText("Mark Read"));
     expect(mockInvoke).toHaveBeenCalledWith("mark_messages_read", {
