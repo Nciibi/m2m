@@ -122,6 +122,7 @@ pub struct DhtPeer {
     /// Current TCP address for connecting.
     pub connect_addr: Option<SocketAddr>,
     /// Protocol version the peer supports.
+    #[expect(dead_code, reason = "Reserved for future protocol negotiation")]
     pub protocol_version: u8,
     /// Last time this peer was seen (unix seconds).
     pub last_seen: u64,
@@ -140,6 +141,7 @@ pub struct BootstrapNode {
 pub struct DhtConfig {
     /// Whether DHT discovery is enabled. **OFF by default.**
     /// Enabling this makes your IP visible to DHT nodes.
+    #[expect(dead_code, reason = "Read via DhtState::enabled() wrapper")]
     pub enabled: bool,
     /// Bootstrap nodes to connect to on startup.
     pub bootstrap_nodes: Vec<BootstrapNode>,
