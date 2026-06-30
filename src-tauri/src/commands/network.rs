@@ -860,6 +860,9 @@ pub fn spawn_receive_loop(
                                             direction: "received".to_string(),
                                             timestamp: now,
                                             read_at: None,
+                                            edited_at: None,
+                                            deleted: false,
+                                            expires_at: None,
                                             reactions: std::collections::HashMap::new(),
                                         },
                                     });
