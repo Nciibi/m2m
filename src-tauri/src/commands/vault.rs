@@ -275,3 +275,469 @@ pub async fn unlock_vault(
         unlocked: true,
     })
 }
+
+// ─── Family Commands ───────────────────────────────────────────────────────
+
+/// List all non-expired family members.
+#[tauri::command]
+pub async fn list_family(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<FamilyMember>, String> {
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+    store.list_family().map_err(|e| format!("failed to list family: {e}"))
+}
+
+/// Add a peer to the family list.
+/// `peer_key_hex` must belong to a peer we've connected with before.
+#[tauri::command]
+pub async fn add_family_member(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    nickname: String,
+    expires_in_days: Option<u64>,
+) -> Result<FamilyMember, String> {
+    if nickname.trim().is_empty() {
+        return Err("nickname cannot be empty".to_string());
+    }
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| format!("invalid peer key: {e}"))?;
+
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+
+    // Verify the peer exists in the peers table (has connected before)
+    if !store.is_family_member(&pk_bytes)? {
+        // Try getting conversation — if no conversation exists, reject
+        let ms = state.message_store.lock().await;
+        let has_conversation = ms.as_ref()
+            .and_then(|m| m.get_conversation(&peer_key_hex).ok())
+            .flatten()
+            .is_some();
+        if !has_conversation {
+            return Err("no conversation with this peer — must connect at least once before adding to family".to_string());
+        }
+    }
+
+    let member = store.add_family_member(&pk_bytes, &nickname, expires_in_days, None)
+        .map_err(|e| format!("failed to add family member: {e}"))?;
+    Ok(member)
+}
+
+/// Remove a peer from the family list.
+#[tauri::command]
+pub async fn remove_family_member(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<(), String> {
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| format!("invalid peer key: {e}"))?;
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+    store.remove_family_member(&pk_bytes)
+        .map_err(|e| format!("failed to remove family member: {e}"))
+}
+
+/// Update a family member's nickname.
+#[tauri::command]
+pub async fn set_family_nickname(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    nickname: String,
+) -> Result<(), String> {
+    if nickname.trim().is_empty() {
+        return Err("nickname cannot be empty".to_string());
+    }
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| format!("invalid peer key: {e}"))?;
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+    store.set_family_nickname(&pk_bytes, &nickname)
+        .map_err(|e| format!("failed to set nickname: {e}"))
+}
+
+/// Try to connect to a family member using their saved info.
+/// If the address is stale, returns a user-friendly error.
+#[tauri::command]
+pub async fn connect_family_member(
+    app_handle: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<ConnectionInfo, String> {
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| format!("invalid peer key: {e}"))?;
+
+    let identity = state.identity.read().await;
+    let kp = identity.as_ref().ok_or("identity not initialized")?;
+
+    // Look up the family member's last known address
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+
+    // Check if they're in family
+    if !store.is_family_member(&pk_bytes)? {
+        return Err("peer is not a family member".to_string());
+    }
+
+    // Get saved address (best-effort)
+    let saved_addr_str: Option<String> = {
+        let members = store.list_family().map_err(|e| format!("list family: {e}"))?;
+        members.into_iter()
+            .find(|m| m.public_key_hex == peer_key_hex)
+            .and_then(|m| m.last_address)
+    };
+    drop(ks);
+
+    let saved_addr: Option<std::net::SocketAddr> = saved_addr_str
+        .as_ref()
+        .and_then(|s| s.parse().ok());
+
+    // Try connecting if we have an address
+    if let Some(addr) = saved_addr {
+        match crate::tor::connect(addr).await {
+            Ok(mut stream) => {
+                let mut session = crate::session::Session::new();
+
+                // Gather candidates
+                let config = state.stun_config.read().await;
+                let stun_result = crate::stun::discover_public_addrs(&config).await.ok();
+                drop(config);
+
+                let host_candidates = crate::candidate::gather_host_candidates();
+                let ipv6_candidates = crate::candidate::gather_ipv6_candidates();
+                let reflexive_candidates = stun_result
+                    .as_ref()
+                    .map(crate::candidate::gather_reflexive_candidates)
+                    .unwrap_or_default();
+
+                let mut all = host_candidates;
+                all.extend(ipv6_candidates);
+                all.extend(reflexive_candidates);
+                all.sort_by(|a, b| b.priority.cmp(&a.priority));
+                let our_candidates: Vec<crate::protocol::WireCandidate> = all.iter().map(|c| {
+                    crate::protocol::WireCandidate {
+                        address: c.address.clone(),
+                        candidate_type: c.candidate_type as u8,
+                        relay_id: None,
+                    }
+                }).collect();
+
+                let x25519 = state.x25519_identity.read().await;
+                let x25519_pub = x25519.as_ref()
+                    .map(|k| k.public_key_bytes())
+                    .unwrap_or([0u8; 32]);
+
+                // Skip identity pre-check — we already know this peer
+                let expected = [0u8; 32];
+                session.handshake_as_initiator(&mut stream, kp, &expected, our_candidates, x25519_pub)
+                    .await
+                    .map_err(|e| format!("handshake failed: {e}"))?;
+
+                let actual_peer_key = hex::encode(session.peer_identity_pub);
+                let peer_fingerprint = session.peer_fingerprint();
+                session.mark_peer_verified();
+
+                let (read_half, write_half) = stream.into_split();
+                let conn = crate::state::PeerConnection {
+                    write_half,
+                    session,
+                    remote_addr: addr,
+                    strategy_name: "family".to_string(),
+                };
+
+                {
+                    let mut conns = state.connections.write().await;
+                    conns.insert(actual_peer_key.clone(), Arc::new(tokio::sync::Mutex::new(conn)));
+                }
+
+                let _ = app_handle.emit("m2m://connection", ConnectionEvent {
+                    peer_key_hex: actual_peer_key.clone(),
+                    state: "established".to_string(),
+                    peer_fingerprint: Some(peer_fingerprint.clone()),
+                });
+
+                // Upsert peer in key store
+                if let Some(pk) = util::decode_peer_key_logged(&actual_peer_key) {
+                    let ks2 = state.key_store.lock().await;
+                    if let Some(ref s) = *ks2 {
+                        let _ = s.upsert_peer(&pk, &peer_fingerprint, None);
+                    }
+                }
+
+                crate::commands::network::spawn_receive_loop(
+                    app_handle,
+                    state.inner().clone(),
+                    read_half,
+                    actual_peer_key.clone(),
+                );
+
+                return Ok(ConnectionInfo {
+                    state: "established".to_string(),
+                    peer_fingerprint: Some(peer_fingerprint),
+                    peer_verified: true,
+                    peer_key_hex: Some(actual_peer_key),
+                });
+            }
+            Err(_) => {
+                // Connection failed — address is stale
+                return Err("CANNOT_REACH".to_string());
+            }
+        }
+    }
+
+    Err("CANNOT_REACH".to_string())
+}
+
+/// Update a family member with a fresh invite (new key + address).
+/// Replaces everything except nickname and expiry.
+#[tauri::command]
+pub async fn update_family_member(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    invite_str: String,
+) -> Result<FamilyMember, String> {
+    let old_key = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| format!("invalid peer key: {e}"))?;
+
+    // Validate the invite to extract the new peer key and address
+    let signed = crate::identity::validate_invite(&invite_str)
+        .map_err(|e| format!("invalid invite: {e}"))?;
+
+    let new_public_key = signed.payload.identity_pub;
+    let new_address = signed.payload.address_hint.clone();
+
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+
+    let updated = store.update_family_member(&old_key, &new_public_key, Some(&new_address))
+        .map_err(|e| format!("failed to update family member: {e}"))?;
+
+    Ok(updated)
+}
+
+// ─── Identity Export/Import ────────────────────────────────────────────────
+
+/// Export identity + family list to an encrypted file.
+#[tauri::command]
+pub async fn export_identity(
+    state: State<'_, Arc<AppState>>,
+    path: String,
+    passphrase: String,
+) -> Result<(), String> {
+    if passphrase.len() < 12 {
+        return Err("passphrase must be at least 12 characters".to_string());
+    }
+    let entropy = util::estimate_passphrase_entropy(&passphrase);
+    if entropy < 40.0 {
+        return Err(format!(
+            "passphrase too weak: ~{:.0} bits. Use a stronger passphrase (aim for 60+).",
+            entropy
+        ));
+    }
+
+    // Get identity from state
+    let identity = state.identity.read().await;
+    let kp = identity.as_ref().ok_or("vault not unlocked — unlock first")?;
+
+    let pub_bytes = kp.public_key_bytes();
+    let sk_bytes = kp.secret_key_bytes();
+
+    // Get family list
+    let ks = state.key_store.lock().await;
+    let store = ks.as_ref().ok_or("key store not initialized")?;
+    let family = store.list_family_all().map_err(|e| format!("list family: {e}"))?;
+    drop(ks);
+
+    // Encrypt the secret key with export passphrase
+    let export_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
+    let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &export_key, crate::commands::util::AAD_EXPORT_V2)
+        .map_err(|e| format!("encryption failed: {e}"))?;
+
+    // Build the export payload
+    let payload = serde_json::json!({
+        "version": 1,
+        "created_at": chrono::Utc::now().timestamp(),
+        "identity": {
+            "public_key": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, pub_bytes),
+            "encrypted_secret_key": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &encrypted_sk),
+            "nonce": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &nonce),
+        },
+        "family": family.iter().map(|m| serde_json::json!({
+            "public_key": m.public_key_hex,
+            "nickname": m.nickname,
+            "added_at": m.added_at,
+            "expires_at": m.expires_at,
+            "last_address": m.last_address,
+        })).collect::<Vec<_>>(),
+    });
+
+    let payload_bytes = serde_json::to_vec(&payload)
+        .map_err(|e| format!("serialization failed: {e}"))?;
+
+    // Write: nonce || ciphertext
+    std::fs::write(&path, &payload_bytes)
+        .map_err(|e| format!("failed to write export file: {e}"))?;
+
+    Ok(())
+}
+
+/// Import identity + family list from an encrypted file.
+#[tauri::command]
+pub async fn import_identity(
+    state: State<'_, Arc<AppState>>,
+    path: String,
+    passphrase: String,
+) -> Result<IdentityInfo, String> {
+    let data = std::fs::read(&path)
+        .map_err(|e| format!("failed to read import file: {e}"))?;
+
+    // Parse JSON payload
+    let payload: serde_json::Value = serde_json::from_slice(&data)
+        .map_err(|_| "invalid or corrupted backup file".to_string())?;
+
+    let identity_obj = payload.get("identity")
+        .ok_or("invalid backup: missing identity data")?;
+
+    let pub_bytes_base64 = identity_obj.get("public_key")
+        .and_then(|v| v.as_str())
+        .ok_or("invalid backup: missing public_key")?;
+    let enc_sk_base64 = identity_obj.get("encrypted_secret_key")
+        .and_then(|v| v.as_str())
+        .ok_or("invalid backup: missing encrypted_secret_key")?;
+    let nonce_base64 = identity_obj.get("nonce")
+        .and_then(|v| v.as_str())
+        .ok_or("invalid backup: missing nonce")?;
+
+    let pub_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, pub_bytes_base64)
+        .map_err(|_| "invalid backup: corrupted public_key")?;
+    let enc_sk = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, enc_sk_base64)
+        .map_err(|_| "invalid backup: corrupted encrypted_secret_key")?;
+    let nonce = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, nonce_base64)
+        .map_err(|_| "invalid backup: corrupted nonce")?;
+
+    // Derive key from passphrase + public key
+    let pub_arr = {
+        let mut arr = [0u8; 32];
+        if pub_bytes.len() != 32 {
+            return Err("invalid public key length".to_string());
+        }
+        arr.copy_from_slice(&pub_bytes);
+        arr
+    };
+
+    let export_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_arr)?;
+    let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &export_key, crate::commands::util::AAD_EXPORT_V2)
+        .map_err(|_| "wrong export passphrase or corrupted backup file".to_string())?;
+
+    let sk_arr = {
+        let mut arr = [0u8; 64];
+        if sk_bytes.len() != 64 {
+            return Err("invalid secret key length in backup".to_string());
+        }
+        arr.copy_from_slice(&sk_bytes);
+        arr
+    };
+
+    // Reconstruct keypair
+    let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
+        .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
+
+    let fingerprint = kp.fingerprint();
+    let pub_hex = hex::encode(&pub_bytes);
+
+    // Store to vault
+    let data_dir = storage::ensure_data_dir()
+        .map_err(|e| format!("data dir error: {e}"))?;
+    let keys_db_path = data_dir.join("keys.db");
+    let key_store = KeyStore::open(&keys_db_path)
+        .map_err(|e| format!("key store error: {e}"))?;
+
+    // Encrypt the private key with the vault's storage key
+    // If vault was initialized, use the existing storage key. Otherwise derive from public key.
+    let storage_key = if key_store.is_vault_initialized().unwrap_or(false) {
+        let sk_guard = state.storage_key.read().await;
+        sk_guard.clone().ok_or("storage key not available")?
+    } else {
+        // First import — use legacy derivation to store, then vault setup will upgrade
+        util::derive_storage_key(&pub_bytes)
+    };
+
+    let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
+        .map_err(|e| format!("encryption failed: {e}"))?;
+
+    let now = chrono::Utc::now().timestamp();
+    key_store.store_identity(&pub_bytes, &new_enc_sk, &new_nonce, now)
+        .map_err(|e| format!("failed to store identity: {e}"))?;
+
+    // Import family members
+    if let Some(family_arr) = payload.get("family").and_then(|v| v.as_array()) {
+        key_store.clear_family().ok(); // Clear existing family
+        for entry in family_arr {
+            let member_pk_hex = entry.get("public_key")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let nickname = entry.get("nickname")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Imported");
+            let added_at = entry.get("added_at")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(now);
+            let expires_at = entry.get("expires_at").and_then(|v| v.as_i64());
+            let last_address = entry.get("last_address").and_then(|v| v.as_str());
+
+            if let Ok(pk) = util::decode_peer_key(member_pk_hex) {
+                let _ = key_store.conn.execute(
+                    "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![pk.as_slice(), nickname, added_at, expires_at, last_address],
+                );
+            }
+        }
+    }
+
+    // Load into state
+    {
+        let mut id_lock = state.identity.write().await;
+        *id_lock = Some(kp);
+    }
+    {
+        let mut sk_lock = state.storage_key.write().await;
+        *sk_lock = Some(storage_key);
+    }
+    {
+        let mut vi = state.vault_initialized.write().await;
+        *vi = true;
+    }
+    {
+        let mut vu = state.vault_unlocked.write().await;
+        *vu = true;
+    }
+    {
+        let mut ks = state.key_store.lock().await;
+        *ks = Some(key_store);
+    }
+
+    // Initialize message store
+    let msgs_db_path = data_dir.join("messages.db");
+    let msg_store = storage::MessageStore::open(&msgs_db_path)
+        .map_err(|e| format!("message store error: {e}"))?;
+    {
+        let mut ms = state.message_store.lock().await;
+        *ms = Some(msg_store);
+    }
+
+    // Initialize transfer store
+    let transfers_db_path = data_dir.join("transfers.db");
+    let transfer_store = storage::TransferStore::open(&transfers_db_path)
+        .map_err(|e| format!("transfer store error: {e}"))?;
+    {
+        let mut ts = state.transfer_store.lock().await;
+        *ts = Some(transfer_store);
+    }
+
+    Ok(IdentityInfo {
+        fingerprint,
+        public_key_hex: pub_hex,
+        has_identity: true,
+    })
+}
