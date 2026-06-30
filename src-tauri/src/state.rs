@@ -112,14 +112,17 @@ impl OutgoingFileTransfer {
 pub struct IncomingFileTransfer {
     #[allow(dead_code)]
     pub transfer_id: String,
+    #[allow(dead_code)]
     pub peer_key_hex: String,
     pub filename: String,
     pub total_size: u64,
     pub total_chunks: u32,
     pub file_hash: Vec<u8>,
     /// Per-chunk SHA-256 hashes from v2 request (empty if v1 sender).
+    #[allow(dead_code)]
     pub chunk_hashes: Vec<Vec<u8>>,
     /// File transfer protocol version used by the sender (0x01 = legacy, 0x02 = v2).
+    #[allow(dead_code)]
     pub peer_protocol_version: u8,
     pub save_path: PathBuf,
     /// Temporary file on disk — chunks are written here as they arrive.
@@ -129,6 +132,7 @@ pub struct IncomingFileTransfer {
     /// Number of chunks received so far.
     pub chunks_received: u32,
     /// Total bytes received so far.
+    #[allow(dead_code)]
     pub bytes_received: u64,
     /// Bitmask of received chunks: true = chunk received.
     /// Size = total_chunks, initialized to all false.
