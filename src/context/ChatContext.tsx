@@ -415,6 +415,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       ));
     });
 
+    const unlistenReconnectAttempt = listen<any>("m2m://reconnect-attempt", (event) => {
+      const { state: reconnectState, attempt } = event.payload;
+      if (reconnectState === "attempting") {
+        setReconnecting(true);
+        setReconnectAttempt(attempt);
+      } else if (reconnectState === "success") {
+        setReconnecting(false);
+        setReconnectAttempt(0);
+      } else if (reconnectState === "failed") {
+        setReconnecting(false);
+        setReconnectAttempt(0);
+      }
+    });
+
     const unlistenDelete = listen<any>("m2m://delete", (event) => {
       const { message_id } = event.payload;
       setMessages((prev) => prev.map((m) =>
