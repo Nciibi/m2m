@@ -1274,6 +1274,38 @@ pub fn spawn_receive_loop(
                     conns.remove(&peer_key_hex);
                     break;
                 }
+                PacketType::MessageReaction => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(rxn) = crate::protocol::deserialize::<crate::protocol::MessageReactionData>(&plaintext) {
+                                    // Store locally
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(ref store) = *ms {
+                                        let _ = store.upsert_reaction(
+                                            &rxn.message_id, &rxn.reaction,
+                                            &peer_key_hex, rxn.remove,
+                                        );
+                                    }
+                                    drop(ms);
+
+                                    // Notify frontend
+                                    let _ = app_handle.emit("m2m://reaction", serde_json::json!({
+                                        "message_id": rxn.message_id,
+                                        "reaction": rxn.reaction,
+                                        "peer_key_hex": peer_key_hex,
+                                        "remove": rxn.remove,
+                                    }));
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt message reaction");
+                            }
+                        }
+                    }
+                }
                 PacketType::Error => {
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
