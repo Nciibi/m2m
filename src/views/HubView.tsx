@@ -24,7 +24,7 @@ export default function HubView() {
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
   const [family, setFamily] = useState<FamilyMember[]>([]);
-  const [familyLoading, setFamilyLoading] = useState(false);
+  const [_familyLoading, setFamilyLoading] = useState(false);
 
   const handleCopy = () => { copyInvite(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
