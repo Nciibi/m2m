@@ -32,6 +32,10 @@ export interface ChatMessage {
   content: string;
   direction: string;
   timestamp: number;
+  /// When this message was read (null = unread, only for received messages).
+  read_at: number | null;
+  /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
+  reactions: Record<string, string[]>;
 }
 
 export interface ConnectionInfo {
