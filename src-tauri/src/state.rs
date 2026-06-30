@@ -372,6 +372,9 @@ pub struct AppState {
     pub lan_state: RwLock<Option<Arc<RwLock<lan_discovery::LanDiscoveryState>>>>,
     /// LAN discovery cancel signal.
     pub lan_cancel: RwLock<Option<Arc<AtomicBool>>>,
+    /// Last time PRAGMA optimize was called (unix timestamp). Used to throttle
+    /// optimize calls to at most once per minute.
+    pub last_optimize_at: RwLock<i64>,
 }
 
 impl AppState {
