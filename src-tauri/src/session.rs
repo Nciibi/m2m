@@ -840,7 +840,7 @@ impl Session {
     ///
     /// Automatically uses the Double Ratchet path if an X3DH+DR session is active,
     /// falling back to the legacy SessionKeys path for backward compatibility.
-    async fn send_encrypted_typed<W: AsyncWrite + Unpin>(
+    pub async fn send_encrypted_typed<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
         packet_type: PacketType,
