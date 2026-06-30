@@ -105,14 +105,14 @@ pub enum DhtError {
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 /// A peer entry from the DHT.
+///
+/// Contains ONLY an ephemeral peer ID and IP address — NO permanent
+/// identity key. Ephemeral IDs rotate on network change and every
+/// 24 hours, preventing linkability.
 #[derive(Debug, Clone)]
 pub struct DhtPeer {
-    /// The peer's Ed25519 public key hash (SHA256 of public key).
+    /// The peer's ephemeral ID (rotates periodically, NOT their identity key).
     pub peer_id: [u8; 32],
-    /// The peer's public key bytes.
-    pub identity_pub: [u8; 32],
-    /// Human-readable fingerprint (for display).
-    pub fingerprint: String,
     /// Current TCP address for connecting.
     pub connect_addr: Option<SocketAddr>,
     /// Protocol version the peer supports.
