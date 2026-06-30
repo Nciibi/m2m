@@ -105,6 +105,11 @@ pub fn run() {
             commands::relay::get_relay_config,
             commands::relay::set_relay_config,
             commands::relay::get_relay_state,
+            commands::discovery::get_discovery_config,
+            commands::discovery::set_discovery_config,
+            commands::discovery::get_discovered_peers,
+            commands::discovery::connect_discovered_peer,
+            commands::discovery::refresh_discovery,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
