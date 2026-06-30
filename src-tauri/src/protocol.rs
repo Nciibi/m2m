@@ -939,6 +939,7 @@ mod protocol_tests {
     // ─── Constants sanity checks ────────────────────────────────
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_protocol_constants_sane() {
         assert!(MAX_FRAME_SIZE >= MIN_FRAME_SIZE);
         assert!(MAX_TEXT_MESSAGE_SIZE < MAX_FRAME_SIZE as usize);
