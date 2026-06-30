@@ -850,6 +850,13 @@ pub fn spawn_receive_loop(
                                                             id, &peer_key_hex, "received",
                                                             &encrypted, &nonce, now as i64,
                                                         );
+                                                        // Periodic PRAGMA optimize (at most once per minute)
+                                                        let now_ts = chrono::Utc::now().timestamp();
+                                                        let mut last_opt = state.last_optimize_at.write().await;
+                                                        if now_ts - *last_opt > 60 {
+                                                            let _ = store.optimize();
+                                                            *last_opt = now_ts;
+                                                        }
                                                     }
                                                 }
                                                 Err(e) => {
