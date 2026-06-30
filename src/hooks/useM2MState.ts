@@ -133,6 +133,8 @@ export function useM2MState() {
           content: `File request sent: ${filename}`,
           direction: "sent",
           timestamp: Math.floor(Date.now() / 1000),
+          read_at: null,
+          reactions: {},
         },
       ]);
     } catch (e) {
