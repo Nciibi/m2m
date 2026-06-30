@@ -304,25 +304,26 @@ pub async fn add_family_member(
     let pk_bytes = util::decode_peer_key(&peer_key_hex)
         .map_err(|e| format!("invalid peer key: {e}"))?;
 
-    let ks = state.key_store.lock().await;
-    let store = ks.as_ref().ok_or("key store not initialized")?;
-
-    // Verify the peer exists in the peers table (has connected before)
-    let is_family = store.is_family_member(&pk_bytes).map_err(|e| format!("family check: {e}"))?;
-    drop(ks); // Drop lock before any .await
-        // Try getting conversation — if no conversation exists, reject
+    // Check peer has a conversation (must have connected at least once)
+    {
         let ms = state.message_store.lock().await;
         let has_conversation = ms.as_ref()
             .and_then(|m| m.get_conversation(&peer_key_hex).ok())
             .flatten()
             .is_some();
         if !has_conversation {
-            return Err("no conversation with this peer — must connect at least once before adding to family".to_string());
+            return Err("no conversation with this peer".to_string());
         }
     }
 
-    let member = store.add_family_member(&pk_bytes, &nickname, expires_in_days, None)
-        .map_err(|e| format!("failed to add family member: {e}"))?;
+    // Add to family (no .await while holding key_store lock)
+    let member = {
+        let ks = state.key_store.lock().await;
+        let store = ks.as_ref().ok_or("key store not initialized")?;
+        store.add_family_member(&pk_bytes, &nickname, expires_in_days, None)
+            .map_err(|e| format!("failed to add family member: {e}"))?
+    };
+
     Ok(member)
 }
 
