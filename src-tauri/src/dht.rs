@@ -588,12 +588,14 @@ mod dht_tests {
 
     #[test]
     fn test_build_announce_body() {
-        init_crypto();
-        let identity = make_identity();
+        let ephemeral_id = [0xABu8; 32];
         let addr: SocketAddr = "192.168.1.5:9999".parse().unwrap();
 
-        let body = build_announce_body(&identity, addr).unwrap();
-        assert!(body.len() > 32 + 32); // peer_id + identity_pub + ip + port + sig
+        let body = build_announce_body(&ephemeral_id, addr);
+        // Format: ephemeral_id(32) + af_tag(1) + ip(4) + port(2) = 39 bytes
+        assert_eq!(body.len(), 32 + 1 + 4 + 2);
+        // First 32 bytes should be the ephemeral ID
+        assert_eq!(&body[..32], &[0xABu8; 32]);
     }
 
     #[test]
