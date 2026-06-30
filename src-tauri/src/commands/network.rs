@@ -823,10 +823,13 @@ pub fn spawn_receive_loop(
                         pr.insert(peer_key_hex.clone(), ri);
                     }
                     // Notify frontend about disconnection
+                    let was_verified = reconnect_info.as_ref()
+                        .map(|ri| ri.peer_verified).unwrap_or(false);
                     let _ = app_handle.emit("m2m://connection", ConnectionEvent {
                         peer_key_hex: peer_key_hex.clone(),
                         state: "disconnected".to_string(),
                         peer_fingerprint: None,
+                        peer_verified: was_verified,
                     });
                     // Remove connection
                     let mut conns = state.connections.write().await;
