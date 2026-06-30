@@ -414,6 +414,23 @@ impl KeyStore {
         Ok(())
     }
 
+    /// Insert a family member from raw values (used during import).
+    pub fn insert_family_member_raw(
+        &self,
+        public_key: &[u8],
+        nickname: &str,
+        added_at: i64,
+        expires_at: Option<i64>,
+        last_address: Option<&str>,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![public_key, nickname, added_at, expires_at, last_address],
+        )?;
+        Ok(())
+    }
+
 }
 
 /// The message store: holds chat history (optional).
