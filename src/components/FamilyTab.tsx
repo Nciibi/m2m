@@ -166,10 +166,6 @@ function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         <label>
           Peer Key
           <datalist id="peer-list">
-            {conversations.filter(c => c.peer_key_hex).map(c => (
-              <option key={c.peer_key_hex} value={c.peer_key_hex} />
-            ))}
-          </datalist>
           <Input
             list="peer-list"
             placeholder="Peer public key hex"
