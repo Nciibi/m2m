@@ -1308,6 +1308,69 @@ pub fn spawn_receive_loop(
                         }
                     }
                 }
+                PacketType::MessageEdit => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(edit) = crate::protocol::deserialize::<crate::protocol::MessageEditData>(&plaintext) {
+                                    // Update local storage
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(ref store) = *ms {
+                                        let sk = state.storage_key.read().await;
+                                        if let Some(key) = sk.as_ref() {
+                                            if let Ok((nonce, encrypted)) = util::crypto_encrypt_storage(
+                                                edit.new_content.as_bytes(), key, util::AAD_MSG_STORE,
+                                            ) {
+                                                let _ = store.edit_message(&edit.message_id, &encrypted, &nonce);
+                                            }
+                                        }
+                                    }
+                                    drop(ms);
+
+                                    // Notify frontend
+                                    let _ = app_handle.emit("m2m://edit", serde_json::json!({
+                                        "message_id": edit.message_id,
+                                        "new_content": edit.new_content,
+                                        "edited_at": edit.edited_at,
+                                        "peer_key_hex": peer_key_hex,
+                                    }));
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt message edit");
+                            }
+                        }
+                    }
+                }
+                PacketType::MessageDelete => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(del) = crate::protocol::deserialize::<crate::protocol::MessageDeleteData>(&plaintext) {
+                                    // Soft-delete locally
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(ref store) = *ms {
+                                        let _ = store.delete_message(&del.message_id);
+                                    }
+                                    drop(ms);
+
+                                    // Notify frontend
+                                    let _ = app_handle.emit("m2m://delete", serde_json::json!({
+                                        "message_id": del.message_id,
+                                        "peer_key_hex": peer_key_hex,
+                                    }));
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt message delete");
+                            }
+                        }
+                    }
+                }
                 PacketType::Error => {
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
