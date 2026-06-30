@@ -3,7 +3,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
-import type { NetworkSettings, StunConfig, NatTypeInfo } from "../types";
+import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer } from "../types";
 
 interface SettingsContextValue {
   networkSettings: NetworkSettings | null;
@@ -23,6 +23,13 @@ interface SettingsContextValue {
   handlePrivateModeToggle: () => Promise<void>;
   handleConnectivityCheck: () => Promise<void>;
   handleTorToggle: () => Promise<void>;
+  // Discovery
+  discoveryConfig: DiscoveryConfig | null;
+  discoveredPeers: DiscoveredPeer[];
+  handleLanToggle: () => Promise<void>;
+  handleDhtToggle: () => Promise<void>;
+  handleConnectDiscoveredPeer: (address: string) => Promise<void>;
+  handleRefreshDiscovery: () => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -44,6 +51,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [stunServerInput, setStunServerInput] = useState("");
   const [privateMode, setPrivateMode] = useState(false);
   const [connectivityResult, setConnectivityResult] = useState<any>(null);
+  // Discovery state
+  const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
+  const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
 
   const openSettings = useCallback(async () => {
     setView("settings");
@@ -55,6 +65,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setStunConfig(sc);
       setPrivateMode(sc.private_mode);
       try { setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics")); }
+      catch { /* noop */ }
+      try { setDiscoveryConfig(await invoke<DiscoveryConfig>("get_discovery_config")); }
+      catch { /* noop */ }
+      try { setDiscoveredPeers(await invoke<DiscoveredPeer[]>("get_discovered_peers")); }
       catch { /* noop */ }
     } catch { /* noop */ }
   }, [setView]);
@@ -136,6 +150,60 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [networkSettings, addToast]);
 
+  // ── Discovery handlers ──
+
+  const handleLanToggle = useCallback(async () => {
+    if (!discoveryConfig) return;
+    const newConfig: DiscoveryConfig = {
+      ...discoveryConfig,
+      lan_enabled: !discoveryConfig.lan_enabled,
+    };
+    try {
+      const result = await invoke<DiscoveryConfig>("set_discovery_config", { config: newConfig });
+      setDiscoveryConfig(result);
+      const peers = await invoke<DiscoveredPeer[]>("get_discovered_peers");
+      setDiscoveredPeers(peers);
+    } catch (e) {
+      addToast("LAN discovery toggle failed: " + e, "error");
+    }
+  }, [discoveryConfig, addToast]);
+
+  const handleDhtToggle = useCallback(async () => {
+    if (!discoveryConfig) return;
+    const newConfig: DiscoveryConfig = {
+      ...discoveryConfig,
+      dht_enabled: !discoveryConfig.dht_enabled,
+    };
+    try {
+      const result = await invoke<DiscoveryConfig>("set_discovery_config", { config: newConfig });
+      setDiscoveryConfig(result);
+      const peers = await invoke<DiscoveredPeer[]>("get_discovered_peers");
+      setDiscoveredPeers(peers);
+    } catch (e) {
+      addToast("DHT discovery toggle failed: " + e, "error");
+    }
+  }, [discoveryConfig, addToast]);
+
+  const handleConnectDiscoveredPeer = useCallback(async (address: string) => {
+    try {
+      const info = await invoke<any>("connect_discovered_peer", { address });
+      addToast("Connected to discovered peer", "success");
+      return info;
+    } catch (e) {
+      addToast("Connection to discovered peer failed: " + e, "error");
+      throw e;
+    }
+  }, [addToast]);
+
+  const handleRefreshDiscovery = useCallback(async () => {
+    try {
+      const peers = await invoke<DiscoveredPeer[]>("refresh_discovery");
+      setDiscoveredPeers(peers);
+    } catch (e) {
+      addToast("Refresh discovery failed: " + e, "error");
+    }
+  }, [addToast]);
+
   return (
     <SettingsContext.Provider value={{
       networkSettings, publicIp, stunLoading, networkDiagnostics,
@@ -145,6 +213,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
       handleResetStunDefaults, handlePrivateModeToggle,
       handleConnectivityCheck, handleTorToggle,
+      discoveryConfig, discoveredPeers,
+      handleLanToggle, handleDhtToggle,
+      handleConnectDiscoveredPeer, handleRefreshDiscovery,
     }}>
       {children}
     </SettingsContext.Provider>
