@@ -238,17 +238,6 @@ impl KeyStore {
     }
 
     // ─── Family (Persistent Contact List) ───────────────────────
-        /// Current public key of this peer (hex-encoded for frontend).
-        pub public_key_hex: String,
-        /// Your label for them.
-        pub nickname: String,
-        /// When they were added (unix seconds).
-        pub added_at: i64,
-        /// When they expire (null = forever).
-        pub expires_at: Option<i64>,
-        /// Last known address (best-effort, may be stale).
-        pub last_address: Option<String>,
-    }
 
     /// Add a peer to the family list. Fails if already present.
     pub fn add_family_member(
