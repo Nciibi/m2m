@@ -571,8 +571,6 @@ mod dht_tests {
             "stale".to_string(),
             DhtPeer {
                 peer_id: [0xAA; 32],
-                identity_pub: [0xBB; 32],
-                fingerprint: "STALE".to_string(),
                 connect_addr: None,
                 protocol_version: 1,
                 last_seen: old_time,
