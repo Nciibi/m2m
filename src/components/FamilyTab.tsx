@@ -125,7 +125,6 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
         );
       })}
 
-      {showUpdate && !family.find(m => showUpdate === m.public_key_hex) && setShowUpdate(null)}
     </div>
   );
 }
