@@ -18,6 +18,7 @@ mod candidate;
 mod commands;
 pub mod crypto;
 mod dht;
+mod ephemeral_id;
 mod hole_punch;
 mod identity;
 mod lan_discovery;
