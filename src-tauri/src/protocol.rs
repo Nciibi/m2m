@@ -949,6 +949,6 @@ mod protocol_tests {
         assert!(MAX_SESSION_DURATION_SECS > 0);
         assert!(MAX_INVITE_VALIDITY_SECS > 0);
         assert!(CLOCK_SKEW_TOLERANCE_SECS > 0);
-        assert!(LENGTH_PREFIX_SIZE == 4);
+        assert_eq!(LENGTH_PREFIX_SIZE, 4);
     }
 }
