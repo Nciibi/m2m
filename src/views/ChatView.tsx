@@ -17,6 +17,7 @@ export default function ChatView() {
     handleSendMessage, handleSendFile, handleVerify, handleDisconnect,
     handleExportConversation, handleSetRetention,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
+    handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
   } = useChat();
   const [text, setText] = useState("");
   const [showFp, setShowFp] = useState(false);
