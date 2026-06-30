@@ -17,6 +17,9 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
+/// Type alias for the reactions map returned by get_reactions.
+type ReactionsMap = std::collections::HashMap<String, Vec<(String, String, i64)>>;
+
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("database error: {0}")]
@@ -893,9 +896,9 @@ impl MessageStore {
     pub fn get_reactions(
         &self,
         message_ids: &[String],
-    ) -> Result<std::collections::HashMap<String, Vec<(String, String, i64)>>, StorageError> {
+    ) -> Result<ReactionsMap, StorageError> {
         if message_ids.is_empty() {
-            return Ok(std::collections::HashMap::new());
+            return Ok(ReactionsMap::new());
         }
         let placeholders: Vec<String> = message_ids.iter().enumerate()
             .map(|(i, _)| format!("?{}", i + 1))
