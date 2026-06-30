@@ -1,33 +1,39 @@
 /// M2M — DHT Peer Discovery
 ///
-/// Kademlia-inspired Distributed Hash Table for finding peers by their
-/// public key. Each peer announces its connection info to the DHT, and
-/// other peers look up that info when they want to connect.
+/// ⚠️ **PRIVACY WARNING** ⚠️
+///
+/// This module is **OFF by default** for a reason: publishing your
+/// presence to a DHT makes you *discoverable* but also *traceable*.
+/// Anyone monitoring the DHT can see when you're online and what IP
+/// you're using.
+///
+/// If you enable this, M2M uses an **ephemeral peer ID** — a random
+/// 32-byte token that changes every 24 hours or whenever your IP
+/// changes. This is NOT your permanent Ed25519 identity key, so
+/// observers cannot link your DHT activity back to your real identity.
+/// However: your IP address is still visible to DHT nodes.
+///
+/// ## When to use
+///
+/// - **Safe**: You want friends to find you without sharing invite links
+/// - **Unsafe**: You're in a high-risk environment, using Tor, or want
+///   maximum metadata protection — leave it OFF and use invite links.
 ///
 /// ## Design
 ///
-/// This is NOT a full Kademlia implementation. It's a lightweight DHT
-/// client that uses configurable bootstrap nodes for peer discovery:
+/// Lightweight Kademlia-style DHT client that uses configurable
+/// bootstrap nodes for peer discovery. Announced peer IDs are
+/// ephemeral (rotated periodically and on network change), NOT
+/// your permanent identity key.
 ///
-/// - **Announce**: Publish `(peer_id_hash, listen_addr, identity_pub)` to the DHT
-/// - **Lookup**: Query the DHT for a peer's current address by their public key
-/// - **Bootstrap**: Connect to known bootstrap nodes to join the DHT network
-///
-/// The DHT operates over TCP (same transport as M2M messaging) using
-/// length-prefixed binary frames, similar to the M2M wire protocol.
-///
-/// ## Privacy
-///
-/// The announcement contains only public information (public key hash,
-/// IP address, protocol version). No message content, no identity
-/// metadata. The DHT is entirely optional — users in private mode can
-/// disable it.
+/// - **Announce**: Publish `(ephemeral_id, listen_addr)` — no permanent key exposed
+/// - **Lookup**: Query for a peer by their ephemeral ID
+/// - **Bootstrap**: Connect to bootstrap nodes to join the DHT network
 ///
 /// ## NAT Awareness
 ///
-/// Peers behind symmetric NATs cannot receive incoming DHT connections,
-/// so they act as "client-only" nodes: they can query and announce
-/// through relay nodes, but don't serve routing table entries.
+/// Peers behind symmetric NATs act as "client-only" nodes (query and
+/// announce only, don't serve routing table entries).
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
