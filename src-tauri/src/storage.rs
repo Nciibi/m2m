@@ -59,6 +59,22 @@ pub fn ensure_data_dir() -> Result<PathBuf, StorageError> {
     Ok(dir)
 }
 
+/// A family member — a peer the user has explicitly saved as a persistent contact.
+/// Stored in the `family` table, separate from the ephemeral `peers` table.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FamilyMember {
+    /// Current public key of this peer (hex-encoded for frontend).
+    pub public_key_hex: String,
+    /// Your label for them.
+    pub nickname: String,
+    /// When they were added (unix seconds).
+    pub added_at: i64,
+    /// When they expire (null = forever).
+    pub expires_at: Option<i64>,
+    /// Last known address (best-effort, may be stale).
+    pub last_address: Option<String>,
+}
+
 /// The key store: holds identity keys, peer keys, and consumed invite nonces.
 /// Private key material is encrypted at the application level before storage.
 pub struct KeyStore {
