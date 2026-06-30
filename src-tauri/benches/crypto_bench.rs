@@ -232,15 +232,20 @@ fn bench_x3dh_initiate(c: &mut Criterion) {
     let spk_b = EphemeralKeypair::generate();
     let opk_b = EphemeralKeypair::generate();
 
+    let bundle = PrekeyBundle {
+        identity_key: ik_b.public_key_bytes(),
+        signed_prekey: spk_b.public_key_bytes(),
+        signed_prekey_sig: vec![0u8; 64],
+        one_time_prekey: Some(opk_b.public_key_bytes()),
+    };
+
     c.bench_function("x3dh_initiate", |b| {
         b.iter(|| {
             let _ = black_box(
                 m2m_lib::crypto::x3dh_initiate(
                     black_box(&ik_a),
                     black_box(&ek_a),
-                    black_box(&ik_b.public_key_bytes()),
-                    black_box(&spk_b.public_key_bytes()),
-                    black_box(Some(&opk_b.public_key_bytes())),
+                    black_box(&bundle),
                 ),
             );
         })
