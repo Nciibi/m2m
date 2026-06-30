@@ -134,7 +134,7 @@ export default function HubView() {
         ) : tab === "family" ? (
           <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
         ) : (
-          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} />
+          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} />
         )}
       </div>
 
@@ -208,7 +208,7 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
   );
 }
 
-function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch }: any) {
+function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted }: any) {
   return (
     <div className="conv-list">
       {conversations.length > 0 && (
@@ -229,7 +229,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
               : "Generate an invite link to host a connection, or paste an invite from a peer to join."}
           </span>
           {!search && (
-            <Button onClick={() => setTab("connect")} icon={<PlusIcon size={18} />} style={{ marginTop: 'var(--space-md)' }}>
+            <Button onClick={onGetStarted} icon={<PlusIcon size={18} />} style={{ marginTop: 'var(--space-md)' }}>
               Get Started
             </Button>
           )}
