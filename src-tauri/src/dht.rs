@@ -47,6 +47,7 @@ use tokio::time;
 use thiserror::Error;
 
 use crate::crypto::IdentityKeypair;
+use crate::ephemeral_id::EphemeralPeerId;
 use crate::protocol;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
