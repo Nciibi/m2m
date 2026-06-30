@@ -167,8 +167,10 @@ pub struct DhtState {
     /// DHT config.
     pub config: DhtConfig,
     /// Whether we've bootstrapped into the DHT network.
+    #[expect(dead_code, reason = "Read externally by DHT operations")]
     pub bootstrapped: bool,
     /// Whether the DHT background task is running.
+    #[expect(dead_code, reason = "Read externally by DHT operations")]
     pub running: bool,
 }
 
@@ -182,6 +184,7 @@ impl DhtState {
         }
     }
 
+    #[expect(dead_code, reason = "Used by external DHT orchestration code")]
     /// Check whether DHT discovery is enabled.
     pub fn enabled(&self) -> bool {
         self.config.enabled
