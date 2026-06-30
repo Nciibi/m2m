@@ -255,16 +255,27 @@ async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
 /// Build an announce body for our identity.
 fn build_announce_body(identity: &IdentityKeypair, listen_addr: SocketAddr) -> Result<Vec<u8>, DhtError> {
     let peer_id = sodiumoxide::crypto::hash::sha256::hash(&identity.public_key_bytes()).0;
-    let mut body = Vec::with_capacity(32 + 32 + 4 + 2 + 64);
+
+    // Encode the IP address: 4 bytes for IPv4, 16 bytes for IPv6.
+    // Prefix with a 1-byte address family tag (4=IPv4, 6=IPv6).
+    let (af_tag, ip_bytes) = match listen_addr.ip() {
+        std::net::IpAddr::V4(v4) => (4u8, v4.octets().to_vec()),
+        std::net::IpAddr::V6(v6) => (6u8, v6.octets().to_vec()),
+    };
+
+    // body = peer_id(32) + identity_pub(32) + af_tag(1) + ip(variable 4/16) + port(2) + sig(64)
+    let body_size = 32 + 32 + 1 + ip_bytes.len() + 2 + 64;
+    let mut body = Vec::with_capacity(body_size);
     body.extend_from_slice(&peer_id);
     body.extend_from_slice(&identity.public_key_bytes());
-    body.extend_from_slice(&listen_addr.ip().octets());
+    body.push(af_tag);
+    body.extend_from_slice(&ip_bytes);
     body.extend_from_slice(&listen_addr.port().to_be_bytes());
 
-    // Sign the announce (peer_id + listen_addr)
-    let mut sign_data = Vec::with_capacity(32 + 4 + 2);
+    // Sign the announce (peer_id + ip + port)
+    let mut sign_data = Vec::with_capacity(32 + ip_bytes.len() + 2);
     sign_data.extend_from_slice(&peer_id);
-    sign_data.extend_from_slice(&listen_addr.ip().octets());
+    sign_data.extend_from_slice(&ip_bytes);
     sign_data.extend_from_slice(&listen_addr.port().to_be_bytes());
     let signature = identity.sign(&sign_data);
     body.extend_from_slice(&signature);
