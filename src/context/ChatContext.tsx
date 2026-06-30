@@ -42,6 +42,10 @@ interface ChatContextValue {
   handleSendReaction: (messageId: string, reaction: string) => Promise<void>;
   handleRemoveReaction: (messageId: string, reaction: string) => Promise<void>;
   handleMarkConversationRead: () => Promise<void>;
+  // Self-destruct, Edit, Delete
+  handleSendMessageWithTimer: (content: string, disappearAfter?: number) => Promise<void>;
+  handleEditMessage: (messageId: string, newContent: string) => Promise<void>;
+  handleDeleteMessage: (messageId: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
