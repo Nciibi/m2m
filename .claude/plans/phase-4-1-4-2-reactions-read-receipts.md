@@ -1,3 +1,10 @@
+# Phase 4 — Message Features ✅ COMPLETE
+
+This plan has been completed and expanded to include 4.3 (self-destruct), 4.4 (edit/delete), and 4.5 (markdown).
+See `CLAUDE.md` and `docs/protocol-spec.md` for current implementation status.
+
+---
+
 # Phase 4.1 + 4.2 — Message Reactions + Read Receipts
 
 ## Overview
