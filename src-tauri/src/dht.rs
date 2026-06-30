@@ -535,14 +535,12 @@ mod dht_tests {
     fn test_parse_node_response() {
         let mut peer_id = [0u8; 32];
         peer_id[0] = 0xAA;
-        let mut identity_pub = [0u8; 32];
-        identity_pub[1] = 0xBB;
+        // New wire format: no identity_pub — just ephemeral_id(32) + ip(4) + port(2)
         let ip = [10u8, 0, 0, 1];
         let port = 9876u16.to_be_bytes();
 
         let mut body = Vec::new();
         body.extend_from_slice(&peer_id);
-        body.extend_from_slice(&identity_pub);
         body.extend_from_slice(&ip);
         body.extend_from_slice(&port);
 
@@ -555,7 +553,8 @@ mod dht_tests {
 
     #[test]
     fn test_parse_node_response_malformed() {
-        let body = vec![0u8; 10]; // Not a multiple of entry_size
+        // Old 70-byte entry size (32+32+4+2) should fail new wire format (32+4+2=38)
+        let body = vec![0u8; 70];
         assert!(parse_node_response(&body).is_err());
     }
 
