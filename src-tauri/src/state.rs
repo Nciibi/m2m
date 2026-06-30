@@ -19,6 +19,7 @@ use crate::stun;
 
 use crate::crypto::IdentityKeypair;
 use crate::network::ConnectionState;
+use crate::reconnect::ReconnectInfo;
 use crate::session::Session;
 use crate::storage;
 
