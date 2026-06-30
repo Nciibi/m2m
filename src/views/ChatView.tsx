@@ -75,6 +75,14 @@ export default function ChatView() {
     try { await handleSendMessage(text.trim().slice(0, 64 * 1024)); setText(""); } finally { setSending(false); }
   };
 
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMsgId) return;
+    const handler = () => setContextMsgId(null);
+    window.addEventListener("click", handler, { once: true });
+    return () => window.removeEventListener("click", handler);
+  }, [contextMsgId]);
+
   const fmt = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
   const grouped = groupByDate(messages);
