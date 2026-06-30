@@ -24,7 +24,7 @@
     radial-gradient(ellipse at 50% 50%, rgba(139, 92, 246, 0.04), transparent 70%);
 
   /* ─── Colors: Borders ─── */
-  --color-border-default: rgba(255, 255, 255, 0.06);
+  --color-border-default: rgba(255, 255, 255, 0.09); /* WCAG: Increased from 0.06 for 3:1 UI component contrast */
   --color-border-active: rgba(129, 140, 248, 0.6);
   --color-border-strong: rgba(255, 255, 255, 0.12);
   --color-border-accent: rgba(129, 140, 248, 0.2);
