@@ -1031,6 +1031,7 @@ pub struct ConversationSummary {
 
 /// Summary of a stored transfer for the frontend.
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub struct StoredTransfer {
     pub id: String,
     pub peer_key_hex: String,
@@ -1147,6 +1148,7 @@ impl TransferStore {
     }
 
     /// Update the number of completed chunks.
+    #[cfg(test)]
     pub fn update_progress(
         &self,
         transfer_id: &str,
@@ -1160,6 +1162,7 @@ impl TransferStore {
     }
 
     /// Update the local path for a completed received file.
+    #[cfg(test)]
     pub fn set_local_path(
         &self,
         transfer_id: &str,
@@ -1173,6 +1176,7 @@ impl TransferStore {
     }
 
     /// List all stored transfers, most recent first.
+    #[cfg(test)]
     pub fn list_transfers(&self, limit: i64) -> Result<Vec<StoredTransfer>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, peer_key_hex, filename, total_size, direction, state,
@@ -1204,6 +1208,7 @@ impl TransferStore {
     }
 
     /// Get a single transfer by ID.
+    #[cfg(test)]
     pub fn get_transfer(&self, transfer_id: &str) -> Result<Option<StoredTransfer>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, peer_key_hex, filename, total_size, direction, state,
@@ -1235,6 +1240,7 @@ impl TransferStore {
     }
 
     /// Delete a transfer record.
+    #[cfg(test)]
     pub fn delete_transfer(&self, transfer_id: &str) -> Result<(), StorageError> {
         self.conn.execute(
             "DELETE FROM transfers WHERE id = ?1",
