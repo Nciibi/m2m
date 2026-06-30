@@ -805,6 +805,11 @@ pub fn spawn_receive_loop(
                 Ok(f) => f,
                 Err(e) => {
                     tracing::info!(peer = %peer_key_hex, error = %e, "peer connection closed");
+                    // Store reconnect info for the frontend (if available)
+                    if let Some(ri) = reconnect_info.clone() {
+                        let mut pr = state.pending_reconnects.write().await;
+                        pr.insert(peer_key_hex.clone(), ri);
+                    }
                     // Notify frontend about disconnection
                     let _ = app_handle.emit("m2m://connection", ConnectionEvent {
                         peer_key_hex: peer_key_hex.clone(),
