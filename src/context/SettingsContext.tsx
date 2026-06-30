@@ -1,9 +1,9 @@
 import {
-  createContext, useContext, useState, useCallback, ReactNode,
+  createContext, useContext, useState, useCallback, useRef, ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
-import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer } from "../types";
+import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer, SecurityConfig } from "../types";
 
 interface SettingsContextValue {
   networkSettings: NetworkSettings | null;
@@ -30,6 +30,13 @@ interface SettingsContextValue {
   handleDhtToggle: () => Promise<void>;
   handleConnectDiscoveredPeer: (address: string) => Promise<void>;
   handleRefreshDiscovery: () => Promise<void>;
+  // Security
+  securityConfig: SecurityConfig | null;
+  handleScreenCaptureToggle: () => Promise<void>;
+  handleClipboardClearSecsChange: (secs: number) => Promise<void>;
+  handleIdleLockSecsChange: (secs: number) => Promise<void>;
+  handleLockVault: () => Promise<void>;
+  handleClearClipboard: () => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -54,6 +61,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Discovery state
   const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
   const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
+  // Security state
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig | null>(null);
+  // Clipboard clear timer ref
+  const clipboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openSettings = useCallback(async () => {
     setView("settings");
