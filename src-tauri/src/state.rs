@@ -334,6 +334,7 @@ impl AppState {
             manual_forwards: RwLock::new(Vec::new()),
             relay_config: RwLock::new(None),
             relay_state: RwLock::new(relay::RelayState::default()),
+            pending_reconnects: RwLock::new(HashMap::new()),
         }
     }
 
