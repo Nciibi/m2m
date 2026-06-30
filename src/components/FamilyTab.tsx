@@ -137,7 +137,8 @@ function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [customDays, setCustomDays] = useState("30");
   const [saving, setSaving] = useState(false);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (e: React.MouseEvent | React.FormEvent) => {
+    e.preventDefault();
     if (!peerKeyHex.trim() || !nickname.trim()) {
       addToast("Peer key and nickname are required", "warning");
       return;
