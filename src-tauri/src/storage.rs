@@ -1033,7 +1033,9 @@ pub struct ConversationSummary {
 #[derive(Debug, Clone)]
 #[cfg(test)]
 pub struct StoredTransfer {
+    #[allow(dead_code)]
     pub id: String,
+    #[allow(dead_code)]
     pub peer_key_hex: String,
     pub filename: String,
     pub total_size: u64,
