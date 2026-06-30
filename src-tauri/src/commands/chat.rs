@@ -90,15 +90,32 @@ pub async fn load_messages(
         .map_err(|e| format!("failed to load messages: {e}"))?;
 
     let mut messages = Vec::with_capacity(stored.len());
+    let msg_ids: Vec<String> = stored.iter().map(|m| m.id.clone()).collect();
+
+    // Load reactions for all messages at once
+    let all_reactions = store.get_reactions(&msg_ids)
+        .unwrap_or_default();
+
     for m in stored {
         let content = util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key, util::AAD_MSG_STORE)
             .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
             .unwrap_or_else(|_| "[encrypted]".to_string());
+
+        // Build reactions map: reaction → [peer_key_hex, ...]
+        let mut reactions: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        if let Some(msg_reactions) = all_reactions.get(&m.id) {
+            for (rxn, peer, _ts) in msg_reactions {
+                reactions.entry(rxn.clone()).or_default().push(peer.clone());
+            }
+        }
+
         messages.push(ChatMessage {
             id: m.id,
             content,
             direction: m.direction,
             timestamp: m.timestamp as u64,
+            read_at: m.read_at,
+            reactions,
         });
     }
     Ok(messages)
