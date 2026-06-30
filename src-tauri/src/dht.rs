@@ -36,6 +36,7 @@
 /// announce only, don't serve routing table entries).
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -171,6 +172,11 @@ impl DhtState {
             bootstrapped: false,
             running: false,
         }
+    }
+
+    /// Check whether DHT discovery is enabled.
+    pub fn enabled(&self) -> bool {
+        self.config.enabled
     }
 
     /// Remove peers that haven't been seen within the expiry window.
@@ -426,11 +432,17 @@ pub async fn announce_loop(
     ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
     network_monitor: Arc<RwLock<crate::ephemeral_id::NetworkMonitor>>,
     listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
+    cancel: Arc<AtomicBool>,
 ) {
     // Track the current ephemeral ID so we can re-announce if it rotates
     let mut current_id = ephemeral_id.read().await.id;
 
     loop {
+        if cancel.load(Ordering::SeqCst) {
+            tracing::info!("DHT announce loop cancelled");
+            return;
+        }
+
         time::sleep(ANNOUNCE_INTERVAL).await;
 
         // Check if we should rotate the ephemeral ID
