@@ -558,17 +558,21 @@ impl MessageStore {
     }
 
     /// Load messages for a conversation (most recent first, with limit).
+    /// Skips expired messages (those past their expires_at).
     pub fn load_messages(
         &self,
         conversation_id: &str,
         limit: i64,
     ) -> Result<Vec<StoredMessage>, StorageError> {
+        let now = chrono::Utc::now().timestamp();
         let mut stmt = self.conn.prepare(
-            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at
+            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
+                    edited_at, deleted, expires_at
              FROM messages WHERE conversation_id = ?1
-             ORDER BY timestamp DESC LIMIT ?2",
+             AND (expires_at IS NULL OR expires_at > ?2)
+             ORDER BY timestamp DESC LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![conversation_id, limit], |row| {
+        let rows = stmt.query_map(params![conversation_id, now, limit], |row| {
             Ok(StoredMessage {
                 id: row.get(0)?,
                 direction: row.get(1)?,
@@ -576,6 +580,9 @@ impl MessageStore {
                 content_nonce: row.get(3)?,
                 timestamp: row.get(4)?,
                 read_at: row.get(5)?,
+                edited_at: row.get(6)?,
+                deleted: row.get::<_, i64>(7)? != 0,
+                expires_at: row.get(8)?,
             })
         })?;
         let mut messages = Vec::new();
