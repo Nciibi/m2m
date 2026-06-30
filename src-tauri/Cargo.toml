@@ -73,6 +73,9 @@ dashmap = "6"
 # SOCKS5 proxy for Tor integration
 tokio-socks = "0.5"
 
+# Dynamic library loading for platform-specific FFI (screen capture protection)
+libloading = "0.8"
+
 [[example]]
 name = "generate-identity"
 path = "examples/generate-identity.rs"
