@@ -263,6 +263,48 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
   }, [activeConversationId]);
 
+  // ─── Self-destruct, Edit, Delete handlers ───
+
+  const handleSendMessageWithTimer = useCallback(async (content: string, disappearAfter?: number) => {
+    if (!connection?.peer_key_hex) return;
+    const msg = await invoke<ChatMessage>("send_message_with_timer", {
+      peerKeyHex: connection.peer_key_hex,
+      content,
+      disappearAfter: disappearAfter ?? null,
+    });
+    setMessages((prev) => [...prev, msg]);
+  }, [connection?.peer_key_hex]);
+
+  const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    if (!connection?.peer_key_hex) return;
+    try {
+      const updated = await invoke<ChatMessage>("edit_message", {
+        peerKeyHex: connection.peer_key_hex,
+        messageId,
+        newContent,
+      });
+      setMessages((prev) => prev.map((m) => m.id === messageId ? updated : m));
+    } catch (e) {
+      app.addToast("Edit failed: " + e, "error");
+    }
+  }, [connection?.peer_key_hex, app]);
+
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    if (!connection?.peer_key_hex) return;
+    try {
+      await invoke("delete_message", {
+        peerKeyHex: connection.peer_key_hex,
+        messageId,
+      });
+      // Optimistic update — mark as deleted immediately
+      setMessages((prev) => prev.map((m) =>
+        m.id === messageId ? { ...m, deleted: true, content: "[deleted]" } : m
+      ));
+    } catch (e) {
+      app.addToast("Delete failed: " + e, "error");
+    }
+  }, [connection?.peer_key_hex, app]);
+
   // ─── Invite validation effect ───
   useEffect(() => {
     if (inviteToConnect.length > 30) {
