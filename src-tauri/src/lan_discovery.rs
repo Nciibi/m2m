@@ -276,35 +276,31 @@ pub async fn start(
         loop {
             tokio::time::sleep(ANNOUNCE_INTERVAL).await;
 
-            // Get current identity and listen port
-            let has_identity = {
-                let id = identity.read().await;
-                id.is_some()
-            };
-
-            if !has_identity {
-                continue; // No identity yet — wait for vault unlock
+            // Check if network changed — rotate ephemeral ID
+            {
+                let eid = ephemeral_id.read().await;
+                if eid.should_rotate() {
+                    drop(eid);
+                    let mut eid = ephemeral_id.write().await;
+                    *eid = crate::ephemeral_id::EphemeralPeerId::generate();
+                    tracing::debug!("LAN discovery session token rotated");
+                }
             }
 
-            let addr = listen_addr.read().await;
-            let listen_port = match *addr {
-                Some(sa) => sa.port(),
-                None => continue, // Not listening yet
-            };
-
-            let id = identity.read().await;
-            let kp = match id.as_ref() {
-                Some(kp) => kp,
-                None => continue,
-            };
-
-            let packet = match build_announcement(kp, listen_port) {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to build LAN announcement");
-                    continue;
+            let listen_port = {
+                let addr = listen_addr.read().await;
+                match *addr {
+                    Some(sa) => sa.port(),
+                    None => continue,
                 }
             };
+
+            let session_token = {
+                let eid = ephemeral_id.read().await;
+                eid.id
+            };
+
+            let packet = build_announcement(listen_port, &session_token);
 
             match socket_announcer.send_to(
                 &packet,
