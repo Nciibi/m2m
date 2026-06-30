@@ -119,6 +119,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         content: `File request sent: ${filename}`,
         direction: "sent",
         timestamp: Math.floor(Date.now() / 1000),
+        read_at: null,
+        reactions: {},
       }]);
     } catch (e) {
       addToast("Failed to send file: " + e, "error");
