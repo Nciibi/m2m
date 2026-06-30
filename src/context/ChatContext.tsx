@@ -255,6 +255,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
   }, [connection?.peer_key_hex]);
 
+  const handleReconnect = useCallback(async () => {
+    if (!connection?.peer_key_hex) return;
+    setReconnecting(true);
+    setReconnectAttempt(1);
+    try {
+      const info = await invoke<ConnectionInfo>("attempt_reconnect", { peerKeyHex: connection.peer_key_hex });
+      setConnection(info);
+    } catch (e) {
+      setReconnecting(false);
+      setReconnectAttempt(0);
+    }
+  }, [connection]);
+
   const handleMarkConversationRead = useCallback(async () => {
     if (!activeConversationId) return;
     try {
