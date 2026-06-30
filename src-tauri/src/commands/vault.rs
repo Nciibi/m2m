@@ -376,26 +376,25 @@ pub async fn connect_family_member(
     let pk_bytes = util::decode_peer_key(&peer_key_hex)
         .map_err(|e| format!("invalid peer key: {e}"))?;
 
-    let identity = state.identity.read().await;
-    let kp = identity.as_ref().ok_or("identity not initialized")?;
+    // Get identity pub key (for handshake) — drop guard before any .await
+    let (kp_pub, kp_sk) = {
+        let identity = state.identity.read().await;
+        let kp = identity.as_ref().ok_or("identity not initialized")?;
+        (kp.public_key_bytes(), kp.secret_key_bytes())
+    };
 
-    // Look up the family member's last known address
-    let ks = state.key_store.lock().await;
-    let store = ks.as_ref().ok_or("key store not initialized")?;
-
-    // Check if they're in family
-    if !store.is_family_member(&pk_bytes)? {
-        return Err("peer is not a family member".to_string());
-    }
-
-    // Get saved address (best-effort)
+    // Look up the family member — drop key_store lock before any .await
     let saved_addr_str: Option<String> = {
+        let ks = state.key_store.lock().await;
+        let store = ks.as_ref().ok_or("key store not initialized")?;
+        if !store.is_family_member(&pk_bytes).map_err(|e| format!("family check: {e}"))? {
+            return Err("peer is not a family member".to_string());
+        }
         let members = store.list_family().map_err(|e| format!("list family: {e}"))?;
         members.into_iter()
             .find(|m| m.public_key_hex == peer_key_hex)
             .and_then(|m| m.last_address)
     };
-    drop(ks);
 
     let saved_addr: Option<std::net::SocketAddr> = saved_addr_str
         .as_ref()
