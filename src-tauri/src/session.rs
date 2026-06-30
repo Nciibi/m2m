@@ -497,6 +497,18 @@ impl Session {
         stream: &mut W,
         text: &str,
     ) -> Result<String, SessionError> {
+        self.send_text_with_timer(stream, text, None).await
+    }
+
+    /// Send a text message with an optional self-destruct timer.
+    /// When `disappear_after` is Some(secs), the peer will auto-delete
+    /// the message after that many seconds from receipt.
+    pub async fn send_text_with_timer<W: AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut W,
+        text: &str,
+        disappear_after: Option<u64>,
+    ) -> Result<String, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
         }
@@ -506,6 +518,7 @@ impl Session {
         let body = MessageBody::Text {
             id: msg_id.clone(),
             content: text.to_string(),
+            disappear_after,
         };
         let body_bytes = protocol::serialize(&body)?;
 
