@@ -4,6 +4,7 @@ import { Button, Input, Modal } from "./ui";
 import { PlusIcon, AlertTriangleIcon } from "./ui/Icons";
 import { useApp } from "../context/AppContext";
 import type { FamilyMember } from "../types";
+import { hashToColor } from "../utils";
 
 interface FamilyTabProps {
   family: FamilyMember[];
