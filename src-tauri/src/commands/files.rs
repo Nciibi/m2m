@@ -122,6 +122,9 @@ pub async fn send_file(
                 let _ = queue.enqueue(transfer_id.clone());
             }
 
+            // Lazy init: open transfer store on first use if not already opened
+            state.ensure_transfer_store(&state.data_dir).map_err(|e| format!("transfer store init: {e}"))?;
+
             // Persist initial transfer record
             {
                 let ts = state.transfer_store.lock().await;
