@@ -536,7 +536,7 @@ async fn handle_relay_incoming_with_frame(
     }
 
     // Start the receive loop (using the one from commands/network)
-    crate::commands::network::spawn_receive_loop(app_handle, state, read_half, peer_key_hex);
+    crate::commands::network::spawn_receive_loop(app_handle, state, read_half, peer_key_hex, None);
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────
