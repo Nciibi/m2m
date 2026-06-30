@@ -246,9 +246,14 @@ pub async fn start(
 
     // ── Listener task ──
     let lan_state_clone = lan_state.clone();
+    let cancel_listener = cancel.clone();
     tokio::spawn(async move {
         let mut buf = [0u8; 512];
         loop {
+            if cancel_listener.load(Ordering::SeqCst) {
+                tracing::info!("LAN discovery listener cancelled");
+                return;
+            }
             match socket_listener.recv_from(&mut buf) {
                 Ok((n, sender)) => {
                     let packet = &buf[..n];
@@ -279,8 +284,13 @@ pub async fn start(
     });
 
     // ── Announcer task ──
+    let cancel_announcer = cancel.clone();
     tokio::spawn(async move {
         loop {
+            if cancel_announcer.load(Ordering::SeqCst) {
+                tracing::info!("LAN discovery announcer cancelled");
+                return;
+            }
             tokio::time::sleep(ANNOUNCE_INTERVAL).await;
 
             // Check if network changed — rotate ephemeral ID
