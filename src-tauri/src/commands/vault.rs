@@ -468,6 +468,7 @@ pub async fn connect_family_member(
                     state.inner().clone(),
                     read_half,
                     actual_peer_key.clone(),
+                    None,
                 );
 
                 return Ok(ConnectionInfo {
