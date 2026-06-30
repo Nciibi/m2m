@@ -51,7 +51,7 @@ pub async fn send_message(
     let history = *state.history_enabled.read().await;
     if history {
         // Lazy init: open message store on first send if not already opened
-        state.ensure_message_store(&state.data_dir).map_err(|e| format!("message store init: {e}"))?;
+        state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
 
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
