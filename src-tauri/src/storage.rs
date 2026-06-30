@@ -456,7 +456,14 @@ impl MessageStore {
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id)
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conversation
-                ON messages(conversation_id, timestamp);",
+                ON messages(conversation_id, timestamp);
+            CREATE TABLE IF NOT EXISTS reactions (
+                message_id TEXT NOT NULL,
+                reaction TEXT NOT NULL,
+                peer_key_hex TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (message_id, peer_key_hex, reaction)
+            );",
         )?;
 
         // Run migrations for existing databases that lack the new columns
