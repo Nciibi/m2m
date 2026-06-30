@@ -331,15 +331,16 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
         let offset = i * entry_size;
         let mut peer_id = [0u8; 32];
         peer_id.copy_from_slice(&body[offset..offset + 32]);
-        // No identity_pub — ephemeral IDs are not linked to permanent identities
-        let identity_pub = [0u8; 32];
+        // No identity_pub transmitted — ephemeral IDs are unlinkable
+        let ip_offset = offset + 32;
         let ip_bytes: [u8; 4] = [
-            body[offset + 64], body[offset + 65],
-            body[offset + 66], body[offset + 67],
+            body[ip_offset], body[ip_offset + 1],
+            body[ip_offset + 2], body[ip_offset + 3],
         ];
-        let port = u16::from_be_bytes([body[offset + 68], body[offset + 69]]);
+        let port_offset = offset + 32 + 4;
+        let port = u16::from_be_bytes([body[port_offset], body[port_offset + 1]]);
 
-        let fingerprint = crate::crypto::fingerprint_from_public_key(&identity_pub);
+        let fingerprint = String::new(); // No permanent fingerprint for ephemeral IDs
         let addr = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(ip_bytes)), port);
 
         peers.push(DhtPeer {
