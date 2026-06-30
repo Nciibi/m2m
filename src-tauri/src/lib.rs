@@ -131,6 +131,11 @@ pub fn run() {
             commands::chat::remove_reaction,
             // Read Receipts
             commands::chat::mark_messages_read,
+            // Message features (self-destruct, edit, delete)
+            commands::chat::send_message_with_timer,
+            commands::chat::edit_message,
+            commands::chat::delete_message,
+            commands::chat::cleanup_expired_messages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
