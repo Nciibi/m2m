@@ -322,3 +322,93 @@ pub async fn export_conversation(
 
     Ok(export_path)
 }
+
+// ─── Reactions ──────────────────────────────────────────────────────────────
+
+/// Send a reaction (emoji) on a message.
+#[tauri::command]
+pub async fn send_reaction(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    message_id: String,
+    reaction: String,
+) -> Result<(), String> {
+    if reaction.len() > 10 {
+        return Err("reaction too long".to_string());
+    }
+
+    // Store locally first
+    {
+        let ms = state.message_store.lock().await;
+        if let Some(ref store) = *ms {
+            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, false)
+                .map_err(|e| format!("failed to store reaction: {e}"))?;
+        }
+    }
+
+    // Send to peer via encrypted typed frame
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
+    let mut conn = conn_arc.lock().await;
+    let data = MessageReactionData {
+        message_id,
+        reaction,
+        remove: false,
+    };
+    conn.session.send_encrypted_typed(
+        &mut conn.write_half,
+        crate::protocol::PacketType::MessageReaction,
+        &data,
+    ).await.map_err(|e| format!("send reaction failed: {e}"))
+}
+
+/// Remove a reaction from a message.
+#[tauri::command]
+pub async fn remove_reaction(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    message_id: String,
+    reaction: String,
+) -> Result<(), String> {
+    // Remove locally
+    {
+        let ms = state.message_store.lock().await;
+        if let Some(ref store) = *ms {
+            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, true)
+                .map_err(|e| format!("failed to remove reaction: {e}"))?;
+        }
+    }
+
+    // Send remove signal to peer
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
+    let mut conn = conn_arc.lock().await;
+    let data = MessageReactionData {
+        message_id,
+        reaction,
+        remove: true,
+    };
+    conn.session.send_encrypted_typed(
+        &mut conn.write_half,
+        crate::protocol::PacketType::MessageReaction,
+        &data,
+    ).await.map_err(|e| format!("remove reaction failed: {e}"))
+}
+
+// ─── Read Receipts ──────────────────────────────────────────────────────────
+
+/// Mark all unread received messages as read for a conversation.
+#[tauri::command]
+pub async fn mark_messages_read(
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+) -> Result<u32, String> {
+    let ms = state.message_store.lock().await;
+    let store = ms.as_ref().ok_or("message store not initialised")?;
+    store.mark_messages_read(&conversation_id)
+        .map_err(|e| format!("mark read failed: {e}"))
+}
