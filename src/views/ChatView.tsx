@@ -29,6 +29,9 @@ export default function ChatView() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [timerSecs, setTimerSecs] = useState<number>(0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlder, setHasOlder] = useState(true);
+  const [pageLoadKey, setPageLoadKey] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const msgRef = useRef<HTMLDivElement>(null);
 
