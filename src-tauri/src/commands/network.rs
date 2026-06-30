@@ -484,7 +484,7 @@ async fn handle_incoming_connection(
     }
 
     // Start the receive loop for this peer
-    spawn_receive_loop(app_handle, state, read_half, peer_key_hex);
+    spawn_receive_loop(app_handle, state, read_half, peer_key_hex, None);
 }
 
 /// Connect to a peer using an invite link.
