@@ -77,11 +77,14 @@ pub async fn send_message(
 }
 
 /// Load message history for a peer.
+/// Supports cursor-based pagination: pass `before_timestamp` to load messages
+/// older than that timestamp (the oldest message currently displayed).
 #[tauri::command]
 pub async fn load_messages(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     limit: Option<i64>,
+    before_timestamp: Option<i64>,
 ) -> Result<Vec<ChatMessage>, String> {
     // Lazy init: open message store on first load if not already opened
     state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
@@ -91,9 +94,15 @@ pub async fn load_messages(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
-    let stored = store
-        .load_messages(&peer_key_hex, limit.unwrap_or(100))
-        .map_err(|e| format!("failed to load messages: {e}"))?;
+    let stored = if let Some(before) = before_timestamp {
+        store
+            .load_messages_before(&peer_key_hex, before, limit.unwrap_or(100))
+            .map_err(|e| format!("failed to load older messages: {e}"))?
+    } else {
+        store
+            .load_messages(&peer_key_hex, limit.unwrap_or(100))
+            .map_err(|e| format!("failed to load messages: {e}"))?
+    };
 
     let mut messages = Vec::with_capacity(stored.len());
     let msg_ids: Vec<String> = stored.iter().map(|m| m.id.clone()).collect();
