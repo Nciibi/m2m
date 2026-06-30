@@ -66,7 +66,10 @@ pub async fn set_discovery_config(
         let lan_state = Arc::new(RwLock::new(lan_discovery::LanDiscoveryState::default()));
         let lan_cancel = Arc::new(AtomicBool::new(false));
 
-        let listen_addr = match *state.listen_addr.read().await {
+        let listen_addr = {
+            let val = state.listen_addr.read().await;
+            Arc::new(RwLock::new(*val))
+        };
         let lan_state_clone = lan_state.clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let cancel_clone = lan_cancel.clone();
