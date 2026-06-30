@@ -217,6 +217,84 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast]);
 
+  // ── Clipboard auto-clear helper ──
+
+  const scheduleClipboardClear = useCallback((secs: number) => {
+    if (clipboardTimerRef.current) {
+      clearTimeout(clipboardTimerRef.current);
+    }
+    if (secs > 0) {
+      clipboardTimerRef.current = setTimeout(async () => {
+        try {
+          await invoke("clear_clipboard");
+          // Also clear via web API as fallback
+          try { await navigator.clipboard.writeText(""); } catch { /* noop */ }
+        } catch { /* noop */ }
+      }, secs * 1000);
+    }
+  }, []);
+
+  // ── Security handlers ──
+
+  const handleScreenCaptureToggle = useCallback(async () => {
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0 };
+    const newConfig: SecurityConfig = {
+      ...current,
+      screen_capture_protection: !current.screen_capture_protection,
+    };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+      addToast(
+        result.screen_capture_protection ? "Screen capture protection enabled" : "Screen capture protection disabled",
+        "info",
+      );
+    } catch (e) {
+      addToast("Failed to toggle screen capture protection: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleClipboardClearSecsChange = useCallback(async (secs: number) => {
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0 };
+    const newConfig: SecurityConfig = { ...current, clipboard_clear_secs: secs };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+    } catch (e) {
+      addToast("Failed to update clipboard setting: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleIdleLockSecsChange = useCallback(async (secs: number) => {
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0 };
+    const newConfig: SecurityConfig = { ...current, idle_lock_secs: secs };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+    } catch (e) {
+      addToast("Failed to update idle lock setting: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleLockVault = useCallback(async () => {
+    try {
+      await invoke("lock_vault");
+      addToast("Vault locked", "success");
+    } catch (e) {
+      addToast("Failed to lock vault: " + e, "error");
+    }
+  }, [addToast]);
+
+  const handleClearClipboard = useCallback(async () => {
+    try {
+      await invoke("clear_clipboard");
+      try { await navigator.clipboard.writeText(""); } catch { /* noop */ }
+      addToast("Clipboard cleared", "info");
+    } catch (e) {
+      addToast("Failed to clear clipboard: " + e, "error");
+    }
+  }, [addToast]);
+
   return (
     <SettingsContext.Provider value={{
       networkSettings, publicIp, stunLoading, networkDiagnostics,
@@ -229,6 +307,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       discoveryConfig, discoveredPeers,
       handleLanToggle, handleDhtToggle,
       handleConnectDiscoveredPeer, handleRefreshDiscovery,
+      securityConfig,
+      handleScreenCaptureToggle, handleClipboardClearSecsChange,
+      handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
     }}>
       {children}
     </SettingsContext.Provider>
