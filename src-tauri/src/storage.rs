@@ -1043,6 +1043,7 @@ pub struct StoredTransfer {
     pub state: String,
     pub chunks_completed: u32,
     pub chunks_total: u32,
+    #[allow(dead_code)]
     pub created_at: i64,
     pub completed_at: Option<i64>,
     pub local_path: Option<String>,
