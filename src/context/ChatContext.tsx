@@ -65,6 +65,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ─── State ───
   const [connection, setConnection] = useState<ConnectionInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [fileRequests, setFileRequests] = useState<FileRequest[]>([]);
   const [conversations, setConversations] = useState<ConversationEntry[]>([]);
