@@ -12,6 +12,8 @@ export default function SettingsView() {
     handleStunDiscover, handleAddStunServer,
     handleRemoveStunServer, handleResetStunDefaults, handlePrivateModeToggle,
     handleConnectivityCheck, handleTorToggle, setStunServerInput,
+    discoveryConfig, discoveredPeers,
+    handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
   } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
