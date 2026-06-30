@@ -77,10 +77,6 @@ tokio-socks = "0.5"
 name = "generate-identity"
 path = "examples/generate-identity.rs"
 
-[[example]]
-name = "relay-server"
-path = "examples/relay-server.rs"
-
 [features]
 default = []
 
