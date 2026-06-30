@@ -377,6 +377,12 @@ impl AppState {
             relay_config: RwLock::new(None),
             relay_state: RwLock::new(relay::RelayState::default()),
             pending_reconnects: RwLock::new(HashMap::new()),
+            // Discovery — all OFF by default
+            discovery_config: RwLock::new(DiscoveryConfig::default()),
+            dht_state: RwLock::new(None),
+            dht_cancel: RwLock::new(None),
+            lan_state: RwLock::new(None),
+            lan_cancel: RwLock::new(None),
         }
     }
 
