@@ -23,6 +23,12 @@ const settingsState = {
   handleConnectivityCheck: vi.fn(),
   handleTorToggle: vi.fn(),
   setStunServerInput: vi.fn(),
+  discoveryConfig: null as any,
+  discoveredPeers: [] as any[],
+  handleLanToggle: vi.fn(),
+  handleDhtToggle: vi.fn(),
+  handleConnectDiscoveredPeer: vi.fn(),
+  handleRefreshDiscovery: vi.fn(),
 };
 
 // State for AppContext mock
@@ -63,6 +69,12 @@ vi.mock("../context/SettingsContext", () => ({
     handleConnectivityCheck: settingsState.handleConnectivityCheck,
     handleTorToggle: settingsState.handleTorToggle,
     setStunServerInput: settingsState.setStunServerInput,
+    discoveryConfig: settingsState.discoveryConfig,
+    discoveredPeers: settingsState.discoveredPeers,
+    handleLanToggle: settingsState.handleLanToggle,
+    handleDhtToggle: settingsState.handleDhtToggle,
+    handleConnectDiscoveredPeer: settingsState.handleConnectDiscoveredPeer,
+    handleRefreshDiscovery: settingsState.handleRefreshDiscovery,
   }),
 }));
 
