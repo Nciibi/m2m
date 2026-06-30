@@ -381,7 +381,7 @@ pub async fn lookup_peer(
 
             let (resp_type, resp_body) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
                 .await
-                .map_err(|_| DhtError::Timeout)??
+                .map_err(|_| DhtError::Timeout)?
                 .map_err(|_| DhtError::Timeout)?;
 
             if resp_type != DHT_NODE_RESPONSE {
@@ -391,7 +391,6 @@ pub async fn lookup_peer(
             let peers = parse_node_response(&resp_body)?;
             peers.into_iter().find(|p| p.peer_id == target_id)
                 .ok_or(DhtError::PeerNotFound)
-        }));
         }));
     }
 
