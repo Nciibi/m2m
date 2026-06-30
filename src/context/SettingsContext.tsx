@@ -153,10 +153,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // ── Discovery handlers ──
 
   const handleLanToggle = useCallback(async () => {
-    if (!discoveryConfig) return;
+    const current = discoveryConfig ?? { lan_enabled: false, dht_enabled: false };
     const newConfig: DiscoveryConfig = {
-      ...discoveryConfig,
-      lan_enabled: !discoveryConfig.lan_enabled,
+      ...current,
+      lan_enabled: !current.lan_enabled,
     };
     try {
       const result = await invoke<DiscoveryConfig>("set_discovery_config", { config: newConfig });
@@ -169,10 +169,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [discoveryConfig, addToast]);
 
   const handleDhtToggle = useCallback(async () => {
-    if (!discoveryConfig) return;
+    const current = discoveryConfig ?? { lan_enabled: false, dht_enabled: false };
     const newConfig: DiscoveryConfig = {
-      ...discoveryConfig,
-      dht_enabled: !discoveryConfig.dht_enabled,
+      ...current,
+      dht_enabled: !current.dht_enabled,
     };
     try {
       const result = await invoke<DiscoveryConfig>("set_discovery_config", { config: newConfig });
