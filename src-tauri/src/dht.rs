@@ -418,40 +418,64 @@ pub async fn lookup_peer(
 }
 
 /// Background task that periodically announces to bootstrap nodes.
+///
+/// Uses an ephemeral peer ID (NOT the permanent identity key).
+/// The ephemeral ID is generated fresh at startup and rotated every 24 hours
+/// or on network change. Old IDs expire from the DHT automatically.
 pub async fn announce_loop(
     dht_state: Arc<RwLock<DhtState>>,
-    identity: Arc<RwLock<Option<IdentityKeypair>>>,
+    ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
+    network_monitor: Arc<RwLock<crate::ephemeral_id::NetworkMonitor>>,
     listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
 ) {
+    // Track the current ephemeral ID so we can re-announce if it rotates
+    let mut current_id = ephemeral_id.read().await.id;
+
     loop {
         time::sleep(ANNOUNCE_INTERVAL).await;
+
+        // Check if we should rotate the ephemeral ID
+        let should_rotate = {
+            let eid = ephemeral_id.read().await;
+            eid.should_rotate()
+        };
+
+        if should_rotate {
+            let mut eid = ephemeral_id.write().await;
+            *eid = crate::ephemeral_id::EphemeralPeerId::generate();
+            current_id = eid.id;
+            tracing::info!("DHT ephemeral peer ID rotated");
+        }
+
+        // Check for network change
+        let network_changed = {
+            let mut monitor = network_monitor.write().await;
+            let local = crate::commands::util::resolve_local_ip();
+            let public = None; // STUN check would be added separately
+            monitor.check_for_change(local, public)
+        };
+
+        if network_changed {
+            let mut eid = ephemeral_id.write().await;
+            *eid = crate::ephemeral_id::EphemeralPeerId::generate();
+            current_id = eid.id;
+            tracing::info!("Network changed — DHT ephemeral peer ID rotated");
+        }
 
         let nodes = {
             let state = dht_state.read().await;
             state.config.bootstrap_nodes.clone()
         };
 
-        let addr = {
-            let a = listen_addr.read().await;
-            *a
-        };
+        let addr = *listen_addr.read().await;
 
-        let kp = {
-            let id = identity.read().await;
-            id.as_ref().map(|kp| {
-                let pk = kp.public_key_bytes();
-                let sk = kp.secret_key_bytes();
-                IdentityKeypair::from_bytes(&pk, &sk).ok()
-            }).flatten()
-        };
-
-        let (kp, addr) = match (kp, addr) {
-            (Some(k), Some(a)) => (k, a),
-            _ => continue,
+        let addr = match addr {
+            Some(a) => a,
+            None => continue,
         };
 
         for node in &nodes {
-            if let Err(e) = announce_to_node(node.address, &kp, addr).await {
+            if let Err(e) = announce_to_node(node.address, &current_id, addr).await {
                 tracing::debug!(node = %node.address, error = %e, "DHT announce failed");
             }
         }
