@@ -326,8 +326,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     const unlistenFileComp = listen<any>("m2m://file-complete", () => {});
 
-    const unlistenFileComp = listen<any>("m2m://file-complete", () => {});
-
     const unlistenReaction = listen<any>("m2m://reaction", (event) => {
       const { message_id, reaction, peer_key_hex, remove } = event.payload;
       // Only apply if this reaction is for a message in the current conversation
