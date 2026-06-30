@@ -734,11 +734,12 @@ mod protocol_tests {
         let body = MessageBody::Text {
             id: "msg-001".to_string(),
             content: "Hello, world! 🔒".to_string(),
+            disappear_after: None,
         };
         let bytes = serialize(&body).unwrap();
         let decoded: MessageBody = deserialize(&bytes).unwrap();
         match &decoded {
-            MessageBody::Text { id, content } => {
+            MessageBody::Text { id, content, .. } => {
                 assert_eq!(id, "msg-001");
                 assert_eq!(content, "Hello, world! 🔒");
             }
