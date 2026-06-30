@@ -76,6 +76,9 @@ tokio-socks = "0.5"
 # Dynamic library loading for platform-specific FFI (screen capture protection)
 libloading = "0.8"
 
+# Raw window handle for platform-specific window operations
+raw-window-handle = "0.6"
+
 [[example]]
 name = "generate-identity"
 path = "examples/generate-identity.rs"
