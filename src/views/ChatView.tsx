@@ -177,6 +177,8 @@ export default function ChatView() {
 
       {/* Messages */}
       <div className="msg-area" ref={msgRef} onScroll={onScroll} id="message-list">
+        {loadingOlder && <div className="msg-loading-older">Loading older messages…</div>}
+        {!hasOlder && messages.length > 0 && <div className="msg-loading-older">Beginning of conversation</div>}
         <div className="session-banner">
           <div className="session-banner__icon"><LockIcon size={22} color="var(--color-accent-bright)" /></div>
           <p className="session-banner__text">
