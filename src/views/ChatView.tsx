@@ -7,13 +7,11 @@ import {
   SendIcon, AttachIcon, FileIcon, ArrowDownIcon, CloseIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
-import { useSettings } from "../context/SettingsContext";
 import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
 
 export default function ChatView() {
   const { identity, toasts, removeToast, addToast, setView } = useApp();
-  const { discoveryConfig } = useSettings();
   const {
     connection, messages, fileRequests, activeConversationId,
     handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
