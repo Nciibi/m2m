@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use tokio::net::tcp::OwnedWriteHalf;
@@ -13,6 +14,8 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
+use crate::dht;
+use crate::lan_discovery;
 use crate::network;
 use crate::relay;
 use crate::stun;
