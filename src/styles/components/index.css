@@ -12,6 +12,7 @@
 @import './select.css';
 @import './toast.css';
 @import './spinner.css';
+@import './progress.css';
 
 /* View-Specific & Utilities */
 @import './utilities.css';
