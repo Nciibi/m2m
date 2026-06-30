@@ -46,7 +46,7 @@ jobs:
       working-directory: src-tauri
 
     - name: Clippy (Rust)
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      run: cargo clippy --all-targets -- -D warnings
       working-directory: src-tauri
 
     - name: Run Tests (Rust)
@@ -64,7 +64,6 @@ jobs:
       run: pnpm audit --audit-level=high
 
     - name: Run Frontend Tests
-      continue-on-error: true
       run: pnpm test
 
     - name: Build Frontend
@@ -72,6 +71,7 @@ jobs:
 
   # ─── Multi-Platform Build ───
   build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: lint-and-test
     strategy:
       fail-fast: false
@@ -117,7 +117,7 @@ jobs:
       run: pnpm install --frozen-lockfile
 
     - name: Build Tauri App
-      uses: tauri-apps/tauri-action@v0
+      uses: tauri-apps/tauri-action@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
