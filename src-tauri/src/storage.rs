@@ -520,6 +520,14 @@ impl MessageStore {
         if !existing_columns.contains(&"expires_at".to_string()) {
             conn.execute("ALTER TABLE messages ADD COLUMN expires_at INTEGER", [])?;
         }
+        // Create indexes that depend on the columns above (expires_at, read_at).
+        // These are CREATE INDEX IF NOT EXISTS so they're idempotent on re-run.
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_messages_expires_at
+                ON messages(expires_at);
+             CREATE INDEX IF NOT EXISTS idx_messages_read_status
+                ON messages(conversation_id, direction, read_at);"
+        )?;
         Ok(())
     }
 
