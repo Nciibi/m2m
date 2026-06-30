@@ -238,6 +238,32 @@ pub struct ManualForward {
     pub order: u32,
 }
 
+/// Security configuration (screen capture, clipboard, idle lock).
+///
+/// All features are OFF by default — user must opt in.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SecurityConfig {
+    /// Prevent screen capture of the app window (Windows/macOS/Linux).
+    /// OFF by default — user should enable only if they trust the OS.
+    pub screen_capture_protection: bool,
+    /// Auto-clear clipboard after N seconds (0 = never clear).
+    /// Default: 0 (disabled). Recommended: 5 when enabled.
+    pub clipboard_clear_secs: u64,
+    /// Lock vault after N seconds of inactivity (0 = never lock).
+    /// Default: 0 (disabled). Recommended: 300 (5 min) when enabled.
+    pub idle_lock_secs: u64,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            screen_capture_protection: false, // OFF — avoid surprising behavior
+            clipboard_clear_secs: 0,           // OFF — don't break clipboard expectations
+            idle_lock_secs: 0,                 // OFF — don't auto-lock without consent
+        }
+    }
+}
+
 /// Peer discovery method configuration.
 ///
 /// **All methods are OFF by default.** Enabling a discovery method makes
@@ -332,6 +358,9 @@ pub struct AppState {
     /// Reconnection metadata for disconnected peers (keyed by peer_key_hex).
     /// Used by the reconnection logic to re-establish X3DH sessions.
     pub pending_reconnects: RwLock<HashMap<String, ReconnectInfo>>,
+    // ─── Security ───
+    /// Security configuration (screen capture, clipboard, idle lock).
+    pub security_config: RwLock<SecurityConfig>,
     // ─── Discovery ───
     /// Peer discovery configuration (LAN, DHT). Both OFF by default.
     pub discovery_config: RwLock<DiscoveryConfig>,
@@ -377,6 +406,8 @@ impl AppState {
             relay_config: RwLock::new(None),
             relay_state: RwLock::new(relay::RelayState::default()),
             pending_reconnects: RwLock::new(HashMap::new()),
+            // Security — all OFF by default
+            security_config: RwLock::new(SecurityConfig::default()),
             // Discovery — all OFF by default
             discovery_config: RwLock::new(DiscoveryConfig::default()),
             dht_state: RwLock::new(None),
