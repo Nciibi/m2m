@@ -298,7 +298,7 @@ pub struct EncryptedEnvelope {
 #[serde(tag = "type")]
 pub enum MessageBody {
     #[serde(rename = "text")]
-    Text { id: String, content: String },
+    Text { id: String, content: String, disappear_after: Option<u64> },
     #[serde(rename = "ack")]
     Ack { id: String },
 }
