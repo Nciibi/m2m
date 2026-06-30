@@ -108,6 +108,12 @@
   100% { background-position: 200% 0; }
 }
 
+/* ─── Progress Shimmer (animated wave across progress bar) ─── */
+@keyframes progressShimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* ─── Clipboard "Copied!" Pop (scale 0.5→1.1→1, 300ms) ─── */
 @keyframes popIn {
   0%   { transform: scale(0.5); opacity: 0; }
