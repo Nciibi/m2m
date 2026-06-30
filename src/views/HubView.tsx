@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
-  ShieldIcon, GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
+  GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
