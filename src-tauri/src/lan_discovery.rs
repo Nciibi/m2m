@@ -30,6 +30,7 @@
 /// Total: 1 + 2 + 32 + 8 = 43 bytes
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -89,6 +90,11 @@ impl LanDiscoveryState {
             peers: HashMap::new(),
             enabled: false,  // ⚠️ OFF by default — privacy first
         }
+    }
+
+    /// Check whether LAN discovery is enabled.
+    pub fn enabled(&self) -> bool {
+        self.enabled
     }
 
     /// Remove peers that haven't announced within the expiry window.
@@ -214,6 +220,7 @@ pub async fn start(
     listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
     lan_state: Arc<RwLock<LanDiscoveryState>>,
     ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
+    cancel: Arc<AtomicBool>,
 ) -> Result<(), LanDiscoveryError> {
     // Bind to a random UDP port for multicast
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))
