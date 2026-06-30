@@ -438,6 +438,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
       handleDeleteConversation,
       handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
+      handleSendMessageWithTimer, handleEditMessage, handleDeleteMessage,
     }}>
       {children}
     </ChatContext.Provider>
