@@ -36,6 +36,23 @@ export default function ChatView() {
 
   useEffect(() => { if (!scrolledUp && msgRef.current) msgRef.current.scrollTop = msgRef.current.scrollHeight; }, [messages, scrolledUp]);
 
+  // Periodic cleanup of expired self-destruct messages
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Math.floor(Date.now() / 1000);
+      setMessages((prev: ChatMessage[]) => prev.filter((m) => !m.expires_at || m.expires_at > now));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Also call backend cleanup periodically
+  useEffect(() => {
+    const timer = setInterval(() => {
+      invoke("cleanup_expired_messages").catch(() => {});
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Mark messages as read when viewing the chat
   useEffect(() => {
     const hasUnreadReceived = messages.some((m) => m.direction === "received" && m.read_at === null);
