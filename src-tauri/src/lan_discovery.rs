@@ -87,7 +87,7 @@ impl LanDiscoveryState {
     fn new() -> Self {
         Self {
             peers: HashMap::new(),
-            enabled: false,
+            enabled: false,  // ⚠️ OFF by default — privacy first
         }
     }
 
