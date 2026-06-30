@@ -123,7 +123,7 @@ pub async fn send_file(
             }
 
             // Lazy init: open transfer store on first use if not already opened
-            state.ensure_transfer_store(&state.data_dir).map_err(|e| format!("transfer store init: {e}"))?;
+            state.ensure_transfer_store(&state.data_dir).await.map_err(|e| format!("transfer store init: {e}"))?;
 
             // Persist initial transfer record
             {
