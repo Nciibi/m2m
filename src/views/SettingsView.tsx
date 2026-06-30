@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon } from "../components/ui/Icons";
+import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 
@@ -14,6 +14,9 @@ export default function SettingsView() {
     handleConnectivityCheck, handleTorToggle, setStunServerInput,
     discoveryConfig, discoveredPeers,
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
+    securityConfig,
+    handleScreenCaptureToggle, handleClipboardClearSecsChange,
+    handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
   } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
