@@ -804,6 +804,7 @@ impl MessageStore {
     }
 
     /// Load messages by direction (used for flushing pending messages on reconnect).
+    #[cfg(test)]
     pub fn load_messages_by_direction(
         &self,
         conversation_id: &str,
@@ -835,6 +836,7 @@ impl MessageStore {
     }
 
     /// Update the direction field of a message (e.g., "pending" → "sent" after flush).
+    #[cfg(test)]
     pub fn update_message_direction(
         &self,
         message_id: &str,
@@ -848,6 +850,7 @@ impl MessageStore {
     }
 
     /// Store a message with direction="pending" (queued for delivery when peer comes online).
+    #[cfg(test)]
     pub fn store_pending_message(
         &self,
         id: &str,
@@ -963,6 +966,7 @@ impl MessageStore {
     // ─── Self-Destruct (Expired Messages) ─────────────
 
     /// Get message IDs that have expired (expires_at is in the past).
+    #[cfg(test)]
     pub fn get_expired_message_ids(&self) -> Result<Vec<String>, StorageError> {
         let now = chrono::Utc::now().timestamp();
         let mut stmt = self.conn.prepare(
