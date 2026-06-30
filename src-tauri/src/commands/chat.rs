@@ -115,6 +115,9 @@ pub async fn load_messages(
             direction: m.direction,
             timestamp: m.timestamp as u64,
             read_at: m.read_at,
+            edited_at: m.edited_at,
+            deleted: m.deleted,
+            expires_at: m.expires_at,
             reactions,
         });
     }
