@@ -165,7 +165,19 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
       {conversations.length === 0 ? (
         <div className="conv-empty">
           <MessageIcon size={48} color="var(--color-text-muted)" />
-          <span>{search ? "No conversations match your search." : "No conversations yet. Connect to a peer to start chatting!"}</span>
+          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            {search ? "No conversations found" : "No conversations yet"}
+          </span>
+          <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6 }}>
+            {search 
+              ? "Try adjusting your search terms or clear the filter." 
+              : "Generate an invite link to host a connection, or paste an invite from a peer to join."}
+          </span>
+          {!search && (
+            <Button onClick={() => setTab("connect")} icon={<PlusIcon size={18} />} style={{ marginTop: 'var(--space-md)' }}>
+              Get Started
+            </Button>
+          )}
         </div>
       ) : (
         conversations.map((c: any) => (

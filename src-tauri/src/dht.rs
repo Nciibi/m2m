@@ -378,9 +378,12 @@ pub async fn lookup_peer(
 
             dht_send(&mut stream, DHT_FIND_NODE, &body_clone).await?;
 
-            let (resp_type, resp_body) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
+            let Ok((resp_type, resp_body)) = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
                 .await
-                .map_err(|_| DhtError::Timeout)?;
+                .map_err(|_| DhtError::Timeout)?
+                else {
+                    return Err(DhtError::Timeout);
+                };
 
             if resp_type != DHT_NODE_RESPONSE {
                 return Err(DhtError::BadResponse("expected NODE_RESPONSE".into()));
