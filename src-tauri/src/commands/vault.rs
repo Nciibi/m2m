@@ -559,9 +559,9 @@ pub async fn export_identity(
         "version": 1,
         "created_at": chrono::Utc::now().timestamp(),
         "identity": {
-            "public_key": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, pub_bytes),
-            "encrypted_secret_key": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &encrypted_sk),
-            "nonce": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &nonce),
+            "public_key": STANDARD.encode(pub_bytes),
+            "encrypted_secret_key": STANDARD.encode(&encrypted_sk),
+            "nonce": STANDARD.encode(&nonce),
         },
         "family": family.iter().map(|m| serde_json::json!({
             "public_key": m.public_key_hex,
