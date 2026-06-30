@@ -315,3 +315,57 @@ struct ConversationMetaData {
 ```
 
 The receiver stores `my_display_name` as the peer's display name and optionally applies `your_display_name` as a suggested name for their own side of the conversation.
+
+## 12. Message Reactions (0x41)
+
+Sent as a typed encrypted frame (same encryption as `EncryptedMessage`, but carrying a `MessageReaction` type byte instead of `EncryptedMessage`).
+
+```rust
+struct MessageReactionData {
+    message_id: String,     // The message being reacted to
+    reaction: String,       // Emoji: "👍", "❤️", "😂", etc.
+    remove: bool,           // false = add reaction, true = remove
+}
+```
+
+- The peer's key is implicit from the session — not serialized in the packet.
+- Reactions are stored in a `reactions` table with composite primary key `(message_id, reaction, peer_key_hex)`.
+- The `remove` flag allows toggling reactions off without a separate packet type.
+- Frontend displays reactions as badges under the message. Clicking a reaction you already added removes it.
+
+## 13. Message Edit (0x42) & Delete (0x43)
+
+Both are typed encrypted frames, sent over the established encrypted session:
+
+```rust
+struct MessageEditData {
+    message_id: String,     // The message to edit
+    new_content: String,    // Replacement content
+    edited_at: u64,         // Server timestamp of the edit
+}
+
+struct MessageDeleteData {
+    message_id: String,     // The message to delete
+}
+```
+
+- Edits replace the original message content — no edit history is stored on the receiving end.
+- Deletes are soft-deletes: the message is marked `deleted = 1` and shown as "Message deleted" placeholder.
+- Both are persisted to local storage and emitted to the frontend via `m2m://edit` / `m2m://delete` events.
+
+## 14. Self-Destruct Timer
+
+Messages can carry an optional self-destruct timer via the `MessageBody::Text` variant:
+
+```rust
+enum MessageBody {
+    Text { id: String, content: String, disappear_after: Option<u64> },
+    Ack { id: String },
+}
+```
+
+- `disappear_after`: number of seconds after which the message auto-deletes on both ends.
+- When present, the receiver stores `expires_at = now + disappear_after` in the `messages` table.
+- The frontend filters messages with `expires_at > now` every 1 second and shows a countdown timer (🔥 m:ss).
+- The backend prunes expired messages every 60 seconds via `cleanup_expired_messages`.
+- Default (None): message never self-destructs.
