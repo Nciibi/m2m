@@ -154,3 +154,125 @@ pub struct ConversationListItem {
 }
 
 pub use crate::storage::FamilyMember;
+
+/// Status of a pending reconnection attempt.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReconnectAttemptEvent {
+    pub peer_key_hex: String,
+    pub attempt: u32,
+    pub max_attempts: u32,
+    pub delay_secs: u64,
+    pub state: String, // "attempting", "success", "failed"
+}
+
+/// Attempt to reconnect to a peer whose connection dropped.
+/// Uses exponential backoff (1s, 2s, 4s, ..., 30s cap, max 5 attempts).
+/// The user must explicitly call this — no auto-reconnect.
+#[tauri::command]
+pub async fn attempt_reconnect(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    peer_key_hex: String,
+) -> Result<super::ConnectionInfo, String> {
+    let info = {
+        let mut pr = state.pending_reconnects.write().await;
+        pr.remove(&peer_key_hex)
+            .ok_or("no pending reconnect info for this peer")?
+    };
+
+    // Attempt with exponential backoff
+    for attempt in 0..crate::reconnect::MAX_RECONNECT_ATTEMPTS {
+        let delay = crate::reconnect::compute_backoff(attempt);
+
+        let _ = app_handle.emit("m2m://reconnect-attempt", ReconnectAttemptEvent {
+            peer_key_hex: peer_key_hex.clone(),
+            attempt: attempt + 1,
+            max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
+            delay_secs: delay.as_secs(),
+            state: "attempting".to_string(),
+        });
+
+        // Try to connect
+        match crate::network::connect_with_strategy(
+            &info.strategy_name,
+            &info.peer_address_hint,
+            &info.peer_candidates,
+        ).await {
+            Ok(stream) => {
+                let (read_half, write_half) = stream.into_split();
+                let mut session = crate::session::Session::new();
+                session.peer_identity_pub = hex::decode(&info.peer_key_hex)
+                    .map_err(|e| format!("invalid peer key: {e}"))?
+                    .try_into()
+                    .map_err(|_| "peer key length mismatch")?;
+                session.peer_verified = info.peer_verified;
+                session.ratchet_interval = info.ratchet_interval;
+
+                let conn = crate::state::PeerConnection {
+                    write_half,
+                    session,
+                    remote_addr: info.peer_address_hint.parse().unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap()),
+                    strategy_name: info.strategy_name.clone(),
+                };
+
+                {
+                    let mut conns = state.connections.write().await;
+                    conns.insert(peer_key_hex.clone(), std::sync::Arc::new(tokio::sync::Mutex::new(conn)));
+                }
+
+                let _ = app_handle.emit("m2m://reconnect-attempt", ReconnectAttemptEvent {
+                    peer_key_hex: peer_key_hex.clone(),
+                    attempt: attempt + 1,
+                    max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
+                    delay_secs: 0,
+                    state: "success".to_string(),
+                });
+
+                let _ = app_handle.emit("m2m://connection", super::ConnectionEvent {
+                    peer_key_hex: peer_key_hex.clone(),
+                    state: "established".to_string(),
+                    peer_fingerprint: Some(info.peer_fingerprint.clone()),
+                });
+
+                // Start receive loop
+                crate::commands::network::spawn_receive_loop(
+                    app_handle.clone(),
+                    state.inner().clone(),
+                    read_half,
+                    peer_key_hex.clone(),
+                    None, // Don't generate a second layer of reconnect info
+                );
+
+                return Ok(super::ConnectionInfo {
+                    state: "established".to_string(),
+                    peer_fingerprint: Some(info.peer_fingerprint),
+                    peer_verified: info.peer_verified,
+                    peer_key_hex: Some(peer_key_hex),
+                });
+            }
+            Err(_) => {
+                // Wait before next attempt
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
+
+    let _ = app_handle.emit("m2m://reconnect-attempt", ReconnectAttemptEvent {
+        peer_key_hex: peer_key_hex.clone(),
+        attempt: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
+        max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
+        delay_secs: 0,
+        state: "failed".to_string(),
+    });
+
+    Err("reconnection failed after max attempts — the peer may be offline or the network changed".to_string())
+}
+
+/// List all peers with pending reconnection info.
+#[tauri::command]
+pub async fn list_pending_reconnects(
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+) -> Result<Vec<String>, String> {
+    let pr = state.pending_reconnects.read().await;
+    Ok(pr.keys().cloned().collect())
+}
