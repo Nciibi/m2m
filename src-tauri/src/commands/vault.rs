@@ -453,6 +453,7 @@ pub async fn connect_family_member(
                     peer_key_hex: actual_peer_key.clone(),
                     state: "established".to_string(),
                     peer_fingerprint: Some(peer_fingerprint.clone()),
+                    peer_verified: false,
                 });
 
                 // Upsert peer in key store
