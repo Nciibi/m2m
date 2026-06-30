@@ -1,23 +1,26 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Button, Badge, Modal, ToastContainer } from "../components/ui";
 import {
   ArrowLeftIcon, ShieldIcon, VerifiedIcon, LockIcon,
-  SendIcon, AttachIcon, FileIcon, ArrowDownIcon,
+  SendIcon, AttachIcon, FileIcon, ArrowDownIcon, CloseIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
+import { useSettings } from "../context/SettingsContext";
 import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
 
 export default function ChatView() {
   const { identity, toasts, removeToast, addToast, setView } = useApp();
+  const { discoveryConfig } = useSettings();
   const {
     connection, messages, fileRequests, activeConversationId,
     handleSendMessage, handleSendFile, handleVerify, handleDisconnect,
     handleExportConversation, handleSetRetention,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
     handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
+    handleEditMessage, handleDeleteMessage,
   } = useChat();
   const [text, setText] = useState("");
   const [showFp, setShowFp] = useState(false);
