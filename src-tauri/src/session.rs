@@ -1913,7 +1913,7 @@ mod session_tests {
             ref other => panic!("expected Text, got {:?}", other),
         }
 
-        let (alice_session, msg_id) = alice.await.unwrap().unwrap();
+        let (alice_session, _msg_id) = alice.await.unwrap().unwrap();
         assert_eq!(alice_session.state, ConnectionState::Established);
         assert!(alice_session.ratchet.is_some(), "Alice should have DR after X3DH");
     }
