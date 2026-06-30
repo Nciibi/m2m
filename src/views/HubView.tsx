@@ -256,6 +256,121 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
   );
 }
 
+function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onOpenSettings, onOpenChat }: any) {
+  const [connecting, setConnecting] = useState<string | null>(null);
+
+  const handleConnectPeer = async (address: string) => {
+    setConnecting(address);
+    try {
+      const info = await onConnect(address);
+      if (info?.peer_key_hex && onOpenChat) {
+        onOpenChat({
+          peer_key_hex: info.peer_key_hex,
+          is_online: true,
+          retention_policy: "none",
+          display_name: null,
+          peer_display_name: null,
+          id: info.peer_key_hex,
+        });
+      }
+    } catch {
+      // toast already shown by handler
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  // Discovery not active
+  if (!discoveryConfig?.lan_enabled && !discoveryConfig?.dht_enabled) {
+    return (
+      <div className="centered-view">
+        <div className="nearby-empty">
+          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            Discovery Not Active
+          </span>
+          <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+            Enable LAN or DHT discovery in Settings to find nearby peers.
+            Both are <strong>OFF by default</strong> — privacy first.
+          </span>
+          <Button variant="secondary" size="sm" onClick={onOpenSettings} style={{ marginTop: 'var(--space-md)' }}>
+            <GearIcon size={16} /> Open Settings
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // No peers found
+  if (discoveredPeers.length === 0) {
+    return (
+      <div className="centered-view">
+        <div className="nearby-empty">
+          <WifiIcon size={48} color="var(--color-text-muted)" />
+          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            No Peers Found
+          </span>
+          <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+            {discoveryConfig?.lan_enabled
+              ? "No LAN peers detected. Make sure other M2M users are on the same network with LAN discovery enabled."
+              : ""}
+            {discoveryConfig?.lan_enabled && discoveryConfig?.dht_enabled ? " " : ""}
+            {discoveryConfig?.dht_enabled
+              ? "No DHT peers found. They may be offline or behind a symmetric NAT."
+              : ""}
+          </span>
+          <Button variant="secondary" size="xs" onClick={onRefresh} style={{ marginTop: 'var(--space-md)' }}>
+            Refresh
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="conv-list">
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'var(--space-xs) var(--space-md)', gap: 'var(--space-xs)' }}>
+        <Button variant="secondary" size="xs" onClick={onRefresh}>Refresh</Button>
+      </div>
+      {discoveredPeers.map((peer: any, idx: number) => (
+        <div key={`${peer.method}-${peer.id_hex}-${idx}`} className="conv-item" role="listitem">
+          <div className="conv-avatar conv-avatar--online" style={{
+            background: `linear-gradient(135deg, #22c55e, #16a34a)`,
+          }}>
+            <WifiIcon size={18} color="white" />
+          </div>
+          <div className="conv-body">
+            <div className="conv-top">
+              <span className="conv-name">
+                {peer.method === "lan" ? "LAN Peer" : "DHT Peer"}
+              </span>
+              <span className="conv-time">{formatTime(peer.last_seen)}</span>
+            </div>
+            <div className="conv-preview">
+              {peer.address}
+              <span className={`badge badge--${peer.method === "lan" ? "info" : "warning"}`} style={{ marginLeft: 'var(--space-xs)', fontSize: '0.7rem' }}>
+                {peer.method === "lan" ? "LAN" : "DHT"}
+              </span>
+            </div>
+            <div className="conv-preview" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+              {peer.id_hex.slice(0, 16)}...
+            </div>
+          </div>
+          <div className="conv-status" style={{ gap: 'var(--space-xxs)' }}>
+            <Button
+              size="xs"
+              onClick={() => handleConnectPeer(peer.address)}
+              disabled={connecting === peer.address}
+              loading={connecting === peer.address}
+            >
+              Connect
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function hashToColor(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
