@@ -52,7 +52,7 @@ impl StorageKey {
 
     /// Create a new key for testing/benchmarking without memory locking.
     /// The key is NOT locked in RAM — only use in tests and benchmarks.
-    #[cfg(any(test, benches))]
+    #[cfg(test)]
     pub fn from_bytes_for_test(key: &[u8; 32]) -> Self {
         Self { key: *key }
     }
