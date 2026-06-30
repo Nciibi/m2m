@@ -38,6 +38,10 @@ interface ChatContextValue {
   handleConnect: () => Promise<void>;
   handleOpenChat: (conv: ConversationEntry) => Promise<void>;
   handleDeleteConversation: () => void;
+  // Reactions & Read Receipts
+  handleSendReaction: (messageId: string, reaction: string) => Promise<void>;
+  handleRemoveReaction: (messageId: string, reaction: string) => Promise<void>;
+  handleMarkConversationRead: () => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
