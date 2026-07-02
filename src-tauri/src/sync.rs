@@ -221,9 +221,10 @@ pub async fn pair_sync_device(
         let conns = state.connections.read().await;
         if let Some(conn_arc) = conns.get(&peer_key_hex) {
             let mut conn = conn_arc.lock().await;
-            conn.session
+            let PeerConnection { session, write_half, .. } = &mut *conn;
+            session
                 .send_encrypted_typed(
-                    &mut conn.write_half,
+                    write_half,
                     PacketType::SyncDeviceInfo,
                     &bytes,
                 )
