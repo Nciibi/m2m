@@ -97,6 +97,8 @@ export default function HubView() {
 
   return (
     <div className="app-shell">
+      <Sidebar currentView="hub" onNavigate={setView} />
+      <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
           <span className="app-header__icon-bg app-header__icon-bg--accent">
@@ -159,6 +161,7 @@ export default function HubView() {
       </div>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </div>
     </div>
   );
 }
