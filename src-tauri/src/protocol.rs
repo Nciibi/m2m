@@ -128,6 +128,11 @@ pub enum PacketType {
     /// The reconnecting peer sends its most recent received timestamp;
     /// the peer responds by re-sending all messages after that timestamp.
     SyncRequest = 0x44,
+    /// Multi-device sync: device identity exchange.
+    /// Sent after X3DH handshake during device pairing.
+    SyncDeviceInfo = 0x45,
+    /// Multi-device sync: encrypted payload batch (peer keys, conversations, etc.).
+    SyncPayload = 0x46,
 }
 
 impl PacketType {
