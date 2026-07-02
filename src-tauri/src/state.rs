@@ -344,6 +344,9 @@ pub struct AppState {
     // ─── Multi-Device Sync ───
     /// Manages sync device pairing, invites, and data exchange.
     pub sync_manager: RwLock<crate::sync::SyncManager>,
+    // ─── Group Chat (Phase 3) ───
+    /// Manages group state, members, and Sender Key chains.
+    pub group_manager: RwLock<GroupManager>,
 }
 
 impl AppState {
@@ -391,6 +394,7 @@ impl AppState {
             // UI Theme
             theme_preference: RwLock::new("system".to_string()),
             sync_manager: RwLock::new(crate::sync::SyncManager::new()),
+            group_manager: RwLock::new(GroupManager::new()),
         }
     }
 
