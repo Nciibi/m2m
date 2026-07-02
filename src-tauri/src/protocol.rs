@@ -901,11 +901,75 @@ mod protocol_tests {
             PacketType::Disconnect,
             PacketType::Error,
             PacketType::ConversationMeta,
+            PacketType::MessageReaction,
+            PacketType::MessageEdit,
+            PacketType::MessageDelete,
+            PacketType::SyncRequest,
+            PacketType::SyncDeviceInfo,
+            PacketType::SyncPayload,
+            PacketType::GroupCreate,
+            PacketType::GroupInvite,
+            PacketType::GroupRemove,
+            PacketType::GroupSenderKey,
+            PacketType::GroupEncryptedMessage,
+            PacketType::GroupInfo,
+            PacketType::GroupLeave,
         ];
         for pt in types {
             let frame = build_frame(pt, b"test");
             assert!(frame.is_ok(), "build_frame failed for {:?}", pt);
         }
+    }
+
+    #[test]
+    fn test_group_create_data_roundtrip() {
+        let data = GroupCreateData {
+            group_id: "test-group-uuid".to_string(),
+            group_name: "Test Group".to_string(),
+            creator_peer_key_hex: "aabb".to_string(),
+            created_at: 1719000000,
+            initial_members: vec!["ccdd".to_string(), "eeff".to_string()],
+        };
+        let bytes = serialize(&data).unwrap();
+        let decoded: GroupCreateData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.group_id, "test-group-uuid");
+        assert_eq!(decoded.group_name, "Test Group");
+        assert_eq!(decoded.initial_members.len(), 2);
+    }
+
+    #[test]
+    fn test_group_sender_key_data_roundtrip() {
+        let data = GroupSenderKeyData {
+            group_id: "gid".to_string(),
+            sender_peer_key_hex: "alice".to_string(),
+            chain_key: [0xAA; 32],
+            message_number: 0,
+            signing_key: Some([0xBB; 32]),
+            verification_key: [0xCC; 32],
+            signature: vec![0xDD; 64],
+        };
+        let bytes = serialize(&data).unwrap();
+        let decoded: GroupSenderKeyData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.group_id, "gid");
+        assert!(decoded.signing_key.is_some());
+        assert_eq!(decoded.verification_key, [0xCC; 32]);
+    }
+
+    #[test]
+    fn test_group_encrypted_message_data_roundtrip() {
+        let data = GroupEncryptedMessageData {
+            group_id: "gid".to_string(),
+            sender_peer_key_hex: "alice".to_string(),
+            message_number: 0,
+            ciphertext: vec![0xEE; 64],
+            nonce: vec![0xFF; 24],
+            signature: vec![0xDD; 64],
+        };
+        let bytes = serialize(&data).unwrap();
+        let decoded: GroupEncryptedMessageData = deserialize(&bytes).unwrap();
+        assert_eq!(decoded.group_id, "gid");
+        assert_eq!(decoded.message_number, 0);
+        assert_eq!(decoded.ciphertext.len(), 64);
     }
 
     // ─── Serialization roundtrips ───────────────────────────────

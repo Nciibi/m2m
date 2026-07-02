@@ -224,3 +224,26 @@ pub async fn set_tor_enabled(
     tor::set_enabled(enabled);
     Ok(())
 }
+
+/// Get the user's theme preference.
+#[tauri::command]
+pub async fn get_theme_preference(
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let theme = state.theme_preference.read().await;
+    Ok(theme.clone())
+}
+
+/// Set the user's theme preference.
+#[tauri::command]
+pub async fn set_theme_preference(
+    state: State<'_, Arc<AppState>>,
+    theme: String,
+) -> Result<(), String> {
+    if !["light", "dark", "system"].contains(&theme.as_str()) {
+        return Err("invalid theme value".to_string());
+    }
+    let mut t = state.theme_preference.write().await;
+    *t = theme;
+    Ok(())
+}
