@@ -1,11 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Card Component Styles
+   Card Component — v2
+   Edge-lit glass panel with refined hover state.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .card {
   background: var(--color-bg-card);
   border: 1px solid rgba(255, 255, 255, 0.04);
-  padding: var(--space-2xl);
+  padding: var(--space-xl) var(--space-2xl);
   border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
@@ -37,13 +38,8 @@
 .card--clickable:hover {
   border-color: var(--color-border-strong);
   background: rgba(35, 36, 50, 0.7);
-  transform: translateY(-2px);
+  transform: translateY(-1.5px);
   box-shadow: var(--shadow-card-hover), var(--shadow-accent-glow);
-}
-
-/* Glass card — enhanced hover shimmer */
-.card:hover::before {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
 }
 
 .card__header {
@@ -53,9 +49,9 @@
 }
 
 .card__icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
