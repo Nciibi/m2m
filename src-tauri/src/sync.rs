@@ -24,8 +24,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[allow(unused_imports)]
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 use uuid::Uuid;
@@ -135,8 +134,7 @@ pub async fn generate_sync_invite(
 
     // Generate 24 random bytes as the token
     let token = crate::crypto::random_bytes(24);
-    let token_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(&token);
+    let token_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&token);
     let token_hash = hex::encode(sha256::hash(&token));
 
     // Store pending invite (one-time, 15-min expiry)
