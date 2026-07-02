@@ -177,22 +177,13 @@
 
 ---
 
-## Phase 10: Platform Polish & Distribution
+## ❌ Phase 10: Platform Polish & Distribution — NOT STARTED
 
-### 10.1 — Code Signing & Notarization
-- macOS: Developer ID + notarization via `tauri ci` pipeline
-- Windows: Authenticode signing via Azure Key Vault or similar
-- Linux: AppImage + Flatpak packaging with signature verification
-
-### 10.2 — Auto-Update Infrastructure
-- Use `tauri-plugin-updater` (already in Tauri 2 ecosystem)
-- Build update server or use GitHub Releases as update source
-- Delta updates for binary size efficiency (future)
-
-### 10.3 — Installer Polish
-- Windows: MSI installer with custom icon, Start menu shortcut
-- macOS: DMG with background image, Applications shortcut
-- Linux: `.deb` + `.rpm` + AppImage via CI matrix
+| Sub-phase | Status | Details |
+|-----------|--------|---------|
+| 10.1 Code signing & notarization | ❌ | Not configured |
+| 10.2 Auto-update infrastructure | ❌ | `tauri-plugin-updater` not in dependencies, no updater config |
+| 10.3 Installer polish | ❌ | No MSI/DMG/AppImage configs beyond defaults |
 
 ---
 
