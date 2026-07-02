@@ -13,8 +13,6 @@ import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
 
 export default function ChatView() {
-  // Typing peers state (ids of peers currently typing)
-  const [typingPeers, setTypingPeers] = useState<string[]>([]);
   const { identity, toasts, removeToast, addToast, setView } = useApp();
   const {
     connection, messages, setMessages, fileRequests, activeConversationId,
@@ -37,7 +35,7 @@ export default function ChatView() {
   const [timerSecs, setTimerSecs] = useState<number>(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
-  const [pageLoadKey, setPageLoadKey] = useState(0);
+  const [_pageLoadKey, setPageLoadKey] = useState(0);
   // Message status tracking: messageId → "sending" | "sent" | "delivered" | "read"
   const [msgStatus, setMsgStatus] = useState<Record<string, "sending" | "sent" | "delivered" | "read">>({});
   // File transfer progress: transferId → TransferProgress
