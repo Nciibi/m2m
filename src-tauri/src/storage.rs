@@ -1500,7 +1500,7 @@ mod tests {
     fn test_delete_conversation_cascade() {
         let store = mem_messagestore();
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
-        store.store_message("msg-001", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000).unwrap();
+        store.store_message("msg-001", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000, true).unwrap();
 
         // Verify it exists
         assert!(store.get_conversation("conv-001").unwrap().is_some());
@@ -1518,8 +1518,8 @@ mod tests {
     fn test_export_conversation_messages() {
         let store = mem_messagestore();
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
-        store.store_message("m1", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000).unwrap();
-        store.store_message("m2", "conv-001", "received", &[0x03; 32], &[0x04; 24], 2000).unwrap();
+        store.store_message("m1", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000, true).unwrap();
+        store.store_message("m2", "conv-001", "received", &[0x03; 32], &[0x04; 24], 2000, true).unwrap();
 
         let exported = store.export_conversation_messages("conv-001").unwrap();
         assert_eq!(exported.len(), 2);
