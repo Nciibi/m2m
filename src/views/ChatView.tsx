@@ -115,6 +115,56 @@ export default function ChatView() {
     }
   }, [messages, hasOlder, loadingOlder, activeConversationId]);
 
+  // Listen for file transfer progress events
+  useEffect(() => {
+    const unlisten = listen<any>("m2m://transfer-progress", (event) => {
+      setFileProgress((prev) => ({ ...prev, [event.payload.transfer_id]: event.payload }));
+    });
+    const unlistenComplete = listen<any>("m2m://file-complete", (event) => {
+      setFileProgress((prev) => {
+        const next = { ...prev };
+        if (event.payload.transfer_id && next[event.payload.transfer_id]) {
+          next[event.payload.transfer_id] = { ...next[event.payload.transfer_id], state: "completed" };
+        }
+        return next;
+      });
+    });
+    const unlistenCancelled = listen<any>("m2m://transfer-cancelled", (event) => {
+      setFileProgress((prev) => {
+        const next = { ...prev };
+        if (event.payload.transfer_id && next[event.payload.transfer_id]) {
+          next[event.payload.transfer_id] = { ...next[event.payload.transfer_id], state: "cancelled" };
+        }
+        return next;
+      });
+    });
+    return () => {
+      unlisten.then(f => f());
+      unlistenComplete.then(f => f());
+      unlistenCancelled.then(f => f());
+    };
+  }, []);
+
+  // Emoji list for the picker
+  const EMOJIS = ["😀","😁","😂","🤣","😊","😉","😍","🥰","😘","😜","😎","🤩",
+    "👍","👎","✌️","🤞","👊","💪","🙌","👏","🤝","🔥","⭐","💯",
+    "❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","💖","✨","🎉",
+    "🙏","💀","☠️","👋","🫂","🤗","😤","😭","😱","🤔","🙄","😴",
+    "✅","❌","❗","❓","➕","➖","🚀","🎂","🎁","💰","🔒","🔓",
+  ];
+
+  // Close emoji picker on click outside
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiBtnRef.current && !emojiBtnRef.current.contains(e.target as Node)) {
+        setEmojiPickerOpen(false);
+      }
+    };
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, [emojiPickerOpen]);
+
   // Reset pagination state when conversation changes
   useEffect(() => {
     setHasOlder(true);
@@ -125,14 +175,18 @@ export default function ChatView() {
     e.preventDefault();
     if (!text.trim() || sending) return;
     setSending(true);
+    const content = text.trim().slice(0, 64 * 1024);
     try {
+      let msg: ChatMessage;
       if (timerSecs > 0) {
-        await handleSendMessageWithTimer(text.trim().slice(0, 64 * 1024), timerSecs);
+        msg = await handleSendMessageWithTimer(content, timerSecs);
       } else {
-        await handleSendMessage(text.trim().slice(0, 64 * 1024));
+        msg = await handleSendMessage(content);
       }
       setText("");
       setTimerSecs(0);
+      // Set message status to 'sent'
+      setMsgStatus((prev) => ({ ...prev, [msg.id]: "sent" }));
     } finally { setSending(false); }
   };
 
