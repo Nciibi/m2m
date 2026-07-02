@@ -1339,6 +1339,45 @@ impl MessageStore {
         Ok(messages)
     }
 
+    /// Load group messages WITH encrypted content (for decryption by caller).
+    /// Returns (ChatMessage, content_encrypted, content_nonce) tuples.
+    pub fn load_group_messages_with_content(
+        &self,
+        group_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<(super::commands::ChatMessage, Vec<u8>, Vec<u8>)>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, group_id, sender_peer_key_hex, content_encrypted, content_nonce,
+                    timestamp, delivered, edited_at, deleted
+             FROM group_messages
+             WHERE group_id = ?1 AND deleted = 0
+             ORDER BY timestamp DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let results = stmt
+            .query_map(params![group_id, limit, offset], |row| {
+                let msg = super::commands::ChatMessage {
+                    id: row.get(0)?,
+                    content: String::new(),
+                    direction: String::new(),
+                    timestamp: row.get::<_, i64>(5)? as u64,
+                    read_at: None,
+                    edited_at: row.get(7)?,
+                    deleted: row.get::<_, i32>(8)? != 0,
+                    expires_at: None,
+                    reactions: std::collections::HashMap::new(),
+                    sender_peer_key_hex: row.get::<_, String>(2)?,
+                };
+                let content_encrypted: Vec<u8> = row.get(3)?;
+                let content_nonce: Vec<u8> = row.get(4)?;
+                Ok((msg, content_encrypted, content_nonce))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(results)
+    }
+
     /// Mark a group message as edited.
     pub fn edit_group_message(
         &self,

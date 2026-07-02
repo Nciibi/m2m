@@ -512,8 +512,9 @@ pub async fn load_group_messages(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
+    // Load stored messages with encrypted content
     let stored = store
-        .load_group_messages(&group_id, limit.unwrap_or(100), 0)
+        .load_group_messages_with_content(&group_id, limit.unwrap_or(100), 0)
         .map_err(|e| format!("failed to load group messages: {e}"))?;
 
     let our_identity = state.identity.read().await;
@@ -522,12 +523,18 @@ pub async fn load_group_messages(
     drop(our_identity);
 
     let mut messages: Vec<ChatMessage> = Vec::with_capacity(stored.len());
-    for mut m in stored {
-        // Try to decrypt content — we store already-decrypted content in the DB
-        // (the field content_encrypted is used for storage at rest, but group messages
-        // are decrypted on receipt before storage. For simplicity, we store encrypted
-        // and decrypt on load.)
-        let _ = key; // storage key is for at-rest encryption of message content
+    for (mut m, enc_content, enc_nonce) in stored {
+        // Decrypt content from storage
+        let content = match super::util::crypto_decrypt_storage(
+            &enc_content, &enc_nonce, key, super::util::AAD_MSG_STORE,
+        ) {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to decrypt group message content");
+                "[encrypted]".to_string()
+            }
+        };
+        m.content = content;
 
         // Determine direction
         let direction = match &our_peer_key_hex {

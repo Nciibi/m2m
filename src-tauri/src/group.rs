@@ -187,7 +187,8 @@ impl Group {
             .our_signing_key
             .as_ref()
             .ok_or("no signing key available")?;
-        let signature = sign_group_message(signing_key, &sign_data);
+        let signature = sign_group_message(signing_key, &sign_data)
+            .map_err(|e| format!("signing failed: {e}"))?;
 
         Ok(GroupEncryptedMessageData {
             group_id: self.group_id.clone(),

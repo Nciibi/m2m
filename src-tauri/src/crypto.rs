@@ -930,13 +930,11 @@ pub fn generate_sender_signing_keypair() -> ([u8; 64], [u8; 32]) {
 pub fn sign_group_message(
     signing_key: &[u8; 64],
     data: &[u8],
-) -> Vec<u8> {
-    let sk = match sign::SecretKey::from_slice(signing_key) {
-        Some(sk) => sk,
-        None => return vec![0u8; 64], // fallback; caller should provide valid key
-    };
+) -> Result<Vec<u8>, CryptoError> {
+    let sk = sign::SecretKey::from_slice(signing_key)
+        .ok_or(CryptoError::InvalidKeyLength)?;
     let sig = sign::sign_detached(data, &sk);
-    sig.as_ref().to_vec()
+    Ok(sig.as_ref().to_vec())
 }
 
 /// Verify a group message signature against the sender's Ed25519 verification key.
