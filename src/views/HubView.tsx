@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
   GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
-  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon,
+  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon, ClockIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
@@ -145,7 +145,7 @@ export default function HubView() {
   );
 }
 
-function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity }: any) {
+function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity, securityConfig, scheduleClipboardClear }: any) {
   const [generating, setGenerating] = useState(false);
   const [fpCopied, setFpCopied] = useState(false);
   const [inviteHistory, setInviteHistory] = useState<string[]>([]);
