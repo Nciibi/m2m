@@ -1755,22 +1755,23 @@
 .paste-btn {
   position: absolute;
   left: 8px;
-  top: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 2;
   padding: 4px 8px;
-  font-size: var(--text-xs);
+  font-size: 0.65rem;
+  font-weight: 500;
   border-radius: var(--radius-xs);
   background: var(--color-bg-chip);
   border: 1px solid var(--color-border-default);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
   white-space: nowrap;
-  height: 26px;
+  line-height: 1;
+  height: 24px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  line-height: 1;
 }
 
 .paste-btn:hover {
