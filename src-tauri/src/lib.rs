@@ -207,6 +207,8 @@ pub fn run() {
             commands::security::set_security_config,
             commands::security::clear_clipboard,
             commands::vault::lock_vault,
+            commands::vault::is_first_run,
+            commands::vault::set_first_run_complete,
             // Family
             commands::vault::list_family,
             commands::vault::add_family_member,
