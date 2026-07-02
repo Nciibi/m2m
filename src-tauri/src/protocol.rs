@@ -184,6 +184,14 @@ impl PacketType {
             0x44 => Ok(PacketType::SyncRequest),
             0x45 => Ok(PacketType::SyncDeviceInfo),
             0x46 => Ok(PacketType::SyncPayload),
+            // Group chat (Phase 3)
+            0x50 => Ok(PacketType::GroupCreate),
+            0x51 => Ok(PacketType::GroupInvite),
+            0x52 => Ok(PacketType::GroupRemove),
+            0x53 => Ok(PacketType::GroupSenderKey),
+            0x54 => Ok(PacketType::GroupEncryptedMessage),
+            0x55 => Ok(PacketType::GroupInfo),
+            0x56 => Ok(PacketType::GroupLeave),
             other => Err(ProtocolError::UnknownPacketType(other)),
         }
     }
