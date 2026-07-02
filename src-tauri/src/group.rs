@@ -399,7 +399,7 @@ impl GroupManager {
         }
 
         // Generate a sender key for the new member
-        let (member_sending_chain, member_initial_key) = generate_sender_key_pair();
+        let (_, member_initial_key) = generate_sender_key_pair();
         let (member_signing_key, member_verification_key) = generate_sender_signing_keypair();
 
         // Store their receiver chain for us
