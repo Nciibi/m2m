@@ -98,6 +98,29 @@ export interface FamilyMember {
   last_address: string | null;
 }
 
+export interface GroupInfo {
+  group_id: string;
+  group_name: string;
+  member_count: number;
+  created_at: number;
+}
+
+export interface GroupMember {
+  peer_key_hex: string;
+  display_name: string | null;
+  role: "admin" | "member";
+  added_at: number;
+}
+
+export interface GroupDetail {
+  group_id: string;
+  group_name: string;
+  member_count: number;
+  created_at: number;
+  our_role: string;
+  members: GroupMember[];
+}
+
 export interface SecurityConfig {
   screen_capture_protection: boolean;
   clipboard_clear_secs: number;
