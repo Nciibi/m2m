@@ -16,12 +16,12 @@ fn send_text_inner(
     conn: &mut PeerConnection,
     text: &str,
     disappear_after: Option<u64>,
-) -> Result<String, crate::session::SessionError> {
+) -> impl std::future::Future<Output = Result<String, crate::session::SessionError>> + use<'_> {
     let PeerConnection { session, write_half, .. } = conn;
     if let Some(secs) = disappear_after {
-        session.send_text_with_timer(write_half, text, Some(secs))
+        Box::pin(session.send_text_with_timer(write_half, text, Some(secs)))
     } else {
-        session.send_text(write_half, text)
+        Box::pin(session.send_text(write_half, text))
     }
 }
 
