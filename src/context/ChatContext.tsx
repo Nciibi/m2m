@@ -493,6 +493,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       ));
     });
 
+    const unlistenTyping = listen<any>("m2m://typing", (event) => {
+      const { peer_key_hex: typingPeer, typing } = event.payload;
+      if (typing) {
+        setTypingPeers((prev: string[]) => prev.includes(typingPeer) ? prev : [...prev, typingPeer]);
+      } else {
+        setTypingPeers((prev: string[]) => prev.filter((p: string) => p !== typingPeer));
+      }
+    });
+
     return () => {
       unlistenMsg.then((f) => f());
       unlistenConn.then((f) => f());
@@ -503,6 +512,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unlistenEdit.then((f) => f());
       unlistenReconnectAttempt.then((f) => f());
       unlistenDelete.then((f) => f());
+      unlistenTyping.then((f) => f());
     };
   }, [setView, notifPermission, activeConversationId, mutedConversations]);
 
