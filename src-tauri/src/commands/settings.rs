@@ -12,6 +12,34 @@ use crate::state::AppState;
 use crate::stun;
 use crate::tor;
 
+/// Get the user's theme preference.
+#[tauri::command]
+pub async fn get_theme_preference(
+    state: State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let theme = state.theme_preference.read().await;
+    Ok(theme.clone())
+}
+
+/// Set the user's theme preference.
+#[tauri::command]
+pub async fn set_theme_preference(
+    state: State<'_, Arc<AppState>>,
+    theme: String,
+) -> Result<(), String> {
+    let valid = ["light", "dark", "system"];
+    if !valid.contains(&theme.as_str()) {
+        return Err("Invalid theme value".to_string());
+    }
+    let mut tp = state.theme_preference.write().await;
+    *tp = theme.clone();
+    // Persist to vault/settings
+    if let Some(key_store) = state.key_store.lock().await.as_ref() {
+        let _ = key_store.set_setting("theme", &theme);
+    }
+    Ok(())
+}
+
 /// Discover the public IP address using enhanced STUN (parallel queries + consensus).
 #[tauri::command]
 pub async fn discover_public_ip(
