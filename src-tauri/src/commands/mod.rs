@@ -54,6 +54,10 @@ pub struct ChatMessage {
     /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
     #[serde(default)]
     pub reactions: std::collections::HashMap<String, Vec<String>>,
+    /// Sender of this message (used for group messages — Ed25519 hex).
+    /// Empty string for 1:1 messages (implicit from conversation).
+    #[serde(default)]
+    pub sender_peer_key_hex: String,
 }
 
 impl ChatMessage {
@@ -65,6 +69,7 @@ impl ChatMessage {
             deleted: false,
             expires_at: None,
             reactions: std::collections::HashMap::new(),
+            sender_peer_key_hex: String::new(),
         }
     }
 }
