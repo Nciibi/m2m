@@ -125,12 +125,13 @@ export default function SettingsView() {
               </label>
               <span className="settings-hint">Route connections via Tor</span>
               <Button size="xs" variant="secondary" onClick={async () => {
-                addToast("Tor test initiated…", "info");
+                addToast("Testing Tor…", "info");
                 try {
-                  const result = await invoke<any>("check_tor_connectivity");
-                  addToast(result.reachable ? "Tor ✓ Reachable" : "Tor ✗ Not reachable", result.reachable ? "success" : "error");
+                  const result = await invoke<any>("check_connectivity");
+                  const torOk = result?.tor_reachable ?? result?.tor ?? false;
+                  addToast(torOk ? "Tor ✓" : "Tor not reachable via current proxy", torOk ? "success" : "warning");
                 } catch (e) {
-                  addToast("Tor test failed: " + e, "error");
+                  addToast("Tor test unavailable: " + e, "warning");
                 }
               }}>Test Tor</Button>
             </div>
