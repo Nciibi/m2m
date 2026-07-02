@@ -7,10 +7,9 @@ use std::sync::Arc;
 
 use tauri::{Emitter, State};
 
-use crate::group::GroupManager;
 use crate::state::{AppState, PeerConnection};
-use crate::protocol::{self, GroupCreateData, GroupEncryptedMessageData, GroupInviteData,
-    GroupLeaveData, GroupRemoveData, GroupSenderKeyData, PacketType};
+use crate::protocol::{self, GroupCreateData, GroupInviteData,
+    GroupLeaveData, GroupRemoveData, PacketType};
 
 use super::{ChatMessage, GroupEvent, GroupMessageEvent};
 
