@@ -93,7 +93,7 @@ This plan details the gaps that prevent the app from achieving a **10/10** UI/UX
 | Task | Scope | Status | Acceptance Criteria |
 |------|-------|--------|----------------------|
 | Accent Color Picker | Add color‑picker control in Settings that updates CSS variable `--color-accent`. Persist selection in vault. | ❌ Not started | UI instantly reflects new accent; saved across restarts |
-| Theme Presets | Provide "System", "Light", "Dark" options; system follows OS preference when set. | 🟡 Partial (system auto-detect only) | Switching presets updates `data-theme` attribute |
+| Theme Presets | Provide "System", "Light", "Dark" options; system follows OS preference when set. | ✅ Complete (ThemeContext.tsx with light/dark/system + SettingsView toggle with Sun/Moon/Monitor icons) | Switching presets updates `data-theme` attribute |
 | Export / Import Theme | Allow users to export current theme JSON and import it later. | ❌ Not started | Theme JSON round‑trips correctly |
 
 ---
