@@ -1410,7 +1410,7 @@ mod tests {
 
         store.ensure_conversation(conv_id, &peer_id).unwrap();
         store.store_message(
-            "msg-001", conv_id, "sent", &[0x01; 32], &[0x02; 24], 1000,
+            "msg-001", conv_id, "sent", &[0x01; 32], &[0x02; 24], 1000, false,
         ).unwrap();
 
         let messages = store.load_messages(conv_id, 10).unwrap();
@@ -1430,7 +1430,7 @@ mod tests {
         for i in 0..5 {
             store.store_message(
                 &format!("msg-{:03}", i), "conv-001", "received",
-                &[i as u8; 32], &[0xBB; 24], 1000 + i,
+                &[i as u8; 32], &[0xBB; 24], 1000 + i, true,
             ).unwrap();
         }
 
@@ -1450,7 +1450,7 @@ mod tests {
         for i in 0..10 {
             store.store_message(
                 &format!("msg-{:03}", i), "conv-001", "sent",
-                &[i as u8; 32], &[0xBB; 24], 1000 + i,
+                &[i as u8; 32], &[0xBB; 24], 1000 + i, true,
             ).unwrap();
         }
 

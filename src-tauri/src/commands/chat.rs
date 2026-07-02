@@ -493,7 +493,7 @@ pub async fn send_message_with_timer(
                         let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                         let _ = store.store_message_with_expiry(
                             &msg_id, &peer_key_hex, "sent",
-                            &encrypted, &nonce, now as i64, expires_at,
+                            &encrypted, &nonce, now as i64, expires_at, true,
                         );
                     }
                 }
