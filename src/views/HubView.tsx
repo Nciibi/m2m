@@ -209,7 +209,7 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
   );
 }
 
-function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted }: any) {
+function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
   return (
     <div className="conv-list">
       {conversations.length > 0 && (
@@ -225,8 +225,8 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             {search ? "No conversations found" : "No conversations yet"}
           </span>
           <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6 }}>
-            {search 
-              ? "Try adjusting your search terms or clear the filter." 
+            {search
+              ? "Try adjusting your search terms or clear the filter."
               : "Generate an invite link to host a connection, or paste an invite from a peer to join."}
           </span>
           {!search && (
@@ -236,7 +236,9 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
           )}
         </div>
       ) : (
-        conversations.map((c: any) => (
+        conversations.map((c: any) => {
+          const isMuted = mutedConversations?.includes(c.peer_key_hex);
+          return (
           <div key={c.id} className="conv-item" onClick={() => onOpenChat(c)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpenChat(c)}>
             <div className={`conv-avatar ${c.is_online ? 'conv-avatar--online' : 'conv-avatar--offline'}`} style={{
               background: `linear-gradient(135deg, ${hashToColor(c.peer_key_hex)}, ${hashToColor(c.peer_key_hex.slice(16))})`,
@@ -245,13 +247,26 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             </div>
             <div className="conv-body">
               <div className="conv-top">
-                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}</span>
+                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <span style={{ marginLeft: 6, fontSize: '0.65rem', opacity: 0.6 }}>🔇</span> : null}</span>
                 {c.last_message_at && <span className="conv-time">{formatTime(c.last_message_at)}</span>}
               </div>
               <span className="conv-preview">{c.last_message_preview || "No messages yet."}</span>
             </div>
             <div className="conv-status">{c.is_online ? <OnlineDot /> : <OfflineDot />}</div>
             <div className="conv-actions">
+              {isMuted ? (
+                <button className="btn btn--icon btn--icon-sm" title="Unmute conversation"
+                  onClick={e => { e.stopPropagation(); onUnmute(c.peer_key_hex); }}
+                  aria-label="Unmute">
+                  🔇
+                </button>
+              ) : (
+                <button className="btn btn--icon btn--icon-sm" title="Mute conversation"
+                  onClick={e => { e.stopPropagation(); onMute(c.peer_key_hex); }}
+                  aria-label="Mute">
+                  🔔
+                </button>
+              )}
               <button className="btn btn--icon btn--icon-sm"
                 onClick={e => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }}
                 aria-label="Delete">
@@ -259,7 +274,8 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
               </button>
             </div>
           </div>
-        ))
+          );
+        })
       )}
     </div>
   );
