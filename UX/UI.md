@@ -127,19 +127,18 @@ Each milestone includes unit‑ and integration‑tests (React Testing Library +
 
 ### 6. Next Steps (Updated July 2026)
 
-**Tier 1 polish is complete (July 2026).** Implemented:
-- Emoji picker, message status, file progress bars, sender labels
-- Invite countdown/history, listening indicator, conversation sorting, last-seen
-- Vault paste button, fingerprint hint
-- Copy IP, STUN health, Test Tor, theme selector in Settings
-- 6 new icons (Monitor, Sun, Moon, Smiley, CheckDouble, Clock)
+**P1–P2 + P5: Complete (August 2026).** Added in this pass:
+- Typing indicator: backend 0x60/0x61 packets + frontend UI (animated dots + "Peer is typing…")
+- Message search: backend `search_messages` command + frontend search bar with results overlay
+- Keyboard shortcuts: Ctrl+N (new chat), Ctrl+F (search), Ctrl+K (settings), Esc (close)
+- Favorites: star toggle per conversation + sorted to top + DB `is_favorite` column + migration
+- Archive: archive toggle per conversation + sorted to bottom + DB `archived` column + migration
+- Drag-and-drop file send: drop zone overlay over input area
+- Conversation list sorting: favorites first, then by recency, archived last
 
-**Remaining work for UI/UX 10/10:**
+**Remaining work for 10/10:**
+1. **P3** — Notification reply/mark-read actions, system tray icon with Show/Lock/Quit menu, auto-update UI
+2. **P4** — Interactive onboarding wizard, WCAG contrast audit, focus management, ARIA live regions
+3. **P5** — Accent color picker, theme export/import
 
-1. **P1 remaining** — Typing indicator (backend + UI), per-conversation search, keyboard shortcuts (Ctrl+N/F/K)
-2. **P2** — Favorites/archive, drag-and-drop file send, keyboard navigation in Hub
-3. **P3** — Notification actions, tray icon, auto-update UI
-4. **P4** — Onboarding wizard, WCAG audit, ARIA live regions
-5. **P5** — Accent color picker, theme export/import
-
-Next immediate targets: typing indicator backend packet, conversation search backend command.
+Next immediate targets: system tray implementation, onboarding wizard.
