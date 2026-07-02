@@ -762,3 +762,72 @@ pub async fn get_muted_conversations(
     let muted = state.muted_conversations.read().await;
     Ok(muted.iter().cloned().collect())
 }
+
+/// Send typing indicator to a peer (fire-and-forget).
+#[tauri::command]
+pub async fn send_typing_indicator(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    typing: bool,
+) -> Result<(), String> {
+    let conns = state.connections.read().await;
+    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+        let mut conn = conn_arc.lock().await;
+        let packet_type = if typing {
+            PacketType::TypingIndicator
+        } else {
+            PacketType::TypingIndicatorClear
+        };
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session.send_encrypted_typed(write_half, packet_type, b"").await
+            .map_err(|e| format!("failed to send typing indicator: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Search messages in a conversation (case-insensitive, limited to 100 results).
+#[tauri::command]
+pub async fn search_messages(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+    query: String,
+) -> Result<Vec<ChatMessage>, String> {
+    let messages: Vec<ChatMessage> = {
+        let ms = state.message_store.lock().await;
+        let sk = state.storage_key.read().await;
+        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            let stored = store.load_messages_for_conversation(&peer_key_hex, 500, 0)
+                .map_err(|e| format!("db error: {e}"))?;
+            let query_lower = query.to_lowercase();
+            stored.into_iter().filter_map(|m| {
+                if m.deleted { return None; }
+                // Decrypt content to search
+                let decrypted = util::crypto_decrypt_storage(
+                    &m.content_encrypted, &m.content_nonce,
+                    key, util::AAD_MSG_STORE,
+                ).ok()?;
+                let text = String::from_utf8(decrypted).ok()?;
+                if text.to_lowercase().contains(&query_lower) {
+                    // Only store the ID and timestamp — frontend already has content
+                    Some(ChatMessage {
+                        id: m.id.clone(),
+                        content: text,
+                        direction: if m.direction == "sent" { "sent".to_string() } else { "received".to_string() },
+                        timestamp: m.timestamp as u64,
+                        read_at: None,
+                        edited_at: None,
+                        deleted: false,
+                        expires_at: None,
+                        reactions: std::collections::HashMap::new(),
+                        sender_peer_key_hex: String::new(),
+                    })
+                } else {
+                    None
+                }
+            }).take(100).collect()
+        } else {
+            Vec::new()
+        }
+    };
+    Ok(messages)
+}
