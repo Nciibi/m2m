@@ -1132,16 +1132,32 @@
 
 .input-wrap-relative {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 
 .input__clear--absolute {
   position: absolute;
-  right: 44px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 2;
   padding: 6px;
   border-radius: var(--radius-xs);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.input__clear--absolute:hover {
+  color: var(--color-text-primary);
 }
 
 .strength-container {
