@@ -5,6 +5,7 @@ import {
   GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon, ClockIcon,
 } from "../components/ui/Icons";
+import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
