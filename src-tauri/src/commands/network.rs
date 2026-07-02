@@ -1788,6 +1788,19 @@ drop(conns);
                         }
                     }
                 }
+                // ─── Typing Indicators ───
+                PacketType::TypingIndicator => {
+                    let _ = app_handle.emit("m2m://typing", serde_json::json!({
+                        "peer_key_hex": peer_key_hex,
+                        "typing": true,
+                    }));
+                }
+                PacketType::TypingIndicatorClear => {
+                    let _ = app_handle.emit("m2m://typing", serde_json::json!({
+                        "peer_key_hex": peer_key_hex,
+                        "typing": false,
+                    }));
+                }
                 _ => {
                     tracing::warn!(peer = %peer_key_hex, "received unexpected packet type in receive loop");
                 }
