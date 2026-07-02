@@ -447,6 +447,18 @@ export default function ChatView() {
       {/* Input */}
       <form className="msg-input-area" onSubmit={submit}>
         <button type="button" className="msg-attach-btn" onClick={handleSendFile} id="send-file-btn" aria-label="Send file"><AttachIcon size={20} /></button>
+        <button type="button" ref={emojiBtnRef} className="emoji-picker-btn" onClick={() => setEmojiPickerOpen(!emojiPickerOpen)} aria-label="Emoji picker">
+          <SmileyIcon size={20} />
+          {emojiPickerOpen && (
+            <div className="emoji-picker-dropdown" onClick={(e) => e.stopPropagation()}>
+              {EMOJIS.map((emoji) => (
+                <button key={emoji} type="button" onClick={() => { setText((t) => t + emoji); setEmojiPickerOpen(false); }}>
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </button>
         <div className="msg-input-wrap">
           <textarea id="message-input" placeholder="Type a secure message…" value={text}
             onChange={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; setText(e.target.value); }}
