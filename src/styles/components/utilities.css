@@ -1893,6 +1893,13 @@
   border-color: var(--color-success-bright);
 }
 
+.onboarding-actions {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-2xl);
+  justify-content: center;
+}
+
 /* ─── Update Banner ─── */
 .update-banner {
   position: fixed;
