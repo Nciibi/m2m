@@ -892,6 +892,37 @@ impl MessageStore {
         Ok(())
     }
 
+    /// Toggle the favorite status of a conversation. Returns the new value.
+    pub fn toggle_favorite(&self, peer_key_hex: &str) -> Result<bool, StorageError> {
+        // Get current value
+        let current: bool = self.conn.query_row(
+            "SELECT COALESCE(is_favorite, 0) FROM conversations WHERE id = ?1",
+            params![peer_key_hex],
+            |row| row.get(0),
+        ).unwrap_or(false);
+        let new_val = !current;
+        self.conn.execute(
+            "UPDATE conversations SET is_favorite = ?1 WHERE id = ?2",
+            params![new_val as i32, peer_key_hex],
+        )?;
+        Ok(new_val)
+    }
+
+    /// Toggle the archive status of a conversation. Returns the new value.
+    pub fn toggle_archive(&self, peer_key_hex: &str) -> Result<bool, StorageError> {
+        let current: bool = self.conn.query_row(
+            "SELECT COALESCE(archived, 0) FROM conversations WHERE id = ?1",
+            params![peer_key_hex],
+            |row| row.get(0),
+        ).unwrap_or(false);
+        let new_val = !current;
+        self.conn.execute(
+            "UPDATE conversations SET archived = ?1 WHERE id = ?2",
+            params![new_val as i32, peer_key_hex],
+        )?;
+        Ok(new_val)
+    }
+
     /// Export all messages for a conversation.
     pub fn export_conversation_messages(
         &self,
