@@ -2,9 +2,9 @@
   "mcpServers": {
     "stitch": {
       "command": "npx",
-      "args": ["-y", "stitch-mcp"],
+      "args": ["-y", "stitch-mcp-server@latest"],
       "env": {
-        "GOOGLE_CLOUD_PROJECT": "YOUR_PROJECT_ID"
+        "STITCH_API_KEY": "YOUR_API_KEY_HERE"
       }
     }
   }
