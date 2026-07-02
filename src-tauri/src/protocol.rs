@@ -162,6 +162,8 @@ impl PacketType {
             0x42 => Ok(PacketType::MessageEdit),
             0x43 => Ok(PacketType::MessageDelete),
             0x44 => Ok(PacketType::SyncRequest),
+            0x45 => Ok(PacketType::SyncDeviceInfo),
+            0x46 => Ok(PacketType::SyncPayload),
             other => Err(ProtocolError::UnknownPacketType(other)),
         }
     }
