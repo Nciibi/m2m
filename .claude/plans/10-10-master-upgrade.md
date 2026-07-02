@@ -41,39 +41,14 @@
 
 ---
 
-## Phase 1: Fully Decentralized Peer Discovery (Architecture: 9.5 → 10)
+## ✅ Phase 1: Fully Decentralized Peer Discovery — COMPLETE
 
-**Problem**: Currently relies on out-of-band invite sharing (copy-paste link). No way to discover peers without a shared channel.
-
-### 1.1 — Kademlia DHT for Peer Discovery
-
-**New file**: `src-tauri/src/dht.rs` (400 lines)
-- Implement Kademlia DHT using `kademlia-dht` or minimal custom implementation
-- Store: `(peer_id_hash) → (endpoint_info, identity_pub, supported_features)`
-- Lookup: by peer_id → get current connection info
-- Bootstrap via configurable bootstrap nodes (hardcoded defaults, user-customizable)
-- NAT-aware: behind NAT = can't serve DHT? Node becomes "client-only" if symmetric NAT
-- Integration: DHT lookup on invite paste, DHT announce on listen start
-
-**Modified**: `src-tauri/src/lib.rs` — add `mod dht;`
-**Modified**: `src-tauri/src/Cargo.toml` — add `kademlia-dht` or custom implementation
-
-### 1.2 — LAN Peer Discovery (mDNS / SSDP)
-
-**New file**: `src-tauri/src/lan_discovery.rs` (200 lines)
-- Periodic UDP multicast announcement on LAN
-- Listens for announcements from other M2M instances on same LAN
-- Auto-populates conversation list with nearby peers
-- No configuration needed — zero-touch local discovery
-
-**Modified**: `src-tauri/src/commands/network.rs` — start LAN discovery alongside TCP listener
-
-### 1.3 — Relay Server as Optional, User-Run Infrastructure
-
-**Modified**: `relay-server.rs` — package as standalone binary with Dockerfile
-- Add `docker-compose.yml` for easy self-hosting
-- Add relay server discovery via DHT (publish relay endpoints)
-- Document: "Run your own relay" in README with 1-command deploy
+| Sub-phase | File | Status |
+|-----------|------|--------|
+| 1.1 Kademlia DHT | `src-tauri/src/dht.rs` | ✅ Custom Kademlia-style DHT — ephemeral peer IDs, announce/lookup/bootstrap, NAT awareness |
+| 1.2 LAN Discovery | `src-tauri/src/lan_discovery.rs` | ✅ UDP multicast on `239.255.27.3:38553`, 30s announce interval, ephemeral session tokens |
+| 1.3 Relay Server | `src-tauri/examples/relay-server.rs` | ✅ Standalone relay with `docker-compose.yml` |
+| Off by default | — | ✅ Both `dht_enabled` and `lan_enabled` default to `false` per privacy-first principle |
 
 ---
 
