@@ -431,6 +431,18 @@ pub struct MessageDeleteData {
     pub message_id: String,
 }
 
+// --- Sync Request (0x44) ---
+
+/// Sent after reconnection to request missed messages.
+/// The reconnecting peer sends the most recent *received* message timestamp
+/// it has for this conversation. The peer responds by re-sending all
+/// messages with timestamp greater than this value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncRequestData {
+    /// Only send messages with timestamp > this value.
+    pub since_timestamp: u64,
+}
+
 // --- Disconnect ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
