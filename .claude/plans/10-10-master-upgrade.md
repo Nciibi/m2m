@@ -218,7 +218,7 @@
 | `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions, offline queue, flush) | +160 | ⚠️ Partially done |
 | `src-tauri/src/commands/network.rs` | Modify (+ reconnect) | +60 | ✅ Done |
 | `src-tauri/src/commands/vault.rs` | Modify (+ export/import) | +150 | ✅ Done |
-| `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ❌ Pending |
+| `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ✅ Done |
 | `src-tauri/src/reconnect.rs` | **NEW** | ~80 | ✅ Done |
 | `src-tauri/src/window_security.rs` | **NEW** | ~100 | ✅ Done |
 | `src-tauri/Cargo.toml` | Modify (+ deps) | +15 | ⚠️ Partial |
