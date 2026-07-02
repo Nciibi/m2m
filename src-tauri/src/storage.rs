@@ -1383,6 +1383,7 @@ impl MessageStore {
     }
 
     /// Mark a group message as edited.
+    #[allow(dead_code)]
     pub fn edit_group_message(
         &self,
         message_id: &str,
@@ -1396,6 +1397,7 @@ impl MessageStore {
     }
 
     /// Soft-delete a group message.
+    #[allow(dead_code)]
     pub fn delete_group_message(
         &self,
         message_id: &str,
