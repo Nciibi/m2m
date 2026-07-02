@@ -29,7 +29,7 @@ interface ChatContextValue {
   setRetentionPolicy: (v: string) => void;
   retentionDuration: string;
   setRetentionDuration: (v: string) => void;
-  handleSendMessage: (content: string) => Promise<void>;
+  handleSendMessage: (content: string) => Promise<ChatMessage>;
   handleVerify: () => Promise<void>;
   handleDisconnect: () => Promise<void>;
   handleReconnect: () => Promise<void>;
@@ -46,7 +46,7 @@ interface ChatContextValue {
   handleRemoveReaction: (messageId: string, reaction: string) => Promise<void>;
   handleMarkConversationRead: () => Promise<void>;
   // Self-destruct, Edit, Delete
-  handleSendMessageWithTimer: (content: string, disappearAfter?: number) => Promise<void>;
+  handleSendMessageWithTimer: (content: string, disappearAfter?: number) => Promise<ChatMessage>;
   handleEditMessage: (messageId: string, newContent: string) => Promise<void>;
   handleDeleteMessage: (messageId: string) => Promise<void>;
   // Mute
@@ -91,13 +91,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // ─── Handlers ───
 
-  const handleSendMessage = useCallback(async (content: string) => {
-    if (!connection?.peer_key_hex) return;
+  const handleSendMessage = useCallback(async (content: string): Promise<ChatMessage> => {
+    if (!connection?.peer_key_hex) throw new Error("Not connected");
     const msg = await invoke<ChatMessage>("send_message", {
       peerKeyHex: connection.peer_key_hex,
       content,
     });
     setMessages((prev) => [...prev, msg]);
+    return msg;
   }, [connection?.peer_key_hex]);
 
   const handleVerify = useCallback(async () => {
@@ -290,14 +291,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // ─── Self-destruct, Edit, Delete handlers ───
 
-  const handleSendMessageWithTimer = useCallback(async (content: string, disappearAfter?: number) => {
-    if (!connection?.peer_key_hex) return;
+  const handleSendMessageWithTimer = useCallback(async (content: string, disappearAfter?: number): Promise<ChatMessage> => {
+    if (!connection?.peer_key_hex) throw new Error("Not connected");
     const msg = await invoke<ChatMessage>("send_message_with_timer", {
       peerKeyHex: connection.peer_key_hex,
       content,
       disappearAfter: disappearAfter ?? null,
     });
     setMessages((prev) => [...prev, msg]);
+    return msg;
   }, [connection?.peer_key_hex]);
 
   const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
