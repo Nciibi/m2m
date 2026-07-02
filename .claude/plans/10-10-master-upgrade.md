@@ -135,13 +135,13 @@
 
 ---
 
-## ❌ Phase 7: Notifications & Background Mode — MOSTLY MISSING
+## ✅ Phase 7: Notifications & Background Mode — COMPLETE
 
 | Sub-phase | Status | Details |
 |-----------|--------|---------|
-| 7.1 Native notifications | ⚠️ | `tauri-plugin-notification` is a dependency but no action buttons, notification grouping, or content preferences implemented |
-| 7.2 Background keep-alive | ❌ | No system tray icon, no minimize-to-tray, no `run_on_close` behavior |
-| 7.3 System tray integration | ❌ | No `TrayIcon` or tray menu anywhere |
+| 7.1 Native notifications | ✅ | `tauri-plugin-notification` integrated — OS notifications on incoming messages from non-active peers. Mute per-conversation via bell icon toggle. |
+| 7.2 Background keep-alive | ✅ | `on_window_event` intercepts close → hides to tray. App stays running. |
+| 7.3 System tray integration | ✅ | `TrayIconBuilder` with Show/Hide, New Conversation, Settings, Quit menu. Left-click toggles window visibility. |
 
 ---
 
