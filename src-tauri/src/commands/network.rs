@@ -1529,6 +1529,261 @@ pub fn spawn_receive_loop(
                 PacketType::Error => {
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
+                // ─── Group Chat (Phase 3) ───
+                PacketType::GroupCreate => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(create) = protocol::deserialize::<protocol::GroupCreateData>(&plaintext) {
+                                    tracing::info!(group = %create.group_id, "received group create");
+                                    let gid = create.group_id.clone();
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+
+                                    state.ensure_message_store(&state.data_dir).await.ok();
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(store) = ms.as_ref() {
+                                        let _ = store.upsert_group(&gid, &create.group_name, create.created_at as i64, "member");
+                                        let _ = store.add_group_member(&gid, &create.creator_peer_key_hex, None, "admin", create.created_at as i64);
+                                        for key in &create.initial_members {
+                                            let _ = store.add_group_member(&gid, key, None, "member", create.created_at as i64);
+                                        }
+                                    }
+                                    drop(ms);
+
+                                    let _ = app_handle.emit("m2m://group-event", GroupEvent {
+                                        group_id: gid,
+                                        event_type: "created".to_string(),
+                                        peer_key_hex: Some(create.creator_peer_key_hex),
+                                    });
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt group create"),
+                        }
+                    }
+                }
+                PacketType::GroupInvite => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(invite) = protocol::deserialize::<protocol::GroupInviteData>(&plaintext) {
+                                    tracing::info!(group = %invite.group_id, "received group invite");
+                                    let _ = app_handle.emit("m2m://group-event", GroupEvent {
+                                        group_id: invite.group_id,
+                                        event_type: "invited".to_string(),
+                                        peer_key_hex: Some(invite.inviter_peer_key_hex),
+                                    });
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt group invite"),
+                        }
+                    }
+                }
+                PacketType::GroupSenderKey => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(sk_data) = protocol::deserialize::<protocol::GroupSenderKeyData>(&plaintext) {
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+                                    let mut gm = state.group_manager.write().await;
+                                    if let Err(e) = gm.handle_sender_key(&sk_data) {
+                                        tracing::warn!(error = %e, "failed to handle sender key");
+                                    }
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt sender key"),
+                        }
+                    }
+                }
+                PacketType::GroupEncryptedMessage => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(group_msg) = protocol::deserialize::<protocol::GroupEncryptedMessageData>(&plaintext) {
+                                    let gid = group_msg.group_id.clone();
+                                    let sender = group_msg.sender_peer_key_hex.clone();
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+
+                                    // Decrypt inner group message
+                                    let mut gm = state.group_manager.write().await;
+                                    let decrypted = if let Some(group) = gm.get_group_mut(&gid) {
+                                        group.decrypt_message(&group_msg).ok()
+                                    } else {
+                                        None
+                                    };
+                                    drop(gm);
+
+                                    if let Some(decrypted_content) = decrypted {
+                                        let content_str = String::from_utf8_lossy(&decrypted_content).to_string();
+                                        let now = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs();
+                                        let msg_id = uuid::Uuid::new_v4().to_string();
+
+                                        state.ensure_message_store(&state.data_dir).await.ok();
+                                        let sk = state.storage_key.read().await;
+                                        let ms = state.message_store.lock().await;
+                                        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                            match super::util::crypto_encrypt_storage(content_str.as_bytes(), key, super::util::AAD_MSG_STORE) {
+                                                Ok((nonce, encrypted)) => {
+                                                    let _ = store.store_group_message(&msg_id, &gid, &sender, &encrypted, &nonce, now as i64, true);
+                                                    let preview = if content_str.len() > 80 { format!("{}...", &content_str[..80]) } else { content_str.clone() };
+                                                    let _ = store.update_group_last_message(&gid, now as i64, &preview);
+                                                }
+                                                Err(e) => tracing::warn!(error = %e, "failed to encrypt group message for storage"),
+                                            }
+                                        }
+                                        drop(ms);
+                                        drop(sk);
+
+                                        let _ = app_handle.emit("m2m://group-message", GroupMessageEvent {
+                                            group_id: gid,
+                                            message: ChatMessage {
+                                                id: msg_id,
+                                                content: content_str,
+                                                direction: "received".to_string(),
+                                                timestamp: now,
+                                                read_at: None,
+                                                edited_at: None,
+                                                deleted: false,
+                                                expires_at: None,
+                                                reactions: std::collections::HashMap::new(),
+                                                sender_peer_key_hex: sender,
+                                            },
+                                        });
+                                    }
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt group message"),
+                        }
+                    }
+                }
+                PacketType::GroupInfo => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(info) = protocol::deserialize::<protocol::GroupInfoData>(&plaintext) {
+                                    let new_name = info.new_name.clone();
+                                    let gid = info.group_id.clone();
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+
+                                    if let Some(ref name) = new_name {
+                                        let mut gm = state.group_manager.write().await;
+                                        let _ = gm.update_group_name(&gid, name);
+                                        state.ensure_message_store(&state.data_dir).await.ok();
+                                        let ms = state.message_store.lock().await;
+                                        if let Some(store) = ms.as_ref() {
+                                            let _ = store.update_group_name(&gid, name);
+                                        }
+                                    }
+
+                                    let _ = app_handle.emit("m2m://group-event", GroupEvent {
+                                        group_id: gid,
+                                        event_type: "name_changed".to_string(),
+                                        peer_key_hex: Some(info.changed_by_peer_key_hex),
+                                    });
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt group info"),
+                        }
+                    }
+                }
+                PacketType::GroupRemove => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(remove) = protocol::deserialize::<protocol::GroupRemoveData>(&plaintext) {
+                                    let removed = remove.removed_peer_key_hex.clone();
+                                    let gid = remove.group_id.clone();
+                                    let is_us = removed == peer_key_hex;
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+
+                                    if is_us {
+                                        let mut gm = state.group_manager.write().await;
+                                        gm.remove_group(&gid);
+                                        state.ensure_message_store(&state.data_dir).await.ok();
+                                        let ms = state.message_store.lock().await;
+                                        if let Some(store) = ms.as_ref() {
+                                            let _ = store.remove_group(&gid);
+                                        }
+                                    } else {
+                                        let mut gm = state.group_manager.write().await;
+                                        let _ = gm.leave_group(&gid, &removed);
+                                        state.ensure_message_store(&state.data_dir).await.ok();
+                                        let ms = state.message_store.lock().await;
+                                        if let Some(store) = ms.as_ref() {
+                                            let _ = store.remove_group_member(&gid, &removed);
+                                        }
+                                        if let Some(sk_data) = remove.new_sender_key {
+                                            let _ = gm.handle_sender_key(&sk_data);
+                                        }
+                                    }
+
+                                    let _ = app_handle.emit("m2m://group-event", GroupEvent {
+                                        group_id: gid,
+                                        event_type: "member_removed".to_string(),
+                                        peer_key_hex: Some(removed),
+                                    });
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt group remove"),
+                        }
+                    }
+                }
+                PacketType::GroupLeave => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(leave) = protocol::deserialize::<protocol::GroupLeaveData>(&plaintext) {
+                                    let leaving = leave.leaving_peer_key_hex.clone();
+                                    let gid = leave.group_id.clone();
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+
+                                    let mut gm = state.group_manager.write().await;
+                                    let _ = gm.leave_group(&gid, &leaving);
+                                    state.ensure_message_store(&state.data_dir).await.ok();
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(store) = ms.as_ref() {
+                                        let _ = store.remove_group_member(&gid, &leaving);
+                                    }
+
+                                    let _ = app_handle.emit("m2m://group-event", GroupEvent {
+                                        group_id: gid,
+                                        event_type: "member_left".to_string(),
+                                        peer_key_hex: Some(leaving),
+                                    });
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "failed to decrypt group leave"),
+                        }
+                    }
+                }
                 _ => {
                     tracing::warn!(peer = %peer_key_hex, "received unexpected packet type in receive loop");
                 }
