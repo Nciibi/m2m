@@ -30,3 +30,6 @@ export { GlobeIcon } from "./icons/GlobeIcon";
 export { HomeIcon } from "./icons/HomeIcon";
 export { WifiIcon } from "./icons/WifiIcon";
 export { ChevronDownIcon } from "./icons/ChevronDownIcon";
+export { MonitorIcon } from "./icons/MonitorIcon";
+export { SunIcon } from "./icons/SunIcon";
+export { MoonIcon } from "./icons/MoonIcon";
