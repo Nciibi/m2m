@@ -107,7 +107,7 @@
 
 ### 3.2 — Frontend: Group Chat UI — ❌ NOT STARTED
 
-Needed: Group chat view (or extended ChatView), group creation modal, group info panel
+Needed: Group chat view (or extended ChatView), group creation modal, group info panel. Frontend types (`GroupInfo`, `GroupMember`, `GroupDetail`, `sender_peer_key_hex` on `ChatMessage`) already defined in `src/types.ts`. No group rendering in ChatView, no GroupContext hook, no group list in HubView yet.
 
 ### 3.3 — Frontend: Group Management — ❌ NOT STARTED
 
@@ -132,7 +132,7 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 
 ---
 
-## ❌ Phase 5: Frontend Overhaul — MOSTLY MISSING (1/8 done)
+## ❌ Phase 5: Frontend Overhaul — PARTIAL (3/8 done)
 
 | Sub-phase | Status | Details |
 |-----------|--------|---------|
@@ -141,9 +141,9 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 | 5.3 Drag-and-drop file transfer | ❌ | No drag/drop handlers in ChatView |
 | 5.4 Voice messages | ❌ | No audio capture, no playback |
 | 5.5 Conversation organization | ❌ | No favorites, mute, archive, or folders — no fields in `types.ts` |
-| 5.6 Theme & color customization | ⚠️ | Light theme CSS exists. AppContext sets `data-theme="dark"` but **no `[data-theme="dark"]` CSS rules**. No accent picker. |
+| 5.6 Theme & color customization | ✅ | `ThemeContext.tsx` — light/dark/system modes. `theme.css` — full light theme with all CSS token overrides. `SettingsView.tsx` — theme selector (Monitor/Sun/Moon icons). Backend: `get_theme_preference`, `set_theme_preference`. Default mode is dark through `:root` tokens. No accent picker yet. |
 | 5.7 Keyboard navigation | ⚠️ | Partial: `Esc` (back to hub), `Ctrl+,` (settings), `?` (help). Missing: Ctrl+N, Ctrl+K, Ctrl+F, etc. |
-| 5.8 Dark mode refinements | ❌ | No dark theme CSS at all |
+| 5.8 Dark mode refinements | ✅ | Dark is the default mode. `:root` in `tokens.css` holds all dark-mode values (canvas gradient, glass effects, edge lights). Full shadow scale for dark backgrounds. No separate `[data-theme="dark"]` block needed — `:root` IS the dark theme. |
 
 ---
 
