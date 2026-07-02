@@ -6,9 +6,9 @@
 use std::sync::Arc;
 
 use tauri::{Emitter, State};
-use tokio::sync::Mutex;
 
 use crate::group::{Group, GroupManager};
+use crate::state::{AppState, PeerConnection};
 use crate::protocol::{self, GroupCreateData, GroupEncryptedMessageData, GroupInviteData,
     GroupLeaveData, GroupRemoveData, GroupSenderKeyData, PacketType};
 use crate::state::{AppState, PeerConnection};
