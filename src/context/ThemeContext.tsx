@@ -47,11 +47,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const stored = await invoke<string>("get_theme_preference");
+        const prefs = await invoke<any>("get_theme_preference");
+        const themeMode = typeof prefs === "string" ? prefs : prefs?.theme;
+        const accent = typeof prefs === "object" && prefs?.accent_color ? prefs.accent_color : null;
         const validThemes: ThemeMode[] = ["light", "dark", "system"];
-        if (validThemes.includes(stored as ThemeMode)) {
-          setThemeState(stored as ThemeMode);
-          applyTheme(stored as ThemeMode);
+        if (validThemes.includes(themeMode as ThemeMode)) {
+          setThemeState(themeMode as ThemeMode);
+          applyTheme(themeMode as ThemeMode);
+        }
+        if (accent) {
+          setAccentColorState(accent);
+          applyAccent(accent);
         }
       } catch {
         applyTheme("system");
@@ -60,7 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       }
     };
     loadTheme();
-  }, [applyTheme]);
+  }, [applyTheme, applyAccent]);
 
   useEffect(() => {
     if (!initialized) return;
