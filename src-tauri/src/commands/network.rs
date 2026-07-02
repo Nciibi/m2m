@@ -1423,6 +1423,58 @@ pub fn spawn_receive_loop(
                         }
                     }
                 }
+                PacketType::SyncRequest => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(sync) = crate::protocol::deserialize::<crate::protocol::SyncRequestData>(&plaintext) {
+                                    // Query our sent messages for this peer since the given timestamp
+                                    // and re-send them as regular encrypted messages.
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(ref store) = *ms {
+                                        if let Ok(missed) = store.load_sent_messages_since(&peer_key_hex, sync.since_timestamp as i64) {
+                                            // Decrypt each message from storage, then re-send over session
+                                            let sk = state.storage_key.read().await;
+                                            if let Some(key) = sk.as_ref() {
+                                                for msg in &missed {
+                                                    match util::crypto_decrypt_storage(
+                                                        &msg.content_encrypted, &msg.content_nonce,
+                                                        key, util::AAD_MSG_STORE,
+                                                    ) {
+                                                        Ok(decrypted) => {
+                                                            if let Ok(text) = String::from_utf8(decrypted) {
+                                                                if let Some(expires_at) = msg.expires_at {
+                                                                    let remaining = expires_at - chrono::Utc::now().timestamp();
+                                                                    if remaining > 0 {
+                                                                        let _ = conn.session.send_text_with_timer(
+                                                                            &mut conn.write_half, &text, Some(remaining as u64),
+                                                                        ).await;
+                                                                    }
+                                                                } else {
+                                                                    let _ = conn.session.send_text(
+                                                                        &mut conn.write_half, &text,
+                                                                    ).await;
+                                                                }
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!(msg_id = %msg.id, error = %e, "sync: failed to decrypt stored sent message");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt sync request");
+                            }
+                        }
+                    }
+                }
                 PacketType::Error => {
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
