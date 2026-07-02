@@ -1486,7 +1486,7 @@ pub fn spawn_receive_loop(
                                 if let Ok(info) = crate::protocol::deserialize::<crate::protocol::SyncDeviceInfo>(&plaintext) {
                                     // Drop conn lock before calling sync handler which may re-acquire it
                                     drop(conn);
-                                    drop(conn_arc);
+                                    let _ = conn_arc;
                                     drop(conns);
                                     let _ = crate::sync::handle_sync_device_info(
                                         &app_handle,
@@ -1510,7 +1510,7 @@ pub fn spawn_receive_loop(
                             Ok(plaintext) => {
                                 if let Ok(payload) = crate::protocol::deserialize::<crate::protocol::SyncPayload>(&plaintext) {
                                     drop(conn);
-                                    drop(conn_arc);
+                                    let _ = conn_arc;
                                     drop(conns);
                                     crate::sync::handle_sync_payload(
                                         &state,
