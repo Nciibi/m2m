@@ -53,6 +53,7 @@ const SYNC_PROTOCOL_VERSION: u8 = 1;
 #[derive(Debug, Clone)]
 pub struct SyncInvite {
     /// Token hash (used as lookup key in pending_invites HashMap).
+    #[allow(dead_code)]
     pub token_hash: Vec<u8>,
     /// Unix timestamp when this invite expires.
     pub expires_at: u64,
