@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Badge Component Styles
+   Badge Component — v2
+   Clean status badges with animated dots.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .badge {
@@ -18,7 +19,7 @@
 }
 
 .badge--default {
-  background: var(--color-bg-input);
+  background: var(--color-bg-chip);
   color: var(--color-text-secondary);
   border-color: var(--color-border-default);
 }
@@ -54,7 +55,6 @@
   flex-shrink: 0;
 }
 
-/* Status dot pulse — opacity 1→0.5→1, 2s infinite */
 .badge__dot--success {
   background: var(--color-success);
   box-shadow: 0 0 8px var(--color-success-glow);
