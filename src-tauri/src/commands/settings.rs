@@ -3,6 +3,7 @@
 //! Handles STUN discovery, Tor proxy configuration, private mode,
 //! connectivity checks, and full network diagnostics for the frontend.
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use tauri::State;
@@ -12,13 +13,28 @@ use crate::state::AppState;
 use crate::stun;
 use crate::tor;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemePreference {
+    pub theme: String,
+    #[serde(default = "default_accent")]
+    pub accent_color: String,
+}
+
+fn default_accent() -> String {
+    "#6366f1".to_string()
+}
+
 /// Get the user's theme preference.
 #[tauri::command]
 pub async fn get_theme_preference(
     state: State<'_, Arc<AppState>>,
-) -> Result<String, String> {
-    let theme = state.theme_preference.read().await;
-    Ok(theme.clone())
+) -> Result<ThemePreference, String> {
+    let theme_str = state.theme_preference.read().await;
+    let accent = state.accent_color.read().await;
+    Ok(ThemePreference {
+        theme: theme_str.clone(),
+        accent_color: accent.clone(),
+    })
 }
 
 /// Set the user's theme preference.
@@ -26,17 +42,18 @@ pub async fn get_theme_preference(
 pub async fn set_theme_preference(
     state: State<'_, Arc<AppState>>,
     theme: String,
+    accent_color: Option<String>,
 ) -> Result<(), String> {
     let valid = ["light", "dark", "system"];
     if !valid.contains(&theme.as_str()) {
         return Err("Invalid theme value".to_string());
     }
     let mut tp = state.theme_preference.write().await;
-    *tp = theme.clone();
-    // Persist to vault/settings (TODO: re-enable when set_setting is implemented)
-    // if let Some(key_store) = state.key_store.lock().await.as_ref() {
-    //     let _ = key_store.set_setting("theme", &theme);
-    // }
+    *tp = theme;
+    if let Some(color) = accent_color {
+        let mut ac = state.accent_color.write().await;
+        *ac = color;
+    }
     Ok(())
 }
 
