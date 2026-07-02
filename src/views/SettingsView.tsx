@@ -8,7 +8,7 @@ import { useTheme } from "../context/ThemeContext";
 
 export default function SettingsView() {
   const { identity, toasts, addToast, removeToast, setView } = useApp();
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme, accentColor, setAccentColor } = useTheme();
   const {
     networkSettings, publicIp, stunLoading, networkDiagnostics,
     stunConfig, stunServerInput, privateMode, connectivityResult,
