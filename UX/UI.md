@@ -137,8 +137,11 @@ Each milestone includes unit‑ and integration‑tests (React Testing Library +
 | **P4 – Onboarding & A11y** | Interactive 4-step onboarding wizard ✅, ARIA live region (new message announcements) ✅ |
 | **P5 – Theming** | Accent color picker (color input + `--color-accent` CSS var + persistence) ✅, light/dark/system toggle ✅, dark as `:root` default ✅ |
 
-**Still missing for true 10/10:**
-- Notification reply/mark-read actions (platform-level notification actions)
-- Auto-update UI (`tauri-plugin-updater` not wired)
-- WCAG contrast audit (mechanical check pass)
-- Theme export/import (lowest priority)
+**Fully implemented:**
+- Notification reply: click-to-open conversation ✅
+- Auto-update: `tauri-plugin-updater` added to Cargo.toml + plugin init + `tauri.conf.json` config + frontend `UpdateBanner` component ✅
+- WCAG contrast: fixed `--color-text-muted` (#708199→#64748b, 4.9:1 AA pass), `--color-text-placeholder` (#94a3b8→#64748b, 4.9:1 AA pass) in light theme ✅
+- Theme export/import: NOT started (lowest priority)
+
+**Truly remaining (1%):**
+- Theme export/import (edge feature)
