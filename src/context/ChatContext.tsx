@@ -395,8 +395,46 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const displayName = peerFingerprint
           ? peerFingerprint.substring(0, 8) + "…"
           : peerKeyHex.substring(0, 8) + "…";
-        import("@tauri-apps/plugin-notification").then(({ sendNotification }) => {
-          sendNotification({ title: "M2M", body: `New message from ${displayName}` });
+        import("@tauri-apps/plugin-notification").then(({ sendNotification, isActionClicked, onActionClicked }) => {
+          sendNotification({
+            title: "M2M",
+            body: `New message from ${displayName}`,
+            actionTypeId: "m2m-message",
+            actions: [
+              { id: "reply", title: "Reply" },
+              { id: "mark-read", title: "Mark Read" },
+              { id: "open", title: "Open" },
+            ],
+            extra: { peerKeyHex },
+          });
+          // Listen for notification action clicks
+          onActionClicked(async (event) => {
+            const actionId = event.actionId;
+            const extra = event.extra || {};
+            const targetPeer = extra.peerKeyHex || peerKeyHex;
+            if (actionId === "open") {
+              setActiveConversationId(targetPeer);
+              setView("chat");
+              try {
+                setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: targetPeer }));
+              } catch { /* noop */ }
+            } else if (actionId === "mark-read") {
+              try {
+                await invoke("mark_messages_read", { conversationId: targetPeer });
+              } catch { /* noop */ }
+            } else if (actionId === "reply") {
+              setActiveConversationId(targetPeer);
+              setView("chat");
+              try {
+                setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: targetPeer }));
+              } catch { /* noop */ }
+              // Focus the message input
+              setTimeout(() => {
+                const input = document.getElementById("message-input") as HTMLTextAreaElement | null;
+                if (input) input.focus();
+              }, 500);
+            }
+          });
         });
       }
     });
