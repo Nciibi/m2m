@@ -1,33 +1,36 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   M2M Design Tokens — S+ Edition
+   M2M Design Tokens — S+ Edition v2
    Every visual property in one place. No magic values in component CSS.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
   /* ─── Colors: Canvas & Depth ─── */
   --color-bg-dark: #030408;
-  --color-bg-surface: rgba(15, 16, 25, 0.75);
-  --color-bg-card: rgba(25, 26, 40, 0.55);
-  --color-bg-elevated: rgba(30, 32, 48, 0.65);
-  --color-bg-input: rgba(255, 255, 255, 0.04);
-  --color-bg-input-focus: rgba(255, 255, 255, 0.08);
+  --color-bg-surface: rgba(12, 14, 24, 0.82);
+  --color-bg-card: rgba(22, 24, 36, 0.6);
+  --color-bg-elevated: rgba(28, 30, 44, 0.7);
+  --color-bg-input: rgba(255, 255, 255, 0.05);
+  --color-bg-input-focus: rgba(255, 255, 255, 0.09);
   --color-bg-hover: rgba(255, 255, 255, 0.06);
   --color-bg-active: rgba(255, 255, 255, 0.1);
-  --color-bg-overlay: rgba(0, 0, 0, 0.65);
-  --color-bg-tooltip: rgba(20, 22, 35, 0.97);
-  --color-bg-modal-backdrop: rgba(0, 0, 0, 0.6);
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+  --color-bg-tooltip: rgba(18, 20, 30, 0.97);
+  --color-bg-modal-backdrop: rgba(0, 0, 0, 0.65);
+  --color-bg-tertiary: rgba(255, 255, 255, 0.03);
+  --color-bg-chip: rgba(255, 255, 255, 0.07);
 
   /* ─── Canvas Gradient (applied at body level) ─── */
   --canvas-gradient:
-    radial-gradient(ellipse at 10% -10%, rgba(99, 102, 241, 0.18), transparent 45%),
-    radial-gradient(ellipse at 90% 110%, rgba(16, 185, 129, 0.08), transparent 45%),
-    radial-gradient(ellipse at 50% 50%, rgba(139, 92, 246, 0.04), transparent 70%);
+    radial-gradient(ellipse 55% 30% at 5% -5%, rgba(99, 102, 241, 0.2), transparent 50%),
+    radial-gradient(ellipse 45% 30% at 95% 105%, rgba(16, 185, 129, 0.1), transparent 50%),
+    radial-gradient(ellipse 40% 25% at 50% 50%, rgba(139, 92, 246, 0.05), transparent 70%);
 
   /* ─── Colors: Borders ─── */
-  --color-border-default: rgba(255, 255, 255, 0.09); /* WCAG: Increased from 0.06 for 3:1 UI component contrast */
+  --color-border-default: rgba(255, 255, 255, 0.08);
   --color-border-active: rgba(129, 140, 248, 0.6);
   --color-border-strong: rgba(255, 255, 255, 0.12);
-  --color-border-accent: rgba(129, 140, 248, 0.2);
+  --color-border-accent: rgba(129, 140, 248, 0.18);
+  --color-border-card: rgba(255, 255, 255, 0.05);
 
   /* ─── Colors: Accent (Indigo) ─── */
   --color-accent: #6366f1;
@@ -38,11 +41,12 @@
   --color-accent-glow-subtle: rgba(99, 102, 241, 0.1);
   --color-accent-gradient: linear-gradient(135deg, #6366f1, #4f46e5);
   --color-accent-gradient-warm: linear-gradient(135deg, #818cf8, #6366f1);
+  --color-accent-gradient-rich: linear-gradient(135deg, #818cf8, #6366f1, #4f46e5);
 
   /* ─── Colors: Text ─── */
-  --color-text-primary: #f8fafc;
+  --color-text-primary: #f1f5f9;
   --color-text-secondary: #cbd5e1;
-  --color-text-muted: #94a3b8; /* WCAG AA: 7:1+ on dark bg (passes AAA) */
+  --color-text-muted: #94a3b8;
   --color-text-inverse: #0f172a;
   --color-text-accent: #a5b4fc;
   --color-text-placeholder: #475569;
@@ -65,13 +69,16 @@
   --color-info-bg: rgba(99, 102, 241, 0.1);
 
   /* ─── Glass Effects ─── */
-  --glass-blur-sm: blur(20px);
-  --glass-blur: blur(40px);
-  --glass-blur-lg: blur(60px);
-  --glass-saturate: saturate(200%);
+  --glass-blur-sm: blur(12px);
+  --glass-blur: blur(24px);
+  --glass-blur-lg: blur(48px);
+  --glass-blur-xl: blur(64px);
+  --glass-saturate: saturate(180%);
+  --glass-saturate-sm: saturate(140%);
 
   /* ─── Edge Light (top highlight for cards) ─── */
-  --edge-light: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  --edge-light: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  --edge-light-strong: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
 
   /* ─── Spacing Scale (4px base) ─── */
   --space-xxs: 4px;
@@ -81,21 +88,23 @@
   --space-lg: 20px;
   --space-xl: 24px;
   --space-2xl: 32px;
-  --space-3xl: 48px;
-  --space-4xl: 64px;
+  --space-3xl: 40px;
+  --space-4xl: 48px;
+  --space-5xl: 64px;
 
-  /* ─── Typography Scale ─── */
-  --text-xs: 0.65rem;
-  --text-sm: 0.72rem;
-  --text-base: 0.78rem;
-  --text-md: 0.85rem;
-  --text-lg: 0.95rem;
-  --text-xl: 1.1rem;
-  --text-2xl: 1.3rem;
-  --text-3xl: 1.5rem;
-  --text-4xl: 2rem;
+  /* ─── Typography Scale (rem) ─── */
+  --text-xs: 0.68rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 0.9375rem;
+  --text-xl: 1.05rem;
+  --text-2xl: 1.2rem;
+  --text-3xl: 1.4rem;
+  --text-4xl: 1.75rem;
+  --text-5xl: 2.25rem;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto',
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
     'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
     'Helvetica Neue', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas',
@@ -105,68 +114,80 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
 
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
-  --line-height-relaxed: 1.7;
+  --line-height-relaxed: 1.65;
 
-  --letter-spacing-tight: -0.025em;
+  --letter-spacing-tight: -0.02em;
   --letter-spacing-normal: 0;
-  --letter-spacing-wide: 0.025em;
-  --letter-spacing-uppercase: 0.08em;
+  --letter-spacing-wide: 0.02em;
+  --letter-spacing-uppercase: 0.06em;
 
   /* ─── Border Radius ─── */
-  --radius-xs: 4px;
+  --radius-xs: 6px;
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
-  --radius-2xl: 32px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-3xl: 36px;
   --radius-full: 9999px;
 
   /* ─── Shadows ─── */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.3);
+  --shadow-2xl: 0 30px 80px rgba(0, 0, 0, 0.6);
 
-  --shadow-accent: 0 4px 12px rgba(99, 102, 241, 0.2);
-  --shadow-accent-strong: 0 8px 24px rgba(99, 102, 241, 0.4);
-  --shadow-accent-glow: 0 0 30px rgba(99, 102, 241, 0.15);
-  --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-accent: 0 4px 14px rgba(99, 102, 241, 0.25);
+  --shadow-accent-strong: 0 6px 20px rgba(99, 102, 241, 0.35);
+  --shadow-accent-glow: 0 0 30px rgba(99, 102, 241, 0.12);
+  --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.15);
 
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.25);
-  --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
-  --shadow-bubble-sent: 0 4px 15px rgba(99, 102, 241, 0.3);
-  --shadow-bubble-received: 0 4px 15px rgba(0, 0, 0, 0.2);
-  --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  --shadow-bubble-sent: 0 2px 8px rgba(99, 102, 241, 0.25);
+  --shadow-bubble-received: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-modal: 0 25px 80px rgba(0, 0, 0, 0.7);
   --shadow-toast: 0 8px 32px rgba(0, 0, 0, 0.5);
 
   --shadow-app-shell:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 10px 40px -10px rgba(0, 0, 0, 0.7),
-    0 0 100px -20px rgba(99, 102, 241, 0.15);
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 10px 40px -10px rgba(0, 0, 0, 0.6),
+    0 0 80px -20px rgba(99, 102, 241, 0.1);
 
   /* ─── Transitions ─── */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
 
   --transition-fast: 150ms var(--ease-out-expo);
-  --transition-base: 300ms var(--ease-out-expo);
-  --transition-smooth: 500ms var(--ease-out-expo);
-  --transition-slow: 800ms var(--ease-out-expo);
+  --transition-base: 250ms var(--ease-out-expo);
+  --transition-smooth: 400ms var(--ease-out-expo);
+  --transition-slow: 600ms var(--ease-out-expo);
   --transition-spring: 500ms var(--ease-out-back);
 
   /* ─── Z-Index Scale ─── */
   --z-base: 1;
   --z-dropdown: 100;
+  --z-fab: 200;
+  --z-modal-backdrop: 9998;
   --z-modal: 9999;
   --z-toast: 10000;
+  --z-tooltip: 10001;
 
   /* ─── Scrollbar ─── */
-  --scrollbar-width: 6px;
+  --scrollbar-width: 4px;
   --scrollbar-track: transparent;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.06);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.12);
+
+  /* ─── Skeleton / Shimmer ─── */
+  --shimmer-base: rgba(255, 255, 255, 0.03);
+  --shimmer-glow: rgba(255, 255, 255, 0.06);
 }
