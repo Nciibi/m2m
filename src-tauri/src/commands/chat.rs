@@ -12,19 +12,6 @@ use super::{ChatMessage, ConversationListItem};
 
 use crate::protocol::MessageReactionData;
 
-fn send_text_inner<'a>(
-    conn: &'a mut PeerConnection,
-    text: &'a str,
-    disappear_after: Option<u64>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, crate::session::SessionError>> + 'a>> {
-    let PeerConnection { session, write_half, .. } = conn;
-    if let Some(secs) = disappear_after {
-        Box::pin(session.send_text_with_timer(write_half, text, Some(secs)))
-    } else {
-        Box::pin(session.send_text(write_half, text))
-    }
-}
-
 /// Send a text message to a connected peer.
 /// If the peer is offline, the message is queued locally with `delivered=0`
 /// and sent automatically when the peer reconnects.
@@ -53,7 +40,8 @@ pub async fn send_message(
     let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
         Some(conn_arc) => {
             let mut conn = conn_arc.lock().await;
-            match send_text_inner(&mut conn, &content, None) {
+            let PeerConnection { session, write_half, .. } = &mut *conn;
+            match session.send_text(write_half, &content).await {
                 Ok(id) => (id, true),
                 Err(e) => {
                     tracing::warn!(peer = %peer_key_hex, error = %e, "send failed, queuing offline");
@@ -488,7 +476,13 @@ pub async fn send_message_with_timer(
     let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
         Some(conn_arc) => {
             let mut conn = conn_arc.lock().await;
-            match send_text_inner(&mut conn, &content, disappear_after) {
+            let PeerConnection { session, write_half, .. } = &mut *conn;
+            let send_result = if let Some(secs) = disappear_after {
+                session.send_text_with_timer(write_half, &content, Some(secs)).await
+            } else {
+                session.send_text(write_half, &content).await
+            };
+            match send_result {
                 Ok(id) => (id, true),
                 Err(e) => {
                     tracing::warn!(peer = %peer_key_hex, error = %e, "send failed, queuing offline");
