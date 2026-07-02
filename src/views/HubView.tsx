@@ -69,6 +69,22 @@ export default function HubView() {
     return { dot: <OfflineDot />, label: "Offline", variant: "default" as const };
   })();
 
+  // Global keyboard shortcuts for Hub
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "n") {
+        e.preventDefault();
+        setTab("connect");
+      }
+      if (e.key === "Escape" && view === "hub") {
+        // Already on hub — no-op
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const filtered = conversations.filter(c => {
     if (!search) return true;
     const q = search.toLowerCase();
