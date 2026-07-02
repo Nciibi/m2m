@@ -275,8 +275,8 @@ export default function SettingsView() {
                 const isHealthy = diagServer?.reachable;
                 return (
                 <div key={i} className="stun-server-item">
-                  <div className="stun-health-item" style={{ flex: 1, border: 'none', background: 'none', padding: 0 }}>
-                    <span className={`badge badge--${isHealthy === true ? 'success' : isHealthy === false ? 'danger' : 'default'}`} style={{ fontSize: '0.6rem', padding: '1px 6px', minWidth: 32, textAlign: 'center' as const }}>
+                  <div className="stun-health-item">
+                    <span className={`stun-badge stun-badge--${isHealthy === true ? 'ok' : isHealthy === false ? 'fail' : 'unknown'}`}>
                       {isHealthy === true ? "OK" : isHealthy === false ? "FAIL" : "?"}
                     </span>
                     <span className="stun-health-item__server">{srv}</span>
@@ -301,7 +301,7 @@ export default function SettingsView() {
           <div className="settings-card">
             <div className="settings-row">
               <span className="settings-label">Appearance</span>
-              <div className="theme-selector" style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
+              <div className="theme-selector">
                 <button className={`btn btn--icon btn--icon-sm ${theme === 'light' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('light')} aria-label="Light theme" title="Light">
                   <SunIcon size={18} />
                 </button>
@@ -328,7 +328,7 @@ export default function SettingsView() {
                 }}
                 aria-label="Accent color"
               />
-              <span className="settings-mono" style={{ fontSize: 'var(--text-xs)' }}>{accentColor}</span>
+              <span className="settings-mono settings-mono--sm">{accentColor}</span>
               <Button size="xs" variant="secondary" onClick={() => setAccentColor("#6366f1")}>Reset</Button>
             </div>
           </div>
