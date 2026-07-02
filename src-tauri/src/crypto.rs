@@ -781,9 +781,6 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
 
 // ─── Sender Key Chain (Signal-style Group E2EE) ──────────────────────────
 
-/// Context string for Sender Key message key derivation.
-const SENDER_KEY_CONTEXT: &[u8] = b"M2M-SENDER-KEY";
-
 /// A single sender's chain state for group E2EE.
 ///
 /// Each group member has their own Sender Key chain. The sender uses their
@@ -839,7 +836,7 @@ impl SenderKeyChain {
         let next_key_out = hkdf(&self.chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
         self.chain_key.copy_from_slice(&next_key_out);
 
-        let msg_num = self.message_number;
+        let _msg_num = self.message_number;
         self.message_number += 1;
 
         Ok((aead_nonce, msg_key))
