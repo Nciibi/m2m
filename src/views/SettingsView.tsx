@@ -224,37 +224,33 @@ export default function SettingsView() {
 
             <div className="settings-row">
               <span className="settings-label">Clipboard Auto-Clear</span>
-              <div className="select-wrap" style={{ width: 'auto' }}>
-                <select className="select--compact"
-                  value={securityConfig?.clipboard_clear_secs ?? 0}
-                  onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))}
-                  aria-label="Clipboard auto-clear timeout"
-                >
-                  <option value={0}>Off</option>
-                  <option value={5}>5 seconds</option>
-                  <option value={10}>10 seconds</option>
-                  <option value={30}>30 seconds</option>
-                  <option value={60}>1 minute</option>
-                </select>
-              </div>
+              <select className="select--compact"
+                value={securityConfig?.clipboard_clear_secs ?? 0}
+                onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))}
+                aria-label="Clipboard auto-clear timeout"
+              >
+                <option value={0}>Off</option>
+                <option value={5}>5s</option>
+                <option value={10}>10s</option>
+                <option value={30}>30s</option>
+                <option value={60}>1m</option>
+              </select>
               <span className="settings-hint">Auto-clear clipboard after copying sensitive data</span>
             </div>
 
             <div className="settings-row">
               <span className="settings-label">Idle Vault Lock</span>
-              <div className="select-wrap" style={{ width: 'auto' }}>
-                <select className="select--compact"
-                  value={securityConfig?.idle_lock_secs ?? 0}
-                  onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))}
-                  aria-label="Idle vault lock timeout"
-                >
-                  <option value={0}>Off</option>
-                  <option value={60}>1 minute</option>
-                  <option value={300}>5 minutes</option>
-                  <option value={600}>10 minutes</option>
-                  <option value={1800}>30 minutes</option>
-                </select>
-              </div>
+              <select className="select--compact"
+                value={securityConfig?.idle_lock_secs ?? 0}
+                onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))}
+                aria-label="Idle vault lock timeout"
+              >
+                <option value={0}>Off</option>
+                <option value={60}>1m</option>
+                <option value={300}>5m</option>
+                <option value={600}>10m</option>
+                <option value={1800}>30m</option>
+              </select>
               <span className="settings-hint">Auto-lock vault after inactivity</span>
             </div>
 
