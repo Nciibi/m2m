@@ -12,6 +12,19 @@ use super::{ChatMessage, ConversationListItem};
 
 use crate::protocol::MessageReactionData;
 
+fn send_text_inner(
+    conn: &mut PeerConnection,
+    text: &str,
+    disappear_after: Option<u64>,
+) -> Result<String, crate::session::SessionError> {
+    let PeerConnection { session, write_half, .. } = conn;
+    if let Some(secs) = disappear_after {
+        session.send_text_with_timer(write_half, text, Some(secs))
+    } else {
+        session.send_text(write_half, text)
+    }
+}
+
 /// Send a text message to a connected peer.
 /// If the peer is offline, the message is queued locally with `delivered=0`
 /// and sent automatically when the peer reconnects.
