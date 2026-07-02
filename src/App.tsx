@@ -21,10 +21,9 @@ import VaultView from "./views/VaultView";
 import HubView from "./views/HubView";
 import ChatView from "./views/ChatView";
 import SettingsView from "./views/SettingsView";
-import Sidebar from "./components/Sidebar";
 
 function AppInner() {
-  const { view, setView } = useApp();
+  const { view } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
   const { securityConfig } = useSettings();
 
@@ -43,8 +42,6 @@ function AppInner() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const showSidebar = view === "hub" || view === "chat" || view === "settings";
-
   const viewComponent = (() => {
     switch (view) {
       case "setup": return <SetupView />;
@@ -59,14 +56,7 @@ function AppInner() {
   return (
     <>
       <ErrorBoundary name={view}>
-        {showSidebar ? (
-          <div className="app-shell">
-            <Sidebar currentView={view} onNavigate={setView} />
-            <div className="app-main">{viewComponent}</div>
-          </div>
-        ) : (
-          viewComponent
-        )}
+        {viewComponent}
       </ErrorBoundary>
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <UpdateBanner />
