@@ -643,3 +643,76 @@ pub async fn cleanup_expired_messages(
     store.delete_expired_messages()
         .map_err(|e| format!("cleanup failed: {e}"))
 }
+
+/// Flush all undelivered messages for a peer after successful reconnection.
+/// Reads queued messages from storage and re-sends them in order.
+/// Does NOT take a State reference — designed to be called from attempt_reconnect.
+pub async fn flush_offline_queue(
+    state: &std::sync::Arc<AppState>,
+    peer_key_hex: &str,
+) -> Result<u32, String> {
+    // Make sure message store is available
+    state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
+
+    let queued = {
+        let sk = state.storage_key.read().await;
+        let ms = state.message_store.lock().await;
+        let store = ms.as_ref().ok_or("message store not initialised")?;
+        let key = sk.as_ref().ok_or("storage key not available")?;
+
+        let stored = store.load_undelivered_messages(peer_key_hex)
+            .map_err(|e| format!("load undelivered: {e}"))?;
+
+        // Decrypt all messages while holding the store lock
+        let mut decrypted = Vec::with_capacity(stored.len());
+        let peer_bytes = match util::decode_peer_key_logged(peer_key_hex) {
+            Some(b) => b,
+            None => return Err("invalid peer key hex".to_string()),
+        };
+        for msg in &stored {
+            match util::crypto_decrypt_storage(&msg.content_encrypted, &msg.content_nonce, key, util::AAD_MSG_STORE) {
+                Ok(bytes) => {
+                    if let Ok(text) = String::from_utf8(bytes) {
+                        decrypted.push((msg.id.clone(), text, msg.expires_at));
+                    }
+                }
+                Err(e) => tracing::warn!(msg_id = %msg.id, error = %e, "failed to decrypt queued message"),
+            }
+        }
+        (store, decrypted, peer_bytes)
+    };
+
+    let (store, decrypted, _peer_bytes) = queued;
+
+    // Now send each message via the active connection
+    let mut sent_count = 0u32;
+    let conns = state.connections.read().await;
+    if let Some(conn_arc) = conns.get(peer_key_hex) {
+        let mut conn = conn_arc.lock().await;
+        for (msg_id, text, expires_at) in &decrypted {
+            let result = if let Some(secs) = expires_at {
+                let remaining = *secs - chrono::Utc::now().timestamp();
+                if remaining > 0 {
+                    conn.session.send_text_with_timer(&mut conn.write_half, text, Some(remaining as u64)).await
+                } else {
+                    // Already expired — skip
+                    let _ = store.mark_delivered(msg_id);
+                    continue;
+                }
+            } else {
+                conn.session.send_text(&mut conn.write_half, text).await
+            };
+            match result {
+                Ok(_) => {
+                    let _ = store.mark_delivered(msg_id);
+                    sent_count += 1;
+                }
+                Err(e) => {
+                    tracing::warn!(msg_id = %msg_id, error = %e, "failed to flush queued message");
+                }
+            }
+        }
+    }
+
+    Ok(sent_count)
+}
