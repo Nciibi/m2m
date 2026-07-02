@@ -285,8 +285,9 @@ pub async fn attempt_reconnect(
                             let conns = flush_state.connections.read().await;
                             if let Some(conn_arc) = conns.get(&flush_peer) {
                                 let mut conn = conn_arc.lock().await;
-                                if let Err(e) = conn.session.send_encrypted_typed(
-                                    &mut conn.write_half,
+                                let PeerConnection { session, write_half, .. } = &mut *conn;
+                                if let Err(e) = session.send_encrypted_typed(
+                                    write_half,
                                     crate::protocol::PacketType::SyncRequest,
                                     &bytes,
                                 ).await {

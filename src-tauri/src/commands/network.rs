@@ -1430,41 +1430,43 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(sync) = crate::protocol::deserialize::<crate::protocol::SyncRequestData>(&plaintext) {
-                                    // Query our sent messages for this peer since the given timestamp
-                                    // and re-send them as regular encrypted messages.
-                                    let ms = state.message_store.lock().await;
-                                    if let Some(ref store) = *ms {
-                                        if let Ok(missed) = store.load_sent_messages_since(&peer_key_hex, sync.since_timestamp as i64) {
-                                            // Decrypt each message from storage, then re-send over session
-                                            let sk = state.storage_key.read().await;
-                                            if let Some(key) = sk.as_ref() {
-                                                for msg in &missed {
-                                                    match util::crypto_decrypt_storage(
+                                    // Load sent messages for this peer since the given timestamp,
+                                    // decrypt them from storage, and re-send over the session.
+                                    let missed: Vec<(String, Option<i64>)> = {
+                                        let ms = state.message_store.lock().await;
+                                        let sk = state.storage_key.read().await;
+                                        if let (Some(ref store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                            if let Ok(stored) = store.load_sent_messages_since(&peer_key_hex, sync.since_timestamp as i64) {
+                                                stored.iter().filter_map(|msg| {
+                                                    util::crypto_decrypt_storage(
                                                         &msg.content_encrypted, &msg.content_nonce,
                                                         key, util::AAD_MSG_STORE,
-                                                    ) {
-                                                        Ok(decrypted) => {
-                                                            if let Ok(text) = String::from_utf8(decrypted) {
-                                                                if let Some(expires_at) = msg.expires_at {
-                                                                    let remaining = expires_at - chrono::Utc::now().timestamp();
-                                                                    if remaining > 0 {
-                                                                        let _ = conn.session.send_text_with_timer(
-                                                                            &mut conn.write_half, &text, Some(remaining as u64),
-                                                                        ).await;
-                                                                    }
-                                                                } else {
-                                                                    let _ = conn.session.send_text(
-                                                                        &mut conn.write_half, &text,
-                                                                    ).await;
-                                                                }
-                                                            }
-                                                        }
-                                                        Err(e) => {
-                                                            tracing::warn!(msg_id = %msg.id, error = %e, "sync: failed to decrypt stored sent message");
-                                                        }
-                                                    }
-                                                }
+                                                    ).ok().and_then(|d| String::from_utf8(d).ok())
+                                                     .map(|text| (text, msg.expires_at))
+                                                }).collect()
+                                            } else {
+                                                Vec::new()
                                             }
+                                        } else {
+                                            Vec::new()
+                                        }
+                                    };
+
+                                    // Re-send each missed message using the destructure pattern
+                                    for (text, expires_at) in &missed {
+                                        let PeerConnection { session, write_half, .. } = &mut *conn;
+                                        let result = if let Some(secs) = expires_at {
+                                            let remaining = *secs - chrono::Utc::now().timestamp();
+                                            if remaining > 0 {
+                                                session.send_text_with_timer(write_half, text, Some(remaining as u64)).await
+                                            } else {
+                                                continue;
+                                            }
+                                        } else {
+                                            session.send_text(write_half, text).await
+                                        };
+                                        if let Err(e) = result {
+                                            tracing::warn!(error = %e, "sync: failed to re-send missed message");
                                         }
                                     }
                                 }
