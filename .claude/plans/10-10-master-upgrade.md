@@ -237,12 +237,15 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 | `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +160 | ✅ Done (SenderKeyChain, signing) |
 | `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, SyncDeviceInfo 0x45, SyncPayload 0x46, + Group 0x50-0x56) | +190 | ✅ Done |
 | `src-tauri/src/session.rs` | Modify (+ reconnect) | +100 | ✅ Done |
-| `src-tauri/src/state.rs` | Modify (+ groups, sync_manager) | +60 | ⚠️ Partial |
-| `src-tauri/src/storage.rs` | Modify (+ WAL, indexes, offline queue, sync queries) | +120 | ✅ Done |
-| `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions, offline queue, flush) | +160 | ⚠️ Partially done |
-| `src-tauri/src/commands/network.rs` | Modify (+ reconnect, sync handlers) | +90 | ✅ Done |
+| `src-tauri/src/state.rs` | Modify (+ groups, sync_manager) | +60 | ✅ Done |
+| `src-tauri/src/storage.rs` | Modify (+ WAL, indexes, offline queue, sync queries, group storage + `load_group_messages_with_content` for caller-side decryption) | +120 | ✅ Done |
+| `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions, offline queue, flush, `sender_peer_key_hex` field) | +160 | ✅ Done |
+| `src-tauri/src/commands/network.rs` | Modify (+ reconnect, sync handlers, 7 group packet handlers — GroupCreate/Invite/SenderKey/EncryptedMessage/Info/Remove, GroupEvent/GroupMessageEvent emits) | +270 | ✅ Done |
 | `src-tauri/src/commands/vault.rs` | Modify (+ export/import) | +150 | ✅ Done |
+| `src-tauri/src/commands/groups.rs` | **NEW** | 610 | ✅ Done (9 commands: create, send, list, get_info, invite, remove, leave, load, update_name) |
+| `src-tauri/src/commands/settings.rs` | Modify (+ `get_theme_preference`, `set_theme_preference`) | +30 | ✅ Done |
 | `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ✅ Done |
+| `src-tauri/src/lib.rs` | Modify (+ register 9 group commands) | +10 | ✅ Done |
 | `src-tauri/src/reconnect.rs` | **NEW** | ~80 | ✅ Done |
 | `src-tauri/src/window_security.rs` | **NEW** | ~100 | ✅ Done |
 | `src-tauri/Cargo.toml` | Modify (+ deps) | +15 | ✅ Done |
@@ -250,9 +253,12 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 | `src/views/HubView.tsx` | Modify (major) | +200 | ❌ Pending |
 | `src/views/SetupView.tsx` | Modify (onboarding) | +100 | ❌ Pending |
 | `src/views/VaultView.tsx` | Modify (UX polish) | +50 | ❌ Pending |
+| `src/views/SettingsView.tsx` | Modify (+ theme selector UI with Monitor/Sun/Moon icons) | +30 | ✅ Done |
+| `src/context/ThemeContext.tsx` | **NEW** | 85 | ✅ Done (light/dark/system with media query listener) |
+| `src/styles/theme.css` | **NEW** | 87 | ✅ Done (full light theme, all CSS token overrides) |
+| `src/styles/tokens.css` | Modify (+ dark mode :root values, glass effects, edge light) | +10 | ✅ Done |
 | `src/App.tsx` | Modify | +30 | ❌ Pending |
-| `src/styles/` | Modify (themes) | +200 | ❌ Pending |
-| `src/types.ts` | Modify | +30 | ❌ Pending |
+| `src/types.ts` | Modify (+ sender_peer_key_hex, GroupInfo, GroupMember, GroupDetail) | +30 | ✅ Done |
 | `docs/` | Various updates | +200 | ⚠️ Partial |
 
 ---
