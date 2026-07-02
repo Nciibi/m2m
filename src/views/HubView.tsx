@@ -386,6 +386,19 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             </div>
             <div className="conv-status">{c.is_online ? <OnlineDot /> : <OfflineDot />}</div>
             <div className="conv-actions">
+              {/* Favorite toggle */}
+              <button className="btn btn--icon btn--icon-sm" title={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
+                onClick={(e) => toggleFav(c.peer_key_hex, e)}
+                aria-label={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
+                style={{ color: favorites.has(c.peer_key_hex) ? 'var(--color-warning)' : undefined }}>
+                {favorites.has(c.peer_key_hex) ? "★" : "☆"}
+              </button>
+              {/* Archive toggle */}
+              <button className="btn btn--icon btn--icon-sm" title={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}
+                onClick={(e) => toggleArch(c.peer_key_hex, e)}
+                aria-label={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}>
+                {archived.has(c.peer_key_hex) ? "📂" : "📁"}
+              </button>
               {isMuted ? (
                 <button className="btn btn--icon btn--icon-sm" title="Unmute conversation"
                   onClick={e => { e.stopPropagation(); onUnmute(c.peer_key_hex); }}
