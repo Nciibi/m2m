@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CipherHub | Secure Onboarding</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed-variant": "#3f465c",
+                      "on-secondary-fixed-variant": "#3c475a",
+                      "surface-dim": "#051424",
+                      "surface-container-highest": "#273647",
+                      "surface-container-high": "#1c2b3c",
+                      "secondary-container": "#3e495d",
+                      "primary-container": "#8083ff",
+                      "on-primary": "#1000a9",
+                      "error": "#ffb4ab",
+                      "on-secondary-fixed": "#111c2d",
+                      "surface-container-low": "#0d1c2d",
+                      "on-surface-variant": "#c7c4d7",
+                      "primary-fixed": "#e1e0ff",
+                      "on-tertiary": "#283044",
+                      "tertiary": "#bec6e0",
+                      "on-primary-fixed": "#07006c",
+                      "tertiary-fixed-dim": "#bec6e0",
+                      "surface-tint": "#c0c1ff",
+                      "outline-variant": "#464554",
+                      "on-secondary": "#263143",
+                      "inverse-on-surface": "#233143",
+                      "primary-fixed-dim": "#c0c1ff",
+                      "tertiary-container": "#8990a8",
+                      "surface-container": "#122131",
+                      "tertiary-fixed": "#dae2fd",
+                      "surface-bright": "#2c3a4c",
+                      "on-error": "#690005",
+                      "secondary-fixed": "#d8e3fb",
+                      "outline": "#908fa0",
+                      "on-surface": "#d4e4fa",
+                      "inverse-surface": "#d4e4fa",
+                      "on-primary-fixed-variant": "#2f2ebe",
+                      "surface-container-lowest": "#010f1f",
+                      "secondary-fixed-dim": "#bcc7de",
+                      "on-secondary-container": "#aeb9d0",
+                      "surface": "#051424",
+                      "primary": "#c0c1ff",
+                      "surface-variant": "#273647",
+                      "background": "#051424",
+                      "on-primary-container": "#0d0096",
+                      "on-tertiary-fixed": "#131b2e",
+                      "on-background": "#d4e4fa",
+                      "error-container": "#93000a",
+                      "on-error-container": "#ffdad6",
+                      "secondary": "#bcc7de",
+                      "on-tertiary-container": "#22293d",
+                      "inverse-primary": "#494bd6"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "container-padding-desktop": "32px",
+                      "unit": "4px",
+                      "gutter": "24px",
+                      "container-padding-mobile": "16px",
+                      "stack-lg": "32px",
+                      "stack-md": "16px",
+                      "stack-sm": "8px"
+              },
+              "fontFamily": {
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "title-md": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "label-sm": ["Inter"]
+              },
+              "fontSize": {
+                      "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "title-md": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-sm": ["12px", {"lineHeight": "1", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body {
+            background-color: #051424;
+            color: #d4e4fa;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        .glass-card {
+            background: rgba(18, 33, 49, 0.3);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .step-transition {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hidden-step {
+            opacity: 0;
+            transform: translateX(20px);
+            pointer-events: none;
+            position: absolute;
+        }
+
+        .active-step {
+            opacity: 1;
+            transform: translateX(0);
+            position: relative;
+        }
+
+        .sonar-container {
+            position: relative;
+            width: 160px;
+            height: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .primary-glow {
+            box-shadow: 0px 0px 24px rgba(192, 193, 255, 0.3);
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .protocol-chip {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-container-padding-mobile md:p-container-padding-desktop">
+<!-- Global Background Shader/Ambient -->
+<div class="fixed inset-0 z-0 opacity-20 pointer-events-none">
+
+</div>
+<!-- Main Onboarding Container -->
+<main class="z-10 w-full max-w-[500px]">
+<div class="glass-card rounded-3xl p-stack-lg shadow-2xl flex flex-col items-center text-center overflow-hidden">
+<!-- Dynamic Logo / Sonar Area -->
+<div class="mb-stack-lg sonar-container">
+
+<div class="relative z-10 w-24 h-24 bg-primary rounded-2xl flex items-center justify-center primary-glow rotate-12 transition-transform hover:rotate-0 duration-500">
+<span class="material-symbols-outlined text-on-primary text-[48px]" id="step-icon" style="font-variation-settings: 'FILL' 1;">
+                        rocket_launch
+                    </span>
+</div>
+</div>
+<!-- Content Area -->
+<div class="w-full min-h-[220px]" id="steps-wrapper">
+<!-- Step 1: Welcome -->
+<section class="step-transition active-step flex flex-col items-center" id="step-1">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary mb-stack-sm">
+                        Welcome to CipherHub
+                    </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-[320px] mb-stack-lg">
+                        Private E2EE messenger with no servers, no accounts, and no tracking.
+                    </p>
+<button class="w-full py-4 bg-primary text-on-primary font-bold rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] primary-glow" onclick="nextStep(2)">
+                        Get Started
+                    </button>
+</section>
+<!-- Step 2: Identity -->
+<section class="step-transition hidden-step flex flex-col items-center" id="step-2">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary mb-stack-sm">
+                        Your Identity is Local
+                    </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-[320px] mb-stack-lg">
+                        Your keys are generated on-device and never leave your hardware.
+                    </p>
+<div class="flex gap-4 w-full">
+<button class="flex-1 py-4 border border-outline-variant text-on-surface font-semibold rounded-xl hover:bg-white/5 transition-colors" onclick="nextStep(1)">
+                            Back
+                        </button>
+<button class="flex-1 py-4 bg-primary text-on-primary font-bold rounded-xl primary-glow hover:scale-[1.02] active:scale-[0.98] transition-all" onclick="nextStep(3)">
+                            Next
+                        </button>
+</div>
+</section>
+<!-- Step 3: Encryption -->
+<section class="step-transition hidden-step flex flex-col items-center" id="step-3">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary mb-stack-sm">
+                        End-to-End Encrypted
+                    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-[340px] mb-stack-lg">
+                        Powered by X3DH + Double Ratchet Signal protocol with Ed25519, X25519, and XChaCha20-Poly1305.
+                    </p>
+<div class="flex gap-4 w-full">
+<button class="flex-1 py-4 border border-outline-variant text-on-surface font-semibold rounded-xl hover:bg-white/5 transition-colors" onclick="nextStep(2)">
+                            Back
+                        </button>
+<button class="flex-1 py-4 bg-primary text-on-primary font-bold rounded-xl primary-glow hover:scale-[1.02] active:scale-[0.98] transition-all" onclick="nextStep(4)">
+                            Next
+                        </button>
+</div>
+</section>
+<!-- Step 4: Ready -->
+<section class="step-transition hidden-step flex flex-col items-center" id="step-4">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary mb-stack-sm">
+                        Ready to Go
+                    </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-[320px] mb-stack-lg">
+                        Share your invite link with a trusted peer to begin secure communication.
+                    </p>
+<button class="w-full py-4 bg-primary text-on-primary font-bold rounded-xl primary-glow hover:scale-[1.02] active:scale-[0.98] transition-all">
+                        Start Messaging
+                    </button>
+</section>
+</div>
+<!-- Progress Dots -->
+<div class="flex items-center justify-center gap-3 mt-stack-lg" id="progress-indicator">
+<!-- Dot 1 -->
+<div class="dot w-3 h-3 rounded-full bg-primary" data-step="1"></div>
+<!-- Dot 2 -->
+<div class="dot w-3 h-3 rounded-full bg-white/20" data-step="2"></div>
+<!-- Dot 3 -->
+<div class="dot w-3 h-3 rounded-full bg-white/20" data-step="3"></div>
+<!-- Dot 4 -->
+<div class="dot w-3 h-3 rounded-full bg-white/20" data-step="4"></div>
+</div>
+<!-- Security Footer Badge -->
+<div class="mt-stack-lg pt-stack-md border-t border-white/5 w-full">
+<div class="protocol-chip py-2 px-4 rounded-full inline-flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">
+                        X3DH • Double Ratchet • X25519 • XChaCha20
+                    </span>
+</div>
+</div>
+</div>
+</main>
+<script>
+        let currentStep = 1;
+        const icons = {
+            1: 'rocket_launch',
+            2: 'key',
+            3: 'lock',
+            4: 'check_circle'
+        };
+
+        function nextStep(step) {
+            // Hide all steps
+            for (let i = 1; i <= 4; i++) {
+                const el = document.getElementById(`step-${i}`);
+                el.classList.remove('active-step');
+                el.classList.add('hidden-step');
+            }
+
+            // Show current step
+            const currentEl = document.getElementById(`step-${step}`);
+            currentEl.classList.remove('hidden-step');
+            currentEl.classList.add('active-step');
+
+            // Update Icon
+            const iconEl = document.getElementById('step-icon');
+            iconEl.style.opacity = '0';
+            setTimeout(() => {
+                iconEl.innerText = icons[step];
+                iconEl.style.opacity = '1';
+            }, 200);
+
+            // Update Dots
+            const dots = document.querySelectorAll('.dot');
+            dots.forEach((dot, index) => {
+                const dotStep = index + 1;
+                dot.innerHTML = ''; // Clear previous state
+                dot.classList.remove('bg-primary', 'bg-white/20', 'flex', 'items-center', 'justify-center');
+                
+                if (dotStep < step) {
+                    // Completed
+                    dot.classList.add('bg-primary', 'flex', 'items-center', 'justify-center');
+                    dot.innerHTML = '<span class="material-symbols-outlined text-[10px] text-on-primary font-bold">check</span>';
+                } else if (dotStep === step) {
+                    // Active
+                    dot.classList.add('bg-primary');
+                } else {
+                    // Upcoming
+                    dot.classList.add('bg-white/20');
+                }
+            });
+
+            currentStep = step;
+        }
+
+        // Simple enter key progression
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && currentStep < 4) {
+                nextStep(currentStep + 1);
+            }
+        });
+    </script>
+</body></html>
