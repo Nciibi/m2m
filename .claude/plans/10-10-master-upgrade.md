@@ -204,31 +204,32 @@
 
 ## File Change Summary
 
-| File | Action | Est. Lines |
-|------|--------|:----------:|
-| `src-tauri/src/dht.rs` | **NEW** | 400 |
-| `src-tauri/src/lan_discovery.rs` | **NEW** | 200 |
-| `src-tauri/src/sync.rs` | **NEW** | 350 |
-| `src-tauri/src/group.rs` | **NEW** | 300 |
-| `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +250 |
-| `src-tauri/src/protocol.rs` | Modify (+ new packet types) | +60 |
-| `src-tauri/src/session.rs` | Modify (+ reconnect logic) | +100 |
-| `src-tauri/src/state.rs` | Modify (+ groups, sync, DHT) | +50 |
-| `src-tauri/src/storage.rs` | Modify (+ WAL, indexes) | +40 |
-| `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions) | +100 |
-| `src-tauri/src/commands/network.rs` | Modify (+ reconnect) | +60 |
-| `src-tauri/src/commands/vault.rs` | Modify (+ export/import) | +150 |
-| `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 |
-| `src-tauri/Cargo.toml` | Modify (+ deps) | +15 |
-| `src/views/ChatView.tsx` | Modify (major) | +400 |
-| `src/views/HubView.tsx` | Modify (major) | +200 |
-| `src/views/SetupView.tsx` | Modify (onboarding) | +100 |
-| `src/views/VaultView.tsx` | Modify (UX polish) | +50 |
-| `src/App.tsx` | Modify | +30 |
-| `src/styles/` | Modify (themes) | +200 |
-| `src/types.ts` | Modify | +30 |
-| `docs/` | Various updates | +200 |
-| **Total** | | **~3,385** |
+| File | Action | Est. Lines | Status |
+|------|--------|:----------:|:------:|
+| `src-tauri/src/dht.rs` | **NEW** | 400 | ✅ Done |
+| `src-tauri/src/lan_discovery.rs` | **NEW** | 200 | ✅ Done |
+| `src-tauri/src/sync.rs` | **NEW** | 350 | ❌ Pending |
+| `src-tauri/src/group.rs` | **NEW** | 300 | ❌ Pending |
+| `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +250 | ❌ Pending |
+| `src-tauri/src/protocol.rs` | Modify (+ typing indicator) | +60 | ❌ Pending |
+| `src-tauri/src/session.rs` | Modify (+ reconnect) | +100 | ✅ Done |
+| `src-tauri/src/state.rs` | Modify (+ groups, sync) | +50 | ❌ Pending |
+| `src-tauri/src/storage.rs` | Modify (+ WAL, indexes) | +40 | ✅ Done |
+| `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions) | +100 | ⚠️ Partially done |
+| `src-tauri/src/commands/network.rs` | Modify (+ reconnect) | +60 | ✅ Done |
+| `src-tauri/src/commands/vault.rs` | Modify (+ export/import) | +150 | ✅ Done |
+| `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ❌ Pending |
+| `src-tauri/src/reconnect.rs` | **NEW** | ~80 | ✅ Done |
+| `src-tauri/src/window_security.rs` | **NEW** | ~100 | ✅ Done |
+| `src-tauri/Cargo.toml` | Modify (+ deps) | +15 | ⚠️ Partial |
+| `src/views/ChatView.tsx` | Modify (major) | +400 | ⚠️ Partial |
+| `src/views/HubView.tsx` | Modify (major) | +200 | ❌ Pending |
+| `src/views/SetupView.tsx` | Modify (onboarding) | +100 | ❌ Pending |
+| `src/views/VaultView.tsx` | Modify (UX polish) | +50 | ❌ Pending |
+| `src/App.tsx` | Modify | +30 | ❌ Pending |
+| `src/styles/` | Modify (themes) | +200 | ❌ Pending |
+| `src/types.ts` | Modify | +30 | ❌ Pending |
+| `docs/` | Various updates | +200 | ⚠️ Partial |
 
 ---
 
