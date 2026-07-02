@@ -48,7 +48,7 @@ This plan details the gaps that prevent the app from achieving a **10/10** UI/UX
 
 | Task | Scope | Status | Acceptance Criteria |
 |------|-------|--------|----------------------|
-| Full‑Text Search | Add search input above message list. Query backend via new `search_messages` command (filter by text, case‑insensitive, limit 50). Highlight matches in rendered markdown. | ❌ Not started (no backend command, no UI) | Searching returns correct messages; UI highlights term |
+| Full‑Text Search | Add search input above message list. Query backend via new `search_messages` command (filter by text, case‑insensitive, limit 50). Highlight matches in rendered markdown. | ✅ Complete (backend `search_messages` in chat.rs + frontend search bar in ChatView with results list, Esc to close) | Searching returns correct messages; UI highlights term |
 | Emoji Picker Completion | Replace placeholder reaction UI with pop‑over picker (60-emoji grid in input toolbar). Allow selecting any Unicode emoji to insert into message text. | ✅ Complete (60 emoji grid in `ChatView`, emoji picker button in input toolbar) | Emojis insert into message text; picker dismisses on outside click |
 | Message Status Indicators | Show "sending" (clock icon) and "sent" (checkmark) per sent message. | ✅ Complete (msg-status system tracking in ChatView) | Status indicators shown on sent messages |
 | File Transfer Progress Bars | Animated progress bar during file send/receive (% complete, speed, ETA) using existing ProgressBar component. | ✅ Complete (listens to `m2m://transfer-progress`) | Live progress updates with speed + ETA shown |
