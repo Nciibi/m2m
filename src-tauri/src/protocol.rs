@@ -945,7 +945,7 @@ mod protocol_tests {
             sender_peer_key_hex: "alice".to_string(),
             chain_key: [0xAA; 32],
             message_number: 0,
-            signing_key: Some([0xBB; 32]),
+            signing_key: Some(vec![0xBB; 64]),
             verification_key: [0xCC; 32],
             signature: vec![0xDD; 64],
         };
