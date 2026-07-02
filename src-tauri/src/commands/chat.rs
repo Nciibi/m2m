@@ -141,6 +141,7 @@ pub async fn load_messages(
             deleted: m.deleted,
             expires_at: m.expires_at,
             reactions,
+            sender_peer_key_hex: String::new(),
         });
     }
     Ok(messages)
