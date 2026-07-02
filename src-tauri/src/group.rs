@@ -447,21 +447,11 @@ impl GroupManager {
         // For each existing member (excluding us and the new member):
         // We need to send THEIR sender key to the new member too,
         // but only the receiver chain (no signing key).
+        // NOTE: The new member needs each existing member's receiver chain,
+        // but we don't store the initial chain key for existing members (only
+        // the current receiver chain state). Phase 3 v2 should store initial
+        // keys alongside receiver chains to support this.
         let mut bundles = vec![their_own_bundle, our_bundle];
-        for member in &group.members {
-            if member.peer_key_hex == new_member_key_hex {
-                continue;
-            }
-            // This existing member's sender key info (from our receiver chains)
-            if let Some(_chain) = group.receiver_chains.get(&member.peer_key_hex) {
-                if let Some(verify_key) = group.verification_keys.get(&member.peer_key_hex) {
-                    // The new member needs each existing member's receiver chain
-                    // But we don't have the initial chain key for existing members
-                    // (we only have the current receiver chain state).
-                    // This is a design limitation — for phase 3, we store initial keys too.
-                }
-            }
-        }
 
         Ok(bundles)
     }
