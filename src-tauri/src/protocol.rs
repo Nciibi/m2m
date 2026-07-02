@@ -566,7 +566,8 @@ pub struct GroupSenderKeyData {
     /// Ed25519 signing key (64 bytes: seed + secret). Only the recipient of THIS bundle gets this.
     /// All other members get the verification_key instead.
     /// The signing key recipient can now send messages as this sender.
-    pub signing_key: Option<[u8; 64]>,
+    #[serde(default, with = "serde_bytes")]
+    pub signing_key: Option<Vec<u8>>,
     /// Ed25519 verification key (32 bytes). Everyone except the signing key recipient gets this.
     pub verification_key: [u8; 32],
     /// Ed25519 signature over (group_id || sender_peer_key_hex || chain_key).

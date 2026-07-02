@@ -792,6 +792,7 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
 ///
 /// Out-of-order messages are handled by caching intermediate message keys
 /// (same design as DoubleRatchet's skipped_keys cache).
+#[derive(Debug, Clone)]
 pub struct SenderKeyChain {
     chain_key: [u8; 32],
     message_number: u64,
@@ -802,6 +803,7 @@ pub struct SenderKeyChain {
     max_cache: usize,
 }
 
+#[derive(Debug, Clone)]
 struct CachedSenderKey {
     nonce: [u8; 24],
     key: [u8; 32],
