@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon } from "../components/ui/Icons";
+import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
+import { useTheme } from "../context/ThemeContext";
 
 export default function SettingsView() {
   const { identity, toasts, removeToast, setView } = useApp();
