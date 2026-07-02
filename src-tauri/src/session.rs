@@ -65,6 +65,10 @@ pub struct Session {
     our_identity_pub: [u8; 32],
     /// How many messages between DH ratchets (default 100). 0 = never ratchet.
     pub ratchet_interval: u64,
+    /// If peer is a synced multi-device, stores their device ID.
+    pub peer_sync_device_id: Option<String>,
+    /// If peer is a synced multi-device, stores their device name.
+    pub peer_sync_device_name: Option<String>,
 }
 
 impl Session {
@@ -94,6 +98,8 @@ impl Session {
             our_candidates: Vec::new(),
             our_identity_pub: [0u8; 32],
             ratchet_interval: 100,
+            peer_sync_device_id: None,
+            peer_sync_device_name: None,
         }
     }
 
