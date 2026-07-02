@@ -315,6 +315,23 @@ export default function SettingsView() {
               </div>
               <span className="settings-hint">Current: {resolvedTheme}</span>
             </div>
+            <div className="settings-divider" />
+            <div className="settings-row">
+              <span className="settings-label">Accent Color</span>
+              <input
+                type="color"
+                value={accentColor}
+                onChange={(e) => setAccentColor(e.target.value)}
+                style={{
+                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border-default)', cursor: 'pointer',
+                  background: 'none', padding: 2,
+                }}
+                aria-label="Accent color"
+              />
+              <span className="settings-mono" style={{ fontSize: 'var(--text-xs)' }}>{accentColor}</span>
+              <Button size="xs" variant="secondary" onClick={() => setAccentColor("#6366f1")}>Reset</Button>
+            </div>
           </div>
         </section>
 
