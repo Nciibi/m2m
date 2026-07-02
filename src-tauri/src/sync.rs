@@ -28,6 +28,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use sodiumoxide::crypto::hash::sha256;
+
 use crate::commands::ConnectionInfo;
 use crate::protocol::{
     self, PacketType, SyncDeviceInfo, SyncPayload, SyncPayloadType,
@@ -125,7 +127,7 @@ pub async fn generate_sync_invite(
     let token_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(&token);
 
-    let token_hash = crate::crypto::sha256(&token);
+    let token_hash = sha256::hash(&token);
 
     // Store pending invite
     let now = now_unix();
