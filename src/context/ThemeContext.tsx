@@ -1,0 +1,85 @@
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useApp } from "./AppContext";
+
+export type ThemeMode = "light" | "dark" | "system";
+
+interface ThemeContextValue {
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
+  resolvedTheme: "light" | "dark";
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error("useTheme() must be used within <ThemeProvider>");
+  return ctx;
+}
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { addToast } = useApp();
+  const [theme, setThemeState] = useState<ThemeMode>("system");
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark");
+  const [initialized, setInitialized] = useState(false);
+
+  const applyTheme = useCallback((mode: ThemeMode) => {
+    let resolved: "light" | "dark";
+    if (mode === "system") {
+      resolved = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } else {
+      resolved = mode;
+    }
+    document.documentElement.setAttribute("data-theme", resolved);
+    setResolvedTheme(resolved);
+  }, []);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const stored = await invoke<string>("get_theme_preference");
+        const validThemes: ThemeMode[] = ["light", "dark", "system"];
+        if (validThemes.includes(stored as ThemeMode)) {
+          setThemeState(stored as ThemeMode);
+          applyTheme(stored as ThemeMode);
+        }
+      } catch {
+        applyTheme("system");
+      } finally {
+        setInitialized(true);
+      }
+    };
+    loadTheme();
+  }, [applyTheme]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    applyTheme(theme);
+    invoke("set_theme_preference", { theme }).catch((e) => {
+      addToast("Failed to save theme: " + e, "error");
+    });
+  }, [theme, initialized, applyTheme, addToast]);
+
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const handler = (e: MediaQueryListEvent) => applyTheme("system");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [theme, applyTheme]);
+
+  const setTheme = useCallback((newTheme: ThemeMode) => {
+    setThemeState(newTheme);
+  }, []);
+
+  if (!initialized) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
