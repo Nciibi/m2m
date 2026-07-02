@@ -530,14 +530,6 @@ export default function ChatView() {
   );
 }
 
-function formatMsg(content: string): React.ReactNode {
-  const parts = content.split(/(`[^`]+`)/g);
-  if (parts.length === 1) return content;
-  return parts.map((p, i) => p.startsWith("`") && p.endsWith("`")
-    ? <code key={i} className="msg-code-inline">{p.slice(1, -1)}</code>
-    : p);
-}
-
 function SelfDestructTimer({ expiresAt }: { expiresAt: number }) {
   const [remaining, setRemaining] = useState(Math.max(0, expiresAt - Math.floor(Date.now() / 1000)));
 
