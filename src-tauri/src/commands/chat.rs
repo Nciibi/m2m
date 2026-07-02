@@ -488,7 +488,7 @@ pub async fn send_message_with_timer(
     let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
         Some(conn_arc) => {
             let mut conn = conn_arc.lock().await;
-            match conn.session.send_text_with_timer(&mut conn.write_half, &content, disappear_after).await {
+            match send_text_inner(&mut conn, &content, disappear_after) {
                 Ok(id) => (id, true),
                 Err(e) => {
                     tracing::warn!(peer = %peer_key_hex, error = %e, "send failed, queuing offline");
