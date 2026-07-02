@@ -176,17 +176,23 @@ export default function ChatView() {
     if (!text.trim() || sending) return;
     setSending(true);
     const content = text.trim().slice(0, 64 * 1024);
+    const tempId = `temp-${Date.now()}`;
+    // Show "Sending…" status immediately
+    setMsgStatus((prev) => ({ ...prev, [tempId]: "sending" }));
     try {
-      let msg: ChatMessage;
       if (timerSecs > 0) {
-        msg = await handleSendMessageWithTimer(content, timerSecs);
+        await handleSendMessageWithTimer(content, timerSecs);
       } else {
-        msg = await handleSendMessage(content);
+        await handleSendMessage(content);
       }
       setText("");
       setTimerSecs(0);
-      // Set message status to 'sent'
-      setMsgStatus((prev) => ({ ...prev, [msg.id]: "sent" }));
+      // Mark as "sent" — the real message will replace the temp ID
+      setMsgStatus((prev) => {
+        const next = { ...prev };
+        delete next[tempId];
+        return next;
+      });
     } finally { setSending(false); }
   };
 
