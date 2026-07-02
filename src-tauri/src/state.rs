@@ -337,6 +337,9 @@ pub struct AppState {
     // ─── Notifications ───
     /// Set of peer_key_hex values that are muted (no notifications).
     pub muted_conversations: RwLock<HashSet<String>>,
+    // ─── Multi-Device Sync ───
+    /// Manages sync device pairing, invites, and data exchange.
+    pub sync_manager: RwLock<crate::sync::SyncManager>,
 }
 
 impl AppState {

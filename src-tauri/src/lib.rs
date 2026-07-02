@@ -34,6 +34,7 @@ mod state;
 mod storage;
 mod stun;
 mod tor;
+mod sync;
 mod window_security;
 
 use std::sync::Arc;
