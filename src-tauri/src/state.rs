@@ -380,6 +380,7 @@ impl AppState {
             lan_state: RwLock::new(None),
             lan_cancel: RwLock::new(None),
             last_optimize_at: RwLock::new(0),
+            muted_conversations: RwLock::new(HashSet::new()),
         }
     }
 
