@@ -521,7 +521,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return (
     <ChatContext.Provider value={{
       connection, isConnecting, reconnecting, reconnectAttempt, messages, setMessages, fileRequests,
-      conversations, activeConversationId,
+      conversations, activeConversationId, typingPeers,
       inviteToConnect, setInviteToConnect, inviteValid,
       namingMyName, setNamingMyName, namingTheirName, setNamingTheirName,
       generatedInvite,
