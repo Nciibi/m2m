@@ -328,6 +328,64 @@ export default function ChatView() {
         </div>
       )}
 
+      {/* Message search bar */}
+      {showSearch && (
+        <div style={{ padding: 'var(--space-sm) var(--space-2xl)', display: 'flex', gap: 'var(--space-xs)', alignItems: 'center', borderBottom: '1px solid var(--color-border-default)' }}>
+          <input
+            type="text"
+            placeholder="Search messages… (press Esc to close)"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (e.target.value.length >= 2) doSearch(e.target.value);
+            }}
+            onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); setSearchResults([]); } }}
+            className="search-input"
+            autoFocus
+            style={{
+              flex: 1, background: 'var(--color-bg-input)', border: '1px solid var(--color-border-default)',
+              borderRadius: 'var(--radius-md)', padding: 'var(--space-xs) var(--space-sm)',
+              color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: 'var(--text-sm)',
+              outline: 'none',
+            }}
+          />
+          {isSearching && <span className="spinner--sm" />}
+          {searchResults.length > 0 && (
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+              {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          <button className="btn btn--icon btn--icon-sm" onClick={() => { setShowSearch(false); setSearchQuery(""); setSearchResults([]); }} aria-label="Close search">✕</button>
+        </div>
+      )}
+      {searchResults.length > 0 && (
+        <div style={{ padding: 'var(--space-sm) var(--space-2xl)', borderBottom: '1px solid var(--color-border-default)', maxHeight: 150, overflowY: 'auto' }}>
+          {searchResults.map((r) => (
+            <div key={r.id} style={{ fontSize: 'var(--text-sm)', padding: '2px 0', cursor: 'pointer', color: 'var(--color-text-secondary)' }}
+              onClick={() => {
+                setSearchQuery("");
+                setSearchResults([]);
+                setShowSearch(false);
+              }}>
+              <span className="msg-content">{renderMarkdown(r.content.substring(0, 100))}</span>
+              <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginLeft: 'var(--space-xs)' }}>
+                {new Date(r.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Typing indicator */}
+      {typingPeers.length > 0 && (
+        <div className="typing-indicator">
+          <span className="typing-indicator__dots"><span /><span /><span /></span>
+          <span className="typing-indicator__text">
+            {activeConversationId && typingPeers.includes(activeConversationId) ? "Peer is typing…" : "Someone is typing…"}
+          </span>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="msg-area" ref={msgRef} onScroll={onScroll} id="message-list">
         {loadingOlder && <div className="msg-loading-older">Loading older messages…</div>}
