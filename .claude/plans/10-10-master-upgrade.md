@@ -273,8 +273,6 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 criterion = { version = "0.5", optional = true }
 # Audio capture (voice messages)
 # cpal = "0.15"                  ❌ Pending
-# System tray
-# tauri-plugin-tray = "2"        ❌ Pending
 # Updater
 # tauri-plugin-updater = "2"     ❌ Pending
 # Notifications — ✅ Already added
