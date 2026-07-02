@@ -1823,6 +1823,68 @@
   align-items: center;
 }
 
+/* ─── Search bar ─── */
+.search-bar {
+  padding: var(--space-sm) var(--space-2xl);
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.search-bar__input {
+  flex: 1;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.search-bar__input:focus {
+  border-color: var(--color-border-active);
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+}
+
+.search-bar__count {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.search-results {
+  padding: var(--space-sm) var(--space-2xl);
+  border-bottom: 1px solid var(--color-border-default);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  font-size: var(--text-sm);
+  padding: 4px 0;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  transition: color 150ms ease;
+}
+
+.search-result-item:hover {
+  color: var(--color-text-primary);
+}
+
+.search-result-time {
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 /* ─── Progress Bar compact ─── */
 .file-progress-meta {
   font-size: var(--text-xs);
