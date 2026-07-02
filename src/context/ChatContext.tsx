@@ -67,7 +67,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const { addToast, setView } = useApp();
 
   // ─── State ───
-  const [connection, setConnection] = useState<ConnectionInfo | null>(null);
+  // Expose setMessages for ChatView pagination / self-destruct cleanup
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
