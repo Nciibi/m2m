@@ -281,6 +281,9 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
 }
 
 function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
+  // Sort conversations: most recent first
+  const sorted = [...conversations].sort((a: any, b: any) => (b.last_message_at || 0) - (a.last_message_at || 0));
+
   return (
     <div className="conv-list">
       {conversations.length > 0 && (
@@ -307,7 +310,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
           )}
         </div>
       ) : (
-        conversations.map((c: any) => {
+        sorted.map((c: any) => {
           const isMuted = mutedConversations?.includes(c.peer_key_hex);
           return (
           <div key={c.id} className="conv-item" onClick={() => onOpenChat(c)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpenChat(c)}>
@@ -319,9 +322,14 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             <div className="conv-body">
               <div className="conv-top">
                 <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <span style={{ marginLeft: 6, fontSize: '0.65rem', opacity: 0.6 }}>🔇</span> : null}</span>
-                {c.last_message_at && <span className="conv-time">{formatTime(c.last_message_at)}</span>}
+                {c.last_message_at && <span className="relative-time">{formatTime(c.last_message_at)}</span>}
               </div>
               <span className="conv-preview">{c.last_message_preview || "No messages yet."}</span>
+              {!c.is_online && c.last_message_at && (
+                <span className="relative-time" style={{ marginTop: 2 }}>
+                  Last seen {formatTime(c.last_message_at)}
+                </span>
+              )}
             </div>
             <div className="conv-status">{c.is_online ? <OnlineDot /> : <OfflineDot />}</div>
             <div className="conv-actions">
