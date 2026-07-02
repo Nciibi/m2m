@@ -88,12 +88,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(newTheme);
   }, []);
 
+  const setAccentColor = useCallback((color: string) => {
+    setAccentColorState(color);
+    applyAccent(color);
+    invoke("set_theme_preference", { theme: theme, accentColor: color }).catch(() => {});
+  }, [theme, applyAccent]);
+
   if (!initialized) {
     return <>{children}</>;
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, accentColor, setAccentColor }}>
       {children}
     </ThemeContext.Provider>
   );
