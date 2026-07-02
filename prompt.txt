@@ -1,143 +1,120 @@
-You are the Lead Product Designer, Design System Architect, UX Researcher, Senior Frontend Engineer, and Creative Director for this project.
+# Mission: Generate Interface Implementation Prompts
 
-Your task is not to generate implementation code.
+The UI/UX Design Bible is now the authoritative specification for this project.
 
-Your task is to produce the complete UI/UX Design Bible for the application.
+Your task is **NOT** to implement the interfaces.
 
-This documentation will become the single source of truth from which the entire interface will later be implemented.
+Your task is to generate a complete set of **implementation prompts**, one Markdown document per interface.
 
-The quality target is:
+These prompts will later be consumed by autonomous coding agents.
 
-10/10 UI
-S+ UX
-Production-ready
-Pixel-perfect
-Zero ambiguity
+Each prompt should contain every instruction required for an implementation agent to build **only that interface** while strictly following the Design Bible.
 
-The documentation should be detailed enough that another engineering team could build the application without ever asking a design question.
+---
 
-Every screen must specify
+# Folder Structure
 
-For every single screen, document:
+Create
 
-Purpose
-User goals
-Layout
-Grid
-Exact component hierarchy
-Every visible element
-Exact placement of every element
-Alignment
-Spacing
-Padding
-Margins
-Typography
-Font sizes
-Font weights
-Colors
-Icons
-Button text
-Placeholder text
-Empty states
-Loading states
-Error states
-Success states
-Tooltips
-Context menus
-Keyboard shortcuts
-Mouse interactions
-Animations
-Motion timing
-Accessibility
-Responsive behavior
-Performance considerations
-Security indicators
-Privacy indicators
-Edge cases
-Visual hierarchy
-User emotion
-Interaction rationale
+```text
+docs/ui/implementation_prompts/
+```
 
-Nothing should be left unspecified.
-
-Every component must specify
-
-Every reusable component should have its own specification.
-
-Document:
-
-Purpose
-Usage
-Variants
-States
-Disabled behavior
-Loading behavior
-Hover
-Focus
-Pressed
-Keyboard interaction
-Animation
-Accessibility
-Minimum size
-Maximum size
-Responsive rules
-Visual examples (ASCII if needed)
-Anti-patterns
-Design rationale
-Every flow
-
-Document every user flow from beginning to end.
+Inside it create one Markdown file for every interface.
 
 Examples:
 
-First launch
-Registration
-Login
-Identity verification
-Adding contacts
-Creating groups
-Sending files
-Voice messages
-Video calls (future)
-Updating profile
-Security settings
+```text
+01_SetupView.md
+02_VaultView.md
+03_HubView.md
+04_ConnectTab.md
+05_ChatsTab.md
+06_NearbyTab.md
+07_FamilyTab.md
+08_ChatView.md
+09_GroupChatView.md
+10_PeerProfile.md
+11_GroupInfoPanel.md
+12_SettingsView.md
+13_SecuritySettings.md
+14_ThemeSettings.md
+15_Onboarding.md
+16_CreateGroupModal.md
+17_InvitePeerModal.md
+18_FileTransfer.md
+19_SearchOverlay.md
+20_Notifications.md
+21_EmojiPicker.md
+22_MessageBubble.md
+23_ConversationItem.md
+24_ContextMenus.md
+25_Dialogs.md
+26_Toasts.md
+27_LoadingStates.md
+28_EmptyStates.md
+29_ErrorStates.md
+30_Shortcuts.md
+```
 
-Every click should be documented.
+Create additional prompt files whenever an interface deserves its own implementation document.
 
-Design Language
+---
 
-Specify every design token.
+# Every Prompt Must Include
 
-Including:
+Every Markdown file should instruct an implementation agent to build **only that interface**.
 
-every color
-every spacing value
-every shadow
-every blur
-every animation
-every easing curve
-every icon size
-every border radius
-every font
-every font weight
-every scrollbar
-every transition
-every tooltip
-every dialog
+Each file must contain:
 
-Nothing should be left to interpretation.
+* Mission
+* Scope
+* Files expected to be modified
+* Components to reuse
+* Components to create
+* Layout hierarchy
+* Pixel-perfect implementation requirements
+* Exact spacing rules
+* Typography
+* Colors
+* Icons
+* Hover states
+* Focus states
+* Active states
+* Disabled states
+* Loading states
+* Empty states
+* Error states
+* Animations
+* Keyboard shortcuts
+* Mouse interactions
+* Accessibility
+* Responsive behavior
+* Performance considerations
+* Security considerations (where applicable)
+* Edge cases
+* Acceptance criteria
+* Self-review checklist
 
-Review Loop
+---
 
-For every document, ask yourself:
+# Important Rules
 
-Could another engineer misunderstand this?
-Is any spacing unspecified?
-Is any animation unspecified?
-Is any button text unspecified?
-Is any icon unspecified?
-Is any layout ambiguous?
-Is any interaction missing?
-Is any edge case undocumented?
+Each prompt must clearly instruct the implementation agent:
 
-If yes, continue expanding the document until the answer becomes No.
+* Never redesign the interface.
+* Never improvise.
+* Never invent layouts.
+* Follow the Design Bible exactly.
+* Reuse existing components whenever possible.
+* Preserve application architecture.
+* Preserve functionality.
+* Produce production-quality code.
+
+---
+
+# Acceptance Criteria
+
+Every prompt should end with a checklist that the implementation agent must satisfy before considering the interface complete.
+
+The prompts should be detailed enough that a coding agent can implement the interface without referring back to any other documentation except the Design Bible.
