@@ -506,15 +506,15 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
             </div>
             <div className="conv-preview">
               {peer.address}
-              <span className={`badge badge--${peer.method === "lan" ? "info" : "warning"}`} style={{ marginLeft: 'var(--space-xs)', fontSize: '0.7rem' }}>
+              <span className={`badge badge--${peer.method === "lan" ? "info" : "warning"} badge--inline`}>
                 {peer.method === "lan" ? "LAN" : "DHT"}
               </span>
             </div>
-            <div className="conv-preview" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+            <div className="conv-preview conv-preview--mono">
               {peer.id_hex.slice(0, 16)}...
             </div>
           </div>
-          <div className="conv-status" style={{ gap: 'var(--space-xxs)' }}>
+          <div className="conv-status conv-status--actions">
             <Button
               size="xs"
               onClick={() => handleConnectPeer(peer.address)}

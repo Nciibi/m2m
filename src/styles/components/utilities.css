@@ -212,10 +212,25 @@
   margin-top: 1px;
 }
 
+.conv-preview--mono {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
 .conv-status {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+}
+
+.conv-status--actions {
+  gap: var(--space-xxs);
+}
+
+.badge--inline {
+  margin-left: var(--space-xs);
+  font-size: 0.65rem;
 }
 
 .conv-actions {
