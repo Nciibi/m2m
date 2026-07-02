@@ -290,6 +290,8 @@ pub struct AppState {
     pub storage_key: RwLock<Option<crate::secure_key::StorageKey>>,
     /// Whether the vault has been unlocked with a passphrase.
     pub vault_unlocked: RwLock<bool>,
+    /// Whether the first-run onboarding has been shown.
+    pub first_run: RwLock<bool>,
     /// Whether a vault passphrase has been set (first-run detection).
     pub vault_initialized: RwLock<bool>,
     /// Disovered public IP address (via STUN).
