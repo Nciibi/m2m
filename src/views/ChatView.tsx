@@ -249,6 +249,28 @@ export default function ChatView() {
         </div>
       )}
 
+      {/* File transfer progress */}
+      {Object.keys(fileProgress).length > 0 && (
+        <div className="file-progress-area">
+          {Object.values(fileProgress).filter((fp) => fp.state !== "completed" && fp.state !== "cancelled").map((fp) => (
+            <div key={fp.transfer_id} className="file-progress-item">
+              <div className="file-progress-top">
+                <span className="file-progress-name"><FileIcon size={16} color="var(--color-accent-bright)" /> {fp.filename}</span>
+                <span className="file-progress-meta">{fmt(fp.total_size)}</span>
+              </div>
+              <ProgressBar value={fp.chunks_completed} max={Math.max(fp.chunks_total, 1)} variant={fp.state === "cancelled" ? "danger" : "default"} />
+              <div className="file-progress-bottom">
+                <span className={`badge badge--${fp.state === "completed" ? "success" : fp.state === "cancelled" ? "danger" : "info"}`}>{fp.state}</span>
+                <span className="file-progress-speed">
+                  {fp.speed_bytes_per_sec > 0 ? `${fmt(fp.speed_bytes_per_sec)}/s` : ""}
+                  {fp.estimated_remaining_secs > 0 && fp.state === "transferring" ? ` · ${Math.round(fp.estimated_remaining_secs)}s remaining` : ""}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Messages */}
       <div className="msg-area" ref={msgRef} onScroll={onScroll} id="message-list">
         {loadingOlder && <div className="msg-loading-older">Loading older messages…</div>}
