@@ -148,22 +148,91 @@ export default function HubView() {
 function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity }: any) {
   const [generating, setGenerating] = useState(false);
   const [fpCopied, setFpCopied] = useState(false);
-  const handleGenerate = async () => { setGenerating(true); try { await onGenerateInvite(); } finally { setGenerating(false); } };
+  const [inviteHistory, setInviteHistory] = useState<string[]>([]);
+  const [inviteCreatedAt, setInviteCreatedAt] = useState<number | null>(null);
+  const [inviteExpiry, setInviteExpiry] = useState<number>(60);
+  const [isListening, setIsListening] = useState(false);
+  const [expiryRemaining, setExpiryRemaining] = useState<number>(0);
+
+  // Check if we're listening
+  useEffect(() => {
+    invoke("get_listen_address").then((addr: any) => {
+      setIsListening(!!addr && addr !== "Not listening");
+    }).catch(() => {});
+  }, []);
+
+  // Invite countdown timer
+  useEffect(() => {
+    if (!inviteCreatedAt) { setExpiryRemaining(0); return; }
+    const update = () => {
+      const elapsed = (Date.now() / 1000) - inviteCreatedAt;
+      const rem = Math.max(0, inviteExpiry * 60 - elapsed);
+      setExpiryRemaining(rem);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [inviteCreatedAt, inviteExpiry]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await onGenerateInvite();
+      setInviteCreatedAt(Date.now() / 1000);
+      setInviteExpiry(60);
+      setIsListening(true);
+      // Add to invite history
+      setInviteHistory((prev) => {
+        const next = [generatedInvite || `invite-${Date.now()}`, ...prev].slice(0, 5);
+        return next;
+      });
+    } finally { setGenerating(false); }
+  };
 
   return (
     <div className="centered-view">
       <div className="invite-section">
         <Card header={{ icon: <PlusIcon size={18} color="var(--color-accent-bright)" />, title: "Host a Connection" }} description="Generate a one-time signed invite for a peer to connect to you securely.">
+          {isListening && (
+            <div className="listening-indicator">
+              <span className="listening-indicator__dot" />
+              Listening for incoming connections
+            </div>
+          )}
           {!generatedInvite ? (
             <Button id="generate-invite-btn" onClick={handleGenerate} loading={generating}>Generate Invite Link</Button>
           ) : (
-            <div className="invite-output">
-              <div className="invite-output__field">
-                <span className="invite-output__text">{generatedInvite}</span>
+            <>
+              <div className="invite-output">
+                <div className="invite-output__field">
+                  <span className="invite-output__text">{generatedInvite}</span>
+                </div>
+                <button className={`btn btn--icon ${copied ? 'btn--icon-copied' : ''}`} onClick={onCopyInvite} id="copy-invite-btn" aria-label="Copy invite">
+                  {copied ? <span className="copied-pop"><CheckIcon size={18} /></span> : <CopyIcon size={18} />}
+                </button>
               </div>
-              <button className={`btn btn--icon ${copied ? 'btn--icon-copied' : ''}`} onClick={onCopyInvite} id="copy-invite-btn" aria-label="Copy invite">
-                {copied ? <span className="copied-pop"><CheckIcon size={18} /></span> : <CopyIcon size={18} />}
-              </button>
+              {expiryRemaining > 0 && (
+                <div className="invite-countdown">
+                  <ClockIcon size={14} />
+                  Expires in {Math.floor(expiryRemaining / 60)}m:{Math.floor(expiryRemaining % 60).toString().padStart(2, "0")}
+                </div>
+              )}
+            </>
+          )}
+          {inviteHistory.length > 0 && (
+            <div className="invite-history">
+              <div className="invite-history__title">Recent Invites</div>
+              {inviteHistory.map((inv, i) => (
+                <div key={i} className="invite-history__item" onClick={() => {
+                  navigator.clipboard.writeText(inv);
+                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                  }
+                }}>
+                  <span>{inv.substring(0, 40)}…</span>
+                  <CopyIcon size={12} />
+                </div>
+              ))}
             </div>
           )}
           {networkSettings?.tor_enabled && !privateMode && generatedInvite && (
