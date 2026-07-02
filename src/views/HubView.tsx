@@ -123,6 +123,7 @@ export default function HubView() {
             setInviteToConnect={setInviteToConnect} onConnect={handleConnect}
             setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
             networkSettings={networkSettings} privateMode={privateMode} identity={identity}
+            securityConfig={securityConfig} scheduleClipboardClear={scheduleClipboardClear}
           />
         ) : tab === "nearby" ? (
           <NearbyTab
