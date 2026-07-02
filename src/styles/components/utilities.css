@@ -1969,6 +1969,98 @@
   display: block;
 }
 
+/* ─── Setup Icon Container (replaces old setup-icon__glow) ─── */
+.setup-icon__container {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-2xl);
+  background: var(--color-accent-gradient);
+  box-shadow: var(--shadow-accent-strong), 0 0 60px var(--color-accent-glow);
+}
+
+.sonar-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: calc(var(--radius-2xl) + 4px);
+  border: 2px solid rgba(99, 102, 241, 0.2);
+  animation: sonarRing 2.5s var(--ease-out-expo) infinite;
+  pointer-events: none;
+}
+.sonar-ring--2 { animation-delay: 0.6s; border-width: 1.5px; }
+.sonar-ring--3 { animation-delay: 1.2s; border-width: 1px; }
+
+.setup-emoji {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.setup-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  text-align: center;
+  margin-top: var(--space-lg);
+  max-width: 400px;
+}
+
+.setup-desc {
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 360px;
+  margin-top: var(--space-xs);
+}
+
+.setup-step-content {
+  animation: slideInUp 0.5s var(--ease-out-expo) both;
+}
+.setup-step-content--left {
+  animation-name: slideInLeft;
+}
+.setup-step-content--right {
+  animation-name: slideInRight;
+}
+
+/* ─── Step Indicator ─── */
+.step-indicator {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-xl);
+  align-items: center;
+}
+
+.step-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 2px solid var(--color-border-default);
+  transition: all var(--transition-base);
+}
+
+.step-dot--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.step-dot--done {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.onboarding-badge {
+  margin-top: var(--space-2xl);
+}
+
 /* ─── Onboarding ─── */
 .onboarding-steps {
   display: flex;
