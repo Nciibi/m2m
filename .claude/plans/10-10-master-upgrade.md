@@ -205,7 +205,7 @@
 |------|--------|:----------:|:------:|
 | `src-tauri/src/dht.rs` | **NEW** | 400 | ✅ Done |
 | `src-tauri/src/lan_discovery.rs` | **NEW** | 200 | ✅ Done |
-| `src-tauri/src/sync.rs` | **NEW** | 350 | ❌ Pending |
+| `src-tauri/src/sync.rs` | **NEW** | 440 | ✅ Done |
 | `src-tauri/src/group.rs` | **NEW** | 300 | ❌ Pending |
 | `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +250 | ❌ Pending |
 | `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, + typing indicator) | +80 | ⚠️ Partial |
