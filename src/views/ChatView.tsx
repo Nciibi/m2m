@@ -8,6 +8,7 @@ import {
   SendIcon, AttachIcon, FileIcon, ArrowDownIcon,
   SmileyIcon, CheckDoubleIcon, ClockIcon,
 } from "../components/ui/Icons";
+import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
