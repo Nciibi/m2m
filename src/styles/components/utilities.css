@@ -1975,6 +1975,17 @@
   align-items: center;
 }
 
+/* ─── Color Picker ─── */
+.color-picker {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-default);
+  cursor: pointer;
+  background: none;
+  padding: 2px;
+}
+
 /* ─── Search bar ─── */
 .search-bar {
   padding: var(--space-sm) var(--space-2xl);
