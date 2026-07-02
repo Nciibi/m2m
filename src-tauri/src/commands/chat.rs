@@ -765,6 +765,30 @@ pub async fn get_muted_conversations(
     Ok(muted.iter().cloned().collect())
 }
 
+/// Toggle favorite status for a conversation.
+#[tauri::command]
+pub async fn toggle_favorite(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<bool, String> {
+    let ms = state.message_store.lock().await;
+    let store = ms.as_ref().ok_or("message store not initialised")?;
+    let new_val = store.toggle_favorite(&peer_key_hex).map_err(|e| format!("db error: {e}"))?;
+    Ok(new_val)
+}
+
+/// Toggle archive status for a conversation.
+#[tauri::command]
+pub async fn toggle_archive(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<bool, String> {
+    let ms = state.message_store.lock().await;
+    let store = ms.as_ref().ok_or("message store not initialised")?;
+    let new_val = store.toggle_archive(&peer_key_hex).map_err(|e| format!("db error: {e}"))?;
+    Ok(new_val)
+}
+
 /// Send typing indicator to a peer (fire-and-forget).
 #[tauri::command]
 pub async fn send_typing_indicator(
