@@ -501,6 +501,12 @@ impl MessageStore {
                 [],
             )?;
         }
+        if !existing_columns.contains(&"is_favorite".to_string()) {
+            conn.execute("ALTER TABLE conversations ADD COLUMN is_favorite INTEGER DEFAULT 0", [])?;
+        }
+        if !existing_columns.contains(&"archived".to_string()) {
+            conn.execute("ALTER TABLE conversations ADD COLUMN archived INTEGER DEFAULT 0", [])?;
+        }
         Ok(())
     }
 
