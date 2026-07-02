@@ -378,12 +378,12 @@ impl GroupManager {
     }
 
     /// Add a new member to an existing group.
-    /// Returns (group_id, bundles_to_send) where bundles are sent over the
-    /// new member's 1:1 DR session.
+    /// Returns bundles to send over the new member's 1:1 DR session.
     pub fn add_member(
         &mut self,
         group_id: &str,
         new_member_key_hex: &str,
+        our_peer_key_hex: &str,
         added_at: u64,
     ) -> Result<Vec<GroupSenderKeyData>, String> {
         let group = self
