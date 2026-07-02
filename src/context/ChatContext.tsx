@@ -344,8 +344,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (view === "hub") loadConversations();
   }, [view, loadConversations]);
 
-  // ─── Tauri event listeners ───
+  // ─── Notification permission + muted conversations ───
   const [notifPermission, setNotifPermission] = useState(false);
+  const [mutedConversations, setMutedConversations] = useState<string[]>([]);
+
+  const loadMutedConversations = useCallback(async () => {
+    try { setMutedConversations(await invoke<string[]>("get_muted_conversations")); } catch { /* noop */ }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -356,9 +361,35 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => { loadMutedConversations(); }, [loadMutedConversations]);
+
+  const handleMuteConversation = useCallback(async (peerKeyHex: string) => {
+    try { await invoke("mute_conversation", { peerKeyHex }); await loadMutedConversations(); } catch { /* noop */ }
+  }, [loadMutedConversations]);
+
+  const handleUnmuteConversation = useCallback(async (peerKeyHex: string) => {
+    try { await invoke("unmute_conversation", { peerKeyHex }); await loadMutedConversations(); } catch { /* noop */ }
+  }, [loadMutedConversations]);
+
+  // ─── Tauri event listeners ───
   useEffect(() => {
     const unlistenMsg = listen<any>("m2m://message", (event) => {
       setMessages((prev) => [...prev, event.payload.message]);
+
+      // Send native OS notification if:
+      // 1. Notification permission granted
+      // 2. Not currently viewing this conversation
+      // 3. Conversation is not muted
+      const peerKeyHex: string = event.payload.peer_key_hex;
+      if (notifPermission && peerKeyHex !== activeConversationId && !mutedConversations.includes(peerKeyHex)) {
+        const peerFingerprint = event.payload.peer_fingerprint ?? event.payload.message?.peer_fingerprint;
+        const displayName = peerFingerprint
+          ? peerFingerprint.substring(0, 8) + "…"
+          : peerKeyHex.substring(0, 8) + "…";
+        import("@tauri-apps/plugin-notification").then(({ sendNotification }) => {
+          sendNotification({ title: "M2M", body: `New message from ${displayName}` });
+        });
+      }
     });
 
     const unlistenConn = listen<any>("m2m://connection", async (event) => {
@@ -466,7 +497,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unlistenReconnectAttempt.then((f) => f());
       unlistenDelete.then((f) => f());
     };
-  }, [setView, notifPermission]);
+  }, [setView, notifPermission, activeConversationId, mutedConversations]);
 
   return (
     <ChatContext.Provider value={{
@@ -482,6 +513,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       handleDeleteConversation,
       handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
       handleSendMessageWithTimer, handleEditMessage, handleDeleteMessage,
+      mutedConversations, handleMuteConversation, handleUnmuteConversation,
     }}>
       {children}
     </ChatContext.Provider>
