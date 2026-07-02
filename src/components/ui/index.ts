@@ -8,3 +8,4 @@ export type { ToastData } from "./Toast";
 export { default as Select } from "./Select";
 export { default as LoadingSpinner } from "./LoadingSpinner";
 export { default as ProgressBar } from "./ProgressBar";
+export { default as UpdateBanner } from "./UpdateBanner";
