@@ -69,9 +69,11 @@ function App() {
     <AppProvider>
       <VaultProvider>
         <SettingsProvider>
-          <ChatProvider>
-            <AppInner />
-          </ChatProvider>
+          <ThemeProvider>
+            <ChatProvider>
+              <AppInner />
+            </ChatProvider>
+          </ThemeProvider>
         </SettingsProvider>
       </VaultProvider>
     </AppProvider>
