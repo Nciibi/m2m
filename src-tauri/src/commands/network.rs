@@ -23,7 +23,7 @@ use crate::state::{AppState, PeerConnection, IncomingFileTransfer};
 use crate::stun;
 
 use super::util;
-use super::{ConnectionEvent, ConnectionInfo, FileRequestEvent, InviteInfo, MessageEvent, ChatMessage};
+use super::{ConnectionEvent, ConnectionInfo, FileRequestEvent, InviteInfo, MessageEvent, ChatMessage, GroupEvent, GroupMessageEvent};
 
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
