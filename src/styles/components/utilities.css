@@ -1542,3 +1542,271 @@
   color: var(--color-text-secondary);
   cursor: pointer;
 }
+
+/* ─── Sender label (group messages) ─── */
+
+.msg-sender-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-accent-bright);
+  margin-bottom: 2px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.msg-bubble--sent .msg-sender-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ─── Emoji Picker (input toolbar) ─── */
+
+.emoji-picker-btn {
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  padding: 10px;
+  min-width: 42px;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  font-family: inherit;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.emoji-picker-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-active);
+  color: var(--color-text-primary);
+}
+
+.emoji-picker-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  animation: fadeIn 0.15s var(--ease-out-expo);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.emoji-picker-dropdown button {
+  all: unset;
+  cursor: pointer;
+  font-size: 1.3rem;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  text-align: center;
+  transition: transform 0.1s ease, background 0.1s ease;
+  line-height: 1;
+}
+
+.emoji-picker-dropdown button:hover {
+  transform: scale(1.3);
+  background: var(--color-bg-hover);
+}
+
+/* ─── Message Status Icons ─── */
+
+.msg-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.6rem;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.msg-status--sending {
+  color: var(--color-text-muted);
+}
+
+.msg-status--sent {
+  color: var(--color-text-muted);
+}
+
+.msg-status--delivered {
+  color: var(--color-accent-bright);
+}
+
+.msg-status--read {
+  color: var(--color-accent-bright);
+}
+
+/* ─── File Transfer Progress in Chat ─── */
+
+.file-progress-area {
+  padding: var(--space-xs) var(--space-2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.file-progress-item {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--text-sm);
+  animation: msgSlide 300ms ease;
+}
+
+.file-progress-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-progress-name {
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.file-progress-meta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.file-progress-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.file-progress-speed {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* ─── Relative time / last-seen ─── */
+
+.relative-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* ─── Invite countdown ─── */
+
+.invite-countdown {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  margin-top: var(--space-xs);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+}
+
+/* ─── Invite history ─── */
+
+.invite-history {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+}
+
+.invite-history__title {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+}
+
+.invite-history__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xxs) var(--space-xs);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.invite-history__item:hover {
+  background: var(--color-bg-hover);
+}
+
+/* ─── Listening indicator ─── */
+
+.listening-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--text-xs);
+  color: var(--color-success);
+  margin-top: var(--space-xs);
+  font-weight: 500;
+}
+
+.listening-indicator__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+  animation: pulseRing 2s ease infinite;
+}
+
+/* ─── Paste button ─── */
+
+.paste-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.paste-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* ─── Fingerprint hint in vault ─── */
+
+.fp-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: var(--space-xs);
+  font-family: var(--font-mono);
+  opacity: 0.7;
+}
