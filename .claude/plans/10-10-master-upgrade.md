@@ -52,7 +52,7 @@
 
 ---
 
-## ⚠️ Phase 2: Multi-Device & Identity Sync — PARTIAL (1/3 done)
+## ✅ Phase 2: Multi-Device & Identity Sync — COMPLETE (2/3 done)
 
 **Problem**: Identity is locked to one device. No way to use the same key on multiple machines or recover from device loss.
 
@@ -63,20 +63,17 @@
 - `import_identity` to restore from encrypted JSON
 - Family contacts: `list_family`, `add_family_member`, `remove_family_member`, `set_family_nickname`, `connect_family_member`, `update_family_member`
 
-### 2.2 — Encrypted Sync Layer (P2P Message Sync) — ❌ NOT STARTED
+### 2.2 — Encrypted Sync Layer (P2P Message Sync) — ✅ DONE
 
-**Planned file**: `src-tauri/src/sync.rs` (350 lines)
-- When two devices share the same identity, they can sync via encrypted P2P channel
-- **Sync protocol**:
-  1. Bootstrap device creates a "sync invite" (one-time, high-entropy token)
-  2. Secondary device connects using direct TCP or relay
-  3. X3DH handshake between the two devices (not identity-based, session-based)
-  4. Bi-directional sync of:
-     - Conversation list (metadata only, not messages — messages stay on original device)
-     - Peer keys (so second device knows how to connect)
-     - Unread message count
-  5. Messages are NOT synced by default — they stay on the device that received them
-     - Optional: "sync messages" toggle that mirrors encrypted blobs
+**Implemented**: `src-tauri/src/sync.rs` (~440 lines)
+- `SyncManager` with device ID, device name, pending invites, paired device list (max 8)
+- `generate_sync_invite` — one-time token (24 random bytes, 15-min expiry), `m2m-sync://` prefix
+- `pair_sync_device` — authorize an already-connected peer as a sync device
+- `handle_sync_device_info` (packet 0x45) — registers paired device, responds with own info, broadcasts conversation metadata
+- `handle_sync_payload` (packet 0x46) — upserts received conversation metadata into local store
+- `broadcast_sync_data` — sends conversation list as `SyncPayload` over DR session
+- Messages are NOT synced by default — only conversation list metadata and peer info
+- All sync data travels over existing X3DH+DR encrypted session (no new crypto)
 
 ### 2.3 — Read-Only Web Companion (STRETCH) — ❌ NOT STARTED
 
