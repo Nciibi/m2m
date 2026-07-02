@@ -49,6 +49,10 @@ interface ChatContextValue {
   handleSendMessageWithTimer: (content: string, disappearAfter?: number) => Promise<void>;
   handleEditMessage: (messageId: string, newContent: string) => Promise<void>;
   handleDeleteMessage: (messageId: string) => Promise<void>;
+  // Mute
+  mutedConversations: string[];
+  handleMuteConversation: (peerKeyHex: string) => Promise<void>;
+  handleUnmuteConversation: (peerKeyHex: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
