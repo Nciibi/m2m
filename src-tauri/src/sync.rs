@@ -157,11 +157,11 @@ pub async fn generate_sync_invite(
 /// Performs X3DH handshake, then sends SyncDeviceInfo for authorization.
 #[tauri::command]
 pub async fn connect_sync_device(
-    app_handle: tauri::AppHandle,
-    state: State<'_, Arc<AppState>>,
-    invite_str: String,
-    address: String,
-    my_name: String,
+    _app_handle: tauri::AppHandle,
+    _state: State<'_, Arc<AppState>>,
+    _invite_str: String,
+    _address: String,
+    _my_name: String,
 ) -> Result<crate::commands::ConnectionInfo, String> {
     // Parse the invite string
     let _token_str = invite_str
