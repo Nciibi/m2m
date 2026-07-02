@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, ToastContainer } from "../components/ui";
-import { KeyIcon, CheckIcon, LockIcon, SendIcon, ShieldIcon } from "../components/ui/Icons";
+import { KeyIcon, CheckIcon, LockIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 
 interface StepData {
