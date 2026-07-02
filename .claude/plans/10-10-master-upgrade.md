@@ -218,7 +218,7 @@
 | `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ✅ Done |
 | `src-tauri/src/reconnect.rs` | **NEW** | ~80 | ✅ Done |
 | `src-tauri/src/window_security.rs` | **NEW** | ~100 | ✅ Done |
-| `src-tauri/Cargo.toml` | Modify (+ deps) | +15 | ⚠️ Partial |
+| `src-tauri/Cargo.toml` | Modify (+ deps) | +15 | ✅ Done |
 | `src/views/ChatView.tsx` | Modify (major) | +400 | ⚠️ Partial |
 | `src/views/HubView.tsx` | Modify (major) | +200 | ❌ Pending |
 | `src/views/SetupView.tsx` | Modify (onboarding) | +100 | ❌ Pending |
