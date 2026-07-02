@@ -1,6 +1,6 @@
 import { MessageIcon, GearIcon, LockIcon, HomeIcon } from "../components/ui/Icons";
 
-export type View = "setup" | "vault" | "hub" | "chat" | "settings";
+type View = import("../context/AppContext").ViewName;
 
 interface SidebarProps {
   currentView: View;
