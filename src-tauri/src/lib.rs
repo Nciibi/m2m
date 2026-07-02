@@ -187,6 +187,8 @@ pub fn run() {
             commands::settings::get_network_diagnostics,
             commands::settings::get_network_settings,
             commands::settings::set_tor_enabled,
+            commands::settings::get_theme_preference,
+            commands::settings::set_theme_preference,
             commands::forwards::list_manual_forwards,
             commands::forwards::add_manual_forward,
             commands::forwards::remove_manual_forward,
