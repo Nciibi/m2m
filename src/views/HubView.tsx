@@ -99,7 +99,7 @@ export default function HubView() {
       <div className="app-header">
         <h1 className="app-header__title">
           <span className="app-header__icon-bg app-header__icon-bg--accent">
-            <img src="logo.jpg" alt="M2M" width="20" height="20" style={{ borderRadius: '4px' }} />
+            <img src="logo.svg" alt="M2M" width="20" height="20" style={{ borderRadius: '4px' }} />
           </span>
           M2M
         </h1>
