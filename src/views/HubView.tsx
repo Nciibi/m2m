@@ -19,6 +19,7 @@ export default function HubView() {
     isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
     handleConnect, setNamingMyName, setNamingTheirName, handleOpenChat,
     handleDeleteConversation, conversations,
+    mutedConversations, handleMuteConversation, handleUnmuteConversation,
   } = useChat();
   const {
     networkSettings, privateMode, openSettings,
