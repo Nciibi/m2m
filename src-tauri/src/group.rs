@@ -322,7 +322,7 @@ impl GroupManager {
 
         for member_key_hex in initial_members {
             // This member gets OUR sender key (so they can decrypt our messages)
-            let (their_sending_chain, their_initial_key) = generate_sender_key_pair();
+            let (_, their_initial_key) = generate_sender_key_pair();
             let (their_signing_key, their_verification_key) = generate_sender_signing_keypair();
 
             // Store THEIR receiver chain (so WE can decrypt THEIR messages)
