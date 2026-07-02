@@ -12,11 +12,11 @@ use super::{ChatMessage, ConversationListItem};
 
 use crate::protocol::MessageReactionData;
 
-fn send_text_inner(
-    conn: &mut PeerConnection,
-    text: &str,
+fn send_text_inner<'a>(
+    conn: &'a mut PeerConnection,
+    text: &'a str,
     disappear_after: Option<u64>,
-) -> impl std::future::Future<Output = Result<String, crate::session::SessionError>> + use<'_> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, crate::session::SessionError>> + 'a>> {
     let PeerConnection { session, write_half, .. } = conn;
     if let Some(secs) = disappear_after {
         Box::pin(session.send_text_with_timer(write_half, text, Some(secs)))
