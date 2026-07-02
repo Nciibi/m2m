@@ -1468,9 +1468,9 @@ mod tests {
         store.ensure_conversation("conv-a", &[0x11; 32]).unwrap();
         store.ensure_conversation("conv-b", &[0x22; 32]).unwrap();
 
-        store.store_message("m1", "conv-a", "sent", &[0x01; 32], &[0x02; 24], 1000).unwrap();
-        store.store_message("m2", "conv-a", "sent", &[0x03; 32], &[0x04; 24], 2000).unwrap();
-        store.store_message("m3", "conv-b", "received", &[0x05; 32], &[0x06; 24], 1500).unwrap();
+        store.store_message("m1", "conv-a", "sent", &[0x01; 32], &[0x02; 24], 1000, true).unwrap();
+        store.store_message("m2", "conv-a", "sent", &[0x03; 32], &[0x04; 24], 2000, true).unwrap();
+        store.store_message("m3", "conv-b", "received", &[0x05; 32], &[0x06; 24], 1500, true).unwrap();
 
         let convos = store.list_conversations().unwrap();
         assert_eq!(convos.len(), 2);
