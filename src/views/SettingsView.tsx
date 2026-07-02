@@ -268,10 +268,25 @@ export default function SettingsView() {
         <section className="settings-section">
           <h2 className="settings-section__title">STUN Servers</h2>
           <div className="settings-card">
-            {(stunConfig?.servers || []).map((srv, i) => (
-              <div className="settings-row" key={i}>
-                <span className="settings-mono">{srv}</span>
-                <button className="btn btn--icon btn--icon-sm" onClick={() => handleRemoveStunServer(i)} aria-label="Remove STUN server"><CloseIcon size={14} /></button>
+            <div className="stun-server-list">
+              {(stunConfig?.servers || []).map((srv, i) => {
+                // Find health info from diagnostics
+                const diagServer = networkDiagnostics?.stun_servers?.find((d: any) => srv.includes(d.server) || d.server.includes(srv));
+                const isHealthy = diagServer?.reachable;
+                return (
+                <div key={i} className="stun-server-item">
+                  <div className="stun-health-item" style={{ flex: 1, border: 'none', background: 'none', padding: 0 }}>
+                    <span className={`badge badge--${isHealthy === true ? 'success' : isHealthy === false ? 'danger' : 'default'}`} style={{ fontSize: '0.6rem', padding: '1px 6px', minWidth: 32, textAlign: 'center' as const }}>
+                      {isHealthy === true ? "OK" : isHealthy === false ? "FAIL" : "?"}
+                    </span>
+                    <span className="stun-health-item__server">{srv}</span>
+                    {diagServer?.rtt_ms && <span className="stun-health-item__rtt">{diagServer.rtt_ms}ms</span>}
+                  </div>
+                  <button className="btn btn--icon btn--icon-sm" onClick={() => handleRemoveStunServer(i)} aria-label="Remove STUN server"><CloseIcon size={14} /></button>
+                </div>
+                );
+              })}
+            </div>
               </div>
             ))}
             <div className="settings-row">
