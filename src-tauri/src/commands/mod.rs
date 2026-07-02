@@ -251,6 +251,52 @@ pub async fn attempt_reconnect(
                     None,
                 );
 
+                // Flush any queued (undelivered) messages and sync missed messages.
+                // Fire-and-forget in a background task so the reconnect response isn't
+                // delayed by potentially slow queue flush or sync request-response.
+                let flush_state = state.inner().clone();
+                let flush_peer = peer_key_hex.clone();
+                let flush_handle = app_handle.clone();
+                tokio::spawn(async move {
+                    // 1. Send queued messages
+                    match crate::commands::chat::flush_offline_queue(&flush_state, &flush_peer).await {
+                        Ok(n) => {
+                            if n > 0 {
+                                tracing::info!(peer = %flush_peer, count = n, "flushed queued messages after reconnect");
+                            }
+                        }
+                        Err(e) => tracing::warn!(peer = %flush_peer, error = %e, "failed to flush offline queue"),
+                    }
+
+                    // 2. Request missed messages from peer, dedup via INSERT OR IGNORE
+                    let latest_ts = {
+                        let ms = flush_state.message_store.lock().await;
+                        if let Some(ref store) = *ms {
+                            store.get_latest_received_timestamp(&flush_peer).unwrap_or(0)
+                        } else {
+                            0i64
+                        }
+                    };
+                    if latest_ts > 0 {
+                        let sync_req = crate::protocol::SyncRequestData {
+                            since_timestamp: latest_ts as u64,
+                        };
+                        if let Ok(bytes) = crate::protocol::serialize(&sync_req) {
+                            let conns = flush_state.connections.read().await;
+                            if let Some(conn_arc) = conns.get(&flush_peer) {
+                                let mut conn = conn_arc.lock().await;
+                                if let Err(e) = conn.session.send_encrypted_typed(
+                                    &mut conn.write_half,
+                                    crate::protocol::PacketType::SyncRequest,
+                                    &bytes,
+                                ).await {
+                                    tracing::warn!(peer = %flush_peer, error = %e, "failed to send sync request");
+                                }
+                            }
+                        }
+                    }
+                });
+
                 return Ok(crate::commands::ConnectionInfo {
                     state: "established".to_string(),
                     peer_fingerprint: Some(info.peer_fingerprint),
