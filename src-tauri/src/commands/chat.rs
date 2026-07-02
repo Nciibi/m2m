@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::protocol::{self};
+use crate::protocol::{self, PacketType};
 use crate::state::{AppState, PeerConnection};
 
 use super::util;
