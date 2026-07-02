@@ -1107,6 +1107,263 @@ pub struct StoredTransfer {
     pub error: Option<String>,
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Group Chat — Query Methods (Phase 3)
+// ═══════════════════════════════════════════════════════════════════════════
+
+impl MessageStore {
+    /// Create or update a group record.
+    pub fn upsert_group(
+        &self,
+        group_id: &str,
+        group_name: &str,
+        created_at: i64,
+        our_role: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO groups (group_id, group_name, created_at, our_role)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![group_id, group_name, created_at, our_role],
+        )?;
+        Ok(())
+    }
+
+    /// Add a member to a group.
+    pub fn add_group_member(
+        &self,
+        group_id: &str,
+        peer_key_hex: &str,
+        display_name: Option<&str>,
+        role: &str,
+        added_at: i64,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO group_members (group_id, peer_key_hex, display_name, role, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![group_id, peer_key_hex, display_name, role, added_at],
+        )?;
+        Ok(())
+    }
+
+    /// Remove a member from a group.
+    pub fn remove_group_member(
+        &self,
+        group_id: &str,
+        peer_key_hex: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "DELETE FROM group_members WHERE group_id = ?1 AND peer_key_hex = ?2",
+            params![group_id, peer_key_hex],
+        )?;
+        Ok(())
+    }
+
+    /// Load all members for a group.
+    pub fn load_group_members(
+        &self,
+        group_id: &str,
+    ) -> Result<Vec<super::group::GroupMember>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT peer_key_hex, display_name, role, added_at
+             FROM group_members WHERE group_id = ?1 ORDER BY added_at",
+        )?;
+        let members = stmt.query_map(params![group_id], |row| {
+            Ok(super::group::GroupMember {
+                peer_key_hex: row.get(0)?,
+                display_name: row.get(1)?,
+                role: match row.get::<_, String>(2)?.as_str() {
+                    "admin" => super::group::GroupRole::Admin,
+                    _ => super::group::GroupRole::Member,
+                },
+                added_at: row.get::<_, i64>(3)? as u64,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+        Ok(members)
+    }
+
+    /// Load a single group record (without members).
+    pub fn load_group(
+        &self,
+        group_id: &str,
+    ) -> Result<Option<super::group::Group>, StorageError> {
+        let result = self.conn.query_row(
+            "SELECT group_id, group_name, created_at, our_role, last_message_at, last_message_preview
+             FROM groups WHERE group_id = ?1",
+            params![group_id],
+            |row| {
+                let group_id: String = row.get(0)?;
+                Ok((group_id, row.get::<_, String>(1)?, row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?, row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<String>>(5)?))
+            },
+        );
+        match result {
+            Ok((gid, name, created_at, _role, last_msg_at, last_preview)) => {
+                let members = self.load_group_members(&gid)?;
+                let mut group = super::group::Group::new(
+                    gid, name, created_at as u64, String::new(),
+                );
+                group.members = members;
+                group.last_message_at = last_msg_at.unwrap_or(0) as u64;
+                group.last_message_preview = last_preview;
+                Ok(Some(group))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(StorageError::Database(e)),
+        }
+    }
+
+    /// List all groups with summary info.
+    pub fn list_groups(
+        &self,
+    ) -> Result<Vec<super::group::GroupSummary>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.group_id, g.group_name, g.created_at,
+                    COALESCE(g.last_message_at, 0), g.last_message_preview,
+                    (SELECT COUNT(*) FROM group_members WHERE group_id = g.group_id) as member_count
+             FROM groups g ORDER BY COALESCE(g.last_message_at, 0) DESC",
+        )?;
+        let groups = stmt.query_map([], |row| {
+            Ok(super::group::GroupSummary {
+                group_id: row.get(0)?,
+                group_name: row.get(1)?,
+                created_at: row.get::<_, i64>(2)? as u64,
+                last_message_at: row.get::<_, i64>(3)? as u64,
+                last_message_preview: row.get(4)?,
+                member_count: row.get::<_, i64>(5)? as u32,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+        Ok(groups)
+    }
+
+    /// Remove a group and all its members.
+    pub fn remove_group(&self, group_id: &str) -> Result<(), StorageError> {
+        self.conn.execute(
+            "DELETE FROM group_members WHERE group_id = ?1",
+            params![group_id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM groups WHERE group_id = ?1",
+            params![group_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update group metadata.
+    pub fn update_group_name(
+        &self,
+        group_id: &str,
+        new_name: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE groups SET group_name = ?1 WHERE group_id = ?2",
+            params![new_name, group_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update the last message preview for a group.
+    pub fn update_group_last_message(
+        &self,
+        group_id: &str,
+        timestamp: i64,
+        preview: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE groups SET last_message_at = ?1, last_message_preview = ?2 WHERE group_id = ?3",
+            params![timestamp, preview, group_id],
+        )?;
+        Ok(())
+    }
+
+    /// Store a group message (idempotent).
+    pub fn store_group_message(
+        &self,
+        id: &str,
+        group_id: &str,
+        sender_peer_key_hex: &str,
+        content_encrypted: &[u8],
+        content_nonce: &[u8],
+        timestamp: i64,
+        delivered: bool,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO group_messages
+             (id, group_id, sender_peer_key_hex, content_encrypted, content_nonce, timestamp, delivered)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                id, group_id, sender_peer_key_hex,
+                content_encrypted, content_nonce, timestamp,
+                delivered as i32,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Load group messages (most recent first, with limit and offset).
+    pub fn load_group_messages(
+        &self,
+        group_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<super::commands::ChatMessage>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, group_id, sender_peer_key_hex, content_encrypted, content_nonce,
+                    timestamp, delivered, edited_at, deleted
+             FROM group_messages
+             WHERE group_id = ?1 AND deleted = 0
+             ORDER BY timestamp DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let messages = stmt
+            .query_map(params![group_id, limit, offset], |row| {
+                Ok(super::commands::ChatMessage {
+                    id: row.get(0)?,
+                    content: String::new(), // filled in by caller after decryption
+                    direction: String::new(), // filled in by caller
+                    timestamp: row.get::<_, i64>(5)? as u64,
+                    read_at: None,
+                    edited_at: row.get(7)?,
+                    deleted: row.get::<_, i32>(8)? != 0,
+                    expires_at: None,
+                    reactions: std::collections::HashMap::new(),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(messages)
+    }
+
+    /// Mark a group message as edited.
+    pub fn edit_group_message(
+        &self,
+        message_id: &str,
+        edited_at: i64,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE group_messages SET edited_at = ?1 WHERE id = ?2",
+            params![edited_at, message_id],
+        )?;
+        Ok(())
+    }
+
+    /// Soft-delete a group message.
+    pub fn delete_group_message(
+        &self,
+        message_id: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE group_messages SET deleted = 1 WHERE id = ?1",
+            params![message_id],
+        )?;
+        Ok(())
+    }
+}
+
 /// Persistent transfer history store.
 ///
 /// Records every file transfer (both sent and received) so the user can
