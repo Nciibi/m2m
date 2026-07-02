@@ -536,6 +536,44 @@ impl MessageStore {
         Ok(())
     }
 
+    /// Create or migrate group chat tables.
+    fn migrate_group_tables(conn: &Connection) -> Result<(), StorageError> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS groups (
+                group_id TEXT PRIMARY KEY,
+                group_name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                our_role TEXT NOT NULL DEFAULT 'member',
+                last_message_at INTEGER,
+                last_message_preview TEXT
+            );
+            CREATE TABLE IF NOT EXISTS group_members (
+                group_id TEXT NOT NULL,
+                peer_key_hex TEXT NOT NULL,
+                display_name TEXT,
+                role TEXT NOT NULL DEFAULT 'member',
+                added_at INTEGER NOT NULL,
+                PRIMARY KEY (group_id, peer_key_hex),
+                FOREIGN KEY (group_id) REFERENCES groups(group_id)
+            );
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id TEXT PRIMARY KEY,
+                group_id TEXT NOT NULL,
+                sender_peer_key_hex TEXT NOT NULL,
+                content_encrypted BLOB NOT NULL,
+                content_nonce BLOB NOT NULL,
+                timestamp INTEGER NOT NULL,
+                delivered INTEGER NOT NULL DEFAULT 1,
+                edited_at INTEGER,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (group_id) REFERENCES groups(group_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_group_messages_group
+                ON group_messages(group_id, timestamp);"
+        )?;
+        Ok(())
+    }
+
     /// Store a message (idempotent — duplicate message IDs are silently ignored).
     pub fn store_message(
         &self,
