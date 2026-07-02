@@ -34,24 +34,23 @@ pub async fn send_message(
         .unwrap_or_default()
         .as_secs();
 
-    // Generate message ID up front — used regardless of delivery path.
-    let msg_id = uuid::Uuid::new_v4().to_string();
-
-    // Try to send via active connection; if offline, queue with delivered=0.
-    let delivered = match state.connections.read().await.get(&peer_key_hex) {
+    // If peer has an active connection, try to send immediately.
+    // send_text generates the msg_id internally — use the one it returns.
+    // If send fails or peer is offline, generate our own msg_id and queue.
+    let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
         Some(conn_arc) => {
             let mut conn = conn_arc.lock().await;
             match conn.session.send_text(&mut conn.write_half, &content).await {
-                Ok(_) => true,
+                Ok(id) => (id, true),
                 Err(e) => {
                     tracing::warn!(peer = %peer_key_hex, error = %e, "send failed, queuing offline");
-                    false
+                    (uuid::Uuid::new_v4().to_string(), false)
                 }
             }
         }
         None => {
             tracing::info!(peer = %peer_key_hex, "peer not connected, queuing message");
-            false
+            (uuid::Uuid::new_v4().to_string(), false)
         }
     };
 
