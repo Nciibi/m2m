@@ -88,10 +88,7 @@
 
 ### 3.1 — Sender Keys for Group E2EE — ❌ NOT STARTED
 
-**Planned file**: `src-tauri/src/crypto.rs` (add ~250 lines)
-...
-...
-...
+**Planned**: Sender Key distribution via existing 1:1 DR sessions, group key ratchet, member add/remove protocol.
 
 ### 3.2 — Frontend: Group Chat UI — ❌ NOT STARTED
 
