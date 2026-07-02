@@ -86,11 +86,12 @@ export default function VaultView() {
               error={vaultError || undefined}
               clearable
               onClear={() => { setPassphrase(""); setVaultError(""); }}
+              className="vault-input"
             />
             <button
               onClick={() => setShowPassphrase(!showPassphrase)}
               aria-label={showPassphrase ? "Hide" : "Show"}
-              className="input__clear input__clear--absolute"
+              className="input__clear--absolute"
             >
               {showPassphrase ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
             </button>
