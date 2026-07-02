@@ -287,8 +287,6 @@ export default function SettingsView() {
                 );
               })}
             </div>
-              </div>
-            ))}
             <div className="settings-row">
               <Input placeholder="host:port" value={stunServerInput} onChange={e => setStunServerInput(e.target.value)} compact mono clearable onClear={() => setStunServerInput("")} />
               <Button size="xs" onClick={handleAddStunServer} disabled={!stunServerInput.trim()}>Add</Button>
