@@ -1285,6 +1285,7 @@ impl MessageStore {
     }
 
     /// Store a group message (idempotent).
+    #[allow(clippy::too_many_arguments)]
     pub fn store_group_message(
         &self,
         id: &str,
