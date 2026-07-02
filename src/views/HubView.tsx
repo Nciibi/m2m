@@ -182,13 +182,18 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
       setInviteCreatedAt(Date.now() / 1000);
       setInviteExpiry(60);
       setIsListening(true);
-      // Add to invite history
-      setInviteHistory((prev) => {
-        const next = [generatedInvite || `invite-${Date.now()}`, ...prev].slice(0, 5);
-        return next;
-      });
     } finally { setGenerating(false); }
   };
+
+  // Track generated invite in history
+  useEffect(() => {
+    if (generatedInvite) {
+      setInviteHistory((prev) => {
+        const next = [generatedInvite, ...prev.filter(i => i !== generatedInvite)].slice(0, 5);
+        return next;
+      });
+    }
+  }, [generatedInvite]);
 
   return (
     <div className="centered-view">
