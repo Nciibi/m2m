@@ -52,24 +52,20 @@
 
 ---
 
-## Phase 2: Multi-Device & Identity Sync (Architecture: +0.5)
+## ⚠️ Phase 2: Multi-Device & Identity Sync — PARTIAL (1/3 done)
 
 **Problem**: Identity is locked to one device. No way to use the same key on multiple machines or recover from device loss.
 
-### 2.1 — Identity Export/Import with Encrypted Backup
+### 2.1 — Identity Export/Import with Encrypted Backup — ✅ DONE
 
-**Modified**: `src-tauri/src/commands/vault.rs` (add ~150 lines)
-- **Export identity**: Encrypted JSON with passphrase-protected key material
-  - Format: `(version, encrypted_ed25519, encrypted_x25519, salt, nonce)`
-  - Derive wrapping key via Argon2id from an export passphrase
-- **Import identity**: Decrypt export, store in vault
-- **QR transfer**: Encode export payload as animated QR for phone pairing
-  - Split across multiple QR frames for small key material
-- **CLI tool**: `m2m identity export` / `m2m identity import` for headless setups
+**Implemented**: `src-tauri/src/commands/vault.rs` (lines ~523–640+)
+- `export_identity` with passphrase + Argon2id wrapping key (min 12 chars, 40+ bits entropy)
+- `import_identity` to restore from encrypted JSON
+- Family contacts: `list_family`, `add_family_member`, `remove_family_member`, `set_family_nickname`, `connect_family_member`, `update_family_member`
 
-### 2.2 — Encrypted Sync Layer (P2P Message Sync)
+### 2.2 — Encrypted Sync Layer (P2P Message Sync) — ❌ NOT STARTED
 
-**New file**: `src-tauri/src/sync.rs` (350 lines)
+**Planned file**: `src-tauri/src/sync.rs` (350 lines)
 - When two devices share the same identity, they can sync via encrypted P2P channel
 - **Sync protocol**:
   1. Bootstrap device creates a "sync invite" (one-time, high-entropy token)
@@ -82,11 +78,7 @@
   5. Messages are NOT synced by default — they stay on the device that received them
      - Optional: "sync messages" toggle that mirrors encrypted blobs
 
-### 2.3 — Read-Only Web Companion (STRETCH)
-
-- Static HTML/JS app that connects via WebSocket to running M2M node
-- No crypto handled in browser — proxy through Rust backend
-- Uses: quick check messages from another machine without installing
+### 2.3 — Read-Only Web Companion (STRETCH) — ❌ NOT STARTED
 
 ---
 
