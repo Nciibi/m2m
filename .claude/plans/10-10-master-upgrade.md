@@ -208,7 +208,7 @@
 | `src-tauri/src/sync.rs` | **NEW** | 440 | ✅ Done |
 | `src-tauri/src/group.rs` | **NEW** | 300 | ❌ Pending |
 | `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +250 | ❌ Pending |
-| `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, + typing indicator) | +80 | ⚠️ Partial |
+| `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, SyncDeviceInfo 0x45, SyncPayload 0x46) | +110 | ✅ Done |
 | `src-tauri/src/session.rs` | Modify (+ reconnect) | +100 | ✅ Done |
 | `src-tauri/src/state.rs` | Modify (+ groups, sync) | +50 | ❌ Pending |
 | `src-tauri/src/storage.rs` | Modify (+ WAL, indexes, offline queue, sync queries) | +120 | ✅ Done |
