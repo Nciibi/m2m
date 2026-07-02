@@ -176,23 +176,16 @@ export default function ChatView() {
     if (!text.trim() || sending) return;
     setSending(true);
     const content = text.trim().slice(0, 64 * 1024);
-    const tempId = `temp-${Date.now()}`;
-    // Show "Sending…" status immediately
-    setMsgStatus((prev) => ({ ...prev, [tempId]: "sending" }));
     try {
-      if (timerSecs > 0) {
-        await handleSendMessageWithTimer(content, timerSecs);
-      } else {
-        await handleSendMessage(content);
-      }
+      const msg = timerSecs > 0
+        ? await handleSendMessageWithTimer(content, timerSecs)
+        : await handleSendMessage(content);
       setText("");
       setTimerSecs(0);
-      // Mark as "sent" — the real message will replace the temp ID
-      setMsgStatus((prev) => {
-        const next = { ...prev };
-        delete next[tempId];
-        return next;
-      });
+      // Mark sent message with "sent" status
+      setMsgStatus((prev) => ({ ...prev, [msg.id]: "sent" }));
+    } catch {
+      // Message failed to send
     } finally { setSending(false); }
   };
 
@@ -332,10 +325,27 @@ export default function ChatView() {
                   </div>
                 ) : (
                   /* Normal message rendering with markdown */
-                  <div className="msg-content">{renderMarkdown(m.content)}</div>
+                  <div>
+                    {/* Sender label for group messages */}
+                    {m.sender_peer_key_hex && (m.sender_peer_key_hex.length > 0) && (
+                      <div className="msg-sender-label">
+                        {m.sender_peer_key_hex.substring(0, 8)}…
+                      </div>
+                    )}
+                    <div className="msg-content">{renderMarkdown(m.content)}</div>
+                  </div>
                 )}
                 <span className="msg-footer-row">
                   <span className="msg-time">{new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  {/* Message status for sent messages */}
+                  {m.direction === "sent" && !m.deleted && msgStatus[m.id] && (
+                    <span className={`msg-status msg-status--${msgStatus[m.id]}`}>
+                      {msgStatus[m.id] === "sending" && <ClockIcon size={10} />}
+                      {msgStatus[m.id] === "sent" && "✓"}
+                      {msgStatus[m.id] === "delivered" && <CheckDoubleIcon size={12} />}
+                      {msgStatus[m.id] === "read" && <CheckDoubleIcon size={12} />}
+                    </span>
+                  )}
                   {/* Edited badge */}
                   {m.edited_at !== null && !m.deleted && (
                     <span className="msg-edited-badge" title={`Edited ${new Date(m.edited_at * 1000).toLocaleString()}`}>edited</span>
