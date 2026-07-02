@@ -1347,12 +1347,12 @@ impl MessageStore {
 
     /// Load group messages WITH encrypted content (for decryption by caller).
     /// Returns (ChatMessage, content_encrypted, content_nonce) tuples.
+    #[allow(clippy::type_complexity)]
     pub fn load_group_messages_with_content(
         &self,
         group_id: &str,
         limit: i64,
         offset: i64,
-    #[allow(clippy::type_complexity)]
     ) -> Result<Vec<(super::commands::ChatMessage, Vec<u8>, Vec<u8>)>, StorageError>
         let mut stmt = self.conn.prepare(
             "SELECT id, group_id, sender_peer_key_hex, content_encrypted, content_nonce,
