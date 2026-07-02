@@ -33,6 +33,10 @@ pub async fn set_theme_preference(
     }
     let mut tp = state.theme_preference.write().await;
     *tp = theme.clone();
+    // Persist to vault/settings (TODO: re-enable when set_setting is implemented)
+    // if let Some(key_store) = state.key_store.lock().await.as_ref() {
+    //     let _ = key_store.set_setting("theme", &theme);
+    // }
     Ok(())
 }
 
