@@ -111,74 +111,18 @@
 
 ---
 
-## Phase 5: Frontend Overhaul — Polished, Professional UX (UI/UX: 8.5 → 10)
+## ❌ Phase 5: Frontend Overhaul — MOSTLY MISSING (1/8 done)
 
-### 5.1 — Typing Indicators
-
-**Modified**: `src/protocol.rs` — new packet type `TypingIndicator (0x45)`
-- Sent: on keystroke, debounced 3s
-- Received: show "Peer is typing…" animation, hide after 5s of no signal
-- Battery/bandwidth conscious: never on every keystroke, only on content change
-
-### 5.2 — Local Message Search
-
-**Modified**: `src-tauri/src/commands/chat.rs` — add `search_messages` command
-- Full-text search across all decrypted local messages
-- Search indexed locally (in-memory index built on vault unlock)
-- Frontend: search bar in conversation list + "Search in conversation" in ChatView header
-
-### 5.3 — Drag-and-Drop File Transfer
-
-**Modified**: `src/views/ChatView.tsx` — add drag-drop zone
-- Drop file → auto-initiate file transfer to current peer
-- Progress shown inline in chat
-- Thumbnail preview for images
-
-### 5.4 — Voice Messages
-
-**New dependency**: `tauri-plugin-audio` or raw audio capture via Rust
-- Record button in message input (hold-to-record, tap-to-toggle)
-- Chunked transfer via existing file transfer protocol (OPUS codec, small chunks)
-- Playback: inline player in chat
-- E2EE: files are encrypted file transfers
-
-### 5.5 — Conversation Organization
-
-**Modified**: `src/views/HubView.tsx` — tabs + folders
-- **Favorites**: pin conversations to top
-- **Unread badge**: per-conversation unread count with visual indicator
-- **Mute**: mute notifications for a conversation (local setting, persisted)
-- **Archive**: hide from main list without deleting
-- **Folders**: user-created categories ("Work", "Family", "Signal contacts")
-
-### 5.6 — Theme & Color Customization
-
-**Modified**: `src/styles/theme.css` (already tokens-based)
-- 3 built-in themes: Dark, Light, High Contrast (accessibility)
-- Accent color picker (customize the purple to any hue)
-- Blur/glass effect toggle (performance + aesthetic preference)
-
-### 5.7 — Full Keyboard Navigation
-
-**Modified**: All views — add comprehensive keyboard shortcuts
-- `Ctrl+N` — new conversation
-- `Ctrl+K` — quick search / command palette
-- `Ctrl+,` — open settings
-- `Escape` — close modal / go back
-- `Ctrl+Shift+M` — mute conversation
-- `Ctrl+Delete` — delete conversation (with confirmation)
-- `Ctrl+F` — search in conversation
-- `Ctrl+Up/Down` — navigate conversation list
-- `Ctrl+Shift+[1-9]` — jump to conversation by position
-- `Alt+1/2` — switch Connect/Chats tab
-
-### 5.8 — Dark Mode Refinements
-
-**Modified**: `src/styles/theme.css` — perfection-pass on dark mode
-- Proper hierarchy: surfaces at varying elevations with subtle border separation
-- Smooth color transitions on theme switch
-- Reduced eye strain: slightly warmer gray tones instead of pure #000 backgrounds
-- Transparent window effects on supported platforms (Windows 11 Mica, macOS vibrancy)
+| Sub-phase | Status | Details |
+|-----------|--------|---------|
+| 5.1 Typing indicators | ❌ | No packet type 0x45, no frontend UI |
+| 5.2 Local message search | ❌ | Conversation-list filter exists in HubView, but no per-conversation full-text search |
+| 5.3 Drag-and-drop file transfer | ❌ | No drag/drop handlers in ChatView |
+| 5.4 Voice messages | ❌ | No audio capture, no playback |
+| 5.5 Conversation organization | ❌ | No favorites, mute, archive, or folders — no fields in `types.ts` |
+| 5.6 Theme & color customization | ⚠️ | Light theme CSS exists. AppContext sets `data-theme="dark"` but **no `[data-theme="dark"]` CSS rules**. No accent picker. |
+| 5.7 Keyboard navigation | ⚠️ | Partial: `Esc` (back to hub), `Ctrl+,` (settings), `?` (help). Missing: Ctrl+N, Ctrl+K, Ctrl+F, etc. |
+| 5.8 Dark mode refinements | ❌ | No dark theme CSS at all |
 
 ---
 
