@@ -16,13 +16,11 @@ vi.mock("../context/AppContext", () => ({
 }));
 
 import { ChatProvider, useChat } from "../context/ChatContext";
-import type { ConnectionInfo } from "../types";
 
 function TestConsumer() {
   const {
     connection, isConnecting, messages, conversations, fileRequests,
-    generatedInvite, inviteValid, activeConversationId,
-    handleSendMessage, handleConnect, handleDisconnect, handleGenerateInvite,
+    handleGenerateInvite,
     handleOpenChat, handleDeleteConversation, setInviteToConnect,
     copyInvite, handleVerify, handleSendFile, handleExportConversation,
     handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
