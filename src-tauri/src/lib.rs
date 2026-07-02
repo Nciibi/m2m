@@ -238,6 +238,16 @@ pub fn run() {
             sync::generate_sync_invite,
             sync::connect_sync_device,
             sync::pair_sync_device,
+            // Group Chat (Phase 3)
+            commands::groups::create_group,
+            commands::groups::send_group_message,
+            commands::groups::list_groups,
+            commands::groups::get_group_info,
+            commands::groups::invite_to_group,
+            commands::groups::remove_from_group,
+            commands::groups::leave_group,
+            commands::groups::load_group_messages,
+            commands::groups::update_group_name,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
