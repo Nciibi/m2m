@@ -352,16 +352,14 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
       {conversations.length === 0 ? (
         <div className="conv-empty">
           <MessageIcon size={48} color="var(--color-text-muted)" />
-          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            {search ? "No conversations found" : "No conversations yet"}
-          </span>
-          <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6 }}>
+          <p className="conv-empty__title">{search ? "No conversations found" : "No conversations yet"}</p>
+          <p className="conv-empty__desc">
             {search
               ? "Try adjusting your search terms or clear the filter."
               : "Generate an invite link to host a connection, or paste an invite from a peer to join."}
-          </span>
+          </p>
           {!search && (
-            <Button onClick={onGetStarted} icon={<PlusIcon size={18} />} style={{ marginTop: 'var(--space-md)' }}>
+            <Button onClick={onGetStarted} icon={<PlusIcon size={18} />}>
               Get Started
             </Button>
           )}
@@ -403,19 +401,12 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
                 aria-label={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}>
                 {archived.has(c.peer_key_hex) ? "📂" : "📁"}
               </button>
-              {isMuted ? (
-                <button className="btn btn--icon btn--icon-sm" title="Unmute conversation"
-                  onClick={e => { e.stopPropagation(); onUnmute(c.peer_key_hex); }}
-                  aria-label="Unmute">
-                  🔇
-                </button>
-              ) : (
-                <button className="btn btn--icon btn--icon-sm" title="Mute conversation"
-                  onClick={e => { e.stopPropagation(); onMute(c.peer_key_hex); }}
-                  aria-label="Mute">
-                  🔔
-                </button>
-              )}
+              <button className="btn btn--icon btn--icon-sm"
+                title={isMuted ? "Unmute conversation" : "Mute conversation"}
+                onClick={e => { e.stopPropagation(); isMuted ? onUnmute(c.peer_key_hex) : onMute(c.peer_key_hex); }}
+                aria-label={isMuted ? "Unmute" : "Mute"}>
+                {isMuted ? "🔇" : "🔔"}
+              </button>
               <button className="btn btn--icon btn--icon-sm"
                 onClick={e => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }}
                 aria-label="Delete">
