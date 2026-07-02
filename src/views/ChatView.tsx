@@ -53,9 +53,8 @@ export default function ChatView() {
   // Periodic cleanup of expired self-destruct messages
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = Math.floor(Date.now() / 1000);
-      setMessages((prev: ChatMessage[]) => prev.filter((m) => !m.expires_at || m.expires_at > now));
-    }, 1000);
+      invoke("cleanup_expired_messages").catch(() => {});
+    }, 10000);
     return () => clearInterval(timer);
   }, []);
 
