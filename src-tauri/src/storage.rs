@@ -532,7 +532,7 @@ impl MessageStore {
                 ON messages(conversation_id, direction, read_at);"
         )?;
         // Run group table migrations
-        Self::migrate_group_tables(&conn)?;
+        Self::migrate_group_tables(conn)?;
         Ok(())
     }
 
