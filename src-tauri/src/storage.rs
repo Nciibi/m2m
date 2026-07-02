@@ -531,6 +531,8 @@ impl MessageStore {
              CREATE INDEX IF NOT EXISTS idx_messages_read_status
                 ON messages(conversation_id, direction, read_at);"
         )?;
+        // Run group table migrations
+        Self::migrate_group_tables(&conn)?;
         Ok(())
     }
 
