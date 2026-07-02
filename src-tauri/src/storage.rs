@@ -543,11 +543,12 @@ impl MessageStore {
         content_encrypted: &[u8],
         content_nonce: &[u8],
         timestamp: i64,
+        delivered: bool,
     ) -> Result<(), StorageError> {
         self.conn.execute(
-            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp],
+            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, delivered)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp, delivered as i32],
         )?;
         self.conn.execute(
             "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
@@ -567,16 +568,108 @@ impl MessageStore {
         content_nonce: &[u8],
         timestamp: i64,
         expires_at: Option<i64>,
+        delivered: bool,
     ) -> Result<(), StorageError> {
         self.conn.execute(
-            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at],
+            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at, delivered) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at, delivered as i32],
         )?;
         self.conn.execute(
             "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
             params![timestamp, conversation_id],
         )?;
         Ok(())
+    }
+
+    /// Load undelivered (queued) sent messages for a conversation.
+    /// Returns messages ordered oldest-first so they are re-sent in order.
+    pub fn load_undelivered_messages(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<StoredMessage>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
+                    edited_at, deleted, expires_at
+             FROM messages WHERE conversation_id = ?1
+             AND direction = 'sent' AND delivered = 0
+             ORDER BY timestamp ASC",
+        )?;
+        let rows = stmt.query_map(params![conversation_id], |row| {
+            Ok(StoredMessage {
+                id: row.get(0)?,
+                direction: row.get(1)?,
+                content_encrypted: row.get(2)?,
+                content_nonce: row.get(3)?,
+                timestamp: row.get(4)?,
+                read_at: row.get(5)?,
+                edited_at: row.get(6)?,
+                deleted: row.get::<_, i64>(7)? != 0,
+                expires_at: row.get(8)?,
+            })
+        })?;
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+        Ok(messages)
+    }
+
+    /// Mark a message as delivered.
+    pub fn mark_delivered(&self, message_id: &str) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE messages SET delivered = 1 WHERE id = ?1",
+            params![message_id],
+        )?;
+        Ok(())
+    }
+
+    /// Load sent messages for a conversation with timestamp >= since.
+    /// Used to respond to SyncRequest — returns messages others sent *to* this peer.
+    pub fn load_sent_messages_since(
+        &self,
+        conversation_id: &str,
+        since_timestamp: i64,
+    ) -> Result<Vec<StoredMessage>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
+                    edited_at, deleted, expires_at
+             FROM messages WHERE conversation_id = ?1
+             AND direction = 'sent' AND timestamp > ?2
+             ORDER BY timestamp ASC",
+        )?;
+        let rows = stmt.query_map(params![conversation_id, since_timestamp], |row| {
+            Ok(StoredMessage {
+                id: row.get(0)?,
+                direction: row.get(1)?,
+                content_encrypted: row.get(2)?,
+                content_nonce: row.get(3)?,
+                timestamp: row.get(4)?,
+                read_at: row.get(5)?,
+                edited_at: row.get(6)?,
+                deleted: row.get::<_, i64>(7)? != 0,
+                expires_at: row.get(8)?,
+            })
+        })?;
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+        Ok(messages)
+    }
+
+    /// Get the most recent received message timestamp for a conversation.
+    /// Returns 0 if no received messages exist.
+    pub fn get_latest_received_timestamp(
+        &self,
+        conversation_id: &str,
+    ) -> Result<i64, StorageError> {
+        let result: Result<i64, _> = self.conn.query_row(
+            "SELECT COALESCE(MAX(timestamp), 0) FROM messages
+             WHERE conversation_id = ?1 AND direction = 'received'",
+            params![conversation_id],
+            |row| row.get(0),
+        );
+        Ok(result.unwrap_or(0))
     }
 
     /// Create or get a conversation.
