@@ -199,7 +199,14 @@
 }
 
 /* ─── Tab Indicator Slide ─── */
+/* ─── Tab Indicator Slide ─── */
 @keyframes tabSlide {
   from { transform: scaleX(0); }
   to   { transform: scaleX(1); }
+}
+
+/* ─── Fade In (generic) ─── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
