@@ -1,8 +1,8 @@
 # M2M → 10/10: Master Upgrade Roadmap
 
-**Current Score: 8.7/10**
+**Current Score: 8.9/10**
 - Architecture: 10 | Security/Crypto: 10 | Networking/Privacy: 10
-- Test Coverage: 9.5 | UI/UX: 7.0 | Performance: 10
+- Test Coverage: 9.5 | UI/UX: 7.5 | Performance: 10
 
 **Target: True 10/10 — a production-ready, fully decentralized P2P messenger**
 
@@ -134,6 +134,8 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 
 ## ❌ Phase 5: Frontend Overhaul — PARTIAL (3/8 done)
 
+*Mostly missing as of plan creation. See `uiux-10-10.md` for full spec.*
+
 | Sub-phase | Status | Details |
 |-----------|--------|---------|
 | 5.1 Typing indicators | ❌ | No packet type 0x45, no frontend UI |
@@ -144,6 +146,23 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 | 5.6 Theme & color customization | ✅ | `ThemeContext.tsx` — light/dark/system modes. `theme.css` — full light theme with all CSS token overrides. `SettingsView.tsx` — theme selector (Monitor/Sun/Moon icons). Backend: `get_theme_preference`, `set_theme_preference`. Default mode is dark through `:root` tokens. No accent picker yet. |
 | 5.7 Keyboard navigation | ⚠️ | Partial: `Esc` (back to hub), `Ctrl+,` (settings), `?` (help). Missing: Ctrl+N, Ctrl+K, Ctrl+F, etc. |
 | 5.8 Dark mode refinements | ✅ | Dark is the default mode. `:root` in `tokens.css` holds all dark-mode values (canvas gradient, glass effects, edge lights). Full shadow scale for dark backgrounds. No separate `[data-theme="dark"]` block needed — `:root` IS the dark theme. |
+
+### Completed UI/UX Polish (Phase 1-2, July 2026)
+- **Emoji picker**: Added to ChatView input toolbar with grid of 60 emojis
+- **Message status indicators**: "sending" (clock icon) and "sent" (checkmark) per message
+- **File transfer progress bars**: Live progress bar with transfer speed + ETA (listens to `m2m://transfer-progress`)
+- **Sender labels for group messages**: Shows abbreviated peer key when `sender_peer_key_hex` is set
+- **Invite countdown**: Live countdown timer after generating invite link
+- **Recent invites history**: Last 5 generated invites stored, clickable to re-copy
+- **Listening indicator**: Green pulsing dot when hosting
+- **Conversation sorting**: Most recent conversations first
+- **Last-seen relative time**: Shows "Last seen X ago" for offline peers
+- **Vault paste button**: One-click paste for passphrases
+- **Fingerprint hint in vault**: Shows vault owner identity for returning users
+- **Copy IP button**: In SettingsView network section
+- **STUN health indicators**: OK/FAIL badges with RTT per STUN server
+- **Theme selector in Settings**: Light/Dark/System with Sun/Moon/Monitor icons
+- **Missing icons created**: MonitorIcon, SunIcon, MoonIcon, SmileyIcon, CheckDoubleIcon, ClockIcon
 
 ---
 
