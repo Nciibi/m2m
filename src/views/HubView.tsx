@@ -302,6 +302,38 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
 }
 
 function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [archived, setArchived] = useState<Set<string>>(new Set());
+
+  // Init from conversation data
+  useEffect(() => {
+    setFavorites(new Set(conversations.filter((c: any) => c.is_favorite).map((c: any) => c.peer_key_hex)));
+    setArchived(new Set(conversations.filter((c: any) => c.archived).map((c: any) => c.peer_key_hex)));
+  }, [conversations]);
+
+  const toggleFav = async (peerKeyHex: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newVal = await invoke<boolean>("toggle_favorite", { peerKeyHex });
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
+        return next;
+      });
+    } catch { /* noop */ }
+  };
+
+  const toggleArch = async (peerKeyHex: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newVal = await invoke<boolean>("toggle_archive", { peerKeyHex });
+      setArchived((prev) => {
+        const next = new Set(prev);
+        if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
+        return next;
+      });
+    } catch { /* noop */ }
+  };
   // Sort conversations: most recent first
   const sorted = [...conversations].sort((a: any, b: any) => (b.last_message_at || 0) - (a.last_message_at || 0));
 
