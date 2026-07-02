@@ -953,9 +953,9 @@ pub fn verify_group_message_signature(
     if signature.len() != 64 {
         return false;
     }
-    let sig = match sign::DetachedSignature::from_slice(signature) {
-        Some(s) => s,
-        None => return false,
+    let sig = match sign::Signature::from_bytes(signature) {
+        Ok(s) => s,
+        Err(_) => return false,
     };
     sign::verify_detached(&sig, data, &pk)
 }
