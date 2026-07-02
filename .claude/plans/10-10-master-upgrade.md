@@ -126,50 +126,15 @@
 
 ---
 
-## Phase 6: Performance & Reliability (Performance: 8.5 → 10)
+## ⚠️ Phase 6: Performance & Reliability — IN PROGRESS (4/5 done)
 
-### 6.1 — Connection Reconnection Logic
-
-**Modified**: `src-tauri/src/commands/network.rs` — auto-reconnect
-- When connection drops: store peer info, attempt reconnect with exponential backoff
-  - 1s, 2s, 4s, 8s, 16s, 30s cap
-  - Max 5 attempts before giving up (user can click "Retry")
-- Re-establish X3DH session on reconnect (new ephemeral keys)
-- Resume file transfers from last ACKed chunk
-- Frontend: "Reconnecting…" badge during retry, "Retry" button after exhaustion
-
-### 6.2 — Message De-duplication & Ordering
-
-**Modified**: `src-tauri/src/session.rs` — robust message ordering
-- Messages carry a logical timestamp (monotonic clock per device)
-- On reconnect: request missed messages by sequence number
-- De-duplication: dedupe by message_id (idempotent delivery)
-- Sender-side queue: pending messages queued locally if peer offline, sent on reconnect
-
-### 6.3 — Database Performance
-
-**Modified**: `src-tauri/src/storage.rs`
-- WAL mode for SQLite (concurrent reads while writing)
-- Periodic `PRAGMA optimize` on idle
-- Indexed queries: add composite index on `(conversation_id, timestamp)` for message loading
-- Message pagination: cursor-based instead of offset-based for large convos
-- Storage encryption: move to per-page encryption for large databases
-
-### 6.4 — Memory & CPU Profiling
-
-**New**: Benchmarks and profiling
-- `cargo bench` benchmarks for crypto operations (DR encrypt/decrypt latency)
-- Memory profiling for large file transfers (ensure <1 chunk in memory)
-- CPU profiling for DHT operations
-- Connection memory overhead: measure per-connection struct size
-
-### 6.5 — Startup Time Optimization
-
-**Modified**: `src-tauri/src/state.rs`, `src-tauri/src/storage.rs`
-- Lazy vault initialization (don't load message store until unlocked)
-- Lazy candidate gathering (don't STUN scan on startup unless listening)
-- Deferred DHT bootstrap (start after UI is responsive)
-- SQLite connection pool for concurrent access
+| Sub-phase | Status | Details |
+|-----------|--------|---------|
+| 6.1 Connection reconnection | ✅ | `reconnect.rs` — exponential backoff (1s→30s cap), 5 max attempts, frontend "Reconnecting…" badge |
+| 6.2 Message de-duplication & ordering | ⚠️ | DB-level idempotent store by message_id exists. **Under development**: sender-side offline queue, reconnect missed-message request |
+| 6.3 Database performance | ✅ | WAL mode on all stores, composite indexes (`idx_messages_conversation`, `idx_messages_expires_at`, etc.) |
+| 6.4 Benchmarks | ✅ | `crypto_bench.rs` with criterion for DR encrypt/decrypt |
+| 6.5 Startup time optimization | ✅ | Lazy vault init, lazy candidate gathering (no STUN scan unless listening), deferred DHT bootstrap |
 
 ---
 
