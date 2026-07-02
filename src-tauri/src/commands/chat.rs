@@ -667,7 +667,10 @@ pub async fn flush_offline_queue(
     // Make sure message store is available
     state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
 
-    let queued = {
+    // Load and decrypt undelivered messages while holding the store lock.
+    // Drop all locks before trying to send so RefCell-backed Connection doesn't
+    // complain about borrow conflicts.
+    let decrypted: Vec<(String, String, Option<i64>)> = {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         let store = ms.as_ref().ok_or("message store not initialised")?;
@@ -676,26 +679,20 @@ pub async fn flush_offline_queue(
         let stored = store.load_undelivered_messages(peer_key_hex)
             .map_err(|e| format!("load undelivered: {e}"))?;
 
-        // Decrypt all messages while holding the store lock
         let mut decrypted = Vec::with_capacity(stored.len());
-        let peer_bytes = match util::decode_peer_key_logged(peer_key_hex) {
-            Some(b) => b,
-            None => return Err("invalid peer key hex".to_string()),
-        };
         for msg in &stored {
-            match util::crypto_decrypt_storage(&msg.content_encrypted, &msg.content_nonce, key, util::AAD_MSG_STORE) {
-                Ok(bytes) => {
-                    if let Ok(text) = String::from_utf8(bytes) {
-                        decrypted.push((msg.id.clone(), text, msg.expires_at));
-                    }
+            if let Ok(bytes) = util::crypto_decrypt_storage(&msg.content_encrypted, &msg.content_nonce, key, util::AAD_MSG_STORE) {
+                if let Ok(text) = String::from_utf8(bytes) {
+                    decrypted.push((msg.id.clone(), text, msg.expires_at));
                 }
-                Err(e) => tracing::warn!(msg_id = %msg.id, error = %e, "failed to decrypt queued message"),
             }
         }
-        (store, decrypted, peer_bytes)
+        decrypted
     };
 
-    let (store, decrypted, _peer_bytes) = queued;
+    if decrypted.is_empty() {
+        return Ok(0);
+    }
 
     // Now send each message via the active connection
     let mut sent_count = 0u32;
@@ -706,18 +703,27 @@ pub async fn flush_offline_queue(
             let result = if let Some(secs) = expires_at {
                 let remaining = *secs - chrono::Utc::now().timestamp();
                 if remaining > 0 {
-                    conn.session.send_text_with_timer(&mut conn.write_half, text, Some(remaining as u64)).await
+                    let PeerConnection { session, write_half, .. } = &mut *conn;
+                    session.send_text_with_timer(write_half, text, Some(remaining as u64)).await
                 } else {
-                    // Already expired — skip
-                    let _ = store.mark_delivered(msg_id);
+                    // Already expired — mark delivered and skip
+                    let ms = state.message_store.lock().await;
+                    if let Some(ref store) = *ms {
+                        let _ = store.mark_delivered(msg_id);
+                    }
                     continue;
                 }
             } else {
-                conn.session.send_text(&mut conn.write_half, text).await
+                let PeerConnection { session, write_half, .. } = &mut *conn;
+                session.send_text(write_half, text).await
             };
             match result {
                 Ok(_) => {
-                    let _ = store.mark_delivered(msg_id);
+                    // Mark delivered without holding conn lock
+                    let ms = state.message_store.lock().await;
+                    if let Some(ref store) = *ms {
+                        let _ = store.mark_delivered(msg_id);
+                    }
                     sent_count += 1;
                 }
                 Err(e) => {
