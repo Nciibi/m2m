@@ -299,7 +299,7 @@ pub async fn invite_to_group(
     // Add member in GroupManager
     let bundles = {
         let mut gm = state.group_manager.write().await;
-        gm.add_member(&group_id, &peer_key_hex, now)
+        gm.add_member(&group_id, &peer_key_hex, &our_peer_key_hex, now)
             .map_err(|e| format!("add member failed: {e}"))?
     };
 
