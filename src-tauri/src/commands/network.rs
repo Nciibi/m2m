@@ -1591,12 +1591,18 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(sk_data) = protocol::deserialize::<protocol::GroupSenderKeyData>(&plaintext) {
+                                    let our_peer_key_hex = {
+                                        let id = state.identity.read().await;
+                                        id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
+                                    };
                                     drop(conn);
                                     drop(conn_arc);
                                     drop(conns);
                                     let mut gm = state.group_manager.write().await;
-                                    if let Err(e) = gm.handle_sender_key(&sk_data) {
-                                        tracing::warn!(error = %e, "failed to handle sender key");
+                                    if let Some(our) = our_peer_key_hex {
+                                        if let Err(e) = gm.handle_sender_key(&sk_data, &our) {
+                                            tracing::warn!(error = %e, "failed to handle sender key");
+                                        }
                                     }
                                 }
                             }
