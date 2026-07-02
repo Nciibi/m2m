@@ -1353,7 +1353,7 @@ impl MessageStore {
         group_id: &str,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<(super::commands::ChatMessage, Vec<u8>, Vec<u8>)>, StorageError>
+    ) -> Result<Vec<(super::commands::ChatMessage, Vec<u8>, Vec<u8>)>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, group_id, sender_peer_key_hex, content_encrypted, content_nonce,
                     timestamp, delivered, edited_at, deleted
