@@ -503,6 +503,114 @@ pub struct SyncPayload {
     pub data: Vec<u8>,
 }
 
+// --- Group Chat (Phase 3) ---
+
+/// Create a new group (packet 0x50).
+/// Sent by the group creator to every initial member over their pairwise DR session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupCreateData {
+    /// UUID v4 identifying the group.
+    pub group_id: String,
+    /// Human-readable group name.
+    pub group_name: String,
+    /// Creator's Ed25519 public key (hex-encoded).
+    pub creator_peer_key_hex: String,
+    /// When the group was created (unix seconds, sender's clock).
+    pub created_at: u64,
+    /// Ed25519 public keys of all initial members (excluding creator).
+    pub initial_members: Vec<String>,
+}
+
+/// Invite a new member to an existing group (packet 0x51).
+/// Sent over the invitee's pairwise DR session by an admin.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupInviteData {
+    pub group_id: String,
+    pub group_name: String,
+    /// Inviter's Ed25519 public key (hex).
+    pub inviter_peer_key_hex: String,
+    /// Current number of members in the group.
+    pub member_count: u32,
+    /// All current members' Ed25519 public keys (hex).
+    pub existing_members: Vec<String>,
+    /// Ed25519 signature over (group_id || member_count) by the inviter.
+    pub signature: Vec<u8>,
+}
+
+/// Remove a member from a group (packet 0x52).
+/// Sent by an admin to ALL remaining members (triggers key rotation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupRemoveData {
+    pub group_id: String,
+    /// The member being removed (Ed25519 public key hex).
+    pub removed_peer_key_hex: String,
+    /// The admin who initiated the removal.
+    pub removed_by_peer_key_hex: String,
+    /// New Sender Key bundles for all remaining members (excluding the removed one).
+    /// Each member gets their own bundle sent over their personal DR session.
+    /// This field is populated in the packet to the specific recipient only.
+    pub new_sender_key: Option<GroupSenderKeyData>,
+}
+
+/// Distribute a Sender Key bundle to a group member (packet 0x53).
+/// Sent over the recipient's 1:1 DR session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupSenderKeyData {
+    pub group_id: String,
+    /// The peer whose sender key this is (Ed25519 public key hex).
+    pub sender_peer_key_hex: String,
+    /// Initial chain key (32 bytes, HKDF-derived) for this sender.
+    pub chain_key: [u8; 32],
+    /// Starting message number (usually 0).
+    pub message_number: u64,
+    /// Ed25519 signing key (32 bytes). Only the recipient of THIS bundle gets this.
+    /// All other members get the verification_key instead.
+    /// The signing key recipient can now send messages as this sender.
+    pub signing_key: Option<[u8; 32]>,
+    /// Ed25519 verification key (32 bytes). Everyone except the signing key recipient gets this.
+    pub verification_key: [u8; 32],
+    /// Ed25519 signature over (group_id || sender_peer_key_hex || chain_key).
+    /// Binds the sender key to the group and sender identity.
+    pub signature: Vec<u8>,
+}
+
+/// An encrypted group message (packet 0x54).
+/// Inner payload is encrypted with the sender's Sender Key chain.
+/// The outer frame is encrypted with the pairwise DR session (standard envelope).
+/// This means the same inner payload is sent N times (once per online member).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupEncryptedMessageData {
+    pub group_id: String,
+    /// The sender's Ed25519 public key (hex).
+    pub sender_peer_key_hex: String,
+    /// Message number in the sender's chain (for key derivation and replay protection).
+    pub message_number: u64,
+    /// XChaCha20-Poly1305 ciphertext (includes padded plaintext).
+    pub ciphertext: Vec<u8>,
+    /// Nonce for the XChaCha20-Poly1305 encryption.
+    pub nonce: Vec<u8>,
+    /// Ed25519 signature over (group_id || message_number || nonce || ciphertext).
+    pub signature: Vec<u8>,
+}
+
+/// Group metadata update (packet 0x55).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupInfoData {
+    pub group_id: String,
+    /// New group name (None = no change).
+    pub new_name: Option<String>,
+    /// Who made the change (Ed25519 public key hex).
+    pub changed_by_peer_key_hex: String,
+}
+
+/// Member leaves a group voluntarily (packet 0x56).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupLeaveData {
+    pub group_id: String,
+    /// The leaving member's Ed25519 public key (hex).
+    pub leaving_peer_key_hex: String,
+}
+
 /// The type of data contained in a SyncPayload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SyncPayloadType {
