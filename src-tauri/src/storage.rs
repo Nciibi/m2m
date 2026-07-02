@@ -1128,10 +1128,8 @@ pub struct ConversationSummary {
     pub retention_policy: String,
     pub message_count: i64,
     /// Whether this conversation is favorited.
-    #[serde(default)]
     pub is_favorite: Option<bool>,
     /// Whether this conversation is archived.
-    #[serde(default)]
     pub archived: Option<bool>,
 }
 
