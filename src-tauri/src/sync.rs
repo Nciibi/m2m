@@ -330,7 +330,6 @@ pub async fn handle_sync_payload(
                                     let _ = store.rename_conversation(
                                         &conv.conversation_id,
                                         &conv.display_name,
-                                        "",
                                     );
                                 }
                             }
