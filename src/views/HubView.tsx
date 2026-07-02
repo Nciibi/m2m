@@ -334,8 +334,12 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
       });
     } catch { /* noop */ }
   };
-  // Sort conversations: most recent first
-  const sorted = [...conversations].sort((a: any, b: any) => (b.last_message_at || 0) - (a.last_message_at || 0));
+  // Sort conversations: favorites first, then by recency, archived at bottom
+  const sorted = [...conversations].sort((a: any, b: any) => {
+    if ((a.archived ? 1 : 0) !== (b.archived ? 1 : 0)) return (a.archived ? 1 : 0) - (b.archived ? 1 : 0);
+    if ((a.is_favorite ? 1 : 0) !== (b.is_favorite ? 1 : 0)) return (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0);
+    return (b.last_message_at || 0) - (a.last_message_at || 0);
+  });
 
   return (
     <div className="conv-list">
