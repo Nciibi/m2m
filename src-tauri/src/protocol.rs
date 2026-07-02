@@ -752,6 +752,19 @@ mod protocol_tests {
             (0x30, PacketType::Disconnect),
             (0x31, PacketType::Error),
             (0x40, PacketType::ConversationMeta),
+            (0x41, PacketType::MessageReaction),
+            (0x42, PacketType::MessageEdit),
+            (0x43, PacketType::MessageDelete),
+            (0x44, PacketType::SyncRequest),
+            (0x45, PacketType::SyncDeviceInfo),
+            (0x46, PacketType::SyncPayload),
+            (0x50, PacketType::GroupCreate),
+            (0x51, PacketType::GroupInvite),
+            (0x52, PacketType::GroupRemove),
+            (0x53, PacketType::GroupSenderKey),
+            (0x54, PacketType::GroupEncryptedMessage),
+            (0x55, PacketType::GroupInfo),
+            (0x56, PacketType::GroupLeave),
         ];
         for &(byte, expected) in valid {
             let parsed = PacketType::from_byte(byte).unwrap();
@@ -762,7 +775,7 @@ mod protocol_tests {
 
     #[test]
     fn test_unknown_packet_type_rejected() {
-        let invalid_bytes: &[u8] = &[0x00, 0x0F, 0x18, 0x22, 0x32, 0x50, 0xFF];
+        let invalid_bytes: &[u8] = &[0x00, 0x0F, 0x18, 0x22, 0x32, 0x47, 0x57, 0xFF];
         for &byte in invalid_bytes {
             assert!(
                 PacketType::from_byte(byte).is_err(),
