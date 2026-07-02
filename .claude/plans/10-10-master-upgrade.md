@@ -138,32 +138,13 @@
 
 ---
 
-## Phase 7: Notifications & Background Mode (UI/UX: +0.3)
+## ❌ Phase 7: Notifications & Background Mode — MOSTLY MISSING
 
-### 7.1 — Native Notifications (Existing + Enhancement)
-
-**Already has**: `tauri-plugin-notification`
-**Enhancements**:
-- Action buttons in notifications: "Reply" (opens quick compose), "Mark Read"
-- Notification grouping: per-conversation summary notifications
-- Silent notifications for muted conversations (still show in notification center, no sound/badge)
-- Notification content preference: always show, show on unlock, never show content
-
-### 7.2 — Background Keep-Alive (Desktop)
-
-**Modified**: `src-tauri/src/main.rs`
-- System tray icon with context menu (Show/Hide, Quit)
-- Minimize to tray option (app stays running, receives messages)
-- Flash tray icon on new message from minimized state
-- Tauri `run_on_close` behavior: minimize, don't quit
-
-### 7.3 — System Tray Integration
-
-**New**: Tray menu with:
-- Connection status indicator
-- Recent conversations (click to open)
-- Quick actions: "New conversation", "Settings", "Quit"
-- Unread badge on tray icon (platform-specific)
+| Sub-phase | Status | Details |
+|-----------|--------|---------|
+| 7.1 Native notifications | ⚠️ | `tauri-plugin-notification` is a dependency but no action buttons, notification grouping, or content preferences implemented |
+| 7.2 Background keep-alive | ❌ | No system tray icon, no minimize-to-tray, no `run_on_close` behavior |
+| 7.3 System tray integration | ❌ | No `TrayIcon` or tray menu anywhere |
 
 ---
 
