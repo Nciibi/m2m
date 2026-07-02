@@ -251,24 +251,24 @@ tauri-plugin-updater = "2"
 
 ---
 
-## Execution Priority (What to Build First)
+## Execution Priority (What to Build Next)
 
 **Tier 1 — Core missing features (highest user impact)**:
 1. Group chat (Phase 3) — biggest missing feature vs. Signal/WhatsApp
 2. Frontend overhaul (Phase 5) — biggest visible quality gap
-3. Message reactions + self-destruct (Phase 4) — high UX value
+3. Message de-duplication + offline queue (Phase 6.2) — reliability gap
 
-**Tier 2 — P2P completeness**:
-4. DHT peer discovery (Phase 1) — removes dependency on out-of-band invite sharing
-5. LAN discovery (Phase 1) — zero-config local connections
-6. Reconnection logic (Phase 6) — reliability improvement
+**Tier 2 — Feature complete**:
+4. Multi-device sync (Phase 2) — significant engineering effort, moderate user demand
+5. Notifications + system tray (Phase 7) — background UX
+6. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
 
 **Tier 3 — Power user features**:
-7. Multi-device sync (Phase 2) — significant engineering effort, moderate user demand
-8. Voice messages (Phase 5) — moderate effort, high polish value
-9. Keyboard shortcuts (Phase 5) — small effort, high power-user value
+7. Voice messages (Phase 5.4) — moderate effort, high polish value
+8. Conversation organization (Phase 5.5) — favorites, mute, archive, folders
+9. Dark theme + keyboard shortcuts (Phase 5.6–5.8)
 
 **Tier 4 — Platform & maintenance**:
-10. Performance optimization (Phase 6)
-11. Auto-update + code signing (Phase 10)
-12. Idle lock + clipboard (Phase 8)
+10. Auto-update + code signing (Phase 10)
+11. Onboarding tutorial (Phase 9.1)
+12. API documentation pass (Phase 9.4)
