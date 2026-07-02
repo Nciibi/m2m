@@ -17,7 +17,7 @@ use crate::hole_punch;
 use crate::identity;
 use crate::network;
 use crate::relay;
-use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate, GroupEncryptedMessageData};
+use crate::protocol::{self, FileTransferRequestData, MessageBody, PacketType, ConversationMetaData, WireCandidate};
 use crate::session::Session;
 use crate::state::{AppState, PeerConnection, IncomingFileTransfer};
 use crate::stun;
