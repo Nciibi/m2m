@@ -102,9 +102,9 @@ This plan details the gaps that prevent the app from achieving a **10/10** UI/UX
 
 | Milestone | Timeline | Deliverable |
 |-----------|----------|-------------|
-| **M1 – Theme & Shortcut Foundation** | End of Week 2 | Dark‑mode CSS, global hotkey system, typing‑indicator wire‑up (backend + UI) |
-| **M2 – Messaging UI Polish** | End of Week 4 | Search bar, completed emoji picker, dark‑mode chat bubbles, ARIA live region |
-| **M3 – Conversation Management** | End of Week 6 | Favorites/mute/archive UI, drag‑and‑drop file send, keyboard navigation in Hub |
+| **M1 – Theme & Shortcut Foundation** | ✅ Mostly complete | Dark‑mode CSS ✅, manual light/dark/system toggle ✅, ThemeContext.tsx ✅, keyboard shortcuts 🟡 partial |
+| **M2 – Messaging UI Polish** | ✅ ~60% complete | Emoji picker ✅, message status indicators ✅, file transfer progress bars ✅, sender labels ✅, Search bar ❌, typing indicator ❌, ARIA live region ❌ |
+| **M3 – Conversation Management** | 🟡 ~30% complete | Conversation sorting ✅, last-seen ✅, invite countdown/history ✅, listening indicator ✅, Favorites/archive ❌, drag-and-drop ❌, keyboard nav ❌ |
 | **M4 – System Integration** | End of Week 8 | Native notifications (with actions), tray icon, background keep‑alive, auto‑update UI |
 | **M5 – Onboarding & Accessibility** | End of Week 10 | Setup wizard, WCAG‑AA contrast compliance, focus management, screen‑reader labels |
 | **M6 – Theming & Customization** | End of Week 12 | Accent‑color picker, theme presets, export/import of theme settings |
