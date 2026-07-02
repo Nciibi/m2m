@@ -22,6 +22,7 @@ export default function SettingsView() {
     scheduleClipboardClear,
   } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
+  const [ipCopied, setIpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
 
   const onBackToHub = () => setView("hub");
@@ -75,6 +76,18 @@ export default function SettingsView() {
             <div className="settings-row">
               <span className="settings-label">Public IP</span>
               <span className="settings-mono">{publicIp || "Not yet discovered"}</span>
+              {publicIp && (
+                <button className="btn btn--ghost btn--icon-sm" onClick={() => {
+                  navigator.clipboard.writeText(publicIp);
+                  setIpCopied(true);
+                  setTimeout(() => setIpCopied(false), 2000);
+                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                  }
+                }} aria-label="Copy IP">
+                  {ipCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+                </button>
+              )}
               <Button size="xs" onClick={handleStunDiscover} loading={stunLoading}>Discover via STUN</Button>
             </div>
 
@@ -261,21 +274,4 @@ export default function SettingsView() {
 
         {/* ─── About ─── */}
         <section className="settings-section">
-          <h2 className="settings-section__title">About</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label">Version</span>
-              <span>2.5.x</span>
-            </div>
-            <div className="settings-row">
-              <span className="settings-label">Crypto</span>
-              <span className="text-muted text-sm">Ed25519 · X25519 · XChaCha20-Poly1305 · X3DH · Double Ratchet</span>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </div>
-  );
-}
+ 

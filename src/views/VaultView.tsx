@@ -66,6 +66,13 @@ export default function VaultView() {
           </span>
         </p>
 
+        {/* Show fingerprint hint for returning users */}
+        {!isFirstTime && identity?.fingerprint && (
+          <div className="fp-hint">
+            This vault belongs to {identity.fingerprint.substring(0, 16)}…
+          </div>
+        )}
+
         <div className={`vault-form ${vaultError ? "vault-form--shake" : ""}`} key={shakeKey}>
           <div className="input-wrap-relative">
             <Input
@@ -86,6 +93,20 @@ export default function VaultView() {
               className="input__clear input__clear--absolute"
             >
               {showPassphrase ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  setPassphrase(text);
+                  setVaultError("");
+                } catch { /* Clipboard access denied */ }
+              }}
+              className="paste-btn"
+              title="Paste from clipboard"
+              aria-label="Paste passphrase"
+            >
+              📋 Paste
             </button>
           </div>
 
