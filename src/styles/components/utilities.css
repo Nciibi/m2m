@@ -192,21 +192,24 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-xl);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: background var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   position: relative;
+  min-height: 64px;
 }
 
 .conv-item:hover {
-  background: var(--color-bg-hover);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .conv-item:active {
-  background: var(--color-bg-active);
-  transform: scale(0.99);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .conv-item:hover .conv-actions {
