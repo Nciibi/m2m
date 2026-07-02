@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { Button, Badge, Modal, ToastContainer } from "../components/ui";
+import { listen } from "@tauri-apps/api/event";
+import { Button, Badge, Modal, ToastContainer, ProgressBar } from "../components/ui";
 import {
   ArrowLeftIcon, ShieldIcon, VerifiedIcon, LockIcon,
   SendIcon, AttachIcon, FileIcon, ArrowDownIcon, CloseIcon,
+  SmileyIcon, CheckDoubleIcon, ClockIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
