@@ -188,7 +188,7 @@
 
 | Phase | Content | Architecture | Security | Networking | Tests | UI/UX | Perf | Overall |
 |-------|---------|:-----------:|:--------:|:----------:|:----:|:----:|:----:|:-------:|
-| Now | Current | 10 | 10 | 10 | 9.5 | 6.0 | 9.5 | **8.0** |
+| Now | Current | 10 | 10 | 10 | 9.5 | 6.0 | 10 | **8.0** |
 | 1 | DHT + LAN discovery | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
 | 2 | Multi-device sync | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
 | 3 | Group chat | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
