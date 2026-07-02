@@ -1540,8 +1540,7 @@ pub fn spawn_receive_loop(
                                     tracing::info!(group = %create.group_id, "received group create");
                                     let gid = create.group_id.clone();
                                     drop(conn);
-                                    drop(conn_arc);
-                                    drop(conns);
+drop(conns);
 
                                     state.ensure_message_store(&state.data_dir).await.ok();
                                     let ms = state.message_store.lock().await;
@@ -1596,8 +1595,7 @@ pub fn spawn_receive_loop(
                                         id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
                                     };
                                     drop(conn);
-                                    drop(conn_arc);
-                                    drop(conns);
+drop(conns);
                                     let mut gm = state.group_manager.write().await;
                                     if let Some(our) = our_peer_key_hex {
                                         if let Err(e) = gm.handle_sender_key(&sk_data, &our) {
@@ -1620,8 +1618,7 @@ pub fn spawn_receive_loop(
                                     let gid = group_msg.group_id.clone();
                                     let sender = group_msg.sender_peer_key_hex.clone();
                                     drop(conn);
-                                    drop(conn_arc);
-                                    drop(conns);
+drop(conns);
 
                                     // Decrypt inner group message
                                     let mut gm = state.group_manager.write().await;
@@ -1688,8 +1685,7 @@ pub fn spawn_receive_loop(
                                     let new_name = info.new_name.clone();
                                     let gid = info.group_id.clone();
                                     drop(conn);
-                                    drop(conn_arc);
-                                    drop(conns);
+drop(conns);
 
                                     if let Some(ref name) = new_name {
                                         let mut gm = state.group_manager.write().await;
@@ -1723,8 +1719,7 @@ pub fn spawn_receive_loop(
                                     let gid = remove.group_id.clone();
                                     let is_us = removed == peer_key_hex;
                                     drop(conn);
-                                    drop(conn_arc);
-                                    drop(conns);
+drop(conns);
 
                                     if is_us {
                                         let mut gm = state.group_manager.write().await;
@@ -1772,8 +1767,7 @@ pub fn spawn_receive_loop(
                                     let leaving = leave.leaving_peer_key_hex.clone();
                                     let gid = leave.group_id.clone();
                                     drop(conn);
-                                    drop(conn_arc);
-                                    drop(conns);
+drop(conns);
 
                                     let mut gm = state.group_manager.write().await;
                                     let _ = gm.leave_group(&gid, &leaving);
