@@ -296,6 +296,28 @@ export default function SettingsView() {
           </div>
         </section>
 
+        {/* ─── Theme ─── */}
+        <section className="settings-section">
+          <h2 className="settings-section__title">Theme</h2>
+          <div className="settings-card">
+            <div className="settings-row">
+              <span className="settings-label">Appearance</span>
+              <div className="theme-selector" style={{ display: 'flex', gap: 'var(--space-xs)', alignItems: 'center' }}>
+                <button className={`btn btn--icon btn--icon-sm ${theme === 'light' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('light')} aria-label="Light theme" title="Light">
+                  <SunIcon size={18} />
+                </button>
+                <button className={`btn btn--icon btn--icon-sm ${theme === 'dark' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('dark')} aria-label="Dark theme" title="Dark">
+                  <MoonIcon size={18} />
+                </button>
+                <button className={`btn btn--icon btn--icon-sm ${theme === 'system' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('system')} aria-label="System theme" title="System">
+                  <MonitorIcon size={18} />
+                </button>
+              </div>
+              <span className="settings-hint">Current: {resolvedTheme}</span>
+            </div>
+          </div>
+        </section>
+
         {/* ─── About ─── */}
         <section className="settings-section">
           <h2 className="settings-section__title">About</h2>
