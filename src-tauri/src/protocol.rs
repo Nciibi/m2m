@@ -199,6 +199,8 @@ impl PacketType {
             0x54 => Ok(PacketType::GroupEncryptedMessage),
             0x55 => Ok(PacketType::GroupInfo),
             0x56 => Ok(PacketType::GroupLeave),
+            0x60 => Ok(PacketType::TypingIndicator),
+            0x61 => Ok(PacketType::TypingIndicatorClear),
             other => Err(ProtocolError::UnknownPacketType(other)),
         }
     }
