@@ -8,6 +8,8 @@ interface ThemeContextValue {
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
   resolvedTheme: "light" | "dark";
+  accentColor: string;
+  setAccentColor: (color: string) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
