@@ -1779,6 +1779,112 @@
   color: var(--color-text-primary);
 }
 
+/* ─── Vault input redesign (no overlap) ─── */
+.vault-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.vault-input-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.vault-input-wrap .input-wrap > input {
+  padding-right: 100px;
+}
+
+.vault-input-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2;
+}
+
+.vault-paste-btn {
+  padding: 4px 8px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-chip);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  line-height: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.vault-paste-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.vault-toggle-btn {
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+  width: 28px;
+  height: 28px;
+}
+
+.vault-toggle-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.vault-match-check {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+}
+
+.vault-input-sub-row {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0;
+}
+
+.vault-tips-toggle {
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+  font-family: inherit;
+}
+
+.vault-tips-toggle:hover {
+  color: var(--color-text-secondary);
+}
+
+.vault-crypto-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 /* ─── Fingerprint hint in vault ─── */
 .fp-hint {
   font-size: var(--text-xs);
