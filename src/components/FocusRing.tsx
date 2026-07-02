@@ -1,4 +1,4 @@
-import React, { ReactNode, forwardRef } from "react";
+import { ReactNode, forwardRef } from "react";
 import "./FocusRing.css";
 
 export interface FocusRingProps {

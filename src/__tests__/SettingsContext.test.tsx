@@ -17,14 +17,13 @@ import { SettingsProvider, useSettings } from "../context/SettingsContext";
 
 function TestConsumer() {
   const {
-    networkSettings, publicIp, stunLoading, networkDiagnostics,
-    stunConfig, stunServerInput, privateMode, connectivityResult,
+    publicIp, stunLoading, privateMode,
+    discoveryConfig, discoveredPeers,
+    securityConfig,
     handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
     handleResetStunDefaults, handlePrivateModeToggle, handleConnectivityCheck,
     handleTorToggle, setStunServerInput,
-    discoveryConfig, discoveredPeers,
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
-    securityConfig,
     handleScreenCaptureToggle, handleLockVault, handleClearClipboard,
   } = useSettings();
   return (
