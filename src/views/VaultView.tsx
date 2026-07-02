@@ -6,7 +6,7 @@ import { useApp } from "../context/AppContext";
 import { useVault } from "../context/VaultContext";
 
 export default function VaultView() {
-  const { vaultInitialized, toasts, removeToast } = useApp();
+  const { identity, vaultInitialized, toasts, removeToast } = useApp();
   const { handleUnlockVault } = useVault();
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
