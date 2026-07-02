@@ -42,6 +42,8 @@ export interface ChatMessage {
   expires_at: number | null;
   /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
   reactions: Record<string, string[]>;
+  /// Sender of this message (used for group messages).
+  sender_peer_key_hex: string;
 }
 
 export interface ConnectionInfo {
