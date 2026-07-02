@@ -123,12 +123,12 @@
 
 ---
 
-## ⚠️ Phase 6: Performance & Reliability — IN PROGRESS (4/5 done)
+## ✅ Phase 6: Performance & Reliability — COMPLETE
 
 | Sub-phase | Status | Details |
 |-----------|--------|---------|
 | 6.1 Connection reconnection | ✅ | `reconnect.rs` — exponential backoff (1s→30s cap), 5 max attempts, frontend "Reconnecting…" badge |
-| 6.2 Message de-duplication & ordering | ⚠️ | DB-level idempotent store by message_id exists. **Under development**: sender-side offline queue, reconnect missed-message request |
+| 6.2 Message de-duplication & ordering | ✅ | DB-level idempotent store by message_id. Sender-side offline queue + reconnect missed-message request implemented |
 | 6.3 Database performance | ✅ | WAL mode on all stores, composite indexes (`idx_messages_conversation`, `idx_messages_expires_at`, etc.) |
 | 6.4 Benchmarks | ✅ | `crypto_bench.rs` with criterion for DR encrypt/decrypt |
 | 6.5 Startup time optimization | ✅ | Lazy vault init, lazy candidate gathering (no STUN scan unless listening), deferred DHT bootstrap |
