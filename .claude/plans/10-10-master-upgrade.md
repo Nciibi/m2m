@@ -236,18 +236,19 @@
 ## Dependency Additions
 
 ```toml
-# DHT-based peer discovery
-kademlia-dht = "0.8"        # or minimal custom Kademlia
+# DHT-based peer discovery — ✅ Implemented custom Kademlia (no external crate needed)
 # Multi-device sync (QR encoding)
-qrcode = "0.14"
-# Benchmarking
+# qrcode = "0.14"                ❌ Pending
+# Benchmarking — ✅ Already added
 criterion = { version = "0.5", optional = true }
 # Audio capture (voice messages)
-# cpal = "0.15"              # cross-platform audio capture
+# cpal = "0.15"                  ❌ Pending
 # System tray
-# tauri-plugin-tray = "2"    # if not built-in in Tauri v2
+# tauri-plugin-tray = "2"        ❌ Pending
 # Updater
-tauri-plugin-updater = "2"
+# tauri-plugin-updater = "2"     ❌ Pending
+# Notifications — ✅ Already added
+tauri-plugin-notification = "2"
 ```
 
 ---
