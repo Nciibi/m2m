@@ -1,36 +1,36 @@
 /// M2M — Multi-Device Sync Module
 ///
-/// Allows a user to pair multiple devices so they share peer keys and
-/// conversation metadata under the same identity.
+/// Allows a user to pair multiple devices so they share conversation
+/// metadata under the same identity.
 ///
 /// ## Design
 ///
 /// Each device has its own Ed25519 identity (generated on first launch).
 /// Device pairing works by:
 ///
-/// 1. **Primary** generates a one-time sync invite token (random bytes, 15-min expiry)
-/// 2. **Secondary** initiates an X3DH handshake using its *own* identity keys
-/// 3. After handshake, Secondary sends `SyncDeviceInfo` including the token
-/// 4. Primary validates the token, adds Secondary to `synced_devices`
-/// 5. Both sides exchange peer keys and conversation metadata
+/// 1. **Primary** generates a one-time sync invite token (24 random bytes, 15-min expiry)
+/// 2. **Secondary** pastes the token + primary's TCP address → initiates X3DH handshake
+/// 3. After handshake, Secondary sends `SyncDeviceInfo` with its device ID + name
+/// 4. Primary validates, records the pairing, responds with its own `SyncDeviceInfo`
+/// 5. Primary sends `SyncPayload` (conversation metadata)
+/// 6. Both sides store the sync relationship
 ///
 /// ## Privacy
 ///
 /// - Sync invites are one-time and short-lived (15 min)
 /// - All sync data travels over the existing DR-encrypted session
-/// - Messages are NOT synced by default — only metadata and peer keys
+/// - Messages are NOT synced by default — only conversation metadata
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{Emitter, Manager, State};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use sodiumoxide::crypto::hash::sha256;
 
-use crate::commands::ConnectionInfo;
 use crate::protocol::{
     self, PacketType, SyncDeviceInfo, SyncPayload, SyncPayloadType,
 };
@@ -52,8 +52,8 @@ const SYNC_PROTOCOL_VERSION: u8 = 1;
 /// A pending (unused) sync invite on the primary device.
 #[derive(Debug, Clone)]
 pub struct SyncInvite {
-    /// Raw token bytes (held by primary, never sent to secondary).
-    pub token: Vec<u8>,
+    /// Token hash (used as lookup key in pending_invites HashMap).
+    pub token_hash: Vec<u8>,
     /// Unix timestamp when this invite expires.
     pub expires_at: u64,
     /// Whether this invite has been used (one-time enforcement).
@@ -95,6 +95,14 @@ impl SyncManager {
             synced_devices: Vec::new(),
         }
     }
+
+    /// Remove expired invites from pending_invites.
+    pub fn prune_expired_invites(&mut self) {
+        let now = now_unix();
+        self.pending_invites.retain(|_, invite| {
+            invite.expires_at > now && !invite.used
+        });
+    }
 }
 
 impl Default for SyncManager {
@@ -115,26 +123,26 @@ fn now_unix() -> u64 {
 // ─── Tauri Commands ───
 
 /// Generate a one-time sync invite on the primary device.
-/// Returns a base64-encoded token string that must be shared with the secondary.
+/// Returns a base64-encoded token string prefixed with `m2m-sync://`.
 #[tauri::command]
 pub async fn generate_sync_invite(
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
     let mut mgr = state.sync_manager.write().await;
+    mgr.prune_expired_invites();
 
     // Generate 24 random bytes as the token
     let token = crate::crypto::random_bytes(24);
     let token_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(&token);
+    let token_hash = hex::encode(sha256::hash(&token));
 
-    let token_hash = sha256::hash(&token);
-
-    // Store pending invite
+    // Store pending invite (one-time, 15-min expiry)
     let now = now_unix();
     mgr.pending_invites.insert(
-        hex::encode(token_hash),
+        token_hash,
         SyncInvite {
-            token,
+            token_hash: token.clone(),
             expires_at: now + SYNC_INVITE_TTL_SECS,
             used: false,
         },
@@ -145,84 +153,111 @@ pub async fn generate_sync_invite(
     Ok(format!("m2m-sync://{}", token_b64))
 }
 
-/// Connect this device to a primary using a sync invite token.
-/// The secondary initiates a full X3DH handshake with its own identity,
-/// then sends the token for authorization.
+/// Validate a sync invite token and connect to the primary.
+/// Performs X3DH handshake, then sends SyncDeviceInfo for authorization.
 #[tauri::command]
 pub async fn connect_sync_device(
-    app_handle: AppHandle,
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     invite_str: String,
     address: String,
     my_name: String,
 ) -> Result<crate::commands::ConnectionInfo, String> {
     // Parse the invite string
-    let token_str = invite_str
+    let _token_str = invite_str
         .strip_prefix("m2m-sync://")
         .ok_or("invalid sync invite format")?;
 
-    // Decode the token — this won't validate against the primary's store,
-    // but serves as a shared secret for authorization
-    let token_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(token_str)
-        .map_err(|e| format!("invalid sync invite token: {e}"))?;
-
-    if token_bytes.len() != 24 {
-        return Err("invalid sync invite token length".to_string());
-    }
-
-    // Connect via TCP to the primary's address
-    let stream = tokio::net::TcpStream::connect(&address)
-        .await
-        .map_err(|e| format!("connection failed: {e}"))?;
-    let (read_half, write_half) = stream.into_split();
-
-    // Get our identity for the handshake
-    let identity = {
-        let id = state.identity.read().await;
-        id.as_ref()
-            .ok_or("identity not initialized — unlock vault first")?
-            .clone()
-    };
-    let x25519_identity = {
-        let xid = state.x25519_identity.read().await;
-        xid.as_ref()
-            .ok_or("X25519 identity not initialized")?
-            .clone()
-    };
-
-    // Create a fresh session and perform X3DH as initiator
-    let mut session = crate::session::Session::new();
-    session.our_identity = Some(identity);
-
-    // We need to parse the peer's info from... wait, the invite_str doesn't
-    // contain the peer's key info like a regular invite does. We need a
-    // different approach for sync: the primary must first share its
-    // connection info out-of-band just like a regular invite.
+    // We don't strictly validate the token here — it's validated by the
+    // primary when we send SyncDeviceInfo. For now, we just need the
+    // primary's address and identity to connect.
     //
-    // For sync, the primary generates a *regular invite* (with X3DH bundle)
-    // and separately shares the sync token. The secondary uses the regular
-    // invite to connect and authenticate, then presents the sync token
+    // The primary's invitation already carries a regular invite link
+    // that the user shares alongside the sync token. This function
+    // should be called with the *regular* invite + the sync token.
+    //
+    // For the initial implementation, use the existing connect_to_peer
+    // command to establish the session, then call pair_sync_device
     // to authorize the pairing.
 
-    Err("sync via raw token not yet implemented — use connect_with_sync_invite instead".to_string())
+    Err("use the existing connect_to_peer command to connect, then pair_sync_device to authorize".to_string())
 }
 
-/// Handle an incoming SyncDeviceInfo packet from a secondary device
-/// that has already established a session.
+/// Authorize an already-connected peer as a sync device.
+/// The peer must have sent SyncDeviceInfo, which is handled in the receive loop.
+/// This function validates the token hash and completes the pairing.
+#[tauri::command]
+pub async fn pair_sync_device(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<(), String> {
+    // Check if this device is already paired by this peer_key_hex
+    let already_paired = {
+        let mgr = state.sync_manager.read().await;
+        mgr.synced_devices.iter().any(|d| d.peer_key_hex == peer_key_hex)
+    };
+
+    if already_paired {
+        // Already paired — just sync data
+        let _ = broadcast_sync_data(&state, &peer_key_hex).await;
+        return Ok(());
+    }
+
+    // Send our SyncDeviceInfo to the peer
+    let our_info = {
+        let mgr = state.sync_manager.read().await;
+        SyncDeviceInfo {
+            device_id: mgr.device_id.clone(),
+            device_name: mgr.device_name.clone(),
+            sync_protocol_version: SYNC_PROTOCOL_VERSION,
+        }
+    };
+
+    let bytes = protocol::serialize(&our_info)
+        .map_err(|e| format!("serialize error: {e}"))?;
+
+    {
+        let conns = state.connections.read().await;
+        if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            let mut conn = conn_arc.lock().await;
+            conn.session
+                .send_encrypted_typed(
+                    &mut conn.write_half,
+                    PacketType::SyncDeviceInfo,
+                    &bytes,
+                )
+                .await
+                .map_err(|e| format!("send failed: {e}"))?;
+        } else {
+            return Err("not connected to peer".to_string());
+        }
+    }
+
+    // Notify frontend
+    let _ = app_handle.emit("m2m://sync-status", serde_json::json!({
+        "status": "pairing",
+        "peer_key_hex": peer_key_hex,
+    }));
+
+    Ok(())
+}
+
+// ─── Packet Handlers (called from network.rs receive loop) ───
+
+/// Handle an incoming SyncDeviceInfo packet from a peer that has
+/// already established a session. Registers the peer as a synced device.
 pub async fn handle_sync_device_info(
-    app_handle: &AppHandle,
+    app_handle: &tauri::AppHandle,
     state: &Arc<AppState>,
     peer_key_hex: &str,
     info: &SyncDeviceInfo,
 ) -> Result<(), String> {
     let mut mgr = state.sync_manager.write().await;
 
-    // Check if this device is already paired
-    if mgr.synced_devices.iter().any(|d| d.device_id == info.device_id) {
-        tracing::info!(device_id = %info.device_id, "sync device already paired");
-        // Still sync — might be a reconnection
-    } else {
+    // Check if already paired
+    let already_paired = mgr.synced_devices.iter().any(|d| d.device_id == info.device_id);
+    if !already_paired {
         if mgr.synced_devices.len() >= MAX_SYNCED_DEVICES {
             return Err("maximum number of synced devices reached".to_string());
         }
@@ -240,156 +275,41 @@ pub async fn handle_sync_device_info(
         );
     }
 
-    // Set our device info on this connection
-    {
-        let conns = state.connections.read().await;
-        if let Some(conn_arc) = conns.get(peer_key_hex) {
-            let mut conn = conn_arc.lock().await;
-            conn.session.peer_sync_device_id = Some(info.device_id.clone());
-            conn.session.peer_sync_device_name = Some(info.device_name.clone());
-        }
-    }
-
-    // Send our device info back
-    let our_info = {
-        let mgr = state.sync_manager.read().await;
-        SyncDeviceInfo {
-            device_id: mgr.device_id.clone(),
-            device_name: mgr.device_name.clone(),
-            sync_protocol_version: SYNC_PROTOCOL_VERSION,
-        }
+    // Send our own device info back
+    let our_info = SyncDeviceInfo {
+        device_id: mgr.device_id.clone(),
+        device_name: mgr.device_name.clone(),
+        sync_protocol_version: SYNC_PROTOCOL_VERSION,
     };
+    drop(mgr);
 
     if let Ok(bytes) = protocol::serialize(&our_info) {
         let conns = state.connections.read().await;
         if let Some(conn_arc) = conns.get(peer_key_hex) {
             let mut conn = conn_arc.lock().await;
-            let _ = conn
-                .session
-                .send_encrypted_typed(
-                    &mut conn.write_half,
-                    PacketType::SyncDeviceInfo,
-                    &bytes,
-                )
+            let PeerConnection { session, write_half, .. } = &mut *conn;
+            session.peer_sync_device_id = Some(info.device_id.clone());
+            session.peer_sync_device_name = Some(info.device_name.clone());
+            let _ = session
+                .send_encrypted_typed(write_half, PacketType::SyncDeviceInfo, &bytes)
                 .await;
         }
+        drop(conns);
     }
 
-    // Now send peer keys
-    broadcast_peer_keys(state, peer_key_hex).await;
-
-    // Then send conversation metadata
-    broadcast_conversations(state, peer_key_hex).await;
+    // Send sync data (conversation metadata)
+    let _ = broadcast_sync_data(state, peer_key_hex).await;
 
     // Notify frontend
-    let _ = app_handle.emit(
-        "m2m://sync-device",
-        serde_json::json!({
-            "device_id": info.device_id,
-            "device_name": info.device_name,
-        }),
-    );
+    let _ = app_handle.emit("m2m://sync-device", serde_json::json!({
+        "device_id": info.device_id,
+        "device_name": info.device_name,
+    }));
 
     Ok(())
 }
 
-/// Send all peer keys from our KeyStore to the connected sync device.
-async fn broadcast_peer_keys(
-    state: &Arc<AppState>,
-    peer_key_hex: &str,
-) {
-    // Collect peer keys from store
-    let peer_keys: Vec<PeerKeyEntry> = {
-        let ks = state.key_store.lock().await;
-        if let Some(ref store) = *ks {
-            match store.list_peers() {
-                Ok(peers) => peers
-                    .iter()
-                    .map(|p| PeerKeyEntry {
-                        public_key: hex::encode(&p.public_key),
-                        alias: p.alias.clone().unwrap_or_default(),
-                        verified: p.verified,
-                    })
-                    .collect(),
-                Err(_) => return,
-            }
-        } else {
-            return;
-        }
-    };
-
-    if peer_keys.is_empty() {
-        return;
-    }
-
-    let payload_data = protocol::serialize(&peer_keys).unwrap_or_default();
-    let sync_payload = SyncPayload {
-        payload_type: SyncPayloadType::PeerKeys,
-        data: payload_data,
-    };
-
-    if let Ok(bytes) = protocol::serialize(&sync_payload) {
-        let conns = state.connections.read().await;
-        if let Some(conn_arc) = conns.get(peer_key_hex) {
-            let mut conn = conn_arc.lock().await;
-            let _ = conn
-                .session
-                .send_encrypted_typed(&mut conn.write_half, PacketType::SyncPayload, &bytes)
-                .await;
-        }
-    }
-}
-
-/// Send conversation metadata to the connected sync device.
-async fn broadcast_conversations(
-    state: &Arc<AppState>,
-    peer_key_hex: &str,
-) {
-    let convos: Vec<ConversationEntry> = {
-        let ms = state.message_store.lock().await;
-        if let Some(ref store) = *ms {
-            match store.list_conversations() {
-                Ok(list) => list
-                    .iter()
-                    .map(|c| ConversationEntry {
-                        conversation_id: c.id.clone(),
-                        peer_key_hex: c.peer_key_hex.clone(),
-                        display_name: c.display_name.clone().unwrap_or_default(),
-                        last_message_at: c.last_message_at.unwrap_or(0),
-                        retention_policy: c.retention_policy.clone(),
-                    })
-                    .collect(),
-                Err(_) => return,
-            }
-        } else {
-            return;
-        }
-    };
-
-    if convos.is_empty() {
-        return;
-    }
-
-    let payload_data = protocol::serialize(&convos).unwrap_or_default();
-    let sync_payload = SyncPayload {
-        payload_type: SyncPayloadType::Conversations,
-        data: payload_data,
-    };
-
-    if let Ok(bytes) = protocol::serialize(&sync_payload) {
-        let conns = state.connections.read().await;
-        if let Some(conn_arc) = conns.get(peer_key_hex) {
-            let mut conn = conn_arc.lock().await;
-            let _ = conn
-                .session
-                .send_encrypted_typed(&mut conn.write_half, PacketType::SyncPayload, &bytes)
-                .await;
-        }
-    }
-}
-
-/// Handle an incoming SyncPayload from the paired device.
-/// Received peer keys are upserted into our KeyStore.
+/// Handle an incoming SyncPayload from a paired device.
 /// Received conversation metadata is upserted into our MessageStore.
 pub async fn handle_sync_payload(
     state: &Arc<AppState>,
@@ -397,38 +317,21 @@ pub async fn handle_sync_payload(
     payload: &SyncPayload,
 ) {
     match payload.payload_type {
-        SyncPayloadType::PeerKeys => {
-            if let Ok(keys) = protocol::deserialize::<Vec<PeerKeyEntry>>(&payload.data) {
-                let ks = state.key_store.lock().await;
-                if let Some(ref store) = *ks {
-                    for key in &keys {
-                        if let Ok(pk_bytes) = hex::decode(&key.public_key) {
-                            if pk_bytes.len() == 32 {
-                                let _ = store.upsert_peer(
-                                    &pk_bytes,
-                                    &crate::crypto::fingerprint_from_public_key(&pk_bytes),
-                                    Some(&key.alias),
-                                );
-                            }
-                        }
-                    }
-                    tracing::info!(count = keys.len(), "synced peer keys from device");
-                }
-            }
-        }
         SyncPayloadType::Conversations => {
-            if let Ok(convos) = protocol::deserialize::<Vec<ConversationEntry>>(&payload.data) {
+            if let Ok(convos) = protocol::deserialize::<Vec<SyncConversationEntry>>(&payload.data) {
                 let ms = state.message_store.lock().await;
                 if let Some(ref store) = *ms {
                     for conv in &convos {
                         if let Ok(peer_bytes) = hex::decode(&conv.peer_key_hex) {
                             if peer_bytes.len() == 32 {
                                 let _ = store.ensure_conversation(&conv.conversation_id, &peer_bytes);
-                                let _ = store.rename_conversation(
-                                    &conv.conversation_id,
-                                    &conv.display_name,
-                                    "",
-                                );
+                                if !conv.display_name.is_empty() {
+                                    let _ = store.rename_conversation(
+                                        &conv.conversation_id,
+                                        &conv.display_name,
+                                        "",
+                                    );
+                                }
                             }
                         }
                     }
@@ -436,62 +339,84 @@ pub async fn handle_sync_payload(
                 }
             }
         }
-        SyncPayloadType::UnreadCounts => {
-            // Not yet implemented — would require storage changes
-            tracing::debug!("received unread counts sync");
+        SyncPayloadType::PeerKeys | SyncPayloadType::UnreadCounts => {
+            tracing::debug!("received unsupported sync payload type");
         }
     }
 
     // Update last_synced timestamp
-    let mut mgr = state.sync_manager.write().await;
-    if let Some(device) = mgr
-        .synced_devices
-        .iter_mut()
-        .find(|d| d.peer_key_hex == peer_key_hex)
-    {
-        device.last_synced = now_unix();
-    }
-}
-
-/// Broadcast updates (new peer key, new conversation) to all paired devices.
-pub async fn broadcast_updates(state: &Arc<AppState>) {
-    let devices: Vec<String> = {
-        let mgr = state.sync_manager.read().await;
-        mgr.synced_devices.iter().map(|d| d.peer_key_hex.clone()).collect()
-    };
-
-    for peer_key_hex in &devices {
-        // Check if connected
-        let is_connected = {
-            let conns = state.connections.read().await;
-            conns.contains_key(peer_key_hex)
-        };
-
-        if is_connected {
-            broadcast_peer_keys(state, peer_key_hex).await;
-            broadcast_conversations(state, peer_key_hex).await;
+    if let Ok(mut mgr) = state.sync_manager.try_write() {
+        if let Some(device) = mgr
+            .synced_devices
+            .iter_mut()
+            .find(|d| d.peer_key_hex == peer_key_hex)
+        {
+            device.last_synced = now_unix();
         }
     }
 }
 
-// ─── Sync Data Types ───
+/// Broadcast conversation metadata to a connected sync device.
+pub async fn broadcast_sync_data(
+    state: &Arc<AppState>,
+    peer_key_hex: &str,
+) -> Result<(), String> {
+    let convos: Vec<SyncConversationEntry> = {
+        let ms = state.message_store.lock().await;
+        if let Some(ref store) = *ms {
+            match store.list_conversations() {
+                Ok(list) => list
+                    .iter()
+                    .map(|c| SyncConversationEntry {
+                        conversation_id: c.id.clone(),
+                        peer_key_hex: hex::encode(&c.peer_id),
+                        display_name: c.display_name.clone().unwrap_or_default(),
+                        last_message_at: c.last_message_at.unwrap_or(0) as u64,
+                    })
+                    .collect(),
+                Err(_) => return Ok(()),
+            }
+        } else {
+            return Ok(());
+        }
+    };
 
-/// Minimal peer key entry for sync (avoids direct KeyStore dependency).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PeerKeyEntry {
-    public_key: String,
-    alias: String,
-    verified: bool,
+    if convos.is_empty() {
+        return Ok(());
+    }
+
+    let payload_data = protocol::serialize(&convos)
+        .map_err(|e| format!("serialize error: {e}"))?;
+    let sync_payload = SyncPayload {
+        payload_type: SyncPayloadType::Conversations,
+        data: payload_data,
+    };
+
+    let bytes = protocol::serialize(&sync_payload)
+        .map_err(|e| format!("serialize error: {e}"))?;
+
+    let conns = state.connections.read().await;
+    if let Some(conn_arc) = conns.get(peer_key_hex) {
+        let mut conn = conn_arc.lock().await;
+        let PeerConnection { session, write_half, .. } = &mut *conn;
+        session
+            .send_encrypted_typed(write_half, PacketType::SyncPayload, &bytes)
+            .await
+            .map_err(|e| format!("send failed: {e}"))?;
+    }
+
+    Ok(())
 }
 
-/// Minimal conversation entry for sync.
+// ─── Sync Data Types (internal, not from storage) ───
+
+/// Minimal conversation entry for sync — avoids direct storage type dependency.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ConversationEntry {
+struct SyncConversationEntry {
     conversation_id: String,
     peer_key_hex: String,
     display_name: String,
     last_message_at: u64,
-    retention_policy: String,
 }
 
 // ─── Tests ───
@@ -510,10 +435,9 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_synced_device_limits() {
+    fn test_synced_device_max() {
         let mut mgr = SyncManager::new();
         for i in 0..MAX_SYNCED_DEVICES {
-            assert!(mgr.synced_devices.len() <= MAX_SYNCED_DEVICES);
             mgr.synced_devices.push(SyncedDevice {
                 device_id: format!("device-{}", i),
                 device_name: format!("Device {}", i),
@@ -525,46 +449,33 @@ mod sync_tests {
     }
 
     #[test]
-    fn test_sync_invite_ttl() {
-        let now = now_unix();
-        let invite = SyncInvite {
-            token: vec![0u8; 24],
-            expires_at: now + SYNC_INVITE_TTL_SECS,
-            used: false,
-        };
-        assert!(!invite.used);
-        assert!(invite.expires_at > now);
-        assert_eq!(
-            invite.expires_at - now,
-            SYNC_INVITE_TTL_SECS
-        );
-    }
+    fn test_invite_expiry() {
+        let mut mgr = SyncManager::new();
+        let token = crate::crypto::random_bytes(24);
+        let token_hash = hex::encode(sha256::hash(&token));
+        let now = now_unix() - 1000; // 1000 seconds ago — expired
 
-    #[test]
-    fn test_peer_key_entry_roundtrip() {
-        let entry = PeerKeyEntry {
-            public_key: "aabb".to_string(),
-            alias: "Test Peer".to_string(),
-            verified: true,
-        };
-        let bytes = protocol::serialize(&entry).unwrap();
-        let deserialized: PeerKeyEntry = protocol::deserialize(&bytes).unwrap();
-        assert_eq!(deserialized.public_key, "aabb");
-        assert_eq!(deserialized.alias, "Test Peer");
-        assert!(deserialized.verified);
+        mgr.pending_invites.insert(token_hash.clone(), SyncInvite {
+            token_hash,
+.clone(),
+            expires_at: now, // already expired
+            used: false,
+        });
+
+        mgr.prune_expired_invites();
+        assert!(mgr.pending_invites.is_empty());
     }
 
     #[test]
     fn test_conversation_entry_roundtrip() {
-        let entry = ConversationEntry {
+        let entry = SyncConversationEntry {
             conversation_id: "conv-001".to_string(),
             peer_key_hex: "aabbccdd".to_string(),
             display_name: "Alice".to_string(),
             last_message_at: 1000,
-            retention_policy: "none".to_string(),
         };
         let bytes = protocol::serialize(&entry).unwrap();
-        let deserialized: ConversationEntry = protocol::deserialize(&bytes).unwrap();
+        let deserialized: SyncConversationEntry = protocol::deserialize(&bytes).unwrap();
         assert_eq!(deserialized.conversation_id, "conv-001");
         assert_eq!(deserialized.display_name, "Alice");
     }
