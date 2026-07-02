@@ -779,6 +779,178 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
     randombytes::randombytes(len)
 }
 
+// ─── Sender Key Chain (Signal-style Group E2EE) ──────────────────────────
+
+/// Context string for Sender Key message key derivation.
+const SENDER_KEY_CONTEXT: &[u8] = b"M2M-SENDER-KEY";
+
+/// A single sender's chain state for group E2EE.
+///
+/// Each group member has their own Sender Key chain. The sender uses their
+/// chain to encrypt messages; receivers use the corresponding receiver chain
+/// to decrypt. Chains advance via HKDF:
+///
+///   message_key = HKDF(chain_key, b"", b"M2M-MSG-KEY", 32)
+///   chain_key   = HKDF(chain_key, b"", b"M2M-NEXT-KEY", 32)
+///
+/// Out-of-order messages are handled by caching intermediate message keys
+/// (same design as DoubleRatchet's skipped_keys cache).
+pub struct SenderKeyChain {
+    chain_key: [u8; 32],
+    message_number: u64,
+    /// Cached message keys for out-of-order messages.
+    /// Keyed by message_number, value is (nonce, aead_key).
+    cached_keys: HashMap<u64, CachedSenderKey>,
+    /// Maximum number of cached keys before rejecting new ones.
+    max_cache: usize,
+}
+
+struct CachedSenderKey {
+    nonce: [u8; 24],
+    key: [u8; 32],
+}
+
+/// Context strings for Sender Key HKDF steps.
+const SENDER_MSG_KEY_INFO: &[u8] = b"M2M-SENDER-MSG-KEY";
+const SENDER_NEXT_KEY_INFO: &[u8] = b"M2M-SENDER-NEXT-KEY";
+
+impl SenderKeyChain {
+    /// Create a new Sender Key chain from an initial chain key.
+    pub fn new(initial_chain_key: [u8; 32]) -> Self {
+        Self {
+            chain_key: initial_chain_key,
+            message_number: 0,
+            cached_keys: HashMap::new(),
+            max_cache: 2000,
+        }
+    }
+
+    /// Derive the next message key and advance the chain.
+    /// Returns (nonce, aead_key) for use with XChaCha20-Poly1305.
+    pub fn next_message_key(&mut self) -> Result<([u8; 24], [u8; 32]), CryptoError> {
+        // Derive message key
+        let msg_key_out = hkdf(&self.chain_key, b"", SENDER_MSG_KEY_INFO, 56);
+        let mut msg_key = [0u8; 32];
+        let mut aead_nonce = [0u8; 24];
+        aead_nonce.copy_from_slice(&msg_key_out[..24]);
+        msg_key.copy_from_slice(&msg_key_out[24..56]);
+
+        // Advance chain key
+        let next_key_out = hkdf(&self.chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
+        self.chain_key.copy_from_slice(&next_key_out);
+
+        let msg_num = self.message_number;
+        self.message_number += 1;
+
+        Ok((aead_nonce, msg_key))
+    }
+
+    /// Derive a message key for a specific message number (for out-of-order messages).
+    /// Caches intermediate keys; subsequent calls for the same number remain cached.
+    pub fn peek_message_key(&mut self, message_number: u64) -> Result<([u8; 24], [u8; 32]), CryptoError> {
+        // Check cache first
+        if let Some(cached) = self.cached_keys.get(&message_number) {
+            return Ok((cached.nonce, cached.key));
+        }
+
+        // Derive forward to the target message number
+        while self.message_number <= message_number {
+            let msg_key_out = hkdf(&self.chain_key, b"", SENDER_MSG_KEY_INFO, 56);
+            let mut aead_nonce = [0u8; 24];
+            let mut msg_key = [0u8; 32];
+            aead_nonce.copy_from_slice(&msg_key_out[..24]);
+            msg_key.copy_from_slice(&msg_key_out[24..56]);
+
+            // Cache the key at the current message number
+            if self.cached_keys.len() >= self.max_cache {
+                return Err(CryptoError::DoubleRatchetError(
+                    "sender key cache full".into(),
+                ));
+            }
+            self.cached_keys.insert(self.message_number, CachedSenderKey {
+                nonce: aead_nonce,
+                key: msg_key,
+            });
+
+            // Advance chain key
+            let next_key_out = hkdf(&self.chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
+            self.chain_key.copy_from_slice(&next_key_out);
+            self.message_number += 1;
+        }
+
+        self.cached_keys.remove(&message_number)
+            .map(|c| (c.nonce, c.key))
+            .ok_or_else(|| CryptoError::DoubleRatchetError(
+                "sender key not found after derivation".into(),
+            ))
+    }
+
+    /// Current message number (next message will get this number).
+    pub fn current_message_number(&self) -> u64 {
+        self.message_number
+    }
+
+    /// Get the current chain key (for storage/backup).
+    pub fn chain_key(&self) -> &[u8; 32] {
+        &self.chain_key
+    }
+}
+
+/// Generate a Sender Key pair: one sending chain and the matching initial chain key
+/// that receivers use to construct their receiving chains.
+///
+/// Returns (sending_chain, initial_chain_key) where:
+/// - sending_chain: the sender uses this to encrypt messages
+/// - initial_chain_key: receivers use this to construct receiving chains
+pub fn generate_sender_key_pair() -> (SenderKeyChain, [u8; 32]) {
+    let random = random_bytes(32);
+    let mut initial_key = [0u8; 32];
+    initial_key.copy_from_slice(&random);
+    let chain = SenderKeyChain::new(initial_key);
+    (chain, initial_key)
+}
+
+/// Derive a receiver chain from a sender's initial chain key.
+pub fn derive_receiver_chain(initial_chain_key: &[u8; 32]) -> SenderKeyChain {
+    SenderKeyChain::new(*initial_chain_key)
+}
+
+/// Generate an Ed25519 signing keypair for a group sender.
+/// Returns (signing_key, verification_key).
+pub fn generate_sender_signing_keypair() -> (ed25519_signing_key::Keypair, [u8; 32]) {
+    let kp = ed25519_signing_key::Keypair::generate();
+    let pk = kp.public_key_bytes();
+    (kp, pk)
+}
+
+// Use the existing sodium sign for sender key signatures
+use self::sign as ed25519_signing_key;
+
+/// Sign a group message with the sender's Ed25519 signing key.
+pub fn sign_group_message(
+    signing_key: &ed25519_signing_key::SecretKey,
+    data: &[u8],
+) -> Vec<u8> {
+    sign::sign_detached(data, signing_key).to_bytes().to_vec()
+}
+
+/// Verify a group message signature against the sender's Ed25519 verification key.
+pub fn verify_group_message_signature(
+    verification_key: &[u8; 32],
+    data: &[u8],
+    signature: &[u8],
+) -> bool {
+    let pk = match sign::PublicKey::from_slice(verification_key) {
+        Some(pk) => pk,
+        None => return false,
+    };
+    let sig = match sign::DetachedSignature::from_slice(signature) {
+        Some(s) => s,
+        None => return false,
+    };
+    sign::verify_detached(&sig, data, &pk)
+}
+
 /// Initialize the sodiumoxide library. Must be called once at startup.
 pub fn init() -> Result<(), CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::InitFailed)
