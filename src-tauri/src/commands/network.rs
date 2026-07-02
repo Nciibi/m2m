@@ -1477,6 +1477,54 @@ pub fn spawn_receive_loop(
                         }
                     }
                 }
+                PacketType::SyncDeviceInfo => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(info) = crate::protocol::deserialize::<crate::protocol::SyncDeviceInfo>(&plaintext) {
+                                    // Drop conn lock before calling sync handler which may re-acquire it
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+                                    let _ = crate::sync::handle_sync_device_info(
+                                        &app_handle,
+                                        &state,
+                                        &peer_key_hex,
+                                        &info,
+                                    ).await;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt sync device info");
+                            }
+                        }
+                    }
+                }
+                PacketType::SyncPayload => {
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(plaintext) => {
+                                if let Ok(payload) = crate::protocol::deserialize::<crate::protocol::SyncPayload>(&plaintext) {
+                                    drop(conn);
+                                    drop(conn_arc);
+                                    drop(conns);
+                                    crate::sync::handle_sync_payload(
+                                        &state,
+                                        &peer_key_hex,
+                                        &payload,
+                                    ).await;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt sync payload");
+                            }
+                        }
+                    }
+                }
                 PacketType::Error => {
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
