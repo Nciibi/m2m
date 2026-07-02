@@ -31,6 +31,8 @@ export default function SettingsView() {
 
   return (
     <div className="app-shell">
+      <Sidebar currentView="settings" onNavigate={setView} />
+      <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
           <span className="app-header__icon-bg app-header__icon-bg--accent">
@@ -353,6 +355,7 @@ export default function SettingsView() {
       </div>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </div>
     </div>
   );
 }
