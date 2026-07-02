@@ -211,11 +211,11 @@
 | `src-tauri/src/sync.rs` | **NEW** | 350 | ❌ Pending |
 | `src-tauri/src/group.rs` | **NEW** | 300 | ❌ Pending |
 | `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +250 | ❌ Pending |
-| `src-tauri/src/protocol.rs` | Modify (+ typing indicator) | +60 | ❌ Pending |
+| `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, + typing indicator) | +80 | ⚠️ Partial |
 | `src-tauri/src/session.rs` | Modify (+ reconnect) | +100 | ✅ Done |
 | `src-tauri/src/state.rs` | Modify (+ groups, sync) | +50 | ❌ Pending |
-| `src-tauri/src/storage.rs` | Modify (+ WAL, indexes) | +40 | ✅ Done |
-| `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions) | +100 | ⚠️ Partially done |
+| `src-tauri/src/storage.rs` | Modify (+ WAL, indexes, offline queue, sync queries) | +120 | ✅ Done |
+| `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions, offline queue, flush) | +160 | ⚠️ Partially done |
 | `src-tauri/src/commands/network.rs` | Modify (+ reconnect) | +60 | ✅ Done |
 | `src-tauri/src/commands/vault.rs` | Modify (+ export/import) | +150 | ✅ Done |
 | `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ❌ Pending |
