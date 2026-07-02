@@ -788,7 +788,7 @@ mod group_tests {
         )
         .unwrap();
 
-        let result = gm.add_member("g1", "charlie", 200);
+        let result = gm.add_member("g1", "charlie", "alice", 200);
         assert!(result.is_ok());
 
         let group = gm.get_group("g1").unwrap();
