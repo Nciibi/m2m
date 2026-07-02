@@ -215,7 +215,7 @@ export default function ChatView() {
         <div className="app-header__actions">
           <Button variant="secondary" size="sm" onClick={backToHub}><ArrowLeftIcon size={16} /> Hub</Button>
           {connection?.state === "disconnected" && connection?.peer_verified ? (
-            <Button variant="warning" size="sm" onClick={handleReconnect} disabled={reconnecting}>
+            <Button variant="secondary" size="sm" onClick={handleReconnect} disabled={reconnecting}>
               {reconnecting ? `Reconnecting (${reconnectAttempt}/5)…` : "Reconnect"}
             </Button>
           ) : (
