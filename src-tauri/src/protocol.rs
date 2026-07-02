@@ -153,6 +153,13 @@ pub enum PacketType {
     GroupInfo = 0x55,
     /// Member leaves a group voluntarily (0x56).
     GroupLeave = 0x56,
+    // ─── Typing Indicators ───
+    /// Notify peer that the user is typing (0x60).
+    /// No payload. Sent periodically while user is typing.
+    TypingIndicator = 0x60,
+    /// Notify peer that the user stopped typing (0x61).
+    /// Sent when user clears input or stops typing for 3 seconds.
+    TypingIndicatorClear = 0x61,
 }
 
 impl PacketType {
