@@ -18,6 +18,8 @@ pub mod vault;
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
+use crate::state::PeerConnection;
+
 // ─── Response types for the frontend — never contain secrets ───
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,7 +258,6 @@ pub async fn attempt_reconnect(
                 // delayed by potentially slow queue flush or sync request-response.
                 let flush_state = state.inner().clone();
                 let flush_peer = peer_key_hex.clone();
-                let flush_handle = app_handle.clone();
                 tokio::spawn(async move {
                     // 1. Send queued messages
                     match crate::commands::chat::flush_offline_queue(&flush_state, &flush_peer).await {
