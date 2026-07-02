@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
 use crate::dht;
+use crate::group::GroupManager;
 use crate::lan_discovery;
 use crate::network;
 use crate::relay;
