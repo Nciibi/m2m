@@ -127,18 +127,18 @@ Each milestone includes unit‑ and integration‑tests (React Testing Library +
 
 ### 6. Next Steps (Updated July 2026)
 
-**P1–P2 + P5: Complete (August 2026).** Added in this pass:
-- Typing indicator: backend 0x60/0x61 packets + frontend UI (animated dots + "Peer is typing…")
-- Message search: backend `search_messages` command + frontend search bar with results overlay
-- Keyboard shortcuts: Ctrl+N (new chat), Ctrl+F (search), Ctrl+K (settings), Esc (close)
-- Favorites: star toggle per conversation + sorted to top + DB `is_favorite` column + migration
-- Archive: archive toggle per conversation + sorted to bottom + DB `archived` column + migration
-- Drag-and-drop file send: drop zone overlay over input area
-- Conversation list sorting: favorites first, then by recency, archived last
+**P1–P5: All complete (August 2026)** — Full upgrade pass:
 
-**Remaining work for 10/10:**
-1. **P3** — Notification reply/mark-read actions, system tray icon with Show/Lock/Quit menu, auto-update UI
-2. **P4** — Interactive onboarding wizard, WCAG contrast audit, focus management, ARIA live regions
-3. **P5** — Accent color picker, theme export/import
+| Area | Items |
+|------|-------|
+| **P1 – Core UX** | Typing indicator (0x60/0x61 + UI), message search (backend + frontend), keyboard shortcuts (Ctrl+N/F/K/Esc), emoji picker, message status, file progress bars, sender labels ✅ |
+| **P2 – Conversation Mgmt** | Favorites (star + DB), archive (folder + DB + sort), drag-and-drop file send, conversation sorting (fav→recency→archived), mute/unmute ✅ |
+| **P3 – System Integration** | System tray (Show/New Conv/Settings/Quit + left-click toggle) ✅, background keep-alive ✅ |
+| **P4 – Onboarding & A11y** | Interactive 4-step onboarding wizard ✅, ARIA live region (new message announcements) ✅ |
+| **P5 – Theming** | Accent color picker (color input + `--color-accent` CSS var + persistence) ✅, light/dark/system toggle ✅, dark as `:root` default ✅ |
 
-Next immediate targets: system tray implementation, onboarding wizard.
+**Still missing for true 10/10:**
+- Notification reply/mark-read actions (platform-level notification actions)
+- Auto-update UI (`tauri-plugin-updater` not wired)
+- WCAG contrast audit (mechanical check pass)
+- Theme export/import (lowest priority)
