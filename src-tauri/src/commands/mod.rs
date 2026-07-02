@@ -163,6 +163,12 @@ pub struct ConversationListItem {
     pub auto_delete_at: Option<i64>,
     pub retention_policy: String,
     pub created_at: i64,
+    /// Whether this conversation is favorited.
+    #[serde(default)]
+    pub is_favorite: bool,
+    /// Whether this conversation is archived.
+    #[serde(default)]
+    pub archived: bool,
 }
 
 pub use crate::storage::FamilyMember;
