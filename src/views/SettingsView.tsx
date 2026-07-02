@@ -321,11 +321,7 @@ export default function SettingsView() {
                 type="color"
                 value={accentColor}
                 onChange={(e) => setAccentColor(e.target.value)}
-                style={{
-                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border-default)', cursor: 'pointer',
-                  background: 'none', padding: 2,
-                }}
+                className="color-picker"
                 aria-label="Accent color"
               />
               <span className="settings-mono settings-mono--sm">{accentColor}</span>
