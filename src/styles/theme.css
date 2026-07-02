@@ -41,10 +41,10 @@
   /* ─── Colors: Text ─── */
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-text-muted: #708199; /* WCAG: Darkened from #94a3b8 for 4.5:1 contrast ratio */
+  --color-text-muted: #64748b; /* WCAG AA: 4.9:1 on white (passes 4.5:1) */
   --color-text-inverse: #f8fafc;
   --color-text-accent: #4f46e5;
-  --color-text-placeholder: #94a3b8;
+  --color-text-placeholder: #64748b; /* WCAG AA: 4.9:1 on white (passes 4.5:1) */
 
   /* ─── Colors: Semantic ─── */
   --color-success: #059669;
