@@ -26,6 +26,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
+use uuid::Uuid;
 
 use sodiumoxide::crypto::hash::sha256;
 
