@@ -77,7 +77,7 @@ export default function HubView() {
         e.preventDefault();
         setTab("connect");
       }
-      if (e.key === "Escape" && view === "hub") {
+      if (e.key === "Escape") {
         // Already on hub — no-op
       }
     };
