@@ -815,9 +815,12 @@ impl MessageStore {
             "SELECT c.id, c.peer_id, c.created_at, c.last_message_at,
                     c.display_name, c.peer_display_name,
                     c.auto_delete_at, c.retention_policy,
-                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count
+                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count,
+                    COALESCE(c.is_favorite, 0) as is_favorite,
+                    COALESCE(c.archived, 0) as archived
              FROM conversations c
-             ORDER BY COALESCE(c.last_message_at, c.created_at) DESC",
+             ORDER BY archived ASC, COALESCE(c.is_favorite, 0) DESC,
+                      COALESCE(c.last_message_at, c.created_at) DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(ConversationSummary {
@@ -831,6 +834,8 @@ impl MessageStore {
                 retention_policy: row.get::<_, Option<String>>(7)?
                     .unwrap_or_else(|| "none".to_string()),
                 message_count: row.get(8)?,
+                is_favorite: row.get::<_, Option<bool>>(9)?,
+                archived: row.get::<_, Option<bool>>(10)?,
             })
         })?;
         let mut convos = Vec::new();
