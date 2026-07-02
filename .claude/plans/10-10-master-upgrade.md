@@ -233,9 +233,9 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 | `src-tauri/src/dht.rs` | **NEW** | 400 | ✅ Done |
 | `src-tauri/src/lan_discovery.rs` | **NEW** | 200 | ✅ Done |
 | `src-tauri/src/sync.rs` | **NEW** | 440 | ✅ Done |
-| `src-tauri/src/group.rs` | **NEW** | 300 | ❌ Pending |
-| `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +250 | ❌ Pending |
-| `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, SyncDeviceInfo 0x45, SyncPayload 0x46) | +110 | ✅ Done |
+| `src-tauri/src/group.rs` | **NEW** | 987 | ✅ Done (incl. 15 unit tests) |
+| `src-tauri/src/crypto.rs` | Modify (+ sender keys) | +160 | ✅ Done (SenderKeyChain, signing) |
+| `src-tauri/src/protocol.rs` | Modify (+ SyncRequest 0x44, SyncDeviceInfo 0x45, SyncPayload 0x46, + Group 0x50-0x56) | +190 | ✅ Done |
 | `src-tauri/src/session.rs` | Modify (+ reconnect) | +100 | ✅ Done |
 | `src-tauri/src/state.rs` | Modify (+ groups, sync_manager) | +60 | ⚠️ Partial |
 | `src-tauri/src/storage.rs` | Modify (+ WAL, indexes, offline queue, sync queries) | +120 | ✅ Done |
