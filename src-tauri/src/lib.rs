@@ -231,6 +231,10 @@ pub fn run() {
             // Reconnection
             commands::attempt_reconnect,
             commands::list_pending_reconnects,
+            // Multi-Device Sync
+            sync::generate_sync_invite,
+            sync::connect_sync_device,
+            sync::pair_sync_device,
         ])
         .run(tauri::generate_context!())
         .expect("error while running M2M");
