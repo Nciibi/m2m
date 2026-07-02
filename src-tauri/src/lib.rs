@@ -234,6 +234,10 @@ pub fn run() {
             // Reconnection
             commands::attempt_reconnect,
             commands::list_pending_reconnects,
+            // Typing Indicator
+            commands::chat::send_typing_indicator,
+            // Message Search
+            commands::chat::search_messages,
             // Multi-Device Sync
             sync::generate_sync_invite,
             sync::connect_sync_device,
