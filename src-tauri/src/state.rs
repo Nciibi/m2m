@@ -341,6 +341,8 @@ pub struct AppState {
     // ─── UI Theme ───
     /// User's theme preference: "light", "dark", or "system".
     pub theme_preference: RwLock<String>,
+    /// User's accent color (hex, e.g. "#6366f1").
+    pub accent_color: RwLock<String>,
     // ─── Multi-Device Sync ───
     /// Manages sync device pairing, invites, and data exchange.
     pub sync_manager: RwLock<crate::sync::SyncManager>,
