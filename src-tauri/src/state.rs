@@ -372,6 +372,7 @@ impl AppState {
             transfer_store: Mutex::new(None),
             storage_key: RwLock::new(None),
             vault_unlocked: RwLock::new(false),
+            first_run: RwLock::new(true),
             vault_initialized: RwLock::new(false),
             public_ip: RwLock::new(None),
             // NAT traversal defaults
