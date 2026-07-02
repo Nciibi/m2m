@@ -579,6 +579,23 @@ export default function ChatView() {
         </button>
       )}
 
+      {/* Drag-and-drop zone */}
+      <div
+        className="drop-zone"
+        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drop-zone--active'); }}
+        onDragLeave={(e) => { e.currentTarget.classList.remove('drop-zone--active'); }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          e.currentTarget.classList.remove('drop-zone--active');
+          const files = Array.from(e.dataTransfer.files);
+          if (files.length > 0 && connection?.state === "established") {
+            addToast(`Dropped ${files[0].name} — sending via file dialog...`, "info");
+            await handleSendFile();
+          }
+        }}
+      >
+        <span className="drop-zone__hint">Drop files here to send</span>
+
       {/* Input */}
       <form className="msg-input-area" onSubmit={submit}>
         <button type="button" className="msg-attach-btn" onClick={handleSendFile} id="send-file-btn" aria-label="Send file"><AttachIcon size={20} /></button>
