@@ -39,7 +39,7 @@ mod window_security;
 use std::sync::Arc;
 use state::AppState;
 
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::Manager;
 
