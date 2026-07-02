@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Button Component Styles
+   Button Component — v2
+   Polished, subtle, modern. Shine sweep on default, lift on hover.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .btn {
@@ -7,23 +8,26 @@
   font-weight: 600;
   cursor: pointer;
   border-radius: var(--radius-lg);
-  transition: transform 300ms var(--ease-out-expo),
-              box-shadow 300ms var(--ease-out-expo),
-              background 300ms var(--ease-out-expo),
-              border-color 300ms var(--ease-out-expo);
+  transition: transform 250ms var(--ease-out-expo),
+              box-shadow 250ms var(--ease-out-expo),
+              background 250ms var(--ease-out-expo),
+              border-color 250ms var(--ease-out-expo),
+              opacity 250ms var(--ease-out-expo);
   position: relative;
   overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid;
   line-height: 1;
   white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
   transform: none !important;
   box-shadow: none !important;
@@ -32,23 +36,23 @@
 .btn--default {
   background: var(--color-accent-gradient);
   color: white;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow: var(--shadow-accent);
 }
 
 .btn--default:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-accent-strong);
-  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1.5px);
+  box-shadow: var(--shadow-accent-strong), 0 0 20px var(--color-accent-glow);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .btn--default:not(:disabled):active {
-  transform: translateY(0);
+  transform: translateY(0px) scale(0.98);
   box-shadow: var(--shadow-accent);
 }
 
 .btn--secondary {
-  background: var(--color-bg-input);
+  background: var(--color-bg-chip);
   color: var(--color-text-secondary);
   border-color: var(--color-border-default);
   box-shadow: none;
@@ -57,17 +61,23 @@
 .btn--secondary:not(:disabled):hover {
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+
+.btn--secondary:not(:disabled):active {
+  background: var(--color-bg-active);
 }
 
 .btn--danger {
   background: transparent;
   color: var(--color-danger);
-  border-color: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.2);
   box-shadow: none;
 }
 
 .btn--danger:not(:disabled):hover {
   background: var(--color-danger-bg);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 .btn--ghost {
@@ -87,11 +97,12 @@
   color: var(--color-text-secondary);
   border-color: var(--color-border-default);
   box-shadow: none;
-  min-width: 42px;
-  min-height: 42px;
+  min-width: 40px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-md);
 }
 
 .btn--icon:not(:disabled):hover {
@@ -101,33 +112,34 @@
 }
 
 .btn--lg {
-  padding: 12px 24px;
+  padding: 11px 22px;
   font-size: var(--text-md);
+  border-radius: var(--radius-xl);
 }
 
 .btn--sm {
   padding: 7px 14px;
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
 }
 
 .btn--xs {
   padding: 5px 10px;
-  font-size: var(--text-sm);
-  border-radius: var(--radius-md);
+  font-size: 0.68rem;
+  border-radius: var(--radius-sm);
 }
 
 .btn--full {
   width: 100%;
 }
 
-/* Shine sweep (default variant only — sweeps left→right, 500ms) */
+/* Shine sweep */
 .btn--default .btn__shine {
   position: absolute;
   top: 0;
   left: -100%;
   width: 100%;
   bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
   pointer-events: none;
 }
 
