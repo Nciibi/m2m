@@ -1,0 +1,305 @@
+# Mission: Implement Phase 3 — Secure Group Chat
+
+You are implementing **Phase 3 (Group Chat)** of this secure messaging application.
+
+This is a **security-critical feature**. The implementation must meet the quality standards expected of a production secure messenger.
+
+Your priorities, in order, are:
+
+1. Cryptographic correctness
+2. Protocol correctness
+3. Security
+4. Reliability
+5. Maintainability
+6. Performance
+
+Never sacrifice correctness for speed.
+
+---
+
+# Existing Architecture
+
+This project already contains:
+
+* X3DH key agreement
+* Double Ratchet sessions
+* Ed25519 identities
+* Secure encrypted storage
+* Packet-based protocol
+* Rust backend
+* React/Tauri frontend
+
+The new Group Chat implementation **must integrate with the existing architecture** instead of bypassing or replacing it.
+
+Do not create parallel systems when existing infrastructure can be reused.
+
+---
+
+# Implementation Scope
+
+Implement **exactly** the approved Phase 3 implementation plan.
+
+## Backend
+
+Implement:
+
+* PacketTypes (0x50–0x56)
+* SenderKeyChain
+* HKDF message key derivation
+* Ed25519 message signing
+* Ed25519 verification
+* GroupManager
+* Group lifecycle
+* Membership management
+* Sender Key distribution
+* Database tables
+* Database migrations
+* Tauri commands
+* Network dispatch
+* State integration
+
+---
+
+## Frontend
+
+Implement:
+
+* Groups tab
+* Group chat view
+* Group creation modal
+* Group information panel
+* Group context
+* Type definitions
+
+The frontend should reuse existing chat components wherever possible to maintain a consistent user experience.
+
+---
+
+# Architecture Requirements
+
+Preserve the project's existing architecture.
+
+Do not introduce unnecessary abstractions.
+
+Do not rewrite existing systems.
+
+Reuse existing:
+
+* message rendering
+* encryption pipeline
+* networking
+* persistence
+* event system
+* UI components
+
+New code should feel like it naturally belongs in the project.
+
+---
+
+# Cryptographic Requirements
+
+Treat all cryptographic operations as security-critical.
+
+Never invent cryptographic behavior.
+
+Use only the project's existing cryptographic primitives together with the approved Sender Key design.
+
+Ensure:
+
+* correct HKDF usage
+* correct chain-key advancement
+* unique message keys
+* replay protection
+* signature verification
+* authenticated sender identity
+* proper key rotation
+* secure member removal
+* secure key distribution
+* encrypted storage of sensitive material
+
+Zero plaintext keys should ever be persisted.
+
+Never log secrets.
+
+Never expose private material through debugging.
+
+---
+
+# Protocol Requirements
+
+The protocol implementation must be deterministic and robust.
+
+Handle:
+
+* duplicate packets
+* missing packets
+* reordered packets
+* invalid signatures
+* invalid Sender Keys
+* malformed packets
+* unknown members
+* removed members
+* stale Sender Keys
+* packet version mismatches
+
+Gracefully reject invalid input without crashing.
+
+---
+
+# Storage Requirements
+
+Implement all required tables exactly as planned.
+
+Ensure:
+
+* indexes are correct
+* foreign key relationships are valid
+* atomic updates
+* transactional consistency
+* encrypted sensitive fields
+* no orphaned records
+
+---
+
+# Frontend Requirements
+
+The UI should feel like a native part of the application.
+
+Requirements:
+
+* smooth navigation
+* responsive layouts
+* loading states
+* empty states
+* error handling
+* optimistic updates where appropriate
+* consistent styling
+* component reuse
+* accessibility
+
+Do not duplicate existing chat logic.
+
+---
+
+# Code Quality
+
+Write production-quality Rust and TypeScript.
+
+Requirements:
+
+* modular
+* readable
+* documented where appropriate
+* idiomatic
+* maintainable
+
+Avoid:
+
+* hacks
+* duplicated code
+* unnecessary cloning
+* unnecessary allocations
+* unnecessary locking
+* race conditions
+* deadlocks
+
+---
+
+# Self-Review Loop
+
+Before considering any feature complete, inspect your own implementation.
+
+Ask:
+
+* Is this cryptographically correct?
+* Does this preserve protocol guarantees?
+* Is there a simpler implementation?
+* Does this integrate cleanly?
+* Can this create race conditions?
+* Can this leak secrets?
+* Can this panic?
+* Can this fail silently?
+* Can this break existing chats?
+
+If improvements exist, implement them before continuing.
+
+---
+
+# Build Order
+
+Implement in this order:
+
+1. protocol.rs
+2. crypto.rs
+3. group.rs
+4. storage.rs
+5. commands/groups.rs
+6. commands/network.rs
+7. state.rs
+8. frontend components
+9. integration
+10. testing
+
+Do not skip steps.
+
+---
+
+# Testing
+
+After implementation:
+
+Verify:
+
+* group creation
+* member invitation
+* member removal
+* sender key rotation
+* message delivery
+* offline member synchronization
+* replay protection
+* signature verification
+* encrypted storage
+* persistence
+* application restart
+* invalid packet handling
+* malformed packet rejection
+* concurrent messaging
+* large groups (up to 32 members)
+
+Ensure all existing one-to-one messaging functionality continues to work without regression.
+
+---
+
+# Validation
+
+Before completion:
+
+* Format all Rust code (`cargo fmt`)
+* Run Clippy and resolve warnings where practical
+* Run frontend formatter/linter
+* Resolve TypeScript errors
+* Build the backend
+* Build the frontend
+* Verify the complete application compiles successfully
+* Resolve any regressions introduced during implementation
+
+Do not consider the task complete while any build, lint, or type errors remain.
+
+---
+
+# Final Report
+
+Provide:
+
+* Every implemented feature
+* Files created
+* Files modified
+* Security considerations
+* Cryptographic decisions
+* Protocol decisions
+* Database changes
+* Frontend changes
+* Tests performed
+* Remaining known limitations
+
+Do not stop after making the code compile. Continue refining until the implementation is production-ready, internally consistent, secure, and fully aligned with the approved Phase 3 design.
