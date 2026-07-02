@@ -796,7 +796,7 @@ pub async fn search_messages(
         let ms = state.message_store.lock().await;
         let sk = state.storage_key.read().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-            let stored = store.load_messages_for_conversation(&peer_key_hex, 500, 0)
+            let stored = store.load_messages(&peer_key_hex, 500)
                 .map_err(|e| format!("db error: {e}"))?;
             let query_lower = query.to_lowercase();
             stored.into_iter().filter_map(|m| {
