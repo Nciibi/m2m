@@ -213,7 +213,7 @@
 | `src-tauri/src/state.rs` | Modify (+ groups, sync_manager) | +60 | ⚠️ Partial |
 | `src-tauri/src/storage.rs` | Modify (+ WAL, indexes, offline queue, sync queries) | +120 | ✅ Done |
 | `src-tauri/src/commands/chat.rs` | Modify (+ search, reactions, offline queue, flush) | +160 | ⚠️ Partially done |
-| `src-tauri/src/commands/network.rs` | Modify (+ reconnect) | +60 | ✅ Done |
+| `src-tauri/src/commands/network.rs` | Modify (+ reconnect, sync handlers) | +90 | ✅ Done |
 | `src-tauri/src/commands/vault.rs` | Modify (+ export/import) | +150 | ✅ Done |
 | `src-tauri/src/main.rs` | Modify (+ tray, background) | +100 | ✅ Done |
 | `src-tauri/src/reconnect.rs` | **NEW** | ~80 | ✅ Done |
