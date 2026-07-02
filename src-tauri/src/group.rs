@@ -1,14 +1,14 @@
-/// M2M — Group Chat Module
-///
-/// Manages group state, member lifecycle, and Sender Key operations
-/// for E2EE group messaging (Phase 3).
-///
-/// Each group has N members. Each member has their own Sender Key chain
-/// for encrypting messages. All other members store a receiver chain
-/// derived from the sender's initial chain key, allowing them to decrypt.
-///
-/// On member removal, all remaining members rotate their Sender Keys
-/// to prevent the removed member from decrypting future messages.
+//! M2M — Group Chat Module
+//!
+//! Manages group state, member lifecycle, and Sender Key operations
+//! for E2EE group messaging (Phase 3).
+//!
+//! Each group has N members. Each member has their own Sender Key chain
+//! for encrypting messages. All other members store a receiver chain
+//! derived from the sender's initial chain key, allowing them to decrypt.
+//!
+//! On member removal, all remaining members rotate their Sender Keys
+//! to prevent the removed member from decrypting future messages.
 
 use std::collections::HashMap;
 
