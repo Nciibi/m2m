@@ -448,6 +448,7 @@ pub async fn mark_messages_read(
 
 /// Send a message with an optional self-destruct timer.
 /// `disappear_after` = seconds until the message auto-deletes (0 = never).
+/// If the peer is offline, the message is queued locally with `delivered=0`.
 #[tauri::command]
 pub async fn send_message_with_timer(
     state: State<'_, Arc<AppState>>,
@@ -463,27 +464,30 @@ pub async fn send_message_with_timer(
         ));
     }
 
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
-
-    let mut conn = conn_arc.lock().await;
-    let msg_id = {
-        let PeerConnection { session, write_half, .. } = &mut *conn;
-        session
-            .send_text_with_timer(write_half, &content, disappear_after)
-            .await
-            .map_err(|e| format!("send failed: {e}"))?
-    };
-
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
     let expires_at = disappear_after.map(|secs| (now + secs) as i64);
+
+    // Try to send via active connection; if offline, queue with delivered=0.
+    let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
+        Some(conn_arc) => {
+            let mut conn = conn_arc.lock().await;
+            match conn.session.send_text_with_timer(&mut conn.write_half, &content, disappear_after).await {
+                Ok(id) => (id, true),
+                Err(e) => {
+                    tracing::warn!(peer = %peer_key_hex, error = %e, "send failed, queuing offline");
+                    (uuid::Uuid::new_v4().to_string(), false)
+                }
+            }
+        }
+        None => {
+            tracing::info!(peer = %peer_key_hex, "peer not connected, queuing message");
+            (uuid::Uuid::new_v4().to_string(), false)
+        }
+    };
 
     // Persist to local storage
     let history = *state.history_enabled.read().await;
@@ -499,7 +503,7 @@ pub async fn send_message_with_timer(
                         let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                         let _ = store.store_message_with_expiry(
                             &msg_id, &peer_key_hex, "sent",
-                            &encrypted, &nonce, now as i64, expires_at, true,
+                            &encrypted, &nonce, now as i64, expires_at, delivered,
                         );
                     }
                 }
