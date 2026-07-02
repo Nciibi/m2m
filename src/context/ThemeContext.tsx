@@ -20,11 +20,18 @@ export function useTheme(): ThemeContextValue {
   return ctx;
 }
 
+const DEFAULT_ACCENT = "#6366f1";
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { addToast } = useApp();
   const [theme, setThemeState] = useState<ThemeMode>("system");
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark");
+  const [accentColor, setAccentColorState] = useState<string>(DEFAULT_ACCENT);
   const [initialized, setInitialized] = useState(false);
+
+  const applyAccent = useCallback((color: string) => {
+    document.documentElement.style.setProperty("--color-accent", color);
+  }, []);
 
   const applyTheme = useCallback((mode: ThemeMode) => {
     let resolved: "light" | "dark";
