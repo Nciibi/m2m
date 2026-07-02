@@ -1331,6 +1331,7 @@ impl MessageStore {
                     deleted: row.get::<_, i32>(8)? != 0,
                     expires_at: None,
                     reactions: std::collections::HashMap::new(),
+                    sender_peer_key_hex: row.get::<_, String>(2)?,
                 })
             })?
             .filter_map(|r| r.ok())
