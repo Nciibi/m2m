@@ -1159,6 +1159,7 @@ impl MessageStore {
     }
 
     /// Load all members for a group.
+    #[allow(dead_code)]
     pub fn load_group_members(
         &self,
         group_id: &str,
@@ -1184,6 +1185,7 @@ impl MessageStore {
     }
 
     /// Load a single group record (without members).
+    #[allow(dead_code)]
     pub fn load_group(
         &self,
         group_id: &str,
@@ -1216,6 +1218,7 @@ impl MessageStore {
     }
 
     /// List all groups with summary info.
+    #[allow(dead_code)]
     pub fn list_groups(
         &self,
     ) -> Result<Vec<super::group::GroupSummary>, StorageError> {
@@ -1305,6 +1308,7 @@ impl MessageStore {
     }
 
     /// Load group messages (most recent first, with limit and offset).
+    #[allow(dead_code)]
     pub fn load_group_messages(
         &self,
         group_id: &str,
