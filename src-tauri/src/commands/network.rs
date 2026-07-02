@@ -1436,7 +1436,7 @@ pub fn spawn_receive_loop(
                                     let missed: Vec<(String, Option<i64>)> = {
                                         let ms = state.message_store.lock().await;
                                         let sk = state.storage_key.read().await;
-                                        if let (Some(ref store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
                                             if let Ok(stored) = store.load_sent_messages_since(&peer_key_hex, sync.since_timestamp as i64) {
                                                 stored.iter().filter_map(|msg| {
                                                     util::crypto_decrypt_storage(
