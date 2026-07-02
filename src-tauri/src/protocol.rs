@@ -450,6 +450,43 @@ pub struct SyncRequestData {
     pub since_timestamp: u64,
 }
 
+// --- Sync Device Info (0x45) ---
+
+/// Exchanged after X3DH handshake during device pairing.
+/// Identifies the connecting device and its display name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncDeviceInfo {
+    /// Unique device identifier (UUID v4).
+    pub device_id: String,
+    /// Human-readable device name (e.g., "Laptop", "Phone").
+    pub device_name: String,
+    /// Sync protocol version (start at 1).
+    pub sync_protocol_version: u8,
+}
+
+// --- Sync Payload (0x46) ---
+
+/// An encrypted batch of sync data sent over an established sync session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncPayload {
+    /// What kind of data this payload contains.
+    pub payload_type: SyncPayloadType,
+    /// Serialized payload data (encrypted at the frame level by DR).
+    #[serde(with = "serde_bytes")]
+    pub data: Vec<u8>,
+}
+
+/// The type of data contained in a SyncPayload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SyncPayloadType {
+    /// Peer public keys for the KeyStore.
+    PeerKeys,
+    /// Conversation metadata (display names, last_message_at, retention).
+    Conversations,
+    /// Per-conversation unread counts.
+    UnreadCounts,
+}
+
 // --- Disconnect ---
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
