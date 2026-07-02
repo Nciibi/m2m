@@ -257,8 +257,7 @@ tauri-plugin-notification = "2"
 2. Frontend overhaul (Phase 5) — biggest visible quality gap
 
 **Tier 2 — Feature complete**:
-4. Multi-device sync (Phase 2) — significant engineering effort, moderate user demand
-5. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
+4. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
 
 **Tier 3 — Power user features**:
 7. Voice messages (Phase 5.4) — moderate effort, high polish value
