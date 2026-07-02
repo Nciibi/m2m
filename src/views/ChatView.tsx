@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Button, Badge, Modal, ToastContainer, ProgressBar } from "../components/ui";
 import {
   ArrowLeftIcon, ShieldIcon, VerifiedIcon, LockIcon,
-  SendIcon, AttachIcon, FileIcon, ArrowDownIcon, CloseIcon,
+  SendIcon, AttachIcon, FileIcon, ArrowDownIcon,
   SmileyIcon, CheckDoubleIcon, ClockIcon,
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
