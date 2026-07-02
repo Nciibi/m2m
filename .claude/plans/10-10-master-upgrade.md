@@ -286,18 +286,18 @@ tauri-plugin-notification = "2"
 ## Execution Priority (What to Build Next)
 
 **Tier 1 — Core missing features (highest user impact)**:
-1. Group chat (Phase 3) — biggest missing feature vs. Signal/WhatsApp
-2. Frontend overhaul (Phase 5) — biggest visible quality gap
+1. Group Chat frontend UI (Phase 3.2–3.3) — biggest remaining gap. Backend fully done, frontend types defined, just needs the UI.
+2. Frontend overhaul (Phase 5) — biggest visible quality gap; typing indicators + message search would be highest-ROI sub-items.
 
 **Tier 2 — Feature complete**:
-4. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
+3. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
 
 **Tier 3 — Power user features**:
-7. Voice messages (Phase 5.4) — moderate effort, high polish value
-8. Conversation organization (Phase 5.5) — favorites, mute, archive, folders
-9. Dark theme + keyboard shortcuts (Phase 5.6–5.8)
+4. Voice messages (Phase 5.4) — moderate effort, high polish value
+5. Conversation organization (Phase 5.5) — favorites, mute, archive, folders
+6. Dark theme refinements + accent picker (Phase 5.6–5.8) — mostly done, needs accent customization
 
 **Tier 4 — Platform & maintenance**:
-10. Auto-update + code signing (Phase 10)
-11. Onboarding tutorial (Phase 9.1)
-12. API documentation pass (Phase 9.4)
+7. Auto-update + code signing (Phase 10)
+8. Onboarding tutorial (Phase 9.1)
+9. API documentation pass (Phase 9.4)
