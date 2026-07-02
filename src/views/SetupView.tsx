@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, ToastContainer } from "../components/ui";
-import { KeyIcon, CheckIcon } from "../components/ui/Icons";
+import { KeyIcon, CheckIcon, ShieldIcon, LockIcon, SendIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 
 export default function SetupView() {
@@ -11,18 +11,16 @@ export default function SetupView() {
   const [isFirstRun, setIsFirstRun] = useState(false);
 
   useEffect(() => {
-    // Check if this is first run by looking for a flag
     invoke<boolean>("is_first_run").then((first) => {
       setIsFirstRun(first);
       if (!first) {
         setInitialized(true);
-        setStep(3); // Skip to "ready"
+        setStep(3);
       }
     }).catch(() => {
       setInitialized(true);
     });
 
-    // Auto-advance through initialization
     const timer = setTimeout(() => {
       setInitialized(true);
       setStep(1);
@@ -32,7 +30,6 @@ export default function SetupView() {
   }, []);
 
   if (!isFirstRun && initialized) {
-    // Fast path: existing user, just show loading
     return (
       <div className="app-shell">
         <div className="centered-view">
@@ -60,27 +57,26 @@ export default function SetupView() {
     );
   }
 
-  // Onboarding wizard for first-run users
   const steps = [
     {
       title: "Welcome to M2M",
       desc: "A private, end-to-end encrypted messenger. No servers, no accounts, no tracking.",
-      icon: "🚀",
+      icon: <ShieldIcon size={28} color="white" />,
     },
     {
       title: "Your Identity is Local",
       desc: "Your keys are generated on this device and never leave it. Not even to us — because there is no us.",
-      icon: "🔑",
+      icon: <KeyIcon size={28} color="white" />,
     },
     {
       title: "End-to-End Encrypted",
       desc: "Messages use X3DH + Double Ratchet (Signal protocol). Ed25519 signing, X25519 key exchange, XChaCha20-Poly1305 encryption.",
-      icon: "🔒",
+      icon: <LockIcon size={28} color="white" />,
     },
     {
-      title: "Ready to Go!",
+      title: "Ready to Go",
       desc: "Share your invite link with a trusted peer to start chatting. Both sides must generate and share invites.",
-      icon: "✅",
+      icon: <SendIcon size={28} color="white" />,
     },
   ];
 
@@ -89,7 +85,7 @@ export default function SetupView() {
   return (
     <div className="app-shell">
       <div className="centered-view">
-        <div className="setup-icon" style={{ fontSize: '2.5rem' }}>
+        <div className="setup-icon">
           {current.icon}
           <div className="setup-icon__glow" />
         </div>
@@ -102,7 +98,6 @@ export default function SetupView() {
           {current.desc}
         </p>
 
-        {/* Step indicators */}
         <div className="onboarding-steps">
           {steps.map((_, i) => (
             <div
@@ -114,16 +109,14 @@ export default function SetupView() {
           ))}
         </div>
 
-        <div className="onboarding-actions" style={{ marginTop: 'var(--space-2xl)', display: 'flex', gap: 'var(--space-md)' }}>
+        <div className="onboarding-actions">
           {step < steps.length - 1 ? (
             <Button onClick={() => setStep((s) => Math.min(s + 1, steps.length - 1))}>
               {step === 0 ? "Get Started" : "Next"}
             </Button>
           ) : (
             <Button onClick={async () => {
-              // Mark first run as complete
               try { await invoke("set_first_run_complete"); } catch { /* noop */ }
-              // Reload to proceed to vault
               window.location.reload();
             }}>
               Start Messaging
