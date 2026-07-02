@@ -1735,6 +1735,10 @@ pub fn spawn_receive_loop(
                                             let _ = store.remove_group(&gid);
                                         }
                                     } else {
+                                        let our_peer_key_hex = {
+                                            let id = state.identity.read().await;
+                                            id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
+                                        };
                                         let mut gm = state.group_manager.write().await;
                                         let _ = gm.leave_group(&gid, &removed);
                                         state.ensure_message_store(&state.data_dir).await.ok();
@@ -1742,8 +1746,8 @@ pub fn spawn_receive_loop(
                                         if let Some(store) = ms.as_ref() {
                                             let _ = store.remove_group_member(&gid, &removed);
                                         }
-                                        if let Some(sk_data) = remove.new_sender_key {
-                                            let _ = gm.handle_sender_key(&sk_data);
+                                        if let (Some(sk_data), Some(our)) = (remove.new_sender_key, our_peer_key_hex) {
+                                            let _ = gm.handle_sender_key(&sk_data, &our);
                                         }
                                     }
 
