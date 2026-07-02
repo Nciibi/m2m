@@ -339,7 +339,7 @@ impl GroupManager {
                 sender_peer_key_hex: member_key_hex.clone(),
                 chain_key: their_initial_key,
                 message_number: 0,
-                signing_key: Some(their_signing_key),
+                signing_key: Some(their_signing_key.to_vec()),
                 verification_key: their_verification_key,
                 signature: Vec::new(), // Filled in by the caller with identity key
             };
@@ -420,7 +420,7 @@ impl GroupManager {
             sender_peer_key_hex: new_member_key_hex.to_string(),
             chain_key: member_initial_key,
             message_number: 0,
-            signing_key: Some(member_signing_key),
+            signing_key: Some(member_signing_key.to_vec()),
             verification_key: member_verification_key,
             signature: Vec::new(),
         };
