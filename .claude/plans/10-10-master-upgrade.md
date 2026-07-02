@@ -79,17 +79,44 @@
 
 ---
 
-## ❌ Phase 3: Group Chat & Multi-Peer Sessions — NOT STARTED
+## ⚠️ Phase 3: Group Chat & Multi-Peer Sessions — BACKEND DONE (Frontend Pending)
 
 **Problem**: Currently strictly 1:1 sessions. No group conversations.
 
-### 3.1 — Sender Keys for Group E2EE — ❌ NOT STARTED
+### 3.1 — Sender Keys for Group E2EE — ✅ BACKEND DONE
 
-**Planned**: Sender Key distribution via existing 1:1 DR sessions, group key ratchet, member add/remove protocol.
+**Implemented**: `src-tauri/src/group.rs` (~987 lines) + `src-tauri/src/crypto.rs` (+160 lines)
+- `SenderKeyChain` — HKDF-based message key derivation with 2000-entry skipped-key cache for out-of-order messages
+- `Group` struct with sending chain, receiver chains per member, Ed25519 signing/verification
+- `GroupManager` with create/add/remove/leave/rotate/list operations
+- `Group::encrypt_message()` — derives key from Sender Key chain, encrypts with XChaCha20-Poly1305, signs with Ed25519
+- `Group::decrypt_message()` — verifies signature, derives key from receiver chain, decrypts
+- `handle_sender_key()` — detects whether a bundle is our own sending chain or another member's receiver chain
+- `rotate_own_sender_key()` — generates new chain + signing keypair after member removal
+- **15 unit tests** all passing
+
+**Wire protocol**: 7 new PacketType variants (0x50–0x56) + 8 data structs in `protocol.rs`
+- GroupCreate, GroupInvite, GroupRemove, GroupSenderKey, GroupEncryptedMessage, GroupInfo, GroupLeave
+- All sent over existing X3DH+DR encrypted sessions (standard `send_encrypted_typed` pattern)
+
+**Storage**: 3 new SQLite tables in `messages.db` — `groups`, `group_members`, `group_messages` with indexes. 12 CRUD methods.
+
+**Tauri Commands**: `commands/groups.rs` (~610 lines) — 9 commands: create_group, send_group_message, list_groups, get_group_info, invite_to_group, remove_from_group, leave_group, load_group_messages, update_group_name
+
+**Network dispatch**: 7 new match arms in `spawn_receive_loop` — handles all group packet types with proper lock scoping and inner message decryption
 
 ### 3.2 — Frontend: Group Chat UI — ❌ NOT STARTED
 
+Needed: Group chat view (or extended ChatView), group creation modal, group info panel
+
 ### 3.3 — Frontend: Group Management — ❌ NOT STARTED
+
+Needed: Member list with roles, add/remove controls, GroupContext hook with event listeners
+
+### Review Findings (all fixed)
+- 🔴 **Critical**: `handle_sender_key` wasn't setting up the recipient's sending chain — fixed to accept `our_peer_key_hex` param and properly route bundles with signing keys
+- 🟡 `sign_group_message` silently returned bogus signatures on bad keys — changed to `Result<Vec<u8>, CryptoError>`
+- 🟡 `load_group_messages` never decrypted stored content — added `load_group_messages_with_content()` that returns encrypted blobs for caller-side decryption
 
 ---
 
