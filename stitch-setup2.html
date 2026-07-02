@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SecureMessenger Settings | M2M Protocol</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        /* Custom Switch Styling */
+        .switch-checkbox:checked + .switch-label {
+            background-color: #10b981;
+        }
+        .switch-checkbox:checked + .switch-label .switch-ball {
+            transform: translateX(1.25rem);
+        }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface-variant": "#c2c6d6",
+                        "surface-variant": "#273647",
+                        "surface-container-highest": "#273647",
+                        "on-tertiary-fixed": "#40000d",
+                        "on-tertiary": "#67001b",
+                        "background": "#051424",
+                        "on-error-container": "#ffdad6",
+                        "primary-container": "#4d8eff",
+                        "tertiary-container": "#ff516a",
+                        "secondary-fixed-dim": "#4edea3",
+                        "surface": "#051424",
+                        "tertiary-fixed": "#ffdadb",
+                        "surface-container": "#122131",
+                        "on-tertiary-container": "#5b0017",
+                        "on-primary": "#002e6a",
+                        "on-secondary-fixed-variant": "#005236",
+                        "surface-tint": "#adc6ff",
+                        "on-primary-fixed": "#001a42",
+                        "on-surface": "#d4e4fa",
+                        "surface-container-low": "#0d1c2d",
+                        "inverse-on-surface": "#233143",
+                        "tertiary-fixed-dim": "#ffb2b7",
+                        "error-container": "#93000a",
+                        "outline-variant": "#424754",
+                        "primary": "#adc6ff",
+                        "on-tertiary-fixed-variant": "#92002a",
+                        "inverse-primary": "#005ac2",
+                        "surface-bright": "#2c3a4c",
+                        "secondary": "#4edea3",
+                        "surface-container-high": "#1c2b3c",
+                        "primary-fixed": "#d8e2ff",
+                        "on-secondary-fixed": "#002113",
+                        "on-primary-fixed-variant": "#004395",
+                        "primary-fixed-dim": "#adc6ff",
+                        "secondary-fixed": "#6ffbbe",
+                        "surface-container-lowest": "#010f1f",
+                        "on-background": "#d4e4fa",
+                        "on-secondary-container": "#00311f",
+                        "error": "#ffb4ab",
+                        "secondary-container": "#00a572",
+                        "inverse-surface": "#d4e4fa",
+                        "tertiary": "#ffb2b7",
+                        "on-secondary": "#003824",
+                        "outline": "#8c909f",
+                        "on-error": "#690005",
+                        "on-primary-container": "#00285d",
+                        "surface-dim": "#051424"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "xs": "4px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "xl": "40px",
+                        "container-max": "1200px",
+                        "base": "4px",
+                        "gutter": "20px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "code-sm": ["Geist"],
+                        "label-md": ["Geist"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "code-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md overflow-hidden flex h-screen">
+<!-- SideNavBar (Shared Component) -->
+<aside class="hidden md:flex flex-col h-full w-64 bg-surface-container border-r border-outline-variant p-md gap-sm fixed left-0 top-0 z-50">
+<div class="flex flex-col gap-xs mb-lg">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-xl bg-primary-container/20 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary" data-weight="fill" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-black text-on-surface tracking-tighter">M2M Node</h1>
+<p class="font-label-md text-label-md text-on-surface-variant opacity-70">v4.2.0-stable</p>
+</div>
+</div>
+</div>
+<nav class="flex flex-col gap-xs flex-grow">
+<!-- Navigation Items Mapping from JSON -->
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-all duration-200 active:translate-x-1" href="#identity">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+<span class="font-label-md text-label-md">Identity</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-all duration-200 active:translate-x-1" href="#network">
+<span class="material-symbols-outlined" data-icon="lan">lan</span>
+<span class="font-label-md text-label-md">Network</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-all duration-200 active:translate-x-1" href="#discovery">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+<span class="font-label-md text-label-md">Discovery</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-secondary font-bold bg-secondary-container/10 border-l-2 border-secondary/50" href="#security">
+<span class="material-symbols-outlined" data-icon="lock_person">lock_person</span>
+<span class="font-label-md text-label-md">Security</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-all duration-200 active:translate-x-1" href="#servers">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+<span class="font-label-md text-label-md">Servers</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-all duration-200 active:translate-x-1" href="#about">
+<span class="material-symbols-outlined" data-icon="info">info</span>
+<span class="font-label-md text-label-md">About</span>
+</a>
+</nav>
+<div class="mt-auto pt-md border-t border-outline-variant flex flex-col gap-sm">
+<div class="flex items-center gap-sm px-sm py-xs">
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A macro close-up portrait of a digital biometric eye scan with intricate iris patterns illuminated by blue and cyan laser light. The background is a dense matrix of code and secure data streams, emphasizing a high-security M2M identity aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4CnmH8PK2VBF1E80N6Uh5ak-znjshP_2EFRGYCo4nirsOdgl3fv56sjjOMU4vdVkohpW83-uq6veoGbjLeAiifNZNeT1fhXxoYV63zubfGV62QZhmJs7imYZI97hgpW6UP3xyhxQtjUadhR22kRG_9AY7xhtCiJi5XWbUgLEzQzCOn7yy9jlRPtC8DOW54fLhVg6ZWueywPde71lEQMBt_fI44VIuwVdjfehMq16e4LBHB_vqRezYlSV0FfpAfclOVyBwmnk-hfI"/>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-on-surface">Admin_Node_01</span>
+<span class="text-[10px] text-secondary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+                        Synchronized
+                    </span>
+</div>
+</div>
+<button class="w-full py-sm bg-primary text-on-primary font-label-md rounded-lg hover:opacity-90 active:scale-[0.98] transition-all">
+                Check Updates
+            </button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-grow md:ml-64 h-full overflow-y-auto no-scrollbar scroll-smooth">
+<!-- Header -->
+<header class="sticky top-0 z-40 bg-background/80 backdrop-blur-md px-lg py-md border-b border-outline-variant flex items-center justify-between">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Node Settings</h2>
+<p class="font-body-md text-on-surface-variant text-sm">Configure your machine-to-machine security protocol parameters.</p>
+</div>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined p-sm rounded-lg hover:bg-surface-variant cursor-pointer text-on-surface-variant" data-icon="help_outline">help_outline</span>
+<span class="material-symbols-outlined p-sm rounded-lg hover:bg-surface-variant cursor-pointer text-on-surface-variant" data-icon="qr_code_2">qr_code_2</span>
+</div>
+</header>
+<div class="max-w-4xl mx-auto p-lg flex flex-col gap-lg pb-xl">
+<!-- Identity Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="identity">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-primary" data-icon="fingerprint">fingerprint</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-primary">Identity</h3>
+</div>
+<div class="grid grid-cols-1 gap-md">
+<div class="flex flex-col gap-xs p-sm bg-background border border-outline-variant rounded-lg">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Node Fingerprint</label>
+<div class="flex items-center justify-between gap-sm">
+<code class="font-code-sm text-code-sm text-on-surface bg-surface-variant/30 px-sm py-xs rounded flex-grow">8b:44:c1:f9:e2:3a:77:d1:b0:12:34:56:78:90:ab:cd</code>
+<button class="p-xs hover:bg-surface-variant rounded transition-colors group">
+<span class="material-symbols-outlined text-sm text-on-surface-variant group-hover:text-primary" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-xs p-sm bg-background border border-outline-variant rounded-lg">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Public Key (Ed25519)</label>
+<div class="flex items-center justify-between gap-sm">
+<code class="font-code-sm text-code-sm text-on-surface bg-surface-variant/30 px-sm py-xs rounded flex-grow overflow-hidden text-ellipsis whitespace-nowrap">m2m_pk1_7f8a9b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u</code>
+<button class="p-xs hover:bg-surface-variant rounded transition-colors group">
+<span class="material-symbols-outlined text-sm text-on-surface-variant group-hover:text-primary" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Network Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="network">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-secondary" data-icon="lan">lan</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-secondary">Network Configuration</h3>
+</div>
+<div class="flex flex-col gap-md">
+<div class="flex flex-wrap items-center justify-between gap-md p-sm bg-background border border-outline-variant rounded-lg">
+<div class="flex flex-col">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Public IP Address</label>
+<span class="font-code-sm text-on-surface">192.168.1.104 <span class="text-on-surface-variant opacity-50 ml-sm font-body-md">(Global)</span></span>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex flex-col items-end">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">NAT Type</label>
+<span class="px-sm py-[2px] bg-tertiary-container/20 text-tertiary text-[10px] font-bold rounded-full border border-tertiary/30">Moderate</span>
+</div>
+<button class="px-md py-sm bg-surface-variant hover:bg-surface-bright text-on-surface text-xs font-bold rounded-lg border border-outline-variant transition-all">Check Connectivity</button>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-md">
+<!-- Toggles -->
+<div class="flex items-center justify-between p-sm border border-outline-variant rounded-lg hover:border-primary/30 transition-colors">
+<div class="flex flex-col">
+<span class="text-sm font-bold">Private Mode</span>
+<span class="text-[11px] text-on-surface-variant">Hide node from public indexing</span>
+</div>
+<div class="relative inline-block w-10 h-5">
+<input checked="" class="opacity-0 w-0 h-0 switch-checkbox" id="private-mode" type="checkbox"/>
+<label class="absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-surface-variant transition-all duration-300 rounded-full switch-label" for="private-mode">
+<span class="absolute h-4 w-4 left-[2px] bottom-[2px] bg-white rounded-full transition-all duration-300 switch-ball shadow-sm"></span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-between p-sm border border-outline-variant rounded-lg hover:border-primary/30 transition-colors">
+<div class="flex flex-col gap-sm">
+<div class="flex flex-col">
+<span class="text-sm font-bold">Tor Routing</span>
+<span class="text-[11px] text-on-surface-variant">Onion-layer obfuscation</span>
+</div>
+<button class="text-[10px] font-bold text-primary uppercase text-left hover:underline w-fit">Test Tor Link</button>
+</div>
+<div class="relative inline-block w-10 h-5">
+<input class="opacity-0 w-0 h-0 switch-checkbox" id="tor-toggle" type="checkbox"/>
+<label class="absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-surface-variant transition-all duration-300 rounded-full switch-label" for="tor-toggle">
+<span class="absolute h-4 w-4 left-[2px] bottom-[2px] bg-white rounded-full transition-all duration-300 switch-ball shadow-sm"></span>
+</label>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Discovery Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="discovery">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-primary" data-icon="hub">hub</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-primary">Discovery Protocols</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="flex flex-col gap-md">
+<div class="flex items-center justify-between">
+<span class="text-sm font-medium">Local Network (LAN) Discovery</span>
+<div class="relative inline-block w-10 h-5">
+<input checked="" class="opacity-0 w-0 h-0 switch-checkbox" id="lan-discovery" type="checkbox"/>
+<label class="absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-surface-variant transition-all duration-300 rounded-full switch-label" for="lan-discovery">
+<span class="absolute h-4 w-4 left-[2px] bottom-[2px] bg-white rounded-full transition-all duration-300 switch-ball shadow-sm"></span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-sm font-medium">Distributed Hash Table (DHT)</span>
+<div class="relative inline-block w-10 h-5">
+<input checked="" class="opacity-0 w-0 h-0 switch-checkbox" id="dht-discovery" type="checkbox"/>
+<label class="absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-surface-variant transition-all duration-300 rounded-full switch-label" for="dht-discovery">
+<span class="absolute h-4 w-4 left-[2px] bottom-[2px] bg-white rounded-full transition-all duration-300 switch-ball shadow-sm"></span>
+</label>
+</div>
+</div>
+</div>
+<div class="bg-background/40 border border-outline-variant rounded-lg p-md flex flex-col items-center justify-center gap-xs">
+<span class="text-3xl font-black text-secondary">14</span>
+<span class="text-[10px] uppercase font-bold text-on-surface-variant">Nodes Online Globally</span>
+<div class="mt-sm flex gap-1">
+<span class="w-1 h-1 rounded-full bg-secondary"></span>
+<span class="w-1 h-1 rounded-full bg-secondary"></span>
+<span class="w-1 h-1 rounded-full bg-secondary"></span>
+<span class="w-1 h-1 rounded-full bg-secondary/30"></span>
+<span class="w-1 h-1 rounded-full bg-secondary/30"></span>
+</div>
+</div>
+</div>
+</section>
+<!-- Security Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="security">
+<div class="flex items-center justify-between mb-md">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-error" data-icon="lock_person">lock_person</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-error">Advanced Security</h3>
+</div>
+<button class="px-md py-xs bg-error-container/20 text-error border border-error/30 hover:bg-error-container/40 rounded-lg text-xs font-bold transition-all active:scale-95">Lock Vault Now</button>
+</div>
+<div class="space-y-md">
+<div class="flex items-center justify-between pb-md border-b border-outline-variant/30">
+<div class="flex flex-col">
+<span class="text-sm font-bold">Screen Capture Protection</span>
+<span class="text-[11px] text-on-surface-variant">Prevent screenshots and recordings of the app</span>
+</div>
+<div class="relative inline-block w-10 h-5">
+<input class="opacity-0 w-0 h-0 switch-checkbox" id="screen-cap" type="checkbox"/>
+<label class="absolute cursor-pointer top-0 left-0 right-0 bottom-0 bg-surface-variant transition-all duration-300 rounded-full switch-label" for="screen-cap">
+<span class="absolute h-4 w-4 left-[2px] bottom-[2px] bg-white rounded-full transition-all duration-300 switch-ball shadow-sm"></span>
+</label>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-lg">
+<div class="flex flex-col gap-xs">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Clipboard Auto-Clear</label>
+<select class="bg-background border border-outline-variant text-on-surface rounded-lg p-sm text-sm focus:border-primary outline-none transition-all cursor-pointer">
+<option>Off</option>
+<option selected="">5 Seconds</option>
+<option>10 Seconds</option>
+<option>30 Seconds</option>
+<option>1 Minute</option>
+</select>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Idle Vault Lock</label>
+<select class="bg-background border border-outline-variant text-on-surface rounded-lg p-sm text-sm focus:border-primary outline-none transition-all cursor-pointer">
+<option>Off</option>
+<option>1 Minute</option>
+<option selected="">5 Minutes</option>
+<option>10 Minutes</option>
+<option>30 Minutes</option>
+</select>
+</div>
+</div>
+</div>
+</section>
+<!-- STUN Servers Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="servers">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-primary" data-icon="dns">dns</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-primary">STUN/Relay Servers</h3>
+</div>
+<div class="space-y-sm">
+<div class="flex items-center justify-between p-sm bg-background/60 rounded-lg border border-outline-variant/30">
+<span class="font-code-sm text-sm">stun.l.google.com:19302</span>
+<span class="flex items-center gap-xs px-sm py-xs bg-secondary/10 text-secondary text-[10px] font-bold rounded-full border border-secondary/20">
+<span class="w-1.5 h-1.5 bg-secondary rounded-full"></span>
+                            Online
+                        </span>
+</div>
+<div class="flex items-center justify-between p-sm bg-background/60 rounded-lg border border-outline-variant/30">
+<span class="font-code-sm text-sm">stun1.node.m2m-protocol.io:3478</span>
+<span class="flex items-center gap-xs px-sm py-xs bg-secondary/10 text-secondary text-[10px] font-bold rounded-full border border-secondary/20">
+<span class="w-1.5 h-1.5 bg-secondary rounded-full"></span>
+                            Online
+                        </span>
+</div>
+<div class="flex items-center justify-between p-sm bg-background/60 rounded-lg border border-outline-variant/30 opacity-50">
+<span class="font-code-sm text-sm">stun.fallback-relay.net:3478</span>
+<span class="flex items-center gap-xs px-sm py-xs bg-surface-variant text-on-surface-variant text-[10px] font-bold rounded-full border border-outline-variant">
+<span class="w-1.5 h-1.5 bg-on-surface-variant rounded-full"></span>
+                            Offline
+                        </span>
+</div>
+</div>
+<button class="mt-md w-full py-sm border border-dashed border-outline-variant hover:border-primary/50 text-on-surface-variant hover:text-primary text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-xs">
+<span class="material-symbols-outlined text-sm">add</span>
+                    Add Custom Server
+                </button>
+</section>
+<!-- Theme Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="theme">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-primary" data-icon="palette">palette</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-primary">Interface Theme</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+<div class="flex flex-col gap-sm">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Mode Selection</label>
+<div class="flex p-xs bg-background rounded-xl border border-outline-variant">
+<button class="flex-grow py-sm flex flex-col items-center gap-xs text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">light_mode</span>
+<span class="text-[10px] font-bold">Light</span>
+</button>
+<button class="flex-grow py-sm flex flex-col items-center gap-xs bg-primary text-on-primary rounded-lg shadow-lg">
+<span class="material-symbols-outlined">dark_mode</span>
+<span class="text-[10px] font-bold">Dark</span>
+</button>
+<button class="flex-grow py-sm flex flex-col items-center gap-xs text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">settings_brightness</span>
+<span class="text-[10px] font-bold">System</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-sm">
+<label class="text-[10px] uppercase font-bold text-on-surface-variant">Accent Color</label>
+<div class="flex items-center gap-md p-sm bg-background rounded-xl border border-outline-variant h-full">
+<button class="w-8 h-8 rounded-full bg-[#adc6ff] border-4 border-white/20 ring-2 ring-[#adc6ff]"></button>
+<button class="w-6 h-6 rounded-full bg-[#4edea3] hover:scale-110 transition-transform"></button>
+<button class="w-6 h-6 rounded-full bg-[#ffb2b7] hover:scale-110 transition-transform"></button>
+<button class="w-6 h-6 rounded-full bg-[#ffda44] hover:scale-110 transition-transform"></button>
+<button class="w-6 h-6 rounded-full bg-white hover:scale-110 transition-transform"></button>
+</div>
+</div>
+</div>
+</section>
+<!-- About Card -->
+<section class="bg-surface-container-low border border-outline-variant rounded-xl p-md" id="about">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="info">info</span>
+<h3 class="font-label-md text-label-md uppercase tracking-widest text-on-surface-variant">About Protocol</h3>
+</div>
+<div class="flex flex-col md:flex-row gap-lg items-center md:items-start">
+<div class="w-24 h-24 rounded-2xl bg-surface-variant flex items-center justify-center p-md border border-outline-variant shadow-inner">
+<span class="material-symbols-outlined text-4xl text-primary" data-weight="fill" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div class="flex-grow space-y-md text-center md:text-left">
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">M2M Secure Messenger</h4>
+<p class="text-sm text-secondary font-mono">v4.2.0-stable build #8291</p>
+</div>
+<div class="space-y-xs">
+<p class="text-xs text-on-surface-variant">Secured by industry-leading cryptographic standards:</p>
+<div class="flex flex-wrap gap-sm justify-center md:justify-start">
+<span class="px-sm py-xs bg-surface-variant rounded text-[10px] font-bold text-on-surface border border-outline-variant">Curve25519 (ECDH)</span>
+<span class="px-sm py-xs bg-surface-variant rounded text-[10px] font-bold text-on-surface border border-outline-variant">AES-256-GCM</span>
+<span class="px-sm py-xs bg-surface-variant rounded text-[10px] font-bold text-on-surface border border-outline-variant">Argon2id KDF</span>
+<span class="px-sm py-xs bg-surface-variant rounded text-[10px] font-bold text-on-surface border border-outline-variant">Double Ratchet</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Footer (Shared Component Logic) -->
+<footer class="w-full py-md border-t border-outline-variant flex flex-col md:flex-row justify-between items-center px-0 mt-xl opacity-60">
+<span class="font-label-md text-label-md text-on-surface-variant">© 2024 M2M Protocol. End-to-End Encrypted.</span>
+<div class="flex gap-lg mt-md md:mt-0">
+<a class="font-label-md text-on-surface-variant hover:text-on-surface transition-colors" href="#">Documentation</a>
+<a class="font-label-md text-on-surface-variant hover:text-on-surface transition-colors" href="#">Source Code</a>
+<a class="font-label-md text-on-surface-variant hover:text-on-surface transition-colors" href="#">Status</a>
+</div>
+</footer>
+</div>
+</main>
+<!-- FAB (Suppressed on Settings Page as per Rule) -->
+<script>
+        // Simple Interaction Logic for active state navigation
+        document.querySelectorAll('aside nav a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                document.querySelectorAll('aside nav a').forEach(l => {
+                    l.classList.remove('text-secondary', 'font-bold', 'bg-secondary-container/10', 'border-l-2', 'border-secondary/50');
+                    l.classList.add('text-on-surface-variant', 'hover:text-on-surface', 'hover:bg-surface-bright');
+                });
+                this.classList.add('text-secondary', 'font-bold', 'bg-secondary-container/10', 'border-l-2', 'border-secondary/50');
+                this.classList.remove('text-on-surface-variant', 'hover:text-on-surface', 'hover:bg-surface-bright');
+            });
+        });
+
+        // Copy button animation simulation
+        document.querySelectorAll('button:has(.material-symbols-outlined[data-icon="content_copy"])').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const icon = this.querySelector('.material-symbols-outlined');
+                const originalIcon = icon.innerText;
+                icon.innerText = 'check';
+                icon.classList.add('text-secondary');
+                setTimeout(() => {
+                    icon.innerText = originalIcon;
+                    icon.classList.remove('text-secondary');
+                }, 1500);
+            });
+        });
+    </script>
+</body></html>
