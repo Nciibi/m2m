@@ -133,6 +133,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         direction: "sent",
         timestamp: Math.floor(Date.now() / 1000),
         read_at: null,
+        edited_at: null,
+        deleted: false,
+        expires_at: null,
         reactions: {},
       }]);
     } catch (e) {
