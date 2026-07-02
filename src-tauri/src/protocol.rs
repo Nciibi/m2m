@@ -133,6 +133,26 @@ pub enum PacketType {
     SyncDeviceInfo = 0x45,
     /// Multi-device sync: encrypted payload batch (peer keys, conversations, etc.).
     SyncPayload = 0x46,
+    // ─── Group Chat (Phase 3) ───
+    /// Create a new group (0x50).
+    /// Sent by the group creator to all initial members over their 1:1 DR session.
+    GroupCreate = 0x50,
+    /// Invite a new member to an existing group (0x51).
+    /// Sent by an admin to the invited member.
+    GroupInvite = 0x51,
+    /// Remove a member from a group (0x52).
+    /// Sent by an admin to all remaining members (triggers key rotation).
+    GroupRemove = 0x52,
+    /// Distribute a Sender Key bundle to a group member (0x53).
+    /// Sent over the recipient's 1:1 DR session during group creation or member add.
+    GroupSenderKey = 0x53,
+    /// An encrypted group message (0x54).
+    /// Inner: Sender Key encrypted payload. Outer: pairwise DR envelope.
+    GroupEncryptedMessage = 0x54,
+    /// Group metadata update (0x55), e.g. name change.
+    GroupInfo = 0x55,
+    /// Member leaves a group voluntarily (0x56).
+    GroupLeave = 0x56,
 }
 
 impl PacketType {
