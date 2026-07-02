@@ -472,7 +472,6 @@ pub struct SyncPayload {
     /// What kind of data this payload contains.
     pub payload_type: SyncPayloadType,
     /// Serialized payload data (encrypted at the frame level by DR).
-    #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
 }
 
