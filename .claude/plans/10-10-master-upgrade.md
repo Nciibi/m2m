@@ -261,8 +261,7 @@ tauri-plugin-notification = "2"
 
 **Tier 2 — Feature complete**:
 4. Multi-device sync (Phase 2) — significant engineering effort, moderate user demand
-5. Notifications + system tray (Phase 7) — background UX
-6. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
+5. Typing indicators + message search (Phase 5.1–5.2) — medium effort, high UX value
 
 **Tier 3 — Power user features**:
 7. Voice messages (Phase 5.4) — moderate effort, high polish value
