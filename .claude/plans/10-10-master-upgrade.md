@@ -258,7 +258,6 @@ tauri-plugin-notification = "2"
 **Tier 1 — Core missing features (highest user impact)**:
 1. Group chat (Phase 3) — biggest missing feature vs. Signal/WhatsApp
 2. Frontend overhaul (Phase 5) — biggest visible quality gap
-3. Message de-duplication + offline queue (Phase 6.2) — reliability gap
 
 **Tier 2 — Feature complete**:
 4. Multi-device sync (Phase 2) — significant engineering effort, moderate user demand
