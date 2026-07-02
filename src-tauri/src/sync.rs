@@ -453,9 +453,8 @@ mod sync_tests {
         let token_hash = hex::encode(sha256::hash(&token));
         let now = now_unix() - 1000; // 1000 seconds ago — expired
 
-        mgr.pending_invites.insert(token_hash.clone(), SyncInvite {
-            token_hash,
-.clone(),
+        mgr.pending_invites.insert(token_hash, SyncInvite {
+            token_hash: token.clone(),
             expires_at: now, // already expired
             used: false,
         });
