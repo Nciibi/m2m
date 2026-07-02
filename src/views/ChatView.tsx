@@ -384,6 +384,11 @@ export default function ChatView() {
         </div>
       )}
 
+      {/* Screen-reader live region for new messages */}
+      <div aria-live="polite" className="sr-only" role="status">
+        {messages.length > 0 && `New message from ${messages[messages.length - 1]?.direction === "received" ? "peer" : "you"}`}
+      </div>
+
       {/* Messages */}
       <div className="msg-area" ref={msgRef} onScroll={onScroll} id="message-list">
         {loadingOlder && <div className="msg-loading-older">Loading older messages…</div>}
