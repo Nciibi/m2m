@@ -17,6 +17,7 @@ interface ChatContextValue {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   fileRequests: FileRequest[];
   conversations: ConversationEntry[];
+  typingPeers: string[];
   activeConversationId: string | null;
   inviteToConnect: string;
   setInviteToConnect: (v: string) => void;
