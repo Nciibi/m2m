@@ -449,15 +449,13 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
   if (!discoveryConfig?.lan_enabled && !discoveryConfig?.dht_enabled) {
     return (
       <div className="centered-view">
-        <div className="nearby-empty">
-          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            Discovery Not Active
-          </span>
-          <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+        <div className="conv-empty">
+          <p className="conv-empty__title">Discovery Not Active</p>
+          <p className="conv-empty__desc">
             Enable LAN or DHT discovery in Settings to find nearby peers.
             Both are <strong>OFF by default</strong> — privacy first.
-          </span>
-          <Button variant="secondary" size="sm" onClick={onOpenSettings} style={{ marginTop: 'var(--space-md)' }}>
+          </p>
+          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
             <GearIcon size={16} /> Open Settings
           </Button>
         </div>
@@ -469,12 +467,10 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
   if (discoveredPeers.length === 0) {
     return (
       <div className="centered-view">
-        <div className="nearby-empty">
+        <div className="conv-empty">
           <WifiIcon size={48} color="var(--color-text-muted)" />
-          <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            No Peers Found
-          </span>
-          <span style={{ maxWidth: '320px', textAlign: 'center', lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+          <p className="conv-empty__title">No Peers Found</p>
+          <p className="conv-empty__desc">
             {discoveryConfig?.lan_enabled
               ? "No LAN peers detected. Make sure other M2M users are on the same network with LAN discovery enabled."
               : ""}
@@ -482,10 +478,8 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
             {discoveryConfig?.dht_enabled
               ? "No DHT peers found. They may be offline or behind a symmetric NAT."
               : ""}
-          </span>
-          <Button variant="secondary" size="xs" onClick={onRefresh} style={{ marginTop: 'var(--space-md)' }}>
-            Refresh
-          </Button>
+          </p>
+          <Button variant="secondary" size="xs" onClick={onRefresh}>Refresh</Button>
         </div>
       </div>
     );
@@ -493,7 +487,7 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
 
   return (
     <div className="conv-list">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'var(--space-xs) var(--space-md)', gap: 'var(--space-xs)' }}>
+      <div className="nearby-actions">
         <Button variant="secondary" size="xs" onClick={onRefresh}>Refresh</Button>
       </div>
       {discoveredPeers.map((peer: any, idx: number) => (

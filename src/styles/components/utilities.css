@@ -1896,6 +1896,14 @@
   flex-shrink: 0;
 }
 
+/* ─── Nearby actions bar ─── */
+.nearby-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-xs) var(--space-md);
+  gap: var(--space-xs);
+}
+
 /* ─── Progress Bar compact ─── */
 .file-progress-meta {
   font-size: var(--text-xs);
