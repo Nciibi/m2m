@@ -230,6 +230,32 @@
   text-transform: uppercase;
 }
 
+.conv-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+}
+
+.online-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-success);
+  border: 2px solid var(--color-bg-dark);
+  box-shadow: 0 0 6px var(--color-success-glow);
+  z-index: 2;
+}
+
+.mute-indicator {
+  margin-left: 6px;
+  font-size: 0.65rem;
+  opacity: 0.6;
+}
+
 .conv-avatar--online {
   border: 2px solid var(--color-success) !important;
   box-shadow: 0 0 12px var(--color-success-glow) !important;
