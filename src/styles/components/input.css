@@ -94,3 +94,9 @@
   color: var(--color-danger);
   padding-left: 4px;
 }
+
+/* ─── Vault input with paste + eye buttons ─── */
+.vault-input.input-wrap > input {
+  padding-left: 56px;
+  padding-right: 44px;
+}
