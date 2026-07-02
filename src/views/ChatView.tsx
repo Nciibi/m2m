@@ -195,6 +195,57 @@ export default function ChatView() {
     } finally { setSending(false); }
   };
 
+  // Search handler
+  const doSearch = useCallback(async (query: string) => {
+    if (!query.trim() || !activeConversationId) {
+      setSearchResults([]);
+      return;
+    }
+    setIsSearching(true);
+    try {
+      const results = await invoke<ChatMessage[]>("search_messages", {
+        peerKeyHex: activeConversationId,
+        query: query.trim(),
+      });
+      setSearchResults(results);
+    } catch {
+      addToast("Search failed", "error");
+    } finally {
+      setIsSearching(false);
+    }
+  }, [activeConversationId, addToast]);
+
+  // Send typing indicator when user types
+  const handleTextChange = useCallback((value: string) => {
+    setText(value);
+    if (!activeConversationId || !connection?.peer_key_hex) return;
+    // Send typing indicator
+    invoke("send_typing_indicator", { peerKeyHex: activeConversationId, typing: true }).catch(() => {});
+    // Clear auto-hide timer
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    // Auto-hide typing after 3s of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      invoke("send_typing_indicator", { peerKeyHex: activeConversationId, typing: false }).catch(() => {});
+    }, 3000);
+  }, [activeConversationId, connection?.peer_key_hex]);
+
+  // Keyboard shortcuts: Ctrl+F for search, Ctrl+K for settings
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "f") {
+        e.preventDefault();
+        setShowSearch((s) => !s);
+      }
+      if (ctrl && e.key === "k") {
+        e.preventDefault();
+        setView("settings");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [setView]);
+
   // Close context menu on click outside
   useEffect(() => {
     if (!contextMsgId) return;
