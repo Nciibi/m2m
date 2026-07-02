@@ -373,10 +373,13 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
           const isMuted = mutedConversations?.includes(c.peer_key_hex);
           return (
           <div key={c.id} className="conv-item" onClick={() => onOpenChat(c)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpenChat(c)}>
-            <div className={`conv-avatar ${c.is_online ? 'conv-avatar--online' : 'conv-avatar--offline'}`} style={{
-              background: `linear-gradient(135deg, ${hashToColor(c.peer_key_hex)}, ${hashToColor(c.peer_key_hex.slice(16))})`,
-            }}>
-              {(c.display_name || c.peer_display_name || c.peer_key_hex).charAt(0).toUpperCase()}
+            <div className="conv-avatar-wrap">
+              <div className={`conv-avatar ${c.is_online ? 'conv-avatar--online' : ''}`} style={{
+                background: `linear-gradient(135deg, ${hashToColor(c.peer_key_hex)}, ${hashToColor(c.peer_key_hex.slice(16))})`,
+              }}>
+                {(c.display_name || c.peer_display_name || c.peer_key_hex).charAt(0).toUpperCase()}
+              </div>
+              {c.is_online && <span className="online-dot" />}
             </div>
             <div className="conv-body">
               <div className="conv-top">
