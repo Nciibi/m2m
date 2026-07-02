@@ -328,28 +328,22 @@ export default function ChatView() {
 
       {/* Message search bar */}
       {showSearch && (
-        <div style={{ padding: 'var(--space-sm) var(--space-2xl)', display: 'flex', gap: 'var(--space-xs)', alignItems: 'center', borderBottom: '1px solid var(--color-border-default)' }}>
+        <div className="search-bar">
           <input
             type="text"
-            placeholder="Search messages… (press Esc to close)"
+            placeholder="Search messages… (Esc to close)"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               if (e.target.value.length >= 2) doSearch(e.target.value);
             }}
             onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); setSearchResults([]); } }}
-            className="search-input"
+            className="search-bar__input"
             autoFocus
-            style={{
-              flex: 1, background: 'var(--color-bg-input)', border: '1px solid var(--color-border-default)',
-              borderRadius: 'var(--radius-md)', padding: 'var(--space-xs) var(--space-sm)',
-              color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: 'var(--text-sm)',
-              outline: 'none',
-            }}
           />
           {isSearching && <span className="spinner--sm" />}
           {searchResults.length > 0 && (
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            <span className="search-bar__count">
               {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
             </span>
           )}
@@ -357,16 +351,16 @@ export default function ChatView() {
         </div>
       )}
       {searchResults.length > 0 && (
-        <div style={{ padding: 'var(--space-sm) var(--space-2xl)', borderBottom: '1px solid var(--color-border-default)', maxHeight: 150, overflowY: 'auto' }}>
+        <div className="search-results">
           {searchResults.map((r) => (
-            <div key={r.id} style={{ fontSize: 'var(--text-sm)', padding: '2px 0', cursor: 'pointer', color: 'var(--color-text-secondary)' }}
+            <div key={r.id} className="search-result-item"
               onClick={() => {
                 setSearchQuery("");
                 setSearchResults([]);
                 setShowSearch(false);
               }}>
               <span className="msg-content">{renderMarkdown(r.content.substring(0, 100))}</span>
-              <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginLeft: 'var(--space-xs)' }}>
+              <span className="search-result-time">
                 {new Date(r.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
