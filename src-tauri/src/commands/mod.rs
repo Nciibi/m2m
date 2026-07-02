@@ -162,6 +162,43 @@ pub struct ConversationListItem {
 
 pub use crate::storage::FamilyMember;
 
+// ─── Group Chat Types (Phase 3) ───
+
+/// Summary info for a group, sent to the frontend.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupInfo {
+    pub group_id: String,
+    pub group_name: String,
+    pub member_count: u32,
+    pub created_at: u64,
+}
+
+/// Full group detail with members, sent to the frontend.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupDetail {
+    pub group_id: String,
+    pub group_name: String,
+    pub member_count: u32,
+    pub created_at: u64,
+    pub our_role: String,
+    pub members: Vec<crate::group::GroupMember>,
+}
+
+/// Event emitted to the frontend when a group message arrives.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupMessageEvent {
+    pub group_id: String,
+    pub message: ChatMessage,
+}
+
+/// Event emitted to the frontend for group state changes.
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupEvent {
+    pub group_id: String,
+    pub event_type: String,
+    pub peer_key_hex: Option<String>,
+}
+
 /// Status of a pending reconnection attempt.
 #[derive(Debug, Clone, Serialize)]
 pub struct ReconnectAttemptEvent {
