@@ -61,13 +61,13 @@ This plan details the gaps that prevent the app from achieving a **10/10** UI/UX
 
 | Task | Scope | Status | Acceptance Criteria |
 |------|-------|--------|----------------------|
-| Favorites / Mute / Archive | Extend `Conversation` model (Rust + TS) with `is_favorite`, `is_muted`, `archived`. Add UI toggle buttons in `HubView` list items. Update DB queries to filter archived out of default list. | 🟡 Partial (mute ✅, favorite/archive ❌) | Users can favorite, mute, archive; UI reflects state instantly |
-| Conversation Sorting | Sort conversations by recency (most recent first). | ✅ Complete (sorted in ChatsTab) | Most recent conversations appear first |
+| Favorites / Mute / Archive | Extend `Conversation` model (Rust + TS) with `is_favorite`, `is_muted`, `archived`. Add UI toggle buttons in `HubView` list items. Update DB queries to filter archived out of default list. | ✅ Complete (star toggle → `toggle_favorite`, archive toggle → `toggle_archive`, DB migration adds columns, ConvListItem carries fields) | Users can favorite, mute, archive; UI reflects state instantly |
+| Conversation Sorting | Sort conversations by recency (most recent first). | ✅ Complete (sorted in ChatsTab, favorites first, archived last) | Most recent conversations appear first |
 | Last-Seen Relative Time | Show "Last seen X ago" for offline peers. | ✅ Complete (relative-time display in ChatsTab) | Offline peers show last-seen timestamp |
 | Invite Countdown & History | Show invite expiry countdown timer + recent invites history (last 5). | ✅ Complete (ConnectTab with countdown and history) | Users see invite expiry and can re-copy old invites |
 | Listening Indicator | Green pulsing dot when hosting. | ✅ Complete (listening-indicator CSS) | Users see when they're listening |
 | Folder / Tag System (optional) | Simple label field (`tags: string[]`) and UI "Add Tag" dialog. | ❌ Not started | Users can group conversations; filter by tag |
-| Drag‑and‑Drop File Send | Implement `<DropZone>` component over message input area; on drop, invoke `handleSendFile`. Show preview thumbnail for images. | ❌ Not started (file send via dialog only) | Dragging a file sends it; UI shows progress bar |
+| Drag‑and‑Drop File Send | Implement `<DropZone>` component over message input area; on drop, invoke `handleSendFile`. Show preview thumbnail for images. | ✅ Complete (drop zone with dashed border overlay + hint text, triggers handleSendFile) | Dragging a file sends it; UI shows progress bar |
 | Conversation List Keyboard Navigation | Arrow‑up/down moves selection, `Enter` opens chat, `Delete` archives. | 🟡 Partial (Enter works, no arrow nav) | Keyboard navigation works without mouse |
 
 #### 3.4. System Integration (Weeks 7–8)
