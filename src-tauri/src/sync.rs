@@ -26,15 +26,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
-use tokio::sync::RwLock;
-use uuid::Uuid;
 
 use sodiumoxide::crypto::hash::sha256;
 
 use crate::protocol::{
     self, PacketType, SyncDeviceInfo, SyncPayload, SyncPayloadType,
 };
-use crate::state::AppState;
+use crate::state::{AppState, PeerConnection};
 
 // ─── Constants ───
 
