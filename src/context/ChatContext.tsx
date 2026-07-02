@@ -75,6 +75,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [fileRequests, setFileRequests] = useState<FileRequest[]>([]);
+  const [typingPeers, setTypingPeers] = useState<string[]>([]);
   const [conversations, setConversations] = useState<ConversationEntry[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [inviteToConnect, setInviteToConnect] = useState("");
