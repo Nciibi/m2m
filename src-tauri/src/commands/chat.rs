@@ -13,6 +13,8 @@ use super::{ChatMessage, ConversationListItem};
 use crate::protocol::MessageReactionData;
 
 /// Send a text message to a connected peer.
+/// If the peer is offline, the message is queued locally with `delivered=0`
+/// and sent automatically when the peer reconnects.
 #[tauri::command]
 pub async fn send_message(
     state: State<'_, Arc<AppState>>,
@@ -27,30 +29,35 @@ pub async fn send_message(
         ));
     }
 
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
-
-    let mut conn = conn_arc.lock().await;
-    let msg_id = {
-        let PeerConnection { session, write_half, .. } = &mut *conn;
-        session
-            .send_text(write_half, &content)
-            .await
-            .map_err(|e| format!("send failed: {e}"))?
-    };
-
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
-    // Persist message to local storage if history is enabled
+    // Generate message ID up front — used regardless of delivery path.
+    let msg_id = uuid::Uuid::new_v4().to_string();
+
+    // Try to send via active connection; if offline, queue with delivered=0.
+    let delivered = match state.connections.read().await.get(&peer_key_hex) {
+        Some(conn_arc) => {
+            let mut conn = conn_arc.lock().await;
+            match conn.session.send_text(&mut conn.write_half, &content).await {
+                Ok(_) => true,
+                Err(e) => {
+                    tracing::warn!(peer = %peer_key_hex, error = %e, "send failed, queuing offline");
+                    false
+                }
+            }
+        }
+        None => {
+            tracing::info!(peer = %peer_key_hex, "peer not connected, queuing message");
+            false
+        }
+    };
+
+    // Persist to local storage if history is enabled
     let history = *state.history_enabled.read().await;
     if history {
-        // Lazy init: open message store on first send if not already opened
         state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
 
         let sk = state.storage_key.read().await;
@@ -62,7 +69,7 @@ pub async fn send_message(
                         let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                         let _ = store.store_message(
                             &msg_id, &peer_key_hex, "sent",
-                            &encrypted, &nonce, now as i64, true,
+                            &encrypted, &nonce, now as i64, delivered,
                         );
                     }
                 }
