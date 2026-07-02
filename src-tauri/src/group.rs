@@ -545,19 +545,47 @@ impl GroupManager {
     }
 
     /// Handle receiving a GroupSenderKey bundle from another member.
+    ///
+    /// The bundle ID scheme:
+    /// - If `signing_key` is `Some(...)`, then this bundle contains OUR OWN signing key
+    ///   (i.e., the recipient should set up their sending chain). The `sender_peer_key_hex`
+    ///   identifies whose chain this is — if it's the recipient's own key, it's the
+    ///   sending chain. Callers should verify the sender_peer_key_hex matches locally.
+    /// - If `signing_key` is `None`, then this bundle contains another member's sender
+    ///   key info and should be stored as a receiver chain to decrypt their messages.
+    ///
+    /// The `our_peer_key_hex` parameter tells us who WE are, so we can determine
+    /// whether a bundle with a signing key is ours.
     pub fn handle_sender_key(
         &mut self,
         data: &GroupSenderKeyData,
+        our_peer_key_hex: &str,
     ) -> Result<(), String> {
         let group = self
             .groups
             .get_mut(&data.group_id)
             .ok_or("group not found")?;
 
-        // If this bundle contains a signing key for us, it's OUR sender key
-        if data.signing_key.is_some() && data.sender_peer_key_hex == "*self" {
-            // This is our own key being re-distributed
-            return Ok(());
+        // If this bundle contains a signing key, it's OUR sending chain
+        // (the bundle was generated specifically for us).
+        if let Some(sk_bytes) = &data.signing_key {
+            // Only set up our sending chain if the bundle is addressed to us.
+            // The sender_peer_key_hex tells us which peer this chain represents —
+            // if it matches our own key, it's our sender chain.
+            if data.sender_peer_key_hex == our_peer_key_hex {
+                let mut sk = [0u8; 64];
+                if sk_bytes.len() == 64 {
+                    sk.copy_from_slice(&sk_bytes[..64]);
+                }
+                group.our_signing_key = Some(sk);
+                group.our_verification_key = Some(data.verification_key);
+                group.our_initial_chain_key = Some(data.chain_key);
+                group.our_sending_chain = Some(crate::crypto::SenderKeyChain::new(data.chain_key));
+                return Ok(());
+            }
+            // If the signing key is present but sender is NOT us, something is wrong
+            // (signing keys should only be sent to the key's owner). Treat as error.
+            return Err("received a sender key bundle with signing key for a different peer".to_string());
         }
 
         // Otherwise, store as a receiver chain for this sender
