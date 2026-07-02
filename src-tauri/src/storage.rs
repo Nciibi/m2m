@@ -940,7 +940,9 @@ impl MessageStore {
             "SELECT c.id, c.peer_id, c.created_at, c.last_message_at,
                     c.display_name, c.peer_display_name,
                     c.auto_delete_at, c.retention_policy,
-                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count
+                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count,
+                    COALESCE(c.is_favorite, 0) as is_favorite,
+                    COALESCE(c.archived, 0) as archived
              FROM conversations c WHERE c.id = ?1",
         )?;
         let result = stmt.query_row(params![conversation_id], |row| {
