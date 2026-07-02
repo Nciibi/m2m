@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button, Input, ToastContainer } from "../components/ui";
-import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon } from "../components/ui/Icons";
+import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon, CheckIcon } from "../components/ui/Icons";
 import { estimateEntropy } from "../utils";
 import { useApp } from "../context/AppContext";
 import { useVault } from "../context/VaultContext";
@@ -61,12 +61,9 @@ export default function VaultView() {
             ? "Choose a strong passphrase to encrypt your identity keys and message history."
             : "Enter your passphrase to decrypt your local data."}
           <br />
-          <span className="text-muted text-sm">
-            Minimum 12 chars · Argon2id
-          </span>
+          <span className="vault-crypto-hint">Minimum 12 chars · Argon2id</span>
         </p>
 
-        {/* Show fingerprint hint for returning users */}
         {!isFirstTime && identity?.fingerprint && (
           <div className="fp-hint">
             This vault belongs to {identity.fingerprint.substring(0, 16)}…
@@ -74,107 +71,111 @@ export default function VaultView() {
         )}
 
         <div className={`vault-form ${vaultError ? "vault-form--shake" : ""}`} key={shakeKey}>
-          <div className="input-wrap-relative">
-            <Input
-              id="vault-passphrase"
-              type={showPassphrase ? "text" : "password"}
-              placeholder="Passphrase"
-              value={passphrase}
-              onChange={e => { setPassphrase(e.target.value); setVaultError(""); }}
-              onKeyDown={e => e.key === "Enter" && handleUnlock()}
-              autoFocus
-              error={vaultError || undefined}
-              clearable
-              onClear={() => { setPassphrase(""); setVaultError(""); }}
-              className="vault-input"
-            />
-            <button
-              onClick={() => setShowPassphrase(!showPassphrase)}
-              aria-label={showPassphrase ? "Hide" : "Show"}
-              className="input__clear--absolute"
-            >
-              {showPassphrase ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  const text = await navigator.clipboard.readText();
-                  setPassphrase(text);
-                  setVaultError("");
-                } catch { /* Clipboard access denied */ }
-              }}
-              className="paste-btn"
-              title="Paste from clipboard"
-              aria-label="Paste passphrase"
-            >
-              📋 Paste
-            </button>
-          </div>
-
-          {passphrase.length > 0 && (
-            <div className="strength-container">
-              <div className="strength-bar">
-                <div className="strength-fill" style={{ width: `${strength.percent}%`, background: colorMap[strength.cls] || "transparent" }} />
-              </div>
-              <div className="strength-info">
-                <span className="strength-label" style={{ color: colorMap[strength.cls] || "var(--color-text-muted)" }}>
-                  {strength.label && `${strength.label} — ${strength.bits} bits`}
-                </span>
-                <span className="strength-chars">{passphrase.length} chars</span>
-              </div>
-            </div>
-          )}
-
-          {isFirstTime && (
-            <>
+          <div className="vault-input-group">
+            <div className="vault-input-wrap">
               <Input
-                id="vault-passphrase-confirm"
+                id="vault-passphrase"
                 type={showPassphrase ? "text" : "password"}
-                placeholder="Confirm passphrase"
-                value={passphraseConfirm}
-                onChange={e => setPassphraseConfirm(e.target.value)}
+                placeholder="Passphrase"
+                value={passphrase}
+                onChange={e => { setPassphrase(e.target.value); setVaultError(""); }}
                 onKeyDown={e => e.key === "Enter" && handleUnlock()}
-                error={passphraseConfirm && passphrase !== passphraseConfirm ? "Passphrases do not match" : undefined}
+                autoFocus
+                error={vaultError || undefined}
+                clearable
+                onClear={() => { setPassphrase(""); setVaultError(""); }}
               />
-              {passphraseConfirm && passphrase === passphraseConfirm && passphrase.length >= 12 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', fontSize: 'var(--text-sm)', color: 'var(--color-success)', marginTop: '-8px' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                  Passphrases match
-                </div>
-              )}
-            </>
-          )}
-
-          <button
-            onClick={() => setShowTips(!showTips)}
-            className="input__clear tips-toggle"
-          >
-            {showTips ? "Hide tips" : "What makes a strong passphrase?"}
-          </button>
-
-          {showTips && (
-            <div className="tips-box">
-              <strong>Tips:</strong>
-              <ul>
-                <li>Use 5+ random words (diceware method)</li>
-                <li>Aim for 60+ bits of entropy</li>
-                <li>Avoid common phrases or song lyrics</li>
-                <li>Include a mix of cases, numbers, or symbols</li>
-                <li>"correct-horse-battery-staple" style is excellent</li>
-              </ul>
+              <div className="vault-input-actions">
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      setPassphrase(text);
+                      setVaultError("");
+                    } catch { /* noop */ }
+                  }}
+                  className="vault-paste-btn"
+                  title="Paste from clipboard"
+                  aria-label="Paste passphrase"
+                >
+                  Paste
+                </button>
+                <button
+                  onClick={() => setShowPassphrase(!showPassphrase)}
+                  aria-label={showPassphrase ? "Hide" : "Show"}
+                  className="vault-toggle-btn"
+                >
+                  {showPassphrase ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                </button>
+              </div>
             </div>
-          )}
 
-          {vaultError && (
-            <div className="vault-error">{vaultError}</div>
-          )}
+            {passphrase.length > 0 && (
+              <div className="strength-container">
+                <div className="strength-bar">
+                  <div className="strength-fill" style={{ width: `${strength.percent}%`, background: colorMap[strength.cls] || "transparent" }} />
+                </div>
+                <div className="strength-info">
+                  <span className="strength-label" style={{ color: colorMap[strength.cls] || "var(--color-text-muted)" }}>
+                    {strength.label && `${strength.label} — ${strength.bits} bits`}
+                  </span>
+                  <span className="strength-chars">{passphrase.length} chars</span>
+                </div>
+              </div>
+            )}
 
-          <div className="vault-submit-wrap">
-            <Button id="vault-unlock-btn" onClick={handleUnlock} loading={loading} fullWidth>
-              {isFirstTime ? "Create Vault" : "Unlock"}
-            </Button>
+            {isFirstTime && (
+              <>
+                <div className="vault-input-wrap">
+                  <Input
+                    id="vault-passphrase-confirm"
+                    type={showPassphrase ? "text" : "password"}
+                    placeholder="Confirm passphrase"
+                    value={passphraseConfirm}
+                    onChange={e => setPassphraseConfirm(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                    error={passphraseConfirm && passphrase !== passphraseConfirm ? "Passphrases do not match" : undefined}
+                  />
+                  {passphraseConfirm && passphrase === passphraseConfirm && passphrase.length >= 12 && (
+                    <span className="vault-match-check">
+                      <CheckIcon size={14} color="var(--color-success)" />
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div className="vault-input-sub-row">
+              <button
+                onClick={() => setShowTips(!showTips)}
+                className="vault-tips-toggle"
+              >
+                {showTips ? "Hide tips" : "What makes a strong passphrase?"}
+              </button>
+            </div>
+
+            {showTips && (
+              <div className="tips-box">
+                <strong>Tips:</strong>
+                <ul>
+                  <li>Use 5+ random words (diceware method)</li>
+                  <li>Aim for 60+ bits of entropy</li>
+                  <li>Avoid common phrases or song lyrics</li>
+                  <li>Include a mix of cases, numbers, or symbols</li>
+                  <li>"correct-horse-battery-staple" style is excellent</li>
+                </ul>
+              </div>
+            )}
+
+            {vaultError && (
+              <div className="vault-error">{vaultError}</div>
+            )}
+
+            <div className="vault-submit-wrap">
+              <Button id="vault-unlock-btn" onClick={handleUnlock} loading={loading} fullWidth>
+                {isFirstTime ? "Create Vault" : "Unlock"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
