@@ -395,6 +395,7 @@ impl AppState {
             muted_conversations: RwLock::new(HashSet::new()),
             // UI Theme
             theme_preference: RwLock::new("system".to_string()),
+            accent_color: RwLock::new("#6366f1".to_string()),
             sync_manager: RwLock::new(crate::sync::SyncManager::new()),
             group_manager: RwLock::new(GroupManager::new()),
         }
