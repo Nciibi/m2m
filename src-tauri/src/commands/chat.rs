@@ -532,11 +532,11 @@ pub async fn send_message_with_timer(
         deleted: false,
         expires_at,
         reactions: std::collections::HashMap::new(),
+        sender_peer_key_hex: String::new(),
     })
 }
 
 /// Edit a previously-sent message.
-/// Updates the message content both locally and for the peer.
 #[tauri::command]
 pub async fn edit_message(
     state: State<'_, Arc<AppState>>,
