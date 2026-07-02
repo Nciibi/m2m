@@ -46,7 +46,7 @@ export default function UpdateBanner() {
           className="btn btn--sm btn--accent"
           onClick={async () => {
             try {
-              const { check, install } = await import("@tauri-apps/plugin-updater");
+              const { check } = await import("@tauri-apps/plugin-updater");
               const update = await check();
               if (update?.available) {
                 await update.downloadAndInstall();
