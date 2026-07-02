@@ -1,6 +1,6 @@
 # M2M → 10/10: Master Upgrade Roadmap
 
-**Current Score: 8.3/10**
+**Current Score: 8.5/10**
 - Architecture: 10 | Security/Crypto: 10 | Networking/Privacy: 10
 - Test Coverage: 9.5 | UI/UX: 6.5 | Performance: 10
 
