@@ -166,39 +166,14 @@
 
 ---
 
-## Phase 9: Documentation & Onboarding (Documentation: 9.5 → 10)
+## ⚠️ Phase 9: Documentation & Onboarding — PARTIAL (1/4 done)
 
-### 9.1 — In-App Onboarding Tutorial
-
-**Modified**: `src/views/SetupView.tsx` — interactive walkthrough
-- First-run: 3-step onboarding
-  1. "Create your identity" — explains keys, fingerprints
-  2. "Share your invite" — walk through generating and sending invite
-  3. "First connection" — guide to paste invite and connect
-- Progressive disclosure: advanced features shown later (Tor, manual forwards, relay)
-
-### 9.2 — User-Facing Documentation
-
-**New**: `docs/user-guide.md` — plain English guide
-- What is P2P? Why no servers?
-- How to verify fingerprints
-- What is NAT traversal?
-- Troubleshooting connection issues
-
-### 9.3 — Threat Model Updates
-
-**Modified**: `docs/threat-model.md`
-- Update for group chat
-- Update for multi-device
-- Update for DHT-based peer discovery
-- Add side-channel analysis for new features
-
-### 9.4 — API Documentation
-
-**Modified**: Rust code — inline doc improvements
-- Every public function has a doc comment with example usage
-- Add `# Panics` sections where applicable
-- Module-level docs explain architecture decisions
+| Sub-phase | Status | Details |
+|-----------|--------|---------|
+| 9.1 In-app onboarding tutorial | ❌ | `SetupView.tsx` is just a loading spinner — no interactive walkthrough |
+| 9.2 User-facing documentation | ⚠️ | `docs/user-guide.md` not created, but `docs/beginners-guide.md`, `docs/architecture.md`, and related docs exist |
+| 9.3 Threat model | ✅ | `docs/threat-model.md` exists and is maintained |
+| 9.4 API documentation | ⚠️ | Partial inline docs on public functions; module-level docs in key files |
 
 ---
 
