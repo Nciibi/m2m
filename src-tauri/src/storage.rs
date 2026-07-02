@@ -957,8 +957,8 @@ impl MessageStore {
                 retention_policy: row.get::<_, Option<String>>(7)?
                     .unwrap_or_else(|| "none".to_string()),
                 message_count: row.get(8)?,
-                is_favorite: None,
-                archived: None,
+                is_favorite: row.get::<_, Option<bool>>(9)?,
+                archived: row.get::<_, Option<bool>>(10)?,
             })
         });
         match result {
