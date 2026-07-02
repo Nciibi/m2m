@@ -729,3 +729,34 @@ pub async fn flush_offline_queue(
 
     Ok(sent_count)
 }
+
+/// Mute a conversation — no native notifications for new messages.
+#[tauri::command]
+pub async fn mute_conversation(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<(), String> {
+    let mut muted = state.muted_conversations.write().await;
+    muted.insert(peer_key_hex);
+    Ok(())
+}
+
+/// Unmute a conversation — restore native notifications.
+#[tauri::command]
+pub async fn unmute_conversation(
+    state: State<'_, Arc<AppState>>,
+    peer_key_hex: String,
+) -> Result<(), String> {
+    let mut muted = state.muted_conversations.write().await;
+    muted.remove(&peer_key_hex);
+    Ok(())
+}
+
+/// Get all muted conversations (list of peer_key_hex values).
+#[tauri::command]
+pub async fn get_muted_conversations(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<String>, String> {
+    let muted = state.muted_conversations.read().await;
+    Ok(muted.iter().cloned().collect())
+}
