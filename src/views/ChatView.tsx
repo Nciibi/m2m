@@ -15,7 +15,7 @@ import type { ChatMessage } from "../types";
 export default function ChatView() {
   const { identity, toasts, removeToast, addToast, setView } = useApp();
   const {
-    connection, messages, setMessages, fileRequests, activeConversationId,
+    connection, messages, setMessages, fileRequests, activeConversationId, typingPeers,
     reconnecting, reconnectAttempt,
     handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
     handleReconnect,
