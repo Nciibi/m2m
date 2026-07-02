@@ -1,340 +1,143 @@
-# Mission: Implement Phase 3 — Secure Group Chat
-
-You are implementing **Phase 3 (Group Chat)** of this secure messaging application.
-
-This is a **security-critical feature**. The implementation must meet the quality standards expected of a production secure messenger.
-
-Your priorities, in order, are:
-
-1. Cryptographic correctness
-2. Protocol correctness
-3. Security
-4. Reliability
-5. Maintainability
-6. Performance
-
-Never sacrifice correctness for speed.
-
----
-
-# Existing Architecture
-
-This project already contains:
-
-* X3DH key agreement
-* Double Ratchet sessions
-* Ed25519 identities
-* Secure encrypted storage
-* Packet-based protocol
-* Rust backend
-* React/Tauri frontend
-
-The new Group Chat implementation **must integrate with the existing architecture** instead of bypassing or replacing it.
-
-Do not create parallel systems when existing infrastructure can be reused.
-
----
-
-# Implementation Scope
-
-Implement **exactly** the approved Phase 3 implementation plan.
-
-## Backend
-
-Implement:
-
-* PacketTypes (0x50–0x56)
-* SenderKeyChain
-* HKDF message key derivation
-* Ed25519 message signing
-* Ed25519 verification
-* GroupManager
-* Group lifecycle
-* Membership management
-* Sender Key distribution
-* Database tables
-* Database migrations
-* Tauri commands
-* Network dispatch
-* State integration
-
----
-
-## Frontend
-
-Implement:
-
-* Groups tab
-* Group chat view
-* Group creation modal
-* Group information panel
-* Group context
-* Type definitions
-
-The frontend should reuse existing chat components wherever possible to maintain a consistent user experience.
-
----
-
-# Architecture Requirements
-
-Preserve the project's existing architecture.
-
-Do not introduce unnecessary abstractions.
-
-Do not rewrite existing systems.
-
-Reuse existing:
-
-* message rendering
-* encryption pipeline
-* networking
-* persistence
-* event system
-* UI components
-
-New code should feel like it naturally belongs in the project.
-
----
-
-# Cryptographic Requirements
-
-Treat all cryptographic operations as security-critical.
-
-Never invent cryptographic behavior.
-
-Use only the project's existing cryptographic primitives together with the approved Sender Key design.
-
-Ensure:
-
-* correct HKDF usage
-* correct chain-key advancement
-* unique message keys
-* replay protection
-* signature verification
-* authenticated sender identity
-* proper key rotation
-* secure member removal
-* secure key distribution
-* encrypted storage of sensitive material
-
-Zero plaintext keys should ever be persisted.
-
-Never log secrets.
-
-Never expose private material through debugging.
-
----
-
-# Protocol Requirements
-
-The protocol implementation must be deterministic and robust.
-
-Handle:
-
-* duplicate packets
-* missing packets
-* reordered packets
-* invalid signatures
-* invalid Sender Keys
-* malformed packets
-* unknown members
-* removed members
-* stale Sender Keys
-* packet version mismatches
-
-Gracefully reject invalid input without crashing.
-
----
-
-# Storage Requirements
-
-Implement all required tables exactly as planned.
-
-Ensure:
-
-* indexes are correct
-* foreign key relationships are valid
-* atomic updates
-* transactional consistency
-* encrypted sensitive fields
-* no orphaned records
-
----
-
-# Frontend Requirements
-
-The UI should feel like a native part of the application.
-
-Requirements:
-
-* smooth navigation
-* responsive layouts
-* loading states
-* empty states
-* error handling
-* optimistic updates where appropriate
-* consistent styling
-* component reuse
-* accessibility
-
-Do not duplicate existing chat logic.
-
----
-
-# Code Quality
-
-Write production-quality Rust and TypeScript.
-
-Requirements:
-
-* modular
-* readable
-* documented where appropriate
-* idiomatic
-* maintainable
-
-Avoid:
-
-* hacks
-* duplicated code
-* unnecessary cloning
-* unnecessary allocations
-* unnecessary locking
-* race conditions
-* deadlocks
-
----
-
-# Self-Review Loop
-
-Before considering any feature complete, inspect your own implementation.
-
-Ask:
-
-* Is this cryptographically correct?
-* Does this preserve protocol guarantees?
-* Is there a simpler implementation?
-* Does this integrate cleanly?
-* Can this create race conditions?
-* Can this leak secrets?
-* Can this panic?
-* Can this fail silently?
-* Can this break existing chats?
-
-If improvements exist, implement them before continuing.
-
----
-
-# Build Order
-
-Implement in this order:
-
-1. protocol.rs
-2. crypto.rs
-3. group.rs
-4. storage.rs
-5. commands/groups.rs
-6. commands/network.rs
-7. state.rs
-8. frontend components
-9. integration
-10. testing
-
-Do not skip steps.
-
----
-
-# Testing
-
-After implementation:
-
-Verify:
-
-* group creation
-* member invitation
-* member removal
-* sender key rotation
-* message delivery
-* offline member synchronization
-* replay protection
-* signature verification
-* encrypted storage
-* persistence
-* application restart
-* invalid packet handling
-* malformed packet rejection
-* concurrent messaging
-* large groups (up to 32 members)
-
-Ensure all existing one-to-one messaging functionality continues to work without regression.
-
----
-
-# Validation
-
-Before completion:
-
-* Format all Rust code (`cargo fmt`)
-* Run Clippy and resolve warnings where practical
-* Run frontend formatter/linter
-* Resolve TypeScript errors
-* Build the backend
-* Build the frontend
-* Verify the complete application compiles successfully
-* Resolve any regressions introduced during implementation
-
-Do not consider the task complete while any build, lint, or type errors remain.
-
----
-
-# Final Report
-
-Provide:
-
-* Every implemented feature
-* Files created
-* Files modified
-* Security considerations
-* Cryptographic decisions
-* Protocol decisions
-* Database changes
-* Frontend changes
-* Tests performed
-* Remaining known limitations
-
-Do not stop after making the code compile. Continue refining until the implementation is production-ready, internally consistent, secure, and fully aligned with the approved Phase 3 design.
-## Incremental Implementation & Commits
-
-Do **not** implement the entire feature as one large change.
-
-Work in **small, logical, reviewable increments**. After completing each major milestone:
-
-* Ensure the project compiles successfully.
-* Run formatting and linting tools.
-* Resolve any errors or warnings introduced by that milestone.
-* Verify that existing functionality has not regressed.
-* Review your own changes before proceeding.
-
-Organize the implementation into clean, self-contained commits with clear commit messages. A recommended breakdown is:
-
-1. **Protocol layer** — Packet types and protocol definitions.
-2. **Cryptography** — SenderKeyChain, HKDF derivation, signing, verification.
-3. **Group manager** — Group lifecycle, membership, key rotation.
-4. **Storage** — Database schema, migrations, encrypted persistence.
-5. **Backend commands** — Tauri commands and API integration.
-6. **Network dispatch** — Packet handling and routing.
-7. **Frontend foundation** — Types, context, state management.
-8. **UI components** — Group views, modals, info panel, navigation.
-9. **Integration** — Connect frontend and backend, end-to-end flow.
-10. **Testing & polish** — Bug fixes, edge cases, performance improvements, documentation.
-
-Treat each commit as if it will be reviewed by senior engineers.
-
-Each commit should:
-
-* Have a single, well-defined purpose.
-* Keep unrelated changes out of the commit.
-* Leave the project in a working, buildable state.
-* Preserve backward compatibility unless the approved design explicitly requires otherwise.
-
-Never accumulate large amounts of unverified code before testing. Prefer many small, verified, production-quality commits over one massive implementation.
+You are the Lead Product Designer, Design System Architect, UX Researcher, Senior Frontend Engineer, and Creative Director for this project.
+
+Your task is not to generate implementation code.
+
+Your task is to produce the complete UI/UX Design Bible for the application.
+
+This documentation will become the single source of truth from which the entire interface will later be implemented.
+
+The quality target is:
+
+10/10 UI
+S+ UX
+Production-ready
+Pixel-perfect
+Zero ambiguity
+
+The documentation should be detailed enough that another engineering team could build the application without ever asking a design question.
+
+Every screen must specify
+
+For every single screen, document:
+
+Purpose
+User goals
+Layout
+Grid
+Exact component hierarchy
+Every visible element
+Exact placement of every element
+Alignment
+Spacing
+Padding
+Margins
+Typography
+Font sizes
+Font weights
+Colors
+Icons
+Button text
+Placeholder text
+Empty states
+Loading states
+Error states
+Success states
+Tooltips
+Context menus
+Keyboard shortcuts
+Mouse interactions
+Animations
+Motion timing
+Accessibility
+Responsive behavior
+Performance considerations
+Security indicators
+Privacy indicators
+Edge cases
+Visual hierarchy
+User emotion
+Interaction rationale
+
+Nothing should be left unspecified.
+
+Every component must specify
+
+Every reusable component should have its own specification.
+
+Document:
+
+Purpose
+Usage
+Variants
+States
+Disabled behavior
+Loading behavior
+Hover
+Focus
+Pressed
+Keyboard interaction
+Animation
+Accessibility
+Minimum size
+Maximum size
+Responsive rules
+Visual examples (ASCII if needed)
+Anti-patterns
+Design rationale
+Every flow
+
+Document every user flow from beginning to end.
+
+Examples:
+
+First launch
+Registration
+Login
+Identity verification
+Adding contacts
+Creating groups
+Sending files
+Voice messages
+Video calls (future)
+Updating profile
+Security settings
+
+Every click should be documented.
+
+Design Language
+
+Specify every design token.
+
+Including:
+
+every color
+every spacing value
+every shadow
+every blur
+every animation
+every easing curve
+every icon size
+every border radius
+every font
+every font weight
+every scrollbar
+every transition
+every tooltip
+every dialog
+
+Nothing should be left to interpretation.
+
+Review Loop
+
+For every document, ask yourself:
+
+Could another engineer misunderstand this?
+Is any spacing unspecified?
+Is any animation unspecified?
+Is any button text unspecified?
+Is any icon unspecified?
+Is any layout ambiguous?
+Is any interaction missing?
+Is any edge case undocumented?
+
+If yes, continue expanding the document until the answer becomes No.
