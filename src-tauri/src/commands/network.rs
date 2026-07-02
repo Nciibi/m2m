@@ -869,7 +869,7 @@ pub fn spawn_receive_loop(
                                                         let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                                                         let _ = store.store_message(
                                                             id, &peer_key_hex, "received",
-                                                            &encrypted, &nonce, now as i64,
+                                                            &encrypted, &nonce, now as i64, true,
                                                         );
                                                     }
                                                     // Drop store lock before PRAGMA optimize to avoid

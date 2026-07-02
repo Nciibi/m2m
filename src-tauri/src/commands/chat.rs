@@ -62,7 +62,7 @@ pub async fn send_message(
                         let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                         let _ = store.store_message(
                             &msg_id, &peer_key_hex, "sent",
-                            &encrypted, &nonce, now as i64,
+                            &encrypted, &nonce, now as i64, true,
                         );
                     }
                 }
