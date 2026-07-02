@@ -39,6 +39,10 @@ mod window_security;
 use std::sync::Arc;
 use state::AppState;
 
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize structured logging — no secrets in output
@@ -63,6 +67,89 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(app_state)
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Hide to tray instead of quitting — app stays running for background messages
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
+        .setup(|app| {
+            // ── System Tray ──
+            let show_item = MenuItemBuilder::with_id("show", "Show M2M").build(app)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let new_conv = MenuItemBuilder::with_id("new_conv", "New Conversation").build(app)?;
+            let settings = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
+            let quit_sep = PredefinedMenuItem::separator(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit M2M").build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&show_item)
+                .item(&separator)
+                .item(&new_conv)
+                .item(&settings)
+                .item(&quit_sep)
+                .item(&quit)
+                .build()?;
+
+            // Use the PNG icon (icon.ico in .ico format may not decode in all tray impls)
+            let icon_bytes: &[u8] = include_bytes!("../icons/icon.png");
+            let icon = tauri::image::Image::from_bytes(icon_bytes)
+                .unwrap_or_else(|_| tauri::image::Image::new(&[], 1, 1));
+
+            TrayIconBuilder::new()
+                .icon(icon)
+                .menu(&menu)
+                .tooltip("M2M Secure Messenger")
+                .on_menu_event(|app, event| {
+                    let id = event.id().as_ref();
+                    match id {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        "new_conv" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                let _ = window.emit("m2m://navigate", "hub");
+                            }
+                        }
+                        "settings" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                let _ = window.emit("m2m://navigate", "settings");
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { .. } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::vault::init_identity,
             commands::vault::get_identity,
@@ -136,6 +223,10 @@ pub fn run() {
             commands::chat::edit_message,
             commands::chat::delete_message,
             commands::chat::cleanup_expired_messages,
+            // Mute
+            commands::chat::mute_conversation,
+            commands::chat::unmute_conversation,
+            commands::chat::get_muted_conversations,
             // Reconnection
             commands::attempt_reconnect,
             commands::list_pending_reconnects,
