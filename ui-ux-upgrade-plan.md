@@ -24,11 +24,11 @@ This plan details the gaps that prevent the app from achieving a **10/10** UI/UX
 
 | Priority | Feature Set | Rationale |
 |----------|-------------|-----------|
-| **P1 – Core Messaging UX** | Typing indicator, per‑conversation search, dark‑theme (manual toggle + system), keyboard shortcuts, complete emoji picker | Directly impacts daily chat experience; lifts UI score from 6 → 9+. |
+| **P1 – Core Messaging UX** ✅ ~70% | Emoji picker ✅, message status indicators ✅, file transfer progress bars ✅, sender labels ✅, invite countdown/ history ✅, conversation sorting ✅, last‑seen ✅. **Still missing**: Typing indicator, per‑conversation search, keyboard shortcuts (Ctrl+N, Ctrl+F, Ctrl+K), message search highlighting | Directly impacts daily chat experience; lifts UI score from 6 → 9+. |
 | **P2 – Conversation Management** | Favorites / mute / archive (mute ✅), drag‑and‑drop file send, conversation folders/tags, keyboard navigation in Hub | Improves scalability for power users; pushes UI score to 10. |
 | **P3 – System Integration** | Native notifications (with actions), system‑tray icon, background keep‑alive, auto‑update UI | Gives native desktop feel; required for production‑ready perception. |
 | **P4 – Onboarding & Accessibility** | Interactive onboarding flow, WCAG‑AA contrast audit, full keyboard navigation, ARIA live regions | Lowers learning curve, meets accessibility standards — critical for polish. |
-| **P5 – Theming & Customization** | Accent‑color picker, dark‑mode toggle in settings, user‑defined theme presets, export/import theme | Personalization, final polish. |
+| **P5 – Theming & Customization** ✅ ~70% | Light/dark/system toggle in Settings ✅, manual theme toggle ✅, dark as default ✅, light theme complete with `[data-theme="light"]` ✅. **Still missing**: Accent‑color picker, user‑defined presets, export/import theme | Personalization, final polish. |
 
 ---
 
