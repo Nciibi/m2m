@@ -124,6 +124,10 @@ pub enum PacketType {
     MessageReaction = 0x41,
     MessageEdit = 0x42,
     MessageDelete = 0x43,
+    /// Request to sync missed messages after reconnect.
+    /// The reconnecting peer sends its most recent received timestamp;
+    /// the peer responds by re-sending all messages after that timestamp.
+    SyncRequest = 0x44,
 }
 
 impl PacketType {
@@ -152,6 +156,7 @@ impl PacketType {
             0x41 => Ok(PacketType::MessageReaction),
             0x42 => Ok(PacketType::MessageEdit),
             0x43 => Ok(PacketType::MessageDelete),
+            0x44 => Ok(PacketType::SyncRequest),
             other => Err(ProtocolError::UnknownPacketType(other)),
         }
     }
