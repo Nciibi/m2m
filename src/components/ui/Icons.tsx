@@ -33,3 +33,6 @@ export { ChevronDownIcon } from "./icons/ChevronDownIcon";
 export { MonitorIcon } from "./icons/MonitorIcon";
 export { SunIcon } from "./icons/SunIcon";
 export { MoonIcon } from "./icons/MoonIcon";
+export { SmileyIcon } from "./icons/SmileyIcon";
+export { CheckDoubleIcon } from "./icons/CheckDoubleIcon";
+export { ClockIcon } from "./icons/ClockIcon";
