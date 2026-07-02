@@ -1,8 +1,8 @@
 # M2M → 10/10: Master Upgrade Roadmap
 
-**Current Score: 8.5/10**
+**Current Score: 8.7/10**
 - Architecture: 10 | Security/Crypto: 10 | Networking/Privacy: 10
-- Test Coverage: 9.5 | UI/UX: 6.5 | Performance: 10
+- Test Coverage: 9.5 | UI/UX: 7.0 | Performance: 10
 
 **Target: True 10/10 — a production-ready, fully decentralized P2P messenger**
 
@@ -215,7 +215,7 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 | Now | Current | 10 | 10 | 10 | 9.5 | 6.5 | 10 | **8.5** |
 | 1 | DHT + LAN discovery | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
 | 2 | Multi-device sync | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
-| 3 | Group chat | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
+| 3 | Group chat (backend) | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
 | 4 | Message features | 10 | 10 | 10 | 9.5 | 9.0 | 8.5 | 9.5 |
 | 5 | Frontend overhaul | 10 | 10 | 10 | 9.5 | 10 | 8.5 | 9.7 |
 | 6 | Performance | 10 | 10 | 10 | 9.5 | 10 | 10 | 9.8 |
