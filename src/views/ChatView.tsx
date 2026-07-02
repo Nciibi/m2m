@@ -598,7 +598,7 @@ export default function ChatView() {
         </button>
         <div className="msg-input-wrap">
           <textarea id="message-input" placeholder="Type a secure message…" value={text}
-            onChange={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; setText(e.target.value); }}
+            onChange={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; handleTextChange(e.target.value); }}
             onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(e); } if (e.key === "Escape" && !text) backToHub(); }}
             rows={1} disabled={connection?.state !== "established"} />
           {text.length > 64 * 1024 * 0.9 && <span className="msg-input-limit">{text.length}/{64 * 1024}</span>}
