@@ -18,8 +18,7 @@ use crate::crypto::{
     verify_group_message_signature, SenderKeyChain,
 };
 use crate::protocol::{
-    GroupCreateData, GroupEncryptedMessageData, GroupInfoData,
-    GroupInviteData, GroupLeaveData, GroupRemoveData, GroupSenderKeyData,
+    GroupEncryptedMessageData, GroupSenderKeyData,
 };
 
 /// Role a member holds in a group.
