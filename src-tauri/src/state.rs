@@ -387,6 +387,8 @@ impl AppState {
             lan_cancel: RwLock::new(None),
             last_optimize_at: RwLock::new(0),
             muted_conversations: RwLock::new(HashSet::new()),
+            // UI Theme
+            theme_preference: RwLock::new("system".to_string()),
             sync_manager: RwLock::new(crate::sync::SyncManager::new()),
         }
     }
