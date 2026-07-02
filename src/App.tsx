@@ -21,19 +21,18 @@ import VaultView from "./views/VaultView";
 import HubView from "./views/HubView";
 import ChatView from "./views/ChatView";
 import SettingsView from "./views/SettingsView";
+import Sidebar from "./components/Sidebar";
 
 function AppInner() {
-  const { view } = useApp();
+  const { view, setView } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
   const { securityConfig } = useSettings();
 
-  // Idle detection for auto-lock
   useIdleDetection({
     timeoutSecs: securityConfig?.idle_lock_secs ?? 0,
     onIdle: () => { invoke("lock_vault").catch(() => {}); },
   });
 
-  // Global keyboard shortcut: ? opens help modal
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -43,6 +42,8 @@ function AppInner() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  const showSidebar = view === "hub" || view === "chat" || view === "settings";
 
   const viewComponent = (() => {
     switch (view) {
@@ -58,7 +59,14 @@ function AppInner() {
   return (
     <>
       <ErrorBoundary name={view}>
-        {viewComponent}
+        {showSidebar ? (
+          <div className="app-shell">
+            <Sidebar currentView={view} onNavigate={setView} />
+            <div className="app-main">{viewComponent}</div>
+          </div>
+        ) : (
+          viewComponent
+        )}
       </ErrorBoundary>
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <UpdateBanner />
