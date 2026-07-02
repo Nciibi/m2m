@@ -9,13 +9,13 @@ This plan details the gaps that prevent the app from achieving a **10/10** UI/UX
 
 | View | **✅ Implemented** | **❌ Missing / Partial** |
 |------|-------------------|---------------------------|
-| **ChatView** | Message list, reactions (6 hardcoded emojis), markdown rendering, self‑destruct timer, file‑transfer UI, read‑receipt badge, context menu (edit/delete), connection banner, reconnect button, infinite scroll pagination, retention policy UI | Typing‑indicator UI (state exists but unused), dark‑theme styling (partial — system auto-detect only), full‑text per‑conversation search, complete emoji picker, extensive keyboard shortcuts (Ctrl+N, Ctrl+F, Ctrl+K, etc.), message search highlighting |
+| **ChatView** | Message list, reactions (6 hardcoded emojis), markdown rendering, self‑destruct timer, file‑transfer UI, read‑receipt badge, context menu (edit/delete), connection banner, reconnect button, infinite scroll pagination, retention policy UI | Typing‑indicator UI (state exists but unused), dark‑theme styling (partial — system auto-detect only), full‑text per‑conversation search, extensive keyboard shortcuts (Ctrl+N, Ctrl+F, Ctrl+K, etc.), message search highlighting |
 | **HubView** | Conversation list, basic filter/search, navigation to ChatView, mute/unmute conversations, delete conversation, family tab, nearby tab (LAN/DHT discovery) | Favorites, archive, drag‑and‑drop file send, keyboard navigation shortcuts (arrow keys, Delete to archive), conversation folders/tags |
 | **SetupView** | Loading spinner with key generation status | Interactive onboarding tutorial (step‑by‑step wizard) |
-| **VaultView** | Vault lock/unlock UI, passphrase strength meter, show/hide passphrase, passphrase tips | UX polish for dark mode (works via system), copy‑to‑clipboard feedback |
-| **SettingsView** | Basic toggles (idle lock, clipboard clear, screen capture, private mode, Tor, STUN config, LAN/DHT discovery) | Theme & accent color picker, system‑tray & background settings, auto‑update UI |
+| **VaultView** | Vault lock/unlock UI, passphrase strength meter, show/hide passphrase, passphrase tips, paste button, fingerprint hint | UX polish for dark mode (works via system), copy‑to‑clipboard feedback |
+| **SettingsView** | Basic toggles (idle lock, clipboard clear, screen capture, private mode, Tor, STUN config, LAN/DHT discovery), theme selector (light/dark/system), copy IP button, STUN health indicators, Test Tor button | Accent color picker, system‑tray & background settings, auto‑update UI |
 | **Global** | Notification dependency present, Tauri notification plugin configured | Native desktop notifications integration (no action buttons), system‑tray icon with menu, background keep‑alive, auto‑update UI |
-| **Styling** | Light‑theme CSS (`[data-theme="light"]`), dark tokens as `:root` default, CSS variables, system preference auto-detect | Full dark‑theme stylesheet completeness audit, WCAG‑AA contrast‑checked colors, accent‑color customization, manual theme toggle |
+| **Styling** | Light‑theme CSS (`[data-theme="light"]`), dark tokens as `:root` default, CSS variables, system preference auto-detect, manual theme toggle in Settings | WCAG‑AA contrast‑checked colors, accent‑color customization |
 | **Accessibility** | Minimal ARIA labels on buttons, some `role="alert"` on toasts, `tabIndex` on conversation items | Keyboard focus order, visible focus ring (FocusRing component exists but not universally applied), ARIA live regions for typing indicator & notifications, high‑contrast mode toggle |
 
 ---
