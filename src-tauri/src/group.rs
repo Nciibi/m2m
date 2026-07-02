@@ -134,11 +134,6 @@ impl Group {
         self.members.iter().any(|m| m.peer_key_hex == peer_key_hex)
     }
 
-    /// Get a member by peer key.
-    pub fn get_member(&self, peer_key_hex: &str) -> Option<&GroupMember> {
-        self.members.iter().find(|m| m.peer_key_hex == peer_key_hex)
-    }
-
     /// Get the count of members.
     pub fn member_count(&self) -> u32 {
         self.members.len() as u32
