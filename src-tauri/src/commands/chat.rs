@@ -207,6 +207,8 @@ pub async fn list_conversations(
             auto_delete_at: c.auto_delete_at,
             retention_policy: c.retention_policy,
             created_at: c.created_at,
+            is_favorite: c.is_favorite.unwrap_or(false),
+            archived: c.archived.unwrap_or(false),
         });
     }
 
