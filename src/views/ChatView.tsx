@@ -261,6 +261,8 @@ export default function ChatView() {
 
   return (
     <div className="app-shell">
+      <Sidebar currentView="chat" onNavigate={setView} />
+      <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
           <span onClick={() => setShowFp(true)} title={connection?.peer_verified ? "Verified" : "Verify"}
@@ -658,6 +660,7 @@ export default function ChatView() {
       </Modal>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </div>
     </div>
   );
 }
