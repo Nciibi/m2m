@@ -334,6 +334,9 @@ pub struct AppState {
     /// Last time PRAGMA optimize was called (unix timestamp). Used to throttle
     /// optimize calls to at most once per minute.
     pub last_optimize_at: RwLock<i64>,
+    // ─── Notifications ───
+    /// Set of peer_key_hex values that are muted (no notifications).
+    pub muted_conversations: RwLock<HashSet<String>>,
 }
 
 impl AppState {
