@@ -38,6 +38,13 @@ export default function ChatView() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [pageLoadKey, setPageLoadKey] = useState(0);
+  // Message status tracking: messageId → "sending" | "sent" | "delivered" | "read"
+  const [msgStatus, setMsgStatus] = useState<Record<string, "sending" | "sent" | "delivered" | "read">>({});
+  // File transfer progress: transferId → TransferProgress
+  const [fileProgress, setFileProgress] = useState<Record<string, { filename: string; total_size: number; bytes_transferred: number; chunks_completed: number; chunks_total: number; speed_bytes_per_sec: number; estimated_remaining_secs: number; state: string; transfer_id: string }>>({});
+  // Emoji picker state
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const msgRef = useRef<HTMLDivElement>(null);
 
