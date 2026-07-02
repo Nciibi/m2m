@@ -11,6 +11,7 @@ import { AppProvider, useApp } from "./context/AppContext";
 import { VaultProvider } from "./context/VaultContext";
 import { ChatProvider } from "./context/ChatContext";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useIdleDetection } from "./hooks/useIdleDetection";
 import ShortcutHelp from "./components/ShortcutHelp";
