@@ -124,6 +124,15 @@ export default function SettingsView() {
                 <span className="toggle-slider" />
               </label>
               <span className="settings-hint">Route connections via Tor</span>
+              <Button size="xs" variant="secondary" onClick={async () => {
+                addToast("Tor test initiated…", "info");
+                try {
+                  const result = await invoke<any>("check_tor_connectivity");
+                  addToast(result.reachable ? "Tor ✓ Reachable" : "Tor ✗ Not reachable", result.reachable ? "success" : "error");
+                } catch (e) {
+                  addToast("Tor test failed: " + e, "error");
+                }
+              }}>Test Tor</Button>
             </div>
 
             <div className="settings-divider" />
@@ -274,4 +283,21 @@ export default function SettingsView() {
 
         {/* ─── About ─── */}
         <section className="settings-section">
- 
+          <h2 className="settings-section__title">About</h2>
+          <div className="settings-card">
+            <div className="settings-row">
+              <span className="settings-label">Version</span>
+              <span>2.5.x</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Crypto</span>
+              <span className="text-muted text-sm">Ed25519 · X25519 · XChaCha20-Poly1305 · X3DH · Double Ratchet</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </div>
+  );
+}
