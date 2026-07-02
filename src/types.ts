@@ -19,6 +19,8 @@ export interface ConversationEntry {
   auto_delete_at: number | null;
   retention_policy: string;
   created_at: number;
+  is_favorite?: boolean;
+  archived?: boolean;
 }
 
 export interface IdentityInfo {
