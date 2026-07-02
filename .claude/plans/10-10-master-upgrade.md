@@ -82,42 +82,20 @@
 
 ---
 
-## Phase 3: Group Chat & Multi-Peer Sessions (Architecture: +0.3)
+## ❌ Phase 3: Group Chat & Multi-Peer Sessions — NOT STARTED
 
 **Problem**: Currently strictly 1:1 sessions. No group conversations.
 
-### 3.1 — Sender Keys for Group E2EE
+### 3.1 — Sender Keys for Group E2EE — ❌ NOT STARTED
 
-**Modified**: `src-tauri/src/crypto.rs` (add ~250 lines)
-- **Sender Keys** pattern (Signal protocol): one symmetric key per sender per group
-  - First message in group: distribute sender key encrypted to each member's DR session
-  - Subsequent messages: encrypt with sender key, broadcast to all members
-  - Forward secrecy: ratchet sender key after each message
-- **Group creation**: Define group_id, member list (peer_key_hex list)
-- **Group handshake**: Each member receives sender key via existing 1:1 session
-- **Member add/remove**: New sender key distribution when membership changes
+**Planned file**: `src-tauri/src/crypto.rs` (add ~250 lines)
+...
+...
+...
 
-**New file**: `src-tauri/src/group.rs` (300 lines)
-- Group state machine: `GroupSession { group_id, members, sender_key, message_counter }`
-- Member join/leave protocol
-- Group metadata (name, avatar, member list) encrypted to all members
+### 3.2 — Frontend: Group Chat UI — ❌ NOT STARTED
 
-**Modified**: `src-tauri/src/state.rs` — add `active_groups: RwLock<HashMap<GroupId, GroupSession>>`
-
-### 3.2 — Frontend: Group Chat UI
-
-**Modified**: `src/views/ChatView.tsx` (add ~150 lines)
-- Group header shows member count, expandable member list
-- "Add member" button (generates group invite)
-- Leave group / disband group controls
-- Message shows sender name (sender_key header includes sender info)
-
-### 3.3 — Frontend: Group Management
-
-**Modified**: `src/views/HubView.tsx` (add ~80 lines)
-- "Create group" button on Chats tab
-- Group conversation items show member count icon
-- Group invite: shareable link that adds the recipient to the group
+### 3.3 — Frontend: Group Management — ❌ NOT STARTED
 
 ---
 
