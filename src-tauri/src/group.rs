@@ -637,6 +637,7 @@ pub struct GroupSummary {
 
 /// Full group detail including members, for frontend display.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[allow(dead_code)]
 pub struct GroupDetail {
     pub group_id: String,
     pub group_name: String,
