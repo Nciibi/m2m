@@ -33,6 +33,15 @@ export default function ChatView() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [timerSecs, setTimerSecs] = useState<number>(0);
+  // Search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ChatMessage[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  // Typing indicator timer (auto-clear after 3s)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  // Keyboard shortcuts
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [_pageLoadKey, setPageLoadKey] = useState(0);
