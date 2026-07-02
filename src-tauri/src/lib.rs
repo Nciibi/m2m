@@ -238,6 +238,9 @@ pub fn run() {
             commands::chat::send_typing_indicator,
             // Message Search
             commands::chat::search_messages,
+            // Favorites & Archive
+            commands::chat::toggle_favorite,
+            commands::chat::toggle_archive,
             // Multi-Device Sync
             sync::generate_sync_invite,
             sync::connect_sync_device,
