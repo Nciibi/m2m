@@ -6,7 +6,7 @@ import { useSettings } from "../context/SettingsContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function SettingsView() {
-  const { identity, toasts, removeToast, setView } = useApp();
+  const { identity, toasts, addToast, removeToast, setView } = useApp();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const {
     networkSettings, publicIp, stunLoading, networkDiagnostics,
