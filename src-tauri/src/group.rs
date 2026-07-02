@@ -450,7 +450,7 @@ impl GroupManager {
         // but we don't store the initial chain key for existing members (only
         // the current receiver chain state). Phase 3 v2 should store initial
         // keys alongside receiver chains to support this.
-        let mut bundles = vec![their_own_bundle, our_bundle];
+        let bundles = vec![their_own_bundle, our_bundle];
 
         Ok(bundles)
     }
