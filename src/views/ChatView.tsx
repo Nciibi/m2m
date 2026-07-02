@@ -40,8 +40,6 @@ export default function ChatView() {
   const [showSearch, setShowSearch] = useState(false);
   // Typing indicator timer (auto-clear after 3s)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isTyping, setIsTyping] = useState(false);
-  // Keyboard shortcuts
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [_pageLoadKey, setPageLoadKey] = useState(0);
