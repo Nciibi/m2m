@@ -428,7 +428,7 @@ impl GroupManager {
 
         let our_bundle = GroupSenderKeyData {
             group_id: group_id.to_string(),
-            sender_peer_key_hex: group.members[0].peer_key_hex.clone(),
+            sender_peer_key_hex: our_peer_key_hex.to_string(),
             chain_key: our_init_key,
             message_number: 0,
             signing_key: None,
