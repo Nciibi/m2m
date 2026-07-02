@@ -125,11 +125,21 @@ Each milestone includes unit‑ and integration‑tests (React Testing Library +
 
 ---
 
-### 6. Next Steps
+### 6. Next Steps (Updated July 2026)
 
-1. **Confirm priority order** – Adjust any feature between P1–P5 if needed.
-2. **Allocate resources** – Decide how many engineers focus on front‑end vs. back‑end for the first two sprints.
-3. **Set up CI checks** – Add WCAG contrast audit and visual regression steps to GitHub Actions.
-4. **Kick‑off M1** – Create the theme provider and hotkey utility, and start the typing‑indicator packet work.
+**Tier 1 polish is complete (July 2026).** Implemented:
+- Emoji picker, message status, file progress bars, sender labels
+- Invite countdown/history, listening indicator, conversation sorting, last-seen
+- Vault paste button, fingerprint hint
+- Copy IP, STUN health, Test Tor, theme selector in Settings
+- 6 new icons (Monitor, Sun, Moon, Smiley, CheckDouble, Clock)
 
-The plan is ready for execution. Let me know if you need a more detailed breakdown of any task or an effort estimate per milestone.
+**Remaining work for UI/UX 10/10:**
+
+1. **P1 remaining** — Typing indicator (backend + UI), per-conversation search, keyboard shortcuts (Ctrl+N/F/K)
+2. **P2** — Favorites/archive, drag-and-drop file send, keyboard navigation in Hub
+3. **P3** — Notification actions, tray icon, auto-update UI
+4. **P4** — Onboarding wizard, WCAG audit, ARIA live regions
+5. **P5** — Accent color picker, theme export/import
+
+Next immediate targets: typing indicator backend packet, conversation search backend command.
