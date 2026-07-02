@@ -634,6 +634,7 @@ export default function ChatView() {
           {sending ? <span className="msg-send-spinner" /> : <SendIcon size={20} />}
         </button>
       </form>
+      </div>
 
       <div className="msg-footer">
         <span>End-to-end encrypted</span>
