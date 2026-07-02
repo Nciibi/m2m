@@ -916,22 +916,28 @@ pub fn derive_receiver_chain(initial_chain_key: &[u8; 32]) -> SenderKeyChain {
 }
 
 /// Generate an Ed25519 signing keypair for a group sender.
-/// Returns (signing_key, verification_key).
-pub fn generate_sender_signing_keypair() -> (ed25519_signing_key::Keypair, [u8; 32]) {
-    let kp = ed25519_signing_key::Keypair::generate();
-    let pk = kp.public_key_bytes();
-    (kp, pk)
+/// Returns (signing_key_secret_bytes, verification_key).
+/// signing_key_secret_bytes is a 64-byte Ed25519 seed+private key.
+pub fn generate_sender_signing_keypair() -> ([u8; 64], [u8; 32]) {
+    let (pk, sk) = sign::gen_keypair();
+    let mut sk_bytes = [0u8; 64];
+    let mut pk_bytes = [0u8; 32];
+    sk_bytes.copy_from_slice(&sk.0);
+    pk_bytes.copy_from_slice(&pk.0);
+    (sk_bytes, pk_bytes)
 }
-
-// Use the existing sodium sign for sender key signatures
-use self::sign as ed25519_signing_key;
 
 /// Sign a group message with the sender's Ed25519 signing key.
 pub fn sign_group_message(
-    signing_key: &ed25519_signing_key::SecretKey,
+    signing_key: &[u8; 64],
     data: &[u8],
 ) -> Vec<u8> {
-    sign::sign_detached(data, signing_key).to_bytes().to_vec()
+    let sk = match sign::SecretKey::from_slice(signing_key) {
+        Some(sk) => sk,
+        None => return vec![0u8; 64], // fallback; caller should provide valid key
+    };
+    let sig = sign::sign_detached(data, &sk);
+    sig.as_ref().to_vec()
 }
 
 /// Verify a group message signature against the sender's Ed25519 verification key.
@@ -944,6 +950,9 @@ pub fn verify_group_message_signature(
         Some(pk) => pk,
         None => return false,
     };
+    if signature.len() != 64 {
+        return false;
+    }
     let sig = match sign::DetachedSignature::from_slice(signature) {
         Some(s) => s,
         None => return false,
