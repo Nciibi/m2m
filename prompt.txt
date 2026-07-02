@@ -303,3 +303,38 @@ Provide:
 * Remaining known limitations
 
 Do not stop after making the code compile. Continue refining until the implementation is production-ready, internally consistent, secure, and fully aligned with the approved Phase 3 design.
+## Incremental Implementation & Commits
+
+Do **not** implement the entire feature as one large change.
+
+Work in **small, logical, reviewable increments**. After completing each major milestone:
+
+* Ensure the project compiles successfully.
+* Run formatting and linting tools.
+* Resolve any errors or warnings introduced by that milestone.
+* Verify that existing functionality has not regressed.
+* Review your own changes before proceeding.
+
+Organize the implementation into clean, self-contained commits with clear commit messages. A recommended breakdown is:
+
+1. **Protocol layer** — Packet types and protocol definitions.
+2. **Cryptography** — SenderKeyChain, HKDF derivation, signing, verification.
+3. **Group manager** — Group lifecycle, membership, key rotation.
+4. **Storage** — Database schema, migrations, encrypted persistence.
+5. **Backend commands** — Tauri commands and API integration.
+6. **Network dispatch** — Packet handling and routing.
+7. **Frontend foundation** — Types, context, state management.
+8. **UI components** — Group views, modals, info panel, navigation.
+9. **Integration** — Connect frontend and backend, end-to-end flow.
+10. **Testing & polish** — Bug fixes, edge cases, performance improvements, documentation.
+
+Treat each commit as if it will be reviewed by senior engineers.
+
+Each commit should:
+
+* Have a single, well-defined purpose.
+* Keep unrelated changes out of the commit.
+* Leave the project in a working, buildable state.
+* Preserve backward compatibility unless the approved design explicitly requires otherwise.
+
+Never accumulate large amounts of unverified code before testing. Prefer many small, verified, production-quality commits over one massive implementation.
