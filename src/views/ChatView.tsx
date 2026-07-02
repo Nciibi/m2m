@@ -11,6 +11,8 @@ import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
 
 export default function ChatView() {
+  // Typing peers state (ids of peers currently typing)
+  const [typingPeers, setTypingPeers] = useState<string[]>([]);
   const { identity, toasts, removeToast, addToast, setView } = useApp();
   const {
     connection, messages, fileRequests, activeConversationId,
