@@ -43,7 +43,7 @@ pub async fn create_group(
     let bundles = {
         let mut gm = state.group_manager.write().await;
         let (gid, bundles) = gm.create_group(
-            group_id,
+            group_id.clone(),
             group_name.clone(),
             now,
             our_peer_key_hex.clone(),
