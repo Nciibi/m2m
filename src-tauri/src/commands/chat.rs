@@ -602,6 +602,7 @@ pub async fn edit_message(
         deleted: false,
         expires_at: None,
         reactions: std::collections::HashMap::new(),
+        sender_peer_key_hex: String::new(),
     })
 }
 
