@@ -135,7 +135,7 @@ export default function HubView() {
         ) : tab === "family" ? (
           <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
         ) : (
-          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} />
+          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} mutedConversations={mutedConversations} onMute={handleMuteConversation} onUnmute={handleUnmuteConversation} />
         )}
       </div>
 
