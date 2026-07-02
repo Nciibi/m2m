@@ -52,16 +52,18 @@ export default function VaultView() {
           {loading ? <UnlockIcon size={36} color="var(--color-accent-bright)" /> : <LockIcon size={36} color="var(--color-accent-bright)" />}
         </div>
 
-        <h2 className="centered-view__title centered-view__title--spaced">
+        <h2 className="centered-view__title centered-view__title--spaced" style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>
           {isFirstTime ? "Set Up Your Vault" : "Unlock Your Vault"}
         </h2>
 
-        <p className="centered-view__desc centered-view__desc--spaced">
+        <p className="centered-view__desc" style={{ fontSize: 'var(--text-sm)', lineHeight: 1.5, marginBottom: 'var(--space-xs)' }}>
           {isFirstTime
             ? "Choose a strong passphrase to encrypt your identity keys and message history."
             : "Enter your passphrase to decrypt your local data."}
-          <br />
-          <span className="vault-crypto-hint">Minimum 12 chars · Argon2id</span>
+        </p>
+
+        <p className="vault-crypto-hint" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-xl)' }}>
+          Minimum 12 chars · Argon2id
         </p>
 
         {!isFirstTime && identity?.fingerprint && (
