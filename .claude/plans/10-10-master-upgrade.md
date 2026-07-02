@@ -231,7 +231,7 @@ Needed: Member list with roles, add/remove controls, GroupContext hook with even
 
 | Phase | Content | Architecture | Security | Networking | Tests | UI/UX | Perf | Overall |
 |-------|---------|:-----------:|:--------:|:----------:|:----:|:----:|:----:|:-------:|
-| Now | Current | 10 | 10 | 10 | 9.5 | 6.5 | 10 | **8.5** |
+| Now | Current | 10 | 10 | 10 | 9.5 | 7.5 | 10 | **8.9** |
 | 1 | DHT + LAN discovery | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
 | 2 | Multi-device sync | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
 | 3 | Group chat (backend) | 10 | 10 | 10 | 9.5 | 8.5 | 8.5 | 9.4 |
