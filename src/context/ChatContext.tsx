@@ -14,6 +14,7 @@ interface ChatContextValue {
   reconnecting: boolean;
   reconnectAttempt: number;
   messages: ChatMessage[];
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   fileRequests: FileRequest[];
   conversations: ConversationEntry[];
   activeConversationId: string | null;
@@ -507,7 +508,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   return (
     <ChatContext.Provider value={{
-      connection, isConnecting, reconnecting, reconnectAttempt, messages, fileRequests,
+      connection, isConnecting, reconnecting, reconnectAttempt, messages, setMessages, fileRequests,
       conversations, activeConversationId,
       inviteToConnect, setInviteToConnect, inviteValid,
       namingMyName, setNamingMyName, namingTheirName, setNamingTheirName,

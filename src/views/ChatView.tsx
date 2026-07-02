@@ -17,7 +17,7 @@ export default function ChatView() {
   const [typingPeers, setTypingPeers] = useState<string[]>([]);
   const { identity, toasts, removeToast, addToast, setView } = useApp();
   const {
-    connection, messages, fileRequests, activeConversationId,
+    connection, messages, setMessages, fileRequests, activeConversationId,
     reconnecting, reconnectAttempt,
     handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
     handleReconnect,
