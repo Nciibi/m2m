@@ -383,17 +383,11 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             </div>
             <div className="conv-body">
               <div className="conv-top">
-                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <span style={{ marginLeft: 6, fontSize: '0.65rem', opacity: 0.6 }}>🔇</span> : null}</span>
+                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <span className="mute-indicator">🔇</span> : null}</span>
                 {c.last_message_at && <span className="relative-time">{formatTime(c.last_message_at)}</span>}
               </div>
               <span className="conv-preview">{c.last_message_preview || "No messages yet."}</span>
-              {!c.is_online && c.last_message_at && (
-                <span className="relative-time" style={{ marginTop: 2 }}>
-                  Last seen {formatTime(c.last_message_at)}
-                </span>
-              )}
             </div>
-            <div className="conv-status">{c.is_online ? <OnlineDot /> : <OfflineDot />}</div>
             <div className="conv-actions">
               {/* Favorite toggle */}
               <button className="btn btn--icon btn--icon-sm" title={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
