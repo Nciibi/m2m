@@ -140,7 +140,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         deleted: false,
         expires_at: null,
         reactions: {},
-      }]);
+        sender_peer_key_hex: "",
+      } as ChatMessage]);
     } catch (e) {
       addToast("Failed to send file: " + e, "error");
     }
