@@ -575,6 +575,7 @@ impl MessageStore {
     }
 
     /// Store a message (idempotent — duplicate message IDs are silently ignored).
+    #[allow(clippy::too_many_arguments)]
     pub fn store_message(
         &self,
         id: &str,
