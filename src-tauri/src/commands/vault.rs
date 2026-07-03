@@ -216,12 +216,15 @@ pub async fn unlock_vault(
 
             // Derive new key and re-encrypt
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let (_new_nonce, _new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
+            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
             let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
                 .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
 
             let xkp = crate::crypto::X25519IdentityKeypair::generate();
+
+            // Pack the data needed for Phase 4 DB writes
+            let legacy_store_data = Some((new_nonce, new_enc_sk, kp.secret_key_bytes()));
 
             // Store storage_key in state
             {
@@ -229,7 +232,7 @@ pub async fn unlock_vault(
                 *sk_lock = Some(new_key);
             }
 
-            (kp, xkp, true)
+            (kp, xkp, true, legacy_store_data)
         }
     } else {
         // Case 1: First run
