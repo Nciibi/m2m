@@ -292,31 +292,38 @@ pub async fn unlock_vault(
         *vu = true;
     }
 
-    // ─── Phase 4: DB writes (X25519 persist and/or legacy migration) ───
+    // ─── Phase 4: Encrypt X25519 data (no .await, no key_store) then DB writes ───
+    let x25519_store_data = if needs_store_x25519 {
+        let xkp_ref = state.x25519_identity.read().await;
+        let xkp = xkp_ref.as_ref().expect("X25519 key must exist");
+        let x_sk_bytes = xkp.secret_key_bytes();
+        let x_pub = xkp.public_key_bytes();
+        let sk = state.storage_key.read().await;
+        let st_key = sk.as_ref().expect("storage key must exist");
+        let result = util::crypto_encrypt_storage(&x_sk_bytes, st_key, util::AAD_KEY_STORE)
+            .ok()
+            .map(|(n, e)| (x_pub, e, n));
+        drop(sk);
+        drop(xkp_ref);
+        result
+    } else {
+        None
+    };
+    drop(ks_guard); // only use Phase 4 lock for actual DB writes
+
+    // Acquire lock only for synchronous DB writes (no .await while holding it)
     if needs_store_x25519 || legacy_store_data.is_some() {
-        let ks_guard3 = state.key_store.lock().await;
-        if let Some(store) = ks_guard3.as_ref() {
-            // Legacy migration: update encrypted identity and mark vault initialized
+        let ks_guard4 = state.key_store.lock().await;
+        if let Some(store) = ks_guard4.as_ref() {
             if let Some((_lnonce, lenc, _lsk)) = &legacy_store_data {
                 let _ = store.update_encrypted_private_key(lenc, _lnonce);
                 let _ = store.set_vault_initialized();
             }
-            // Persist X25519 key if generated
-            if needs_store_x25519 {
-                let xkp_ref = state.x25519_identity.read().await;
-                if let Some(xkp) = xkp_ref.as_ref() {
-                    let x_sk_bytes = xkp.secret_key_bytes();
-                    let x_pub = xkp.public_key_bytes();
-                    let sk = state.storage_key.read().await;
-                    if let Some(st_key) = sk.as_ref() {
-                        if let Ok((x_nonce, x_enc)) = util::crypto_encrypt_storage(&x_sk_bytes, st_key, util::AAD_KEY_STORE) {
-                            let _ = store.store_x25519_key(&x_pub, &x_enc, &x_nonce);
-                        }
-                    }
-                }
+            if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_store_data {
+                let _ = store.store_x25519_key(x_pub, x_enc, x_nonce);
             }
         }
-        drop(ks_guard3);
+        drop(ks_guard4);
     }
 
     Ok(VaultStatus {
