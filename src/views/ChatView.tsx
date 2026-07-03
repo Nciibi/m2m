@@ -182,6 +182,33 @@ export default function ChatView() {
                       {m.read_at && " ✓✓"}
                     </span>
                   )}
+                  {/* Reaction buttons (show on hover) */}
+                  <div className="flex items-center gap-1 mt-1 px-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => {
+                      const hasReacted = Object.values(m.reactions || {}).some((reactors) => reactors.includes("self") && Object.keys(m.reactions).find(k => m.reactions![k] === reactors) === emoji);
+                      return (
+                        <button
+                          key={emoji}
+                          onClick={(e) => { e.stopPropagation(); hasReacted ? handleRemoveReaction(m.id, emoji) : handleSendReaction(m.id, emoji); }}
+                          className={`text-[14px] p-0.5 rounded-full transition-all hover:scale-125 ${hasReacted ? "bg-primary/20 scale-110" : "hover:bg-white/10"}`}
+                          title={emoji}
+                        >
+                          {emoji}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Existing reactions display */}
+                  {m.reactions && Object.keys(m.reactions).length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 mt-1 px-xs">
+                      {Object.entries(m.reactions).map(([emoji, reactors]) => (
+                        <span key={emoji} className="flex items-center gap-0.5 text-[12px] bg-white/5 rounded-full px-1.5 py-0.5">
+                          {emoji}
+                          <span className="text-[10px] text-text-muted">{reactors.length}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div key={m.id} className={`flex flex-col items-start gap-[2px] max-w-[75%] self-start animate-in slide-in-from-left-4 fade-in duration-300 ${isPrevSame ? "mt-0" : "mt-md"}`}>
