@@ -4,7 +4,7 @@ import { useToast } from "../hooks/useToast";
 import type { IdentityInfo, VaultStatus } from "../types";
 import type { ToastData } from "../components/ui/Toast";
 
-export type ViewName = "setup" | "vault" | "hub" | "chat" | "settings";
+export type ViewName = "setup" | "vault" | "hub" | "chat" | "settings" | "groups";
 
 interface AppContextValue {
   // Navigation
