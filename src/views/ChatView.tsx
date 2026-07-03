@@ -43,25 +43,44 @@ export default function ChatView() {
 
   const grouped = groupByDate(messages);
 
+  const currentConversation = conversations.find(c => c.peer_key_hex === activeConversationId || c.id === activeConversationId);
+  const displayName = currentConversation?.display_name || currentConversation?.peer_display_name || connection?.peer_key_hex?.substring(0, 12) || "Secure Session";
+  const firstLetter = displayName.charAt(0).toUpperCase();
+
   return (
     <main className="premium-glass-card w-full h-full flex flex-col relative z-10">
-      {/* HEADER (52px) */}
-      <header className="h-[52px] min-h-[52px] flex justify-between items-center px-xl border-b border-border-subtle bg-surface/80 backdrop-blur-3xl shrink-0">
+      {/* HEADER (64px) */}
+      <header className="h-[64px] min-h-[64px] flex justify-between items-center px-xl border-b border-border-subtle bg-surface/80 backdrop-blur-3xl shrink-0">
         <div className="flex items-center gap-md">
-          <span className="material-symbols-outlined text-outline text-[20px]">shield</span>
-          <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wide">Encrypted Session</span>
-        </div>
-        <div className="flex items-center gap-lg">
-          <button onClick={() => setView("hub")} className="text-on-surface-variant hover:text-primary transition-colors flex items-center">
+          <button onClick={() => setView("hub")} className="text-on-surface-variant hover:text-primary transition-colors flex items-center p-xs hover:bg-bg-hover rounded-lg active:scale-95 transition-transform" title="Go back">
             <span className="material-symbols-outlined text-[22px]">arrow_back</span>
           </button>
-          <div className="flex items-center gap-sm px-md py-xs bg-tertiary-container/10 rounded-full border border-tertiary-container/20">
-            <span className={`w-1.5 h-1.5 rounded-full ${connection?.state === "established" ? "bg-tertiary pulse-green" : "bg-warning"}`}></span>
-            <span className={`font-label-xs text-label-xs font-bold ${connection?.state === "established" ? "text-tertiary" : "text-warning"}`}>
-              {connection?.state === "established" ? "Online" : connection?.state || "Offline"}
-            </span>
+          
+          <div className="h-6 w-[1px] bg-border-subtle"></div>
+          
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-[#a855f7] flex items-center justify-center font-bold text-white text-sm select-none">
+            {firstLetter}
           </div>
-          <button onClick={handleDisconnect} className="px-md py-1 border border-danger/30 text-danger hover:bg-danger/10 rounded-lg font-label-sm transition-all">
+          
+          <div className="flex flex-col gap-0">
+            <span className="font-bold text-on-surface text-body-lg leading-none">{displayName}</span>
+            <div className="flex items-center gap-xs mt-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${connection?.state === "established" ? "bg-tertiary pulse-green" : "bg-warning"}`}></span>
+              <span className="font-mono-label text-[10px] text-text-muted uppercase tracking-wider">
+                {connection?.state === "established" ? "Online · E2EE" : connection?.state || "Connecting..."}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-md">
+          {connection?.peer_verified && (
+            <div className="flex items-center gap-xs px-sm py-1 bg-success-bg border border-success-glow text-tertiary rounded-lg select-none">
+              <span className="material-symbols-outlined text-[14px]">verified_user</span>
+              <span className="font-mono-label text-[9px] uppercase tracking-wider font-bold">Verified</span>
+            </div>
+          )}
+          <button onClick={handleDisconnect} className="px-md py-1.5 border border-danger/25 text-danger hover:bg-danger/10 hover:border-danger/40 rounded-xl font-label-sm font-semibold active:scale-[0.96] transition-all">
             Disconnect
           </button>
         </div>
