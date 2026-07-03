@@ -152,6 +152,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [connection?.peer_key_hex, addToast]);
 
+  const handleAcceptFileTransfer = useCallback(async (transferId: string) => {
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const savePath = await save({ title: "Save incoming file" });
+      if (!savePath) return;
+      await invoke("accept_file_transfer", { transferId });
+      setFileRequests((prev) => prev.filter((r) => r.transfer_id !== transferId));
+      addToast("Downloading file...", "info");
+    } catch (e) {
+      addToast("Failed to accept transfer: " + e, "error");
+    }
+  }, [addToast]);
+
+  const handleRejectFileTransfer = useCallback(async (transferId: string) => {
+    try {
+      await invoke("reject_file_transfer", { transferId });
+      setFileRequests((prev) => prev.filter((r) => r.transfer_id !== transferId));
+      addToast("File transfer rejected", "info");
+    } catch (e) {
+      addToast("Failed to reject transfer: " + e, "error");
+    }
+  }, [addToast]);
+
   const handleExportConversation = useCallback(async () => {
     if (!activeConversationId) return;
     try {
