@@ -59,8 +59,9 @@ pub const MAX_INVITE_VALIDITY_SECS: u64 = 24 * 60 * 60;
 /// Clock skew tolerance for invite validation (5 minutes).
 pub const CLOCK_SKEW_TOLERANCE_SECS: u64 = 5 * 60;
 
-/// Maximum invite string length.
-pub const MAX_INVITE_LENGTH: usize = 512;
+/// Maximum invite string length (4096 bytes accommodates X3DH prekey bundle
+/// + candidates + relay info after base64url encoding).
+pub const MAX_INVITE_LENGTH: usize = 4096;
 
 /// Maximum address hint length.
 pub const MAX_ADDRESS_HINT_LENGTH: usize = 256;
