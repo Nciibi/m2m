@@ -172,7 +172,7 @@ pub async fn unlock_vault(
     drop(ks_guard); // key_store is dead — .await is safe now
 
     // ─── Phase 2: Synchronous crypto (no .await, no key_store) ───
-    let (keypair, x25519_kp, needs_store_x25519, legacy_store_data): (_, _, _, Option<([u8;24], Vec<u8>, [u8;64])>) = if let Some((pub_bytes, enc_sk, nonce, was_init, x25519_load)) = read_data {
+    let (keypair, x25519_kp, needs_store_x25519, legacy_store_data): (_, _, _, Option<(Vec<u8>, Vec<u8>, [u8;64])>) = if let Some((pub_bytes, enc_sk, nonce, was_init, x25519_load)) = read_data {
         let mut pub_arr = [0u8; 32];
         pub_arr.copy_from_slice(&pub_bytes);
 
