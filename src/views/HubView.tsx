@@ -132,7 +132,7 @@ export default function HubView() {
         <div className="flex items-center h-full gap-xl">
           {([
             { id: "connect" as const, icon: "link", label: "Connect" },
-            { id: "chats" as const, icon: "chat_bubble", label: "Chats", badge: conversations.length },
+            { id: "chats" as const, icon: "chat_bubble", label: "Chats", badge: conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0) },
             { id: "nearby" as const, icon: "wifi", label: "Nearby" },
             { id: "family" as const, icon: "group", label: "Family" },
           ]).map(tab => (
