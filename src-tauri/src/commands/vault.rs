@@ -309,7 +309,6 @@ pub async fn unlock_vault(
     } else {
         None
     };
-    drop(ks_guard); // only use Phase 4 lock for actual DB writes
 
     // Acquire lock only for synchronous DB writes (no .await while holding it)
     if needs_store_x25519 || legacy_store_data.is_some() {
