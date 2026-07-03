@@ -174,6 +174,40 @@ pub async fn unlock_vault(
                 *sk_lock = Some(storage_key);
             }
 
+            // Load X25519 key from storage
+            let x25519_kp = if key_store.has_x25519_key().unwrap_or(false) {
+                let (x_pub, x_enc, x_nonce) = key_store.load_x25519_key()
+                    .map_err(|e| format!("failed to load X25519 key: {e}"))?;
+                let sk = state.storage_key.read().await;
+                let storage_key = sk.as_ref()
+                    .ok_or("storage key not set")?;
+                let x_sk_bytes = util::crypto_decrypt_storage(&x_enc, &x_nonce, storage_key, util::AAD_KEY_STORE)
+                    .map_err(|_| "failed to decrypt X25519 key — passphrase may have changed".to_string())?;
+                drop(sk);
+                let mut x_sk_arr = [0u8; 32];
+                x_sk_arr.copy_from_slice(&x_sk_bytes);
+                crate::crypto::X25519IdentityKeypair::from_bytes(&x_pub, &x_sk_arr)
+                    .map_err(|e| format!("failed to reconstruct X25519: {e}"))?
+            } else {
+                // First unlock after upgrade: generate X25519 key and persist it
+                let xkp = crate::crypto::X25519IdentityKeypair::generate();
+                let x_sk_bytes = xkp.secret_key_bytes();
+                let x_pub = xkp.public_key_bytes();
+                let sk = state.storage_key.read().await;
+                let storage_key = sk.as_ref()
+                    .ok_or("storage key not set")?;
+                let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, storage_key, util::AAD_KEY_STORE)
+                    .map_err(|e| format!("failed to encrypt X25519 key: {e}"))?;
+                drop(sk);
+                key_store.store_x25519_key(&x_pub, &x_enc, &x_nonce)
+                    .map_err(|e| format!("failed to store X25519 key: {e}"))?;
+                xkp
+            };
+            {
+                let mut x_lock = state.x25519_identity.write().await;
+                *x_lock = Some(x25519_kp);
+            }
+
             IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
                 .map_err(|e| format!("failed to reconstruct identity: {e}"))?
         } else {
