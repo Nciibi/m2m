@@ -28,11 +28,11 @@ export default function SettingsView() {
       <style>{`
         .settings-glass-card {
             position: relative;
-            background: rgba(12, 14, 24, 0.4);
-            backdrop-filter: blur(60px) saturate(1.4);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--color-bg-surface);
+            backdrop-filter: var(--glass-blur-xl) var(--glass-saturate);
+            border: 1px solid var(--color-border-default);
             border-radius: 24px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+            box-shadow: var(--shadow-app-shell);
             transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
             overflow: hidden;
         }
@@ -44,7 +44,7 @@ export default function SettingsView() {
             padding: 1px;
             background-image: radial-gradient(
                 400px circle at var(--cursor-x) var(--cursor-y),
-                rgba(255, 255, 255, 0.15),
+                var(--color-border-active),
                 transparent 40%
             );
             background-attachment: fixed;
@@ -60,13 +60,13 @@ export default function SettingsView() {
         }
         .settings-glass-card:hover {
             transform: translateY(-4px) scale(1.01);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.2);
+            box-shadow: var(--shadow-card-hover);
         }
         .mac-toggle {
             position: relative;
             width: 36px;
             height: 20px;
-            background: #33343b;
+            background: var(--color-bg-input);
             border-radius: 999px;
             transition: background 0.2s ease;
         }
@@ -82,19 +82,19 @@ export default function SettingsView() {
             transition: transform 0.2s ease;
         }
         input:checked + .mac-toggle {
-            background: #6366f1;
+            background: var(--color-accent);
         }
         input:checked + .mac-toggle::after {
             transform: translateX(16px);
         }
         .segmented-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--color-bg-input);
+            border: 1px solid var(--color-border-default);
         }
         .active-segment {
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #c0c1ff;
+            background: var(--color-primary-glow);
+            border: 1px solid var(--color-border-active);
+            color: var(--color-text-accent);
         }
         .no-scrollbar::-webkit-scrollbar {
             display: none;
