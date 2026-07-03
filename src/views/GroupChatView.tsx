@@ -22,7 +22,7 @@ export default function GroupChatView() {
 
   const loadMessages = useCallback(async (groupId: string) => {
     try {
-      const msgs = await invoke<ChatMessage[]>("load_group_messages", { groupId, limit: 100, offset: 0 });
+      const msgs = await invoke<ChatMessage[]>("load_group_messages", { groupId, limit: 100 });
       setMessages(msgs);
     } catch { /* noop */ }
   }, []);
