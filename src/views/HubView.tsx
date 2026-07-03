@@ -126,6 +126,9 @@ export default function HubView() {
             <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
             <span className="font-label-sm text-label-sm text-on-surface-variant">Online</span>
           </div>
+          <button onClick={() => setView("groups")} className="text-on-surface-variant hover:text-primary transition-colors active:scale-95 p-1 rounded-lg hover:bg-input-bg" title="Group Chats">
+            <span className="material-symbols-outlined text-[20px]">groups</span>
+          </button>
           <button onClick={() => setView("settings")} className="text-on-surface-variant hover:text-primary transition-colors active:scale-95 p-1 rounded-lg hover:bg-input-bg">
             <span className="material-symbols-outlined text-[20px]">settings</span>
           </button>
