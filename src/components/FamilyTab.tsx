@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "../context/AppContext";
 import type { FamilyMember } from "../types";
+import { FamilyIllustration } from "./ui";
 
 interface FamilyTabProps {
   family: FamilyMember[];
@@ -18,8 +19,8 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
 
   if (family.length === 0 && !showAdd) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4">
-        <span className="material-symbols-outlined text-4xl opacity-50">family_restroom</span>
+      <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4 py-4xl">
+        <FamilyIllustration />
         <div className="text-center space-y-2">
           <p className="font-headline-2xl text-headline-2xl text-on-surface">No family members</p>
           <p className="font-body-md text-body-md max-w-[320px] mx-auto">Add people you trust to message them without generating an invite each time.</p>
