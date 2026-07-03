@@ -71,7 +71,7 @@ export default function VaultView() {
       <div className={`premium-glass-card rounded-3xl max-w-[420px] w-full p-2xl flex flex-col items-center relative group ${shake ? "animate-[shake_0.4s_ease]" : ""}`}>
 
         {/* Icon */}
-        <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-xl">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-border-subtle mb-xl">
           <span className="material-symbols-outlined text-primary text-4xl">{vaultInitialized ? "lock" : "key"}</span>
         </div>
 
@@ -165,7 +165,7 @@ export default function VaultView() {
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-center gap-sm p-md bg-danger/10 border border-danger/20 rounded-xl text-danger text-body-md animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-sm p-md bg-error-container border border-error rounded-xl text-danger text-body-md animate-in fade-in slide-in-from-top-2 duration-200">
               <span className="material-symbols-outlined text-[18px]">error</span>
               <span>{error}</span>
             </div>
