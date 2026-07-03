@@ -1199,6 +1199,8 @@ pub struct ConversationSummary {
     pub is_favorite: Option<bool>,
     /// Whether this conversation is archived.
     pub archived: Option<bool>,
+    /// Number of unread received messages.
+    pub unread_count: u32,
 }
 
 /// Summary of a stored transfer for the frontend.
