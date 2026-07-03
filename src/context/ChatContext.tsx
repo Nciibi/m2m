@@ -153,23 +153,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [connection?.peer_key_hex, addToast]);
 
-  const handleAcceptFileTransfer = useCallback(async (transferId: string) => {
+  const handleAcceptFileTransfer = useCallback(async (req: FileRequest) => {
     try {
       const { save } = await import("@tauri-apps/plugin-dialog");
-      const savePath = await save({ title: "Save incoming file" });
+      const savePath = await save({ title: "Save incoming file", defaultPath: req.filename });
       if (!savePath) return;
-      await invoke("accept_file_transfer", { transferId });
-      setFileRequests((prev) => prev.filter((r) => r.transfer_id !== transferId));
+      await invoke("accept_file_transfer", {
+        peerKeyHex: req.peer_key_hex,
+        transferId: req.transfer_id,
+        saveDir: savePath,
+      });
+      setFileRequests((prev) => prev.filter((r) => r.transfer_id !== req.transfer_id));
       addToast("Downloading file...", "info");
     } catch (e) {
       addToast("Failed to accept transfer: " + e, "error");
     }
   }, [addToast]);
 
-  const handleRejectFileTransfer = useCallback(async (transferId: string) => {
+  const handleRejectFileTransfer = useCallback(async (req: FileRequest) => {
     try {
-      await invoke("reject_file_transfer", { transferId });
-      setFileRequests((prev) => prev.filter((r) => r.transfer_id !== transferId));
+      await invoke("reject_file_transfer", {
+        peerKeyHex: req.peer_key_hex,
+        transferId: req.transfer_id,
+      });
+      setFileRequests((prev) => prev.filter((r) => r.transfer_id !== req.transfer_id));
       addToast("File transfer rejected", "info");
     } catch (e) {
       addToast("Failed to reject transfer: " + e, "error");
