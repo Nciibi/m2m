@@ -285,7 +285,7 @@ export default function HubView() {
               <div className="space-y-sm">
                 {conversations
                   .filter(c => c.peer_key_hex.includes(search) || (c.display_name && c.display_name.toLowerCase().includes(search.toLowerCase())))
-                  .map((c, i) => (
+                  .map((c) => (
                     <div
                       key={c.peer_key_hex}
                       onClick={() => handleOpenChat(c.peer_key_hex)}
