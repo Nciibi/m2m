@@ -63,11 +63,11 @@ export default function GroupChatView() {
       return;
     }
     try {
-      const info = await invoke<GroupDetail>("create_group", {
+      const info = await invoke<GroupInfo>("create_group", {
         groupName: createName.trim(),
         memberPeerKeys: members,
       });
-      setGroups((prev) => [...prev, { group_id: info.group_id, group_name: info.group_name, member_count: info.member_count, created_at: info.created_at }]);
+      setGroups((prev) => [...prev, info]);
       setShowCreate(false);
       setCreateName("");
       setCreateMembers("");
