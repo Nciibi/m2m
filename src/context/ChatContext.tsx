@@ -486,7 +486,32 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setFileRequests((prev) => [...prev, event.payload]);
     });
 
-    const unlistenFileComp = listen<any>("m2m://file-complete", () => {});
+    const unlistenFileProgress = listen<any>("m2m://transfer-progress", (event) => {
+      setTransfers((prev: TransferProgress[]) => {
+        const idx = prev.findIndex((t) => t.transfer_id === event.payload.transfer_id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = event.payload;
+          return updated;
+        }
+        return [...prev, event.payload];
+      });
+    });
+
+    const unlistenFileCompleted = listen<any>("m2m://transfer-completed", (event) => {
+      setTransfers((prev) => prev.filter((t) => t.transfer_id !== event.payload.transfer_id));
+      addToast(`File transfer complete: ${event.payload.filename || ""}`, "success");
+    });
+
+    const unlistenFileError = listen<any>("m2m://transfer-error", (event) => {
+      setTransfers((prev) => prev.filter((t) => t.transfer_id !== event.payload.transfer_id));
+      addToast(`File transfer failed: ${event.payload.error || "unknown error"}`, "error");
+    });
+
+    const unlistenFileCancelled = listen<any>("m2m://transfer-cancelled", (event) => {
+      setTransfers((prev) => prev.filter((t) => t.transfer_id !== event.payload.transfer_id));
+      addToast("File transfer cancelled", "warning");
+    });
 
     const unlistenReaction = listen<any>("m2m://reaction", (event) => {
       const { message_id, reaction, peer_key_hex, remove } = event.payload;
