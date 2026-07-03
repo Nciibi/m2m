@@ -883,7 +883,10 @@ impl MessageStore {
                     c.auto_delete_at, c.retention_policy,
                     (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count,
                     COALESCE(c.is_favorite, 0) as is_favorite,
-                    COALESCE(c.archived, 0) as archived
+                    COALESCE(c.archived, 0) as archived,
+                    (SELECT COUNT(*) FROM messages m
+                     WHERE m.conversation_id = c.id
+                     AND m.direction = 'received' AND m.read_at IS NULL) as unread_count
              FROM conversations c
              ORDER BY archived ASC, COALESCE(c.is_favorite, 0) DESC,
                       COALESCE(c.last_message_at, c.created_at) DESC",
@@ -902,6 +905,7 @@ impl MessageStore {
                 message_count: row.get(8)?,
                 is_favorite: row.get::<_, Option<bool>>(9)?,
                 archived: row.get::<_, Option<bool>>(10)?,
+                unread_count: row.get::<_, i64>(11)? as u32,
             })
         })?;
         let mut convos = Vec::new();
