@@ -62,6 +62,7 @@ function AppInner() {
       case "settings": return <SettingsView />;
       case "hub": return <HubView />;
       case "chat": return <ChatView />;
+      case "groups": return <GroupChatView />;
       default: return <SetupView />;
     }
   })();
