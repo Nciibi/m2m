@@ -56,7 +56,6 @@ interface ChatContextValue {
   handleMuteConversation: (peerKeyHex: string) => Promise<void>;
   handleUnmuteConversation: (peerKeyHex: string) => Promise<void>;
   // File Transfer
-  fileRequests: FileRequest[];
   handleAcceptFileTransfer: (transferId: string) => Promise<void>;
   handleRejectFileTransfer: (transferId: string) => Promise<void>;
 }
