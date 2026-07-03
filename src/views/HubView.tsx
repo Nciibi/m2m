@@ -67,16 +67,18 @@ export default function HubView() {
     try {
       const info = await invoke<ConnectionInfo>("connect_to_peer", { inviteStr: inviteToConnect });
       // Set display names after connecting
-      if (namingTheirName || namingMyName) {
+      if (info.peer_key_hex && (namingTheirName || namingMyName)) {
         try {
-          // Derive peer key hex from the invite payload
-          const signed = await invoke<{ identity_pub: number[] }>("validate_invite", { inviteStr: inviteToConnect });
-          // validate_invite returns InviteInfo which has identity_pub as a hex string
-          // Actually, use the connection's peer_key_hex — we have it from the invite
-          if (namingTheirName) {
-            await invoke("rename_conversation", { conversationId: namingTheirName, displayName: namingTheirName });
+          if (namingMyName || namingTheirName) {
+            await invoke("send_conversation_names", {
+              peerKeyHex: info.peer_key_hex,
+              myName: namingMyName || "Me",
+              theirName: namingTheirName || "Them",
+            });
           }
-        } catch {}
+        } catch (e) {
+          console.warn("Failed to set display names:", e);
+        }
       }
       setView("chat");
     } catch (e: any) {
@@ -97,7 +99,7 @@ export default function HubView() {
   const handleDeleteConversation = async (e: React.MouseEvent, peerKeyHex: string) => {
     e.stopPropagation();
     try {
-      await invoke("delete_conversation", { peerKeyHex });
+      await invoke("delete_conversation_cmd", { conversationId: peerKeyHex });
       addToast("Conversation deleted", "success");
     } catch (err: any) {
       addToast("Failed to delete conversation", "error");
