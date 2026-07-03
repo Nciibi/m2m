@@ -189,8 +189,9 @@ export default function VaultView() {
           </button>
         </form>
 
-        <div className="mt-xl text-center">
-          <p className="font-mono-label text-[10px] text-primary/30 uppercase tracking-[0.2em]">AES-256-GCM / Argon2id</p>
+        <div className="mt-xl flex items-center justify-center gap-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shadow-[0_0_8px_var(--color-success)]"></span>
+          <p className="font-mono-label text-[10px] text-text-muted uppercase tracking-[0.2em] select-none">Enclave Offline & Isolated</p>
         </div>
       </div>
 
