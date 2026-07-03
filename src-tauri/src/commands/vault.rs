@@ -282,6 +282,22 @@ pub async fn unlock_vault(
             *sk_lock = Some(storage_key);
         }
 
+        // Generate and store X25519 key for X3DH
+        let xkp = crate::crypto::X25519IdentityKeypair::generate();
+        let x_sk_bytes = xkp.secret_key_bytes();
+        let x_pub = xkp.public_key_bytes();
+        let storage_key_ref = state.storage_key.read().await;
+        let sk = storage_key_ref.as_ref().ok_or("storage key not set")?;
+        let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, sk, util::AAD_KEY_STORE)
+            .map_err(|e| format!("failed to encrypt X25519 key: {e}"))?;
+        drop(storage_key_ref);
+        key_store.store_x25519_key(&x_pub, &x_enc, &x_nonce)
+            .map_err(|e| format!("failed to store X25519 key: {e}"))?;
+        {
+            let mut x_lock = state.x25519_identity.write().await;
+            *x_lock = Some(xkp);
+        }
+
         kp
     };
 

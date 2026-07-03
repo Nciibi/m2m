@@ -710,7 +710,7 @@
   padding: 1px;
   background-attachment: fixed; background-image: radial-gradient(
     800px circle at var(--cursor-x) var(--cursor-y),
-    rgba(255, 255, 255, 0.15),
+    var(--color-border-active),
     transparent 40%
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -726,7 +726,7 @@
   inset: 0;
   background-attachment: fixed; background-image: radial-gradient(
     600px circle at var(--cursor-x) var(--cursor-y),
-    rgba(99, 102, 241, 0.08),
+    var(--color-accent-glow-subtle),
     transparent 40%
   );
   pointer-events: none;
