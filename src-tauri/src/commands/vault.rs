@@ -241,6 +241,19 @@ pub async fn unlock_vault(
                 *sk_lock = Some(new_key);
             }
 
+            // Generate X25519 key for new sessions
+            let xkp = crate::crypto::X25519IdentityKeypair::generate();
+            let x_sk_bytes = xkp.secret_key_bytes();
+            let x_pub = xkp.public_key_bytes();
+            let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, &new_key, util::AAD_KEY_STORE)
+                .map_err(|e| format!("failed to encrypt X25519 key: {e}"))?;
+            key_store.store_x25519_key(&x_pub, &x_enc, &x_nonce)
+                .map_err(|e| format!("failed to store X25519 key: {e}"))?;
+            {
+                let mut x_lock = state.x25519_identity.write().await;
+                *x_lock = Some(xkp);
+            }
+
             IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
                 .map_err(|e| format!("failed to reconstruct identity: {e}"))?
         }
