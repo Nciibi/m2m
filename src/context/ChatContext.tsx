@@ -579,7 +579,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
       handleSendMessageWithTimer, handleEditMessage, handleDeleteMessage,
       mutedConversations, handleMuteConversation, handleUnmuteConversation,
-      fileRequests, handleAcceptFileTransfer, handleRejectFileTransfer,
+      handleAcceptFileTransfer, handleRejectFileTransfer,
     }}>
       {children}
     </ChatContext.Provider>
