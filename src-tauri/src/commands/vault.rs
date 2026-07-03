@@ -216,7 +216,7 @@ pub async fn unlock_vault(
 
             // Derive new key and re-encrypt
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
-            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
+            let (_new_nonce, _new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
             let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
                 .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
