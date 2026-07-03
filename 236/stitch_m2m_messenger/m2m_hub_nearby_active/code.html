@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CipherGlass | Nearby Peer Discovery</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    body {
+      background-color: #030408;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.05) 0%, transparent 50%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    .glass-card {
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      border-left: 1px solid rgba(255, 255, 255, 0.05);
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    @keyframes sonar-pulse {
+      0% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.8; }
+    }
+
+    @keyframes ripple {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+
+    .pulse-container {
+      position: relative;
+    }
+
+    .ripple-effect {
+      position: absolute;
+      border: 2px solid #c0c1ff;
+      border-radius: 50%;
+      animation: ripple 2s infinite ease-out;
+    }
+
+    .ripple-effect:nth-child(2) {
+      animation-delay: 0.6s;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(192, 193, 255, 0.2);
+      border-radius: 10px;
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#1a1b21",
+            "on-secondary-fixed-variant": "#3a456a",
+            "secondary-fixed": "#dbe1ff",
+            "primary-fixed": "#e1e0ff",
+            "surface-tint": "#c0c1ff",
+            "tertiary": "#4edea3",
+            "on-surface": "#e2e2ea",
+            "surface-container-high": "#282a30",
+            "on-secondary-container": "#a9b4de",
+            "on-error-container": "#ffdad6",
+            "background": "#030408",
+            "text-secondary": "#cbd5e1",
+            "on-tertiary": "#003824",
+            "on-tertiary-container": "#000703",
+            "on-secondary-fixed": "#0d1a3c",
+            "warning": "#f59e0b",
+            "secondary": "#bac5f0",
+            "text-primary": "#f1f5f9",
+            "surface-container-lowest": "#0c0e14",
+            "surface-container-highest": "#33343b",
+            "on-surface-variant": "#c7c4d7",
+            "surface-bright": "#373940",
+            "inverse-on-surface": "#2f3037",
+            "danger": "#ef4444",
+            "on-error": "#690005",
+            "primary": "#c0c1ff",
+            "secondary-container": "#3a456a",
+            "error": "#ffb4ab",
+            "primary-fixed-dim": "#c0c1ff",
+            "on-primary": "#1000a9",
+            "primary-container": "#8083ff",
+            "on-secondary": "#242f52",
+            "surface-dim": "#111319",
+            "text-muted": "#94a3b8",
+            "outline-variant": "#464554",
+            "on-primary-fixed": "#07006c",
+            "tertiary-container": "#00885d",
+            "on-primary-fixed-variant": "#2f2ebe",
+            "error-container": "#93000a",
+            "secondary-fixed-dim": "#bac5f0",
+            "surface": "rgba(12, 14, 24, 0.82)",
+            "elevated": "rgba(28, 30, 44, 0.7)",
+            "outline": "#908fa0",
+            "on-tertiary-fixed": "#002113",
+            "border-subtle": "rgba(255, 255, 255, 0.08)",
+            "tertiary-fixed": "#6ffbbe",
+            "input-bg": "rgba(255, 255, 255, 0.05)",
+            "on-primary-container": "#0d0096",
+            "inverse-surface": "#e2e2ea",
+            "tertiary-fixed-dim": "#4edea3",
+            "surface-variant": "#33343b",
+            "inverse-primary": "#494bd6",
+            "on-background": "#e2e2ea",
+            "surface-container": "#1e1f26",
+            "on-tertiary-fixed-variant": "#005236"
+          },
+          "spacing": {
+            "4xl": "64px", "xs": "4px", "xl": "24px", "2xl": "32px", "gutter": "16px", "container-max": "1000px", "3xl": "48px", "md": "12px", "lg": "16px", "sm": "8px"
+          },
+          "fontFamily": {
+            "label-xs": ["Inter"], "body-lg": ["Inter"], "mono-code": ["JetBrains Mono"], "body-base": ["Inter"], "headline-2xl": ["Inter"], "mono-label": ["JetBrains Mono"], "headline-4xl": ["Inter"], "body-xl": ["Inter"], "body-md": ["Inter"], "label-sm": ["Inter"], "headline-3xl": ["Inter"]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="text-on-surface font-body-base antialiased">
+<!-- Main Shell -->
+<main class="w-full max-w-container-max h-[800px] glass-card bg-surface flex flex-col rounded-3xl shadow-2xl overflow-hidden relative border border-border-subtle">
+<!-- Top Bar Navigation (Based on TopAppBar & SideNavBar combined structure) -->
+<header class="flex items-center justify-between px-xl py-lg border-b border-border-subtle bg-surface/40 backdrop-blur-md z-20">
+<div class="flex items-center gap-8">
+<h1 class="font-headline-2xl text-headline-2xl font-bold tracking-tight text-primary">CipherGlass</h1>
+<nav class="flex items-center gap-sm">
+<!-- Navigation Tabs -->
+<button class="px-lg py-sm rounded-xl text-on-surface-variant font-label-sm text-label-sm hover:bg-white/5 transition-all">Connect</button>
+<button class="px-lg py-sm rounded-xl text-on-surface-variant font-label-sm text-label-sm hover:bg-white/5 transition-all">Chats</button>
+<button class="px-lg py-sm rounded-xl bg-primary-container/20 text-primary font-semibold font-label-sm text-label-sm flex items-center gap-2 border border-primary/20">
+<span class="material-symbols-outlined text-[18px]">location_on</span>
+            Nearby
+          </button>
+<button class="px-lg py-sm rounded-xl text-on-surface-variant font-label-sm text-label-sm hover:bg-white/5 transition-all">Family</button>
+</nav>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-2 bg-tertiary/10 border border-tertiary/20 px-3 py-1.5 rounded-full">
+<span class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_rgba(78,222,163,0.6)]"></span>
+<span class="text-label-xs font-mono-label text-tertiary uppercase">Online</span>
+</div>
+<button class="p-2 rounded-xl text-on-surface-variant hover:bg-white/5 transition-all active:scale-95">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto custom-scrollbar px-xl py-xl space-y-xl">
+<!-- Section 1: Discovery Status -->
+<section class="flex flex-col items-center justify-center py-xl bg-white/[0.02] rounded-2xl border border-white/5 relative overflow-hidden">
+<!-- Background Ambient Glow -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-primary/10 blur-[100px]"></div>
+<div class="pulse-container flex items-center justify-center mb-6">
+<div class="ripple-effect w-16 h-16"></div>
+<div class="ripple-effect w-16 h-16"></div>
+<div class="z-10 w-16 h-16 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center shadow-[0_0_30px_rgba(192,193,255,0.3)] animate-[sonar-pulse_2s_infinite]">
+<span class="material-symbols-outlined text-primary text-3xl">sensors</span>
+</div>
+</div>
+<div class="text-center space-y-2 relative z-10">
+<h2 class="font-headline-3xl text-headline-3xl text-text-primary tracking-tight">Discovery is ON</h2>
+<p class="font-body-md text-body-md text-text-muted max-w-md mx-auto">Scanning for encrypted nodes on local and distributed networks...</p>
+</div>
+</section>
+<!-- Section 2: LAN Discovery -->
+<section class="space-y-md">
+<div class="flex items-center gap-sm px-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">lan</span>
+<h3 class="font-mono-label text-label-sm text-on-surface-variant tracking-widest uppercase">LAN DISCOVERY</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- LAN Peer 1 -->
+<div class="glass-card bg-surface-container-low/40 p-lg rounded-2xl flex items-center justify-between group hover:bg-surface-container-high/60 transition-all duration-300">
+<div class="flex items-center gap-lg">
+<div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:border-primary/30 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">desktop_windows</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-text-primary font-semibold">Node_Alpha_7</span>
+<span class="text-[10px] bg-white/10 text-on-surface-variant px-1.5 rounded font-mono-code">LOCAL</span>
+</div>
+<div class="font-mono-code text-label-sm text-text-muted">192.168.1.42:38553</div>
+<div class="font-mono-code text-[10px] text-primary/60">FP: a1b2c3d4...9z0</div>
+</div>
+</div>
+<button class="bg-primary hover:bg-primary-container text-on-primary font-semibold py-2 px-lg rounded-xl transition-all active:scale-95 shadow-[0_4px_12px_rgba(192,193,255,0.2)]">
+              Connect
+            </button>
+</div>
+<!-- LAN Peer 2 -->
+<div class="glass-card bg-surface-container-low/40 p-lg rounded-2xl flex items-center justify-between group hover:bg-surface-container-high/60 transition-all duration-300">
+<div class="flex items-center gap-lg">
+<div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:border-primary/30 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">laptop_mac</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-text-primary font-semibold">MBP-X-Vault</span>
+<span class="text-[10px] bg-white/10 text-on-surface-variant px-1.5 rounded font-mono-code">LOCAL</span>
+</div>
+<div class="font-mono-code text-label-sm text-text-muted">192.168.1.109:44122</div>
+<div class="font-mono-code text-[10px] text-primary/60">FP: f5e6d7c8...1a2</div>
+</div>
+</div>
+<button class="bg-primary hover:bg-primary-container text-on-primary font-semibold py-2 px-lg rounded-xl transition-all active:scale-95 shadow-[0_4px_12px_rgba(192,193,255,0.2)]">
+              Connect
+            </button>
+</div>
+</div>
+</section>
+<!-- Section 3: DHT Discovery -->
+<section class="space-y-md">
+<div class="flex items-center gap-sm px-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">dns</span>
+<h3 class="font-mono-label text-label-sm text-on-surface-variant tracking-widest uppercase">DHT DISCOVERY</h3>
+</div>
+<div class="space-y-md">
+<!-- DHT Peer 1 -->
+<div class="glass-card bg-surface-container-low/40 p-lg rounded-2xl flex items-center justify-between group hover:bg-surface-container-high/60 transition-all duration-300">
+<div class="flex items-center gap-lg">
+<div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:border-primary/30 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">dns</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-xl">
+<div class="space-y-1">
+<span class="font-body-md text-body-md text-text-primary font-semibold">Distributed_Node_772</span>
+<div class="font-mono-code text-label-sm text-text-muted">ID: node_55d1...f822</div>
+</div>
+<div class="h-8 w-[1px] bg-white/5 hidden md:block"></div>
+<div class="space-y-1">
+<span class="text-[10px] font-mono-label text-on-surface-variant uppercase">Fingerprint</span>
+<div class="font-mono-code text-label-sm text-primary/70">8a:22:c3:91:e0:ff:2b:4a</div>
+</div>
+</div>
+</div>
+<button class="bg-primary hover:bg-primary-container text-on-primary font-semibold py-2 px-lg rounded-xl transition-all active:scale-95 shadow-[0_4px_12px_rgba(192,193,255,0.2)]">
+              Connect
+            </button>
+</div>
+<!-- DHT Peer 2 -->
+<div class="glass-card bg-surface-container-low/40 p-lg rounded-2xl flex items-center justify-between group hover:bg-surface-container-high/60 transition-all duration-300">
+<div class="flex items-center gap-lg">
+<div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:border-primary/30 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">storage</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-xl">
+<div class="space-y-1">
+<span class="font-body-md text-body-md text-text-primary font-semibold">Ghost_Relay_04</span>
+<div class="font-mono-code text-label-sm text-text-muted">ID: node_aa29...cc11</div>
+</div>
+<div class="h-8 w-[1px] bg-white/5 hidden md:block"></div>
+<div class="space-y-1">
+<span class="text-[10px] font-mono-label text-on-surface-variant uppercase">Fingerprint</span>
+<div class="font-mono-code text-label-sm text-primary/70">0d:44:b1:f2:c3:91:44:88</div>
+</div>
+</div>
+</div>
+<button class="bg-primary hover:bg-primary-container text-on-primary font-semibold py-2 px-lg rounded-xl transition-all active:scale-95 shadow-[0_4px_12px_rgba(192,193,255,0.2)]">
+              Connect
+            </button>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer Area -->
+<footer class="px-xl py-lg border-t border-border-subtle bg-surface/40 backdrop-blur-md z-10 flex flex-col gap-lg">
+<div class="flex items-center justify-center">
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-label-sm text-label-sm py-2 px-xl rounded-full bg-white/[0.03] hover:bg-white/[0.06] active:scale-95">
+<span class="material-symbols-outlined text-[20px] animate-spin-[20s_linear_infinite]">refresh</span>
+          Refresh Peer List
+        </button>
+</div>
+<!-- Privacy Notice -->
+<div class="bg-warning/10 border border-warning/20 p-md rounded-xl flex items-start gap-md">
+<span class="material-symbols-outlined text-warning shrink-0">info</span>
+<p class="text-label-sm font-body-md text-warning/90 leading-relaxed">
+          Both are <span class="font-bold underline">OFF by default</span> for privacy. When enabled, your IP address is visible to observers on the discovery channel. Ephemeral IDs are used and rotate periodically.
+        </p>
+</div>
+</footer>
+<!-- Decorative Top Edge Light -->
+<div class="absolute top-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+</main>
+<script>
+    // Micro-interaction: Simulated Refresh
+    const refreshBtn = document.querySelector('footer button');
+    refreshBtn.addEventListener('click', () => {
+      const icon = refreshBtn.querySelector('.material-symbols-outlined');
+      icon.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+      icon.style.transform = 'rotate(360deg)';
+      
+      refreshBtn.classList.add('opacity-50', 'pointer-events-none');
+      
+      setTimeout(() => {
+        icon.style.transition = 'none';
+        icon.style.transform = 'rotate(0deg)';
+        refreshBtn.classList.remove('opacity-50', 'pointer-events-none');
+      }, 1000);
+    });
+
+    // Pulse intensity logic
+    let intensity = 0.5;
+    const pulseNode = document.querySelector('.animate-\\[sonar-pulse_2s_infinite\\]');
+    setInterval(() => {
+      intensity = 0.6 + Math.random() * 0.4;
+      pulseNode.style.boxShadow = `0 0 ${30 * intensity}px rgba(192, 193, 255, ${0.3 * intensity})`;
+    }, 1000);
+  </script>
+</body></html>

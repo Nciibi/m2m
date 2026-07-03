@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CipherVault | Family Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary": "#bac5f0",
+                    "surface-variant": "#33343b",
+                    "on-primary": "#1000a9",
+                    "elevated": "rgba(28, 30, 44, 0.7)",
+                    "on-primary-container": "#0d0096",
+                    "surface-tint": "#c0c1ff",
+                    "surface-dim": "#111319",
+                    "on-secondary-fixed-variant": "#3a456a",
+                    "surface-container": "#1e1f26",
+                    "outline": "#908fa0",
+                    "on-tertiary": "#003824",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "tertiary-container": "#00885d",
+                    "on-primary-fixed": "#07006c",
+                    "surface-bright": "#373940",
+                    "primary-fixed": "#e1e0ff",
+                    "on-secondary": "#242f52",
+                    "tertiary": "#4edea3",
+                    "border-subtle": "rgba(255, 255, 255, 0.08)",
+                    "surface-container-low": "#1a1b21",
+                    "inverse-surface": "#e2e2ea",
+                    "inverse-on-surface": "#2f3037",
+                    "error": "#ffb4ab",
+                    "text-primary": "#f1f5f9",
+                    "warning": "#f59e0b",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-tertiary-fixed": "#002113",
+                    "tertiary-fixed": "#6ffbbe",
+                    "on-surface-variant": "#c7c4d7",
+                    "surface-container-lowest": "#0c0e14",
+                    "secondary-fixed": "#dbe1ff",
+                    "on-background": "#e2e2ea",
+                    "danger": "#ef4444",
+                    "input-bg": "rgba(255, 255, 255, 0.05)",
+                    "text-muted": "#94a3b8",
+                    "on-tertiary-container": "#000703",
+                    "inverse-primary": "#494bd6",
+                    "on-error": "#690005",
+                    "secondary-fixed-dim": "#bac5f0",
+                    "on-surface": "#e2e2ea",
+                    "background": "#030408",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "secondary-container": "#3a456a",
+                    "on-secondary-container": "#a9b4de",
+                    "on-error-container": "#ffdad6",
+                    "text-secondary": "#cbd5e1",
+                    "error-container": "#93000a",
+                    "surface": "rgba(12, 14, 24, 0.82)",
+                    "primary": "#c0c1ff",
+                    "outline-variant": "#464554",
+                    "on-secondary-fixed": "#0d1a3c",
+                    "surface-container-highest": "#33343b",
+                    "primary-container": "#8083ff",
+                    "surface-container-high": "#282a30"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "24px",
+                    "sm": "8px",
+                    "2xl": "32px",
+                    "container-max": "1000px",
+                    "3xl": "48px",
+                    "xs": "4px",
+                    "lg": "16px",
+                    "gutter": "16px",
+                    "md": "12px",
+                    "4xl": "64px"
+            },
+            "fontFamily": {
+                    "body-xl": ["Inter"],
+                    "headline-3xl": ["Inter"],
+                    "mono-code": ["JetBrains Mono"],
+                    "body-md": ["Inter"],
+                    "body-base": ["Inter"],
+                    "headline-4xl": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "label-xs": ["Inter"],
+                    "headline-2xl": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "mono-label": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "body-xl": ["1.05rem", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-3xl": ["1.4rem", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "mono-code": ["0.8125rem", {"lineHeight": "1.5", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+                    "body-md": ["0.875rem", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-base": ["0.8125rem", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-4xl": ["1.75rem", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "label-sm": ["0.75rem", {"lineHeight": "1rem", "fontWeight": "500"}],
+                    "label-xs": ["0.68rem", {"lineHeight": "0.875rem", "fontWeight": "500"}],
+                    "headline-2xl": ["1.2rem", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "body-lg": ["0.9375rem", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "mono-label": ["0.75rem", {"lineHeight": "1rem", "letterSpacing": "0.02em", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #030408;
+            color: #f1f5f9;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .glass-card {
+            background: rgba(12, 14, 24, 0.6);
+            backdrop-filter: blur(40px);
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            border-left: 1px solid rgba(255, 255, 255, 0.06);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+        .status-glow {
+            box-shadow: 0 0 8px rgba(78, 222, 163, 0.4);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(192, 193, 255, 0.2);
+            border-radius: 10px;
+        }
+        .active-tab {
+            color: #c0c1ff;
+            font-weight: 700;
+            border-bottom: 2px solid #c0c1ff;
+        }
+        .nav-item {
+            transition: all 0.2s ease;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-lg">
+<!-- Global Background Shader Effect -->
+
+<!-- Main Container: Fixed Width Floating Card Aesthetic -->
+<div class="relative w-full max-w-container-max h-[800px] glass-card rounded-2xl flex flex-col overflow-hidden z-10 border border-border-subtle">
+<!-- TopAppBar (From JSON Structure) -->
+<header class="fixed top-0 w-full z-50 bg-surface backdrop-blur-xl border-b border-border-subtle flex justify-between items-center px-lg py-md shadow-sm" style="position: sticky;">
+<div class="flex items-center gap-md">
+<span class="font-headline-2xl text-headline-2xl font-bold text-primary tracking-tight">CipherVault</span>
+</div>
+<nav class="hidden md:flex items-center gap-xl h-full">
+<button class="nav-item text-on-surface-variant hover:text-primary transition-colors font-body-lg text-body-lg py-2">Messages</button>
+<button class="nav-item active-tab text-primary font-bold font-body-lg text-body-lg py-2">Family</button>
+<button class="nav-item text-on-surface-variant hover:text-primary transition-colors font-body-lg text-body-lg py-2">Vault</button>
+<button class="nav-item text-on-surface-variant hover:text-primary transition-colors font-body-lg text-body-lg py-2">Audit</button>
+</nav>
+<div class="flex items-center gap-md">
+<button class="p-2 text-on-surface-variant hover:bg-white/5 rounded-full transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined">lock</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-white/5 rounded-full transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center ml-sm overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="A professional portrait of a tech-savvy individual in a dark, high-contrast studio setting with subtle blue rim lighting. The style is modern and clean, reflecting a high-end secure digital identity avatar for a privacy platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFup5UIgLnXtjErb6eOy_xNiaDwDVaahIoD-YjCj4TLA_ulPhjS7W_zWfKJAlZh1QAGBT0cfWVeGxU9A6ue9Tf7E5xENivQGMBb8yJz6rUXFb63w5VvGlD-KZ89-VLp_x96V14jorWWD0QGIOCaYQmeQ8DxJSryDYsQP1sVfrVw5pTvSs3Dk0AFG5L9UKVM6q1aBCDGy4V5txPYr8fk7LrOJgUYohIkSFmnQSdeCrPaAah-I3lvunmkrVLFf4xfoxG2PFIkqEf0w"/>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col overflow-y-auto custom-scrollbar p-xl gap-xl">
+<!-- Section 1: Add Family Member Glass Card -->
+<section class="flex flex-col gap-lg">
+<div class="flex items-center gap-sm mb-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">person_add</span>
+<h2 class="font-headline-3xl text-headline-3xl">Add Trusted Member</h2>
+</div>
+<div class="glass-card p-xl rounded-xl grid grid-cols-1 md:grid-cols-3 gap-lg items-end">
+<div class="flex flex-col gap-xs">
+<label class="font-label-sm text-label-sm text-text-muted ml-1">Nickname</label>
+<input class="bg-input-bg border border-border-subtle rounded-lg px-lg py-md focus:ring-1 focus:ring-primary focus:outline-none text-text-primary font-body-md transition-all placeholder:text-text-muted/50" placeholder="e.g. Sarah Miller" type="text"/>
+</div>
+<div class="flex flex-col gap-xs">
+<label class="font-label-sm text-label-sm text-text-muted ml-1">Identity Key</label>
+<input class="bg-input-bg border border-border-subtle rounded-lg px-lg py-md focus:ring-1 focus:ring-primary focus:outline-none text-primary font-mono-code transition-all placeholder:text-text-muted/50" placeholder="0x..." type="text"/>
+</div>
+<button class="bg-primary-container text-on-primary-container font-body-lg text-body-lg font-bold px-xl py-md rounded-lg hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(128,131,255,0.3)]">
+                        Add Member
+                    </button>
+</div>
+</section>
+<!-- Section 2: Trusted Family Nodes List -->
+<section class="flex flex-col gap-lg pb-4xl">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">hub</span>
+<h2 class="font-headline-3xl text-headline-3xl">Trusted Family Nodes</h2>
+</div>
+<span class="font-mono-label text-mono-label bg-secondary-container/30 px-sm py-1 rounded border border-border-subtle text-secondary">
+                        3 ACTIVE NODES
+                    </span>
+</div>
+<div class="flex flex-col gap-md">
+<!-- Member Card 1 -->
+<div class="glass-card p-lg rounded-xl flex items-center justify-between group hover:bg-white/[0.03] transition-all">
+<div class="flex items-center gap-lg">
+<div class="relative">
+<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-on-primary font-bold text-headline-2xl">
+                                    SM
+                                </div>
+<div class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#4edea3] border-2 border-[#030408] status-glow"></div>
+</div>
+<div class="flex flex-col">
+<span class="font-body-xl text-body-xl font-bold">Sarah Miller</span>
+<span class="font-mono-code text-mono-code text-text-muted">4f8e...a2b9</span>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="hidden md:flex items-center gap-xs px-md py-1 rounded-full bg-tertiary/10 text-tertiary font-label-sm border border-tertiary/20 mr-md">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+                                AES-256 Active
+                            </div>
+<button class="px-lg py-md rounded-lg font-body-md text-on-surface-variant hover:text-primary hover:bg-white/5 transition-colors border border-transparent hover:border-border-subtle">
+                                Connect
+                            </button>
+<button class="p-md rounded-lg text-danger hover:bg-danger/10 transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+<!-- Member Card 2 -->
+<div class="glass-card p-lg rounded-xl flex items-center justify-between group hover:bg-white/[0.03] transition-all">
+<div class="flex items-center gap-lg">
+<div class="relative">
+<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-tertiary to-secondary-container flex items-center justify-center text-on-tertiary font-bold text-headline-2xl">
+                                    JK
+                                </div>
+<div class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#4edea3] border-2 border-[#030408] status-glow"></div>
+</div>
+<div class="flex flex-col">
+<span class="font-body-xl text-body-xl font-bold">John K. (Mainframe)</span>
+<span class="font-mono-code text-mono-code text-text-muted">7c21...88ff</span>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="px-lg py-md rounded-lg font-body-md text-on-surface-variant hover:text-primary hover:bg-white/5 transition-colors border border-transparent hover:border-border-subtle">
+                                Connect
+                            </button>
+<button class="p-md rounded-lg text-danger hover:bg-danger/10 transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+<!-- Member Card 3 -->
+<div class="glass-card p-lg rounded-xl flex items-center justify-between group hover:bg-white/[0.03] transition-all">
+<div class="flex items-center gap-lg">
+<div class="relative">
+<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-secondary-container to-primary flex items-center justify-center text-on-secondary font-bold text-headline-2xl">
+                                    AL
+                                </div>
+<div class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-text-muted border-2 border-[#030408]"></div>
+</div>
+<div class="flex flex-col">
+<span class="font-body-xl text-body-xl font-bold">Alice Liddell</span>
+<span class="font-mono-code text-mono-code text-text-muted">d9a3...54c2</span>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<span class="text-text-muted font-label-sm mr-md">Last seen 2m ago</span>
+<button class="px-lg py-md rounded-lg font-body-md text-on-surface-variant hover:text-primary hover:bg-white/5 transition-colors border border-transparent hover:border-border-subtle">
+                                Connect
+                            </button>
+<button class="p-md rounded-lg text-danger hover:bg-danger/10 transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: Empty State (Hidden by default) -->
+<section class="hidden flex-1 flex flex-col items-center justify-center text-center py-4xl" id="empty-state">
+<div class="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center mb-xl border border-border-subtle shadow-xl">
+<span class="material-symbols-outlined text-text-muted text-[48px]">home</span>
+</div>
+<h3 class="font-headline-4xl text-headline-4xl mb-md">No family members yet</h3>
+<p class="text-text-muted font-body-lg text-body-lg max-w-[320px]">
+                    Add trusted peers as family members for quick access to secure nodes and direct communication.
+                </p>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface backdrop-blur-2xl border-t border-border-subtle flex justify-around items-center px-4 py-2 pb-safe shadow-lg">
+<button class="flex flex-col items-center justify-center text-text-muted hover:text-primary transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined">forum</span>
+<span class="font-label-sm text-label-sm mt-1">Chats</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-xl px-4 py-1.5 active:scale-90 duration-150">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-sm text-label-sm mt-1">Family</span>
+</button>
+<button class="flex flex-col items-center justify-center text-text-muted hover:text-primary transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined">lock</span>
+<span class="font-label-sm text-label-sm mt-1">Vault</span>
+</button>
+<button class="flex flex-col items-center justify-center text-text-muted hover:text-primary transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined">settings_input_component</span>
+<span class="font-label-sm text-label-sm mt-1">Config</span>
+</button>
+</nav>
+<!-- Status Bar -->
+<footer class="px-xl py-sm bg-surface-container-lowest border-t border-border-subtle flex items-center justify-between z-10">
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs">
+<div class="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></div>
+<span class="font-mono-label text-label-xs text-tertiary">ENCRYPTED NODE: ACTIVE</span>
+</div>
+<div class="h-3 w-[1px] bg-border-subtle"></div>
+<span class="font-mono-label text-label-xs text-text-muted uppercase tracking-widest">Protocol: M2M-V3</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="font-mono-label text-label-xs text-text-muted">SECURE_TUNNEL_01</span>
+<span class="material-symbols-outlined text-[14px] text-text-muted">vpn_lock</span>
+</div>
+</footer>
+</div>
+<!-- Background Atmospheric Glows -->
+<div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[120px] rounded-full pointer-events-none"></div>
+<div class="fixed bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-secondary/10 blur-[100px] rounded-full pointer-events-none"></div>
+<script>
+        // Micro-interactions and logic
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                // Subtle scale effect on hover for glass elements
+                if(btn.classList.contains('glass-card')) {
+                    btn.style.transform = 'translateY(-2px)';
+                }
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.transform = 'translateY(0)';
+            });
+        });
+
+        // Function to simulate removing a member (UI only)
+        function removeMember(memberId) {
+            // Placeholder logic for visual feedback
+            console.log('Removing member node:', memberId);
+        }
+    </script>
+</body></html>

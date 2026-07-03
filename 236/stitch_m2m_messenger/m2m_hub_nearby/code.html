@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vault Messenger - Nearby Discovery</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#005236",
+                    "surface": "rgba(12, 14, 24, 0.82)",
+                    "on-surface-variant": "#c7c4d7",
+                    "background": "#030408",
+                    "on-primary": "#1000a9",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "text-muted": "#94a3b8",
+                    "error-container": "#93000a",
+                    "surface-dim": "#111319",
+                    "on-secondary-fixed-variant": "#3a456a",
+                    "surface-tint": "#c0c1ff",
+                    "surface-variant": "#33343b",
+                    "on-primary-fixed": "#07006c",
+                    "inverse-on-surface": "#2f3037",
+                    "on-tertiary": "#003824",
+                    "error": "#ffb4ab",
+                    "on-tertiary-fixed": "#002113",
+                    "text-primary": "#f1f5f9",
+                    "warning": "#f59e0b",
+                    "surface-container-lowest": "#0c0e14",
+                    "primary-container": "#8083ff",
+                    "tertiary-fixed": "#6ffbbe",
+                    "surface-container-low": "#1a1b21",
+                    "tertiary": "#4edea3",
+                    "secondary-fixed-dim": "#bac5f0",
+                    "on-error-container": "#ffdad6",
+                    "text-secondary": "#cbd5e1",
+                    "on-secondary": "#242f52",
+                    "tertiary-container": "#00885d",
+                    "border-subtle": "rgba(255, 255, 255, 0.08)",
+                    "primary": "#c0c1ff",
+                    "indigo-accent": "#6366f1",
+                    "elevated": "rgba(28, 30, 44, 0.7)",
+                    "surface-container": "#1e1f26",
+                    "secondary-fixed": "#dbe1ff",
+                    "inverse-surface": "#e2e2ea",
+                    "outline": "#908fa0",
+                    "secondary": "#bac5f0",
+                    "outline-variant": "#464554",
+                    "on-primary-container": "#0d0096",
+                    "on-surface": "#e2e2ea",
+                    "surface-container-highest": "#33343b",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "on-secondary-container": "#a9b4de",
+                    "on-secondary-fixed": "#0d1a3c",
+                    "danger": "#ef4444",
+                    "surface-bright": "#373940",
+                    "on-background": "#e2e2ea",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "primary-fixed": "#e1e0ff",
+                    "inverse-primary": "#494bd6",
+                    "on-tertiary-container": "#000703",
+                    "input-bg": "rgba(255, 255, 255, 0.05)",
+                    "surface-container-high": "#282a30",
+                    "secondary-container": "#3a456a",
+                    "on-error": "#690005"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "2xl": "1rem",
+                    "3xl": "2rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "sm": "8px",
+                    "gutter": "16px",
+                    "md": "12px",
+                    "xs": "4px",
+                    "lg": "16px",
+                    "2xl": "32px",
+                    "4xl": "64px",
+                    "xl": "24px",
+                    "container-max": "1000px",
+                    "3xl": "48px"
+            },
+            "fontFamily": {
+                    "headline-2xl": ["Inter"],
+                    "mono-label": ["JetBrains Mono"],
+                    "label-xs": ["Inter"],
+                    "mono-code": ["JetBrains Mono"],
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "body-xl": ["Inter"],
+                    "body-base": ["Inter"],
+                    "headline-4xl": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "headline-3xl": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #030408;
+            background-image: radial-gradient(circle at center, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .glass-dashboard {
+            width: 100%;
+            max-width: 1000px;
+            min-height: 600px;
+            background: rgba(12, 14, 24, 0.6);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border-radius: 32px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .glass-dashboard::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+        }
+
+        .pulse-green {
+            box-shadow: 0 0 0 0 rgba(78, 222, 163, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(78, 222, 163, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(78, 222, 163, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(78, 222, 163, 0); }
+        }
+
+        .peer-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .peer-card:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(99, 102, 241, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .indigo-gradient {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        }
+
+        .indigo-gradient:hover {
+            filter: brightness(1.1);
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+</head>
+<body class="p-gutter md:p-2xl">
+<!-- Main Dashboard Container -->
+<main class="glass-dashboard">
+<!-- HEADER -->
+<header class="flex justify-between items-center px-xl h-[52px] border-b border-border-subtle">
+<div class="flex items-center gap-xs">
+<span class="font-headline-3xl text-headline-3xl font-bold text-primary tracking-tight">M2M</span>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-sm bg-surface-container/40 px-md py-xs rounded-full border border-border-subtle">
+<span class="w-2 h-2 rounded-full bg-tertiary pulse-green"></span>
+<span class="font-mono-label text-mono-label text-tertiary tracking-wider uppercase">Online</span>
+</div>
+<button class="p-xs text-on-surface-variant hover:text-primary transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+</button>
+</div>
+</header>
+<!-- TAB BAR -->
+<nav class="flex items-center justify-center px-xl h-[44px] border-b border-border-subtle gap-xl">
+<button class="font-body-base text-body-base text-on-surface-variant hover:text-primary transition-colors py-2">Connect</button>
+<button class="font-body-base text-body-base text-on-surface-variant hover:text-primary transition-colors flex items-center gap-xs py-2">
+                Chats <span class="bg-primary/20 text-primary text-[10px] px-1.5 py-0.5 rounded-full font-bold">3</span>
+</button>
+<button class="font-body-base text-body-base text-text-primary font-bold border-b-2 border-indigo-accent py-2 px-2 h-full">Nearby</button>
+<button class="font-body-base text-body-base text-on-surface-variant hover:text-primary transition-colors py-2">Family</button>
+</nav>
+<!-- CONTENT AREA -->
+<section class="flex-1 p-xl overflow-y-auto custom-scrollbar">
+<!-- Discovery Status Header -->
+<div class="flex items-center justify-between mb-xl">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-indigo-accent/10 flex items-center justify-center text-indigo-accent">
+<span class="material-symbols-outlined text-[24px]" data-icon="radar">radar</span>
+</div>
+<div>
+<h2 class="font-headline-2xl text-headline-2xl text-primary">Discovery is ON</h2>
+<p class="font-body-base text-body-base text-text-muted">Scanning for encrypted nodes on local and distributed networks...</p>
+</div>
+</div>
+</div>
+<!-- LAN Discovery Section -->
+<div class="mb-2xl">
+<div class="flex items-center gap-sm mb-lg">
+<span class="material-symbols-outlined text-indigo-accent text-[18px]" data-icon="wifi_tethering">wifi_tethering</span>
+<h3 class="font-mono-label text-mono-label text-on-surface-variant uppercase tracking-widest">LAN Discovery</h3>
+</div>
+<div class="grid gap-md">
+<!-- Peer Card 1 -->
+<div class="peer-card bg-surface-container/20 border border-border-subtle rounded-xl p-lg flex items-center justify-between">
+<div class="flex items-center gap-lg">
+<div class="w-12 h-12 rounded-xl bg-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="devices">devices</span>
+</div>
+<div class="space-y-1">
+<p class="font-mono-code text-mono-code text-primary">192.168.1.42:38553</p>
+<div class="flex items-center gap-sm">
+<span class="font-mono-code text-[11px] text-text-muted bg-surface-container-low px-sm py-0.5 rounded">a1b2c3d4...</span>
+<button class="text-text-muted hover:text-primary transition-colors" title="Copy Key">
+<span class="material-symbols-outlined text-[14px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+<button class="indigo-gradient text-white font-label-sm text-label-sm px-xl py-md rounded-lg shadow-lg active:scale-95 transition-transform">
+                            Connect
+                        </button>
+</div>
+</div>
+</div>
+<!-- DHT Discovery Section -->
+<div class="mb-2xl">
+<div class="flex items-center gap-sm mb-lg">
+<span class="material-symbols-outlined text-indigo-accent text-[18px]" data-icon="hub">hub</span>
+<h3 class="font-mono-label text-mono-label text-on-surface-variant uppercase tracking-widest">DHT Discovery</h3>
+</div>
+<div class="grid gap-md">
+<!-- Peer Card 2 -->
+<div class="peer-card bg-surface-container/20 border border-border-subtle rounded-xl p-lg flex items-center justify-between">
+<div class="flex items-center gap-lg">
+<div class="w-12 h-12 rounded-xl bg-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="dns">dns</span>
+</div>
+<div class="space-y-1">
+<p class="font-headline-2xl text-headline-2xl text-primary">Distributed_Node_772</p>
+<div class="flex items-center gap-sm">
+<span class="font-mono-code text-[11px] text-text-muted bg-surface-container-low px-sm py-0.5 rounded">f9e8d7c6...</span>
+<button class="text-text-muted hover:text-primary transition-colors" title="Copy Key">
+<span class="material-symbols-outlined text-[14px]" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+<button class="indigo-gradient text-white font-label-sm text-label-sm px-xl py-md rounded-lg shadow-lg active:scale-95 transition-transform">
+                            Connect
+                        </button>
+</div>
+</div>
+</div>
+<!-- Refresh Button -->
+<div class="flex justify-center mt-xl">
+<button class="flex items-center gap-sm px-xl py-md rounded-full bg-transparent hover:bg-white/5 border border-transparent hover:border-border-subtle transition-all group active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:rotate-180 transition-transform duration-500" data-icon="refresh">refresh</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Refresh Peer List</span>
+</button>
+</div>
+</section>
+<!-- FOOTER WARNING -->
+<footer class="p-lg bg-surface-container-low/50">
+<div class="flex items-start gap-md bg-warning/5 border border-warning/20 p-md rounded-xl">
+<span class="material-symbols-outlined text-warning text-[20px] mt-0.5" data-icon="privacy_tip">privacy_tip</span>
+<p class="font-body-md text-body-md text-warning/90 leading-relaxed">
+                    Both are OFF by default for privacy. When enabled, your IP address is visible to observers on the discovery channel. Ephemeral IDs are used and rotate periodically.
+                </p>
+</div>
+</footer>
+</main>
+<!-- Bottom Nav for Mobile -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-gutter py-xs bg-surface/90 backdrop-blur-3xl border-t border-border-subtle z-50">
+<div class="flex flex-col items-center justify-center text-on-surface-variant p-2">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+<span class="font-label-sm text-label-sm">Connect</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant p-2">
+<span class="material-symbols-outlined" data-icon="chat_bubble">chat_bubble</span>
+<span class="font-label-sm text-label-sm">Chats</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary/10 text-primary rounded-xl p-2">
+<span class="material-symbols-outlined" data-icon="location_on">location_on</span>
+<span class="font-label-sm text-label-sm">Nearby</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant p-2">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-sm text-label-sm">Family</span>
+</div>
+</nav>
+<script>
+        // Micro-interactions
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                button.style.transform = 'scale(0.96)';
+            });
+            button.addEventListener('mouseup', () => {
+                button.style.transform = '';
+            });
+            button.addEventListener('mouseleave', () => {
+                button.style.transform = '';
+            });
+        });
+
+        // Copy key interaction
+        document.querySelectorAll('[title="Copy Key"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const icon = btn.querySelector('.material-symbols-outlined');
+                const originalIcon = icon.innerText;
+                icon.innerText = 'check';
+                icon.style.color = '#4edea3';
+                setTimeout(() => {
+                    icon.innerText = originalIcon;
+                    icon.style.color = '';
+                }, 1500);
+            });
+        });
+    </script>
+</body></html>

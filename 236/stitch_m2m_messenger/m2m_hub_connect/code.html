@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<title>CipherGlass | Secure M2M Hub</title>
+<style>
+    :root {
+      --indigo-glow: rgba(99, 102, 241, 0.15);
+    }
+    body {
+      background-color: #030408;
+      background-image: 
+        radial-gradient(circle at 10% 20%, var(--indigo-glow) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, var(--indigo-glow) 0%, transparent 40%);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', sans-serif;
+    }
+    .glass-container {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.7);
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+    }
+    .glass-card::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    }
+    .status-glow {
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+    }
+    .indigo-btn-glow {
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+                  "surface-container-highest": "#33343b",
+                  "secondary-fixed-dim": "#bac5f0",
+                  "tertiary-fixed": "#6ffbbe",
+                  "input-bg": "rgba(255, 255, 255, 0.05)",
+                  "on-tertiary-fixed-variant": "#005236",
+                  "primary-fixed": "#e1e0ff",
+                  "on-tertiary-fixed": "#002113",
+                  "surface-container-low": "#1a1b21",
+                  "surface-bright": "#373940",
+                  "error": "#ffb4ab",
+                  "surface-tint": "#c0c1ff",
+                  "primary-fixed-dim": "#c0c1ff",
+                  "on-surface-variant": "#c7c4d7",
+                  "inverse-primary": "#494bd6",
+                  "surface-container-lowest": "#0c0e14",
+                  "on-background": "#e2e2ea",
+                  "surface": "rgba(12, 14, 24, 0.82)",
+                  "surface-container": "#1e1f26",
+                  "secondary-container": "#3a456a",
+                  "on-secondary-fixed-variant": "#3a456a",
+                  "tertiary-fixed-dim": "#4edea3",
+                  "on-primary-fixed": "#07006c",
+                  "tertiary": "#4edea3",
+                  "surface-variant": "#33343b",
+                  "text-muted": "#94a3b8",
+                  "on-primary": "#1000a9",
+                  "border-subtle": "rgba(255, 255, 255, 0.08)",
+                  "tertiary-container": "#00885d",
+                  "inverse-surface": "#e2e2ea",
+                  "elevated": "rgba(28, 30, 44, 0.7)",
+                  "warning": "#f59e0b",
+                  "on-surface": "#e2e2ea",
+                  "danger": "#ef4444",
+                  "surface-dim": "#111319",
+                  "text-primary": "#f1f5f9",
+                  "on-secondary-container": "#a9b4de",
+                  "on-tertiary-container": "#000703",
+                  "on-tertiary": "#003824",
+                  "primary": "#c0c1ff",
+                  "background": "#111319",
+                  "on-error": "#690005",
+                  "secondary": "#bac5f0",
+                  "secondary-fixed": "#dbe1ff",
+                  "outline": "#908fa0",
+                  "on-primary-container": "#0d0096",
+                  "inverse-on-surface": "#2f3037",
+                  "on-error-container": "#ffdad6",
+                  "primary-container": "#8083ff",
+                  "surface-container-high": "#282a30",
+                  "on-secondary": "#242f52",
+                  "error-container": "#93000a",
+                  "text-secondary": "#cbd5e1",
+                  "on-secondary-fixed": "#0d1a3c",
+                  "on-primary-fixed-variant": "#2f2ebe",
+                  "outline-variant": "#464554"
+          },
+          "borderRadius": {
+                  "DEFAULT": "0.25rem",
+                  "lg": "0.5rem",
+                  "xl": "0.75rem",
+                  "full": "9999px"
+          },
+          "spacing": {
+                  "lg": "16px",
+                  "4xl": "64px",
+                  "xs": "4px",
+                  "xl": "24px",
+                  "3xl": "48px",
+                  "container-max": "1000px",
+                  "gutter": "16px",
+                  "md": "12px",
+                  "sm": "8px",
+                  "2xl": "32px"
+          },
+          "fontFamily": {
+                  "body-xl": ["Inter"],
+                  "headline-4xl": ["Inter"],
+                  "body-md": ["Inter"],
+                  "headline-3xl": ["Inter"],
+                  "headline-2xl": ["Inter"],
+                  "body-lg": ["Inter"],
+                  "mono-label": ["JetBrains Mono"],
+                  "body-base": ["Inter"],
+                  "mono-code": ["JetBrains Mono"],
+                  "label-xs": ["Inter"],
+                  "label-sm": ["Inter"]
+          },
+          "fontSize": {
+                  "body-xl": ["1.05rem", {"lineHeight": "1.6", "fontWeight": "400"}],
+                  "headline-4xl": ["1.75rem", {"lineHeight": "1.2", "fontWeight": "700"}],
+                  "body-md": ["0.875rem", {"lineHeight": "1.5", "fontWeight": "400"}],
+                  "headline-3xl": ["1.4rem", {"lineHeight": "1.3", "fontWeight": "600"}],
+                  "headline-2xl": ["1.2rem", {"lineHeight": "1.4", "fontWeight": "600"}],
+                  "body-lg": ["0.9375rem", {"lineHeight": "1.6", "fontWeight": "400"}],
+                  "mono-label": ["0.75rem", {"lineHeight": "1rem", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                  "body-base": ["0.8125rem", {"lineHeight": "1.5", "fontWeight": "400"}],
+                  "mono-code": ["0.8125rem", {"lineHeight": "1.5", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+                  "label-xs": ["0.68rem", {"lineHeight": "0.875rem", "fontWeight": "500"}],
+                  "label-sm": ["0.75rem", {"lineHeight": "1rem", "fontWeight": "500"}]
+          }
+        },
+      },
+    }
+  </script>
+</head>
+<body class="dark bg-background">
+<!-- Main App Shell -->
+<main class="glass-container w-full max-w-container-max h-[962px] bg-surface/80 backdrop-blur-3xl rounded-[32px] overflow-hidden flex flex-col relative">
+<!-- TOP SECTION: Header -->
+<header class="h-[52px] px-xl flex items-center justify-between border-b border-border-subtle shrink-0">
+<div class="flex items-center gap-md">
+<div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary-container to-inverse-primary flex items-center justify-center shadow-lg shadow-primary-container/20">
+<span class="material-symbols-outlined text-white text-[20px]" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<span class="font-headline-2xl text-headline-2xl font-extrabold tracking-tight text-on-surface">M2M</span>
+</div>
+<div class="flex items-center gap-lg">
+<div class="flex items-center gap-sm bg-surface-container-low/50 px-md py-xs rounded-full border border-border-subtle">
+<div class="w-2 h-2 rounded-full bg-tertiary-fixed-dim status-glow animate-pulse"></div>
+<span class="font-label-sm text-label-sm text-on-surface">Online</span>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+</div>
+</header>
+<!-- MIDDLE SECTION: Tab Bar -->
+<nav class="h-[44px] px-xl flex items-center border-b border-border-subtle bg-surface-container-lowest/30 shrink-0">
+<div class="flex items-center h-full gap-xl">
+<!-- Connect Tab (Active) -->
+<button class="h-full flex items-center gap-sm px-xs border-b-2 border-primary text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">link</span>
+<span class="font-label-sm text-label-sm font-bold">Connect</span>
+</button>
+<!-- Chats Tab -->
+<button class="h-full flex items-center gap-sm px-xs border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-all group">
+<span class="material-symbols-outlined text-[18px]">chat_bubble</span>
+<span class="font-label-sm text-label-sm">Chats</span>
+<span class="bg-primary-container text-on-primary-container text-[10px] px-1.5 py-0.5 rounded-full font-bold">3</span>
+</button>
+<!-- Nearby Tab -->
+<button class="h-full flex items-center gap-sm px-xs border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">wifi</span>
+<span class="font-label-sm text-label-sm">Nearby</span>
+</button>
+<!-- Family Tab -->
+<button class="h-full flex items-center gap-sm px-xs border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-all">
+<span class="material-symbols-outlined text-[18px]">group</span>
+<span class="font-label-sm text-label-sm">Family</span>
+</button>
+</div>
+</nav>
+<!-- MAIN CONTENT: Connect Tab -->
+<div class="flex-1 p-xl overflow-y-auto space-y-xl">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-xl">
+<!-- CARD 1: Host a Connection -->
+<section class="glass-card rounded-2xl p-xl flex flex-col h-full">
+<div class="flex items-center gap-md mb-xl">
+<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary">broadcast_on_personal</span>
+</div>
+<div>
+<h2 class="font-headline-2xl text-headline-2xl text-on-surface">Host a Connection</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Create a secure link for others to join.</p>
+</div>
+</div>
+<button class="w-full py-md px-xl bg-primary-container text-on-primary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-110 active:scale-95 transition-all indigo-btn-glow mb-xl">
+            Generate Invite Link
+          </button>
+<div class="space-y-md">
+<label class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Your Active Invite</label>
+<div class="flex items-center gap-sm bg-input-bg p-md rounded-xl border border-border-subtle group">
+<span class="font-mono-code text-mono-code text-primary flex-1 break-all overflow-hidden whitespace-nowrap">m2m://a1b2c3d4e5f67g8h9i0j1k2l3m4n5o6p7q8r9s0</span>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-white/5">
+<span class="material-symbols-outlined text-[20px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center gap-sm text-warning font-label-sm text-label-sm px-xs">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>Expires in 59:32</span>
+</div>
+</div>
+<div class="mt-4xl flex-1">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-lg">Recent Invites</h3>
+<div class="space-y-sm">
+<div class="flex items-center justify-between p-md rounded-lg bg-white/2 hover:bg-white/5 transition-colors cursor-pointer border border-transparent hover:border-border-subtle">
+<div class="flex items-center gap-md">
+<div class="w-2 h-2 rounded-full bg-error"></div>
+<span class="font-body-base text-body-base text-on-surface">invite_key_8422.m2m</span>
+</div>
+<span class="font-label-xs text-label-xs text-on-surface-variant">2h ago</span>
+</div>
+<div class="flex items-center justify-between p-md rounded-lg bg-white/2 hover:bg-white/5 transition-colors cursor-pointer border border-transparent hover:border-border-subtle">
+<div class="flex items-center gap-md">
+<div class="w-2 h-2 rounded-full bg-error"></div>
+<span class="font-body-base text-body-base text-on-surface">invite_key_1109.m2m</span>
+</div>
+<span class="font-label-xs text-label-xs text-on-surface-variant">Yesterday</span>
+</div>
+</div>
+</div>
+</section>
+<!-- CARD 2: Join a Connection -->
+<section class="glass-card rounded-2xl p-xl flex flex-col h-full">
+<div class="flex items-center gap-md mb-xl">
+<div class="w-10 h-10 rounded-xl bg-tertiary/10 flex items-center justify-center border border-tertiary/20">
+<span class="material-symbols-outlined text-tertiary">key</span>
+</div>
+<div>
+<h2 class="font-headline-2xl text-headline-2xl text-on-surface">Join a Connection</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Enter a link to start an encrypted chat.</p>
+</div>
+</div>
+<div class="space-y-xl">
+<div class="space-y-md">
+<label class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Invite Link</label>
+<input class="w-full bg-input-bg border border-border-subtle rounded-xl px-xl py-md text-primary font-mono-code focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-outline-variant outline-none transition-all" placeholder="m2m://..." type="text"/>
+<div class="flex items-center gap-sm text-tertiary font-label-sm text-label-sm px-xs">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>Valid Invite Found</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-lg">
+<div class="space-y-md">
+<label class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Your Name</label>
+<input class="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none" placeholder="Nexus-01" type="text"/>
+</div>
+<div class="space-y-md">
+<label class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Their Name</label>
+<input class="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none" placeholder="Ghost-Host" type="text"/>
+</div>
+</div>
+<button class="w-full py-md px-xl bg-tertiary-container text-on-tertiary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-tertiary/10">
+<span class="material-symbols-outlined">sensors</span>
+              Connect
+            </button>
+</div>
+<!-- Atmospheric Graphic Element -->
+<div class="mt-auto pt-4xl flex justify-center">
+<div class="relative w-32 h-32 flex items-center justify-center opacity-30">
+<div class="absolute inset-0 border border-primary/20 rounded-full animate-ping"></div>
+<div class="absolute inset-4 border border-tertiary/20 rounded-full animate-[ping_2s_infinite]"></div>
+<span class="material-symbols-outlined text-primary/40 text-4xl">vpn_lock</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+<!-- BOTTOM SECTION: Footer -->
+<footer class="shrink-0 border-t border-border-subtle bg-surface-container-lowest/50 p-xl flex flex-col md:flex-row items-center justify-between gap-xl">
+<div class="flex flex-col gap-sm">
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-[0.2em]">Your Identity Fingerprint</span>
+<div class="flex items-center gap-md">
+<span class="font-mono-code text-mono-code text-secondary px-md py-xs bg-white/5 rounded-lg border border-border-subtle">
+            a1b2:c3d4:e5f6:g7h8:i9j0:k1l2:m3n4:o5p6
+          </span>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-white/5 active:scale-90" title="Copy Fingerprint">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-4xl">
+<div class="flex flex-col items-end">
+<span class="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-[0.2em]">End-to-End Encryption</span>
+<div class="flex items-center gap-sm">
+<span class="font-mono-label text-mono-label text-tertiary bg-tertiary/10 px-2 py-0.5 rounded border border-tertiary/20">AES-256-GCM</span>
+<span class="font-mono-label text-mono-label text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">P-521 ECDH</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-bright/50 border border-border-subtle flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A futuristic professional portrait of a tech-savvy user in a dark room with subtle cyan and indigo background lights. The aesthetic is clean and modern, following the high-end minimalism of a privacy-focused platform. The person has a serious, focused expression, wearing dark minimalist techwear." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAu70YyZm3Vsbv78fXhqIdNLi0VGkDSnCGTKgJLVmSI6ZUtwHDFcToPMpx0KkJtb3AQTmWaPF47rQ8ycnI6CiUsP58b9J36QdcNzjEzY4I0ia2VDYxX7OdqWOMjFt1wZsbkIoxOEuBD96QaLliL-qyDG4_NECxAcz6YJWViYJLmSEW_syttPARw3q9d1Uc-o6qv5Nj8f0cRqO6RCn381jqrEElBkPW3H_BWj4tSVAXmTbkSqkBVYlsWZ4ujQk9qsNjNmO2TfyofDg"/>
+</div>
+</div>
+</footer>
+<!-- Interactive Vault Lock Pulsing Overlay (Atmospheric only) -->
+<div class="absolute bottom-6 left-6 pointer-events-none opacity-20 hidden md:block">
+<div class="w-24 h-24 rounded-full bg-primary/5 blur-3xl animate-pulse"></div>
+</div>
+</main>
+<script>
+    // Simple micro-interaction for the "Generate Invite Link" button
+    document.querySelector('button.bg-primary-container')?.addEventListener('click', function() {
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Generating...';
+      btn.style.opacity = '0.8';
+      
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.opacity = '1';
+        // Logic would normally generate a new link here
+      }, 1200);
+    });
+
+    // Copy to clipboard helper
+    document.querySelectorAll('button .material-symbols-outlined:contains("content_copy")').forEach(btn => {
+      btn.parentElement.addEventListener('click', () => {
+        const icon = btn;
+        const originalIcon = icon.innerText;
+        icon.innerText = 'check';
+        icon.classList.add('text-tertiary');
+        setTimeout(() => {
+          icon.innerText = originalIcon;
+          icon.classList.remove('text-tertiary');
+        }, 1500);
+      });
+    });
+  </script>
+</body></html>

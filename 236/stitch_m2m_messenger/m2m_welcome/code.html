@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>M2M Secure Messenger | Onboarding</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        @font-face {
+            font-family: 'Geist';
+            src: url('https://cdn.jsdelivr.net/npm/geist-font@1.1.0/fonts/geist-sans/Geist-Regular.woff2') format('woff2');
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#33343b",
+                        "error": "#ffb4ab",
+                        "tertiary": "#ffb2b7",
+                        "error-container": "#93000a",
+                        "surface-dim": "#111319",
+                        "on-primary-container": "#0d0096",
+                        "on-tertiary-container": "#5b0017",
+                        "primary": "#c0c1ff",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed-variant": "#92002a",
+                        "tertiary-fixed": "#ffdadb",
+                        "surface-container-low": "#1a1b21",
+                        "inverse-surface": "#e2e2ea",
+                        "on-tertiary-fixed": "#40000d",
+                        "on-secondary-fixed-variant": "#005236",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "surface-tint": "#c0c1ff",
+                        "background": "#030408",
+                        "on-secondary-fixed": "#002113",
+                        "outline": "#908fa0",
+                        "surface-bright": "#373940",
+                        "surface-container-highest": "#33343b",
+                        "secondary-fixed": "#6ffbbe",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-fixed": "#07006c",
+                        "primary-container": "#8083ff",
+                        "secondary-container": "#00a572",
+                        "on-secondary": "#003824",
+                        "on-tertiary": "#67001b",
+                        "outline-variant": "#464554",
+                        "surface": "#111319",
+                        "on-secondary-container": "#00311f",
+                        "inverse-primary": "#494bd6",
+                        "surface-container-lowest": "#0c0e14",
+                        "on-background": "#e2e2ea",
+                        "surface-container": "#1e1f26",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#2f3037",
+                        "tertiary-container": "#ff516a",
+                        "secondary": "#4edea3",
+                        "tertiary-fixed-dim": "#ffb2b7",
+                        "on-primary": "#1000a9",
+                        "on-surface": "#e2e2ea",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-surface-variant": "#c7c4d7",
+                        "surface-container-high": "#282a30",
+                        "primary-fixed": "#e1e0ff",
+                        "brand-indigo": "#6366f1",
+                        "brand-indigo-dark": "#4f46e5"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "button": "18px",
+                        "glass": "24px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px",
+                        "margin-mobile": "16px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter", "sans-serif"],
+                        "mono-code": ["Geist Mono", "monospace"],
+                        "body-md": ["Inter", "sans-serif"],
+                        "headline-xl": ["Inter", "sans-serif"],
+                        "headline-lg-mobile": ["Inter", "sans-serif"],
+                        "headline-lg": ["Inter", "sans-serif"],
+                        "label-caps": ["Inter", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "mono-code": ["13px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-xl": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #030408;
+            background-image: 
+                radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(79, 70, 229, 0.1) 0%, transparent 40%);
+            min-height: 100vh;
+            color: #e2e2ea;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        .glass-container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .step-dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .step-dot.active {
+            background-color: #6366f1;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+            border: none;
+        }
+
+        .step-dot.inactive {
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-indigo-gradient {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-indigo-gradient:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+            filter: brightness(1.1);
+        }
+
+        .btn-indigo-gradient:active {
+            transform: scale(0.98);
+        }
+
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md">
+<!-- Top AppBar (Identity Anchor) -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-gutter py-6 max-w-container-max mx-auto left-0 right-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-lg text-headline-lg tracking-tighter text-primary">M2M</span>
+<div class="h-4 w-[1px] bg-white/20 mx-2"></div>
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Protocol v2.4</span>
+</div>
+<div class="hidden md:flex items-center gap-6">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors">help_outline</span>
+</div>
+</header>
+<main class="flex-grow flex items-center justify-center p-margin-mobile md:p-margin-desktop relative">
+<!-- Subtle Glow Orbs -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-indigo/5 rounded-full blur-[120px] pointer-events-none"></div>
+<div class="max-w-2xl w-full flex flex-col items-center gap-12 z-10">
+<!-- Step Indicator -->
+<div class="flex items-center gap-4">
+<div class="step-dot active"></div>
+<div class="step-dot inactive"></div>
+<div class="step-dot inactive"></div>
+<div class="step-dot inactive"></div>
+</div>
+<!-- Onboarding Card -->
+<div class="glass-container rounded-glass p-8 md:p-12 w-full text-center flex flex-col items-center gap-8 border-white/10">
+<!-- Rocket Emoji / Icon -->
+<div class="w-32 h-32 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-6xl float-animation">
+                    🚀
+                </div>
+<div class="space-y-4">
+<h1 class="font-headline-xl text-headline-xl text-white tracking-tight">
+                        Welcome to M2M
+                    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md mx-auto">
+                        A private, end-to-end encrypted messenger. No servers, no accounts, no tracking. Your communication is sovereign.
+                    </p>
+</div>
+<!-- Code Style Technical Snippet -->
+<div class="w-full bg-surface-container-lowest/50 rounded-xl p-4 border border-white/5 font-mono-code text-mono-code text-secondary text-left overflow-hidden">
+<div class="flex gap-2 mb-2">
+<div class="w-2 h-2 rounded-full bg-error/40"></div>
+<div class="w-2 h-2 rounded-full bg-secondary/40"></div>
+<div class="w-2 h-2 rounded-full bg-primary/40"></div>
+</div>
+<code class="block text-white/40">Initializing secure node...</code>
+<code class="block text-secondary">&gt; RSA_ENCRYPTION_LAYER_ACTIVE</code>
+<code class="block text-primary/70">&gt; NODE_ID: 8F2A...9C1E (VERIFIED)</code>
+</div>
+<!-- Action Button -->
+<button class="w-full md:w-auto px-12 py-5 btn-indigo-gradient rounded-button text-white font-bold text-lg flex items-center justify-center gap-3 group">
+<span>Get Started</span>
+<span class="material-symbols-outlined transition-transform group-hover:translate-x-1">arrow_forward</span>
+</button>
+</div>
+<!-- Footer Muted Info -->
+<div class="flex flex-col items-center gap-2 opacity-40">
+<p class="font-label-caps text-label-caps text-on-surface-variant">SECURE P2P ARCHITECTURE</p>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+<span class="material-symbols-outlined text-[18px]">fingerprint</span>
+<span class="material-symbols-outlined text-[18px]">vpn_lock</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Side Decoration Elements (Hidden on mobile) -->
+<div class="hidden lg:block fixed left-10 top-1/2 -translate-y-1/2 space-y-8 opacity-20">
+<div class="h-24 w-[1px] bg-gradient-to-b from-transparent via-white to-transparent"></div>
+<div class="font-mono-code text-[10px] [writing-mode:vertical-lr] tracking-[0.5em] text-white">ENCRYPTED_FLOW_ACTIVE</div>
+<div class="h-24 w-[1px] bg-gradient-to-b from-transparent via-white to-transparent"></div>
+</div>
+<!-- Micro-interaction Script -->
+<script>
+        document.addEventListener('mousemove', (e) => {
+            const orbs = document.querySelectorAll('.bg-brand-indigo\\/5');
+            orbs.forEach(orb => {
+                const speed = 0.01;
+                const x = (window.innerWidth - e.pageX * speed) / 100;
+                const y = (window.innerHeight - e.pageY * speed) / 100;
+                orb.style.transform = `translate(${x}px, ${y}px)`;
+            });
+        });
+
+        // Simple button active state simulation
+        const startBtn = document.querySelector('.btn-indigo-gradient');
+        startBtn.addEventListener('click', function() {
+            this.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 100);
+        });
+    </script>
+</body></html>

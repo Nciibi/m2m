@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>M2M Secure | Chat Session</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    :root {
+      --glass-bg: rgba(12, 14, 24, 0.82);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-blur: blur(24px);
+    }
+    
+    body {
+      background-color: #030408;
+      background-image: 
+        radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(78, 222, 163, 0.03) 0%, transparent 50%);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .chat-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .chat-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .chat-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+
+    .message-sent {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      box-shadow: 0 4px 15px -3px rgba(99, 102, 241, 0.3);
+    }
+
+    .status-pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .5; transform: scale(1.1); }
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary-fixed": "#002113",
+            "error": "#ffb4ab",
+            "on-tertiary": "#003824",
+            "secondary-fixed-dim": "#bac5f0",
+            "tertiary": "#4edea3",
+            "surface-container-low": "#1a1b21",
+            "tertiary-fixed": "#6ffbbe",
+            "surface-container-lowest": "#0c0e14",
+            "primary-container": "#8083ff",
+            "warning": "#f59e0b",
+            "text-primary": "#f1f5f9",
+            "on-secondary-fixed-variant": "#3a456a",
+            "surface-dim": "#111319",
+            "surface-variant": "#33343b",
+            "on-primary-fixed": "#07006c",
+            "inverse-on-surface": "#2f3037",
+            "surface-tint": "#c0c1ff",
+            "text-muted": "#94a3b8",
+            "error-container": "#93000a",
+            "on-primary-fixed-variant": "#2f2ebe",
+            "on-primary": "#1000a9",
+            "background": "#111319",
+            "on-surface-variant": "#c7c4d7",
+            "on-tertiary-fixed-variant": "#005236",
+            "surface": "rgba(12, 14, 24, 0.82)",
+            "on-tertiary-container": "#000703",
+            "input-bg": "rgba(255, 255, 255, 0.05)",
+            "inverse-primary": "#494bd6",
+            "secondary-container": "#3a456a",
+            "on-error": "#690005",
+            "surface-container-high": "#282a30",
+            "danger": "#ef4444",
+            "on-secondary-fixed": "#0d1a3c",
+            "primary-fixed-dim": "#c0c1ff",
+            "primary-fixed": "#e1e0ff",
+            "on-background": "#e2e2ea",
+            "surface-bright": "#373940",
+            "secondary": "#bac5f0",
+            "outline-variant": "#464554",
+            "outline": "#908fa0",
+            "secondary-fixed": "#dbe1ff",
+            "inverse-surface": "#e2e2ea",
+            "surface-container": "#1e1f26",
+            "tertiary-fixed-dim": "#4edea3",
+            "on-secondary-container": "#a9b4de",
+            "surface-container-highest": "#33343b",
+            "on-surface": "#e2e2ea",
+            "on-primary-container": "#0d0096",
+            "on-error-container": "#ffdad6",
+            "primary": "#c0c1ff",
+            "elevated": "rgba(28, 30, 44, 0.7)",
+            "border-subtle": "rgba(255, 255, 255, 0.08)",
+            "tertiary-container": "#00885d",
+            "text-secondary": "#cbd5e1",
+            "on-secondary": "#242f52"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "gutter": "16px",
+            "sm": "8px",
+            "xs": "4px",
+            "lg": "16px",
+            "2xl": "32px",
+            "md": "12px",
+            "4xl": "64px",
+            "xl": "24px",
+            "container-max": "1000px",
+            "3xl": "48px"
+          },
+          "fontFamily": {
+            "label-sm": ["Inter"],
+            "headline-3xl": ["Inter"],
+            "headline-4xl": ["Inter"],
+            "body-base": ["Inter"],
+            "body-xl": ["Inter"],
+            "mono-code": ["JetBrains Mono"],
+            "body-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-2xl": ["Inter"],
+            "label-xs": ["Inter"],
+            "mono-label": ["JetBrains Mono"]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="flex items-center justify-center p-xl">
+<main class="w-full max-w-[1000px] h-[870px] flex flex-col glass-panel rounded-xl overflow-hidden shadow-[0_25px_80px_rgba(0,0,0,0.7)] relative">
+<!-- HEADER -->
+<header class="flex items-center justify-between px-xl py-md bg-surface/40 border-b border-white/5 backdrop-blur-md z-20">
+<div class="flex items-center gap-md">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-text-muted hover:bg-white/5 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<div class="flex items-center gap-sm px-md py-1.5 rounded-lg bg-white/5 border border-white/5">
+<span class="material-symbols-outlined text-outline text-[20px]" data-icon="shield">shield</span>
+<div class="flex flex-col">
+<span class="font-body-md text-text-primary leading-tight">Encrypted Session</span>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary status-pulse shadow-[0_0_8px_#4edea3]"></span>
+<span class="font-label-xs text-text-muted">Peer Online</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="hidden md:flex flex-col items-end mr-4">
+<span class="font-mono-label text-tertiary text-[10px]">AES-256 GCM</span>
+<span class="font-mono-label text-outline text-[10px]">DH-EXCHANGE: VERIFIED</span>
+</div>
+<button class="px-lg py-sm rounded-lg font-label-sm text-text-primary bg-white/5 border border-white/10 hover:border-danger hover:text-danger hover:bg-danger/10 transition-all duration-300">
+          Disconnect
+        </button>
+</div>
+</header>
+<!-- MESSAGE AREA -->
+<section class="flex-1 overflow-y-auto chat-scrollbar px-xl py-xl space-y-xl relative">
+<!-- Date Separator -->
+<div class="flex items-center justify-center gap-md py-4">
+<div class="h-[1px] flex-1 bg-white/5"></div>
+<span class="font-mono-label text-text-muted text-[11px] uppercase tracking-widest">─── Today ───</span>
+<div class="h-[1px] flex-1 bg-white/5"></div>
+</div>
+<!-- Received Message -->
+<div class="flex flex-col items-start max-w-[80%] group">
+<div class="px-lg py-md rounded-[18px] rounded-bl-[4px] glass-panel bg-white/[0.03] text-on-surface-variant font-body-base leading-relaxed">
+          The cryptographic handshake is complete. Our keys have been rotated successfully. All subsequent packets are now routed through the obsidian relay.
+        </div>
+<div class="flex items-center gap-md mt-sm px-sm">
+<span class="font-label-xs text-text-muted/60">12:31 PM</span>
+<div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-[10px] hover:bg-white/10 transition-colors">👍 2</button>
+</div>
+</div>
+</div>
+<!-- Sent Message -->
+<div class="flex flex-col items-end ml-auto max-w-[80%] group">
+<div class="px-lg py-md rounded-[18px] rounded-br-[4px] message-sent text-white font-body-base leading-relaxed">
+          Understood. I'm initializing the data transfer now. Let me know if you see any latency spikes in the metadata monitoring panel.
+        </div>
+<div class="flex items-center gap-md mt-sm px-sm">
+<div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-[10px] hover:bg-white/10 transition-colors">❤️ 1</button>
+</div>
+<div class="flex items-center gap-1">
+<span class="font-label-xs text-text-muted/60">12:30 PM</span>
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="done_all">done_all</span>
+</div>
+</div>
+</div>
+<!-- Sent Message Short -->
+<div class="flex flex-col items-end ml-auto max-w-[80%]">
+<div class="px-lg py-md rounded-[18px] rounded-br-[4px] message-sent text-white font-body-base leading-relaxed">
+          Transfer initiated. ⚡
+        </div>
+<div class="flex items-center gap-1 mt-sm px-sm">
+<span class="font-label-xs text-text-muted/60">12:32 PM</span>
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="done">done</span>
+</div>
+</div>
+<!-- Received Message with Reaction -->
+<div class="flex flex-col items-start max-w-[80%] group">
+<div class="px-lg py-md rounded-[18px] rounded-bl-[4px] glass-panel bg-white/[0.03] text-on-surface-variant font-body-base leading-relaxed">
+          Received. The integrity check passed.
+        </div>
+<div class="flex items-center gap-sm mt-1">
+<div class="px-2 py-0.5 rounded-full glass-panel bg-white/[0.05] border-white/10 text-[10px] flex items-center gap-1">
+<span>👍</span> <span class="font-bold text-tertiary">2</span>
+</div>
+<div class="px-2 py-0.5 rounded-full glass-panel bg-white/[0.05] border-white/10 text-[10px] flex items-center gap-1">
+<span>❤️</span> <span class="font-bold text-primary">1</span>
+</div>
+</div>
+<span class="font-label-xs text-text-muted/60 mt-sm px-sm">12:33 PM</span>
+</div>
+<!-- Scroll to bottom FAB -->
+<button class="absolute bottom-4 right-8 w-10 h-10 rounded-full message-sent flex items-center justify-center text-white shadow-xl hover:scale-110 active:scale-95 transition-all animate-bounce">
+<span class="material-symbols-outlined" data-icon="arrow_downward">arrow_downward</span>
+</button>
+</section>
+<!-- INPUT AREA -->
+<footer class="px-xl py-lg bg-surface-container-lowest/80 border-t border-white/5 backdrop-blur-2xl">
+<div class="flex items-end gap-md glass-panel p-2 rounded-xl bg-white/[0.03]">
+<div class="flex items-center gap-1 self-center pb-2 pl-1">
+<button class="w-9 h-9 rounded-lg flex items-center justify-center text-text-muted hover:bg-white/10 hover:text-primary transition-all">
+<span class="material-symbols-outlined" data-icon="attach_file">attach_file</span>
+</button>
+<button class="w-9 h-9 rounded-lg flex items-center justify-center text-text-muted hover:bg-white/10 hover:text-primary transition-all">
+<span class="material-symbols-outlined" data-icon="mood">mood</span>
+</button>
+</div>
+<div class="flex-1 relative">
+<textarea class="w-full bg-transparent border-0 focus:ring-0 text-text-primary placeholder:text-text-muted/50 py-3 resize-none font-body-md overflow-hidden" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" placeholder="Type a secure message…" rows="1"></textarea>
+</div>
+<div class="flex items-center gap-md pb-1.5 pr-1">
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 text-text-muted hover:text-primary hover:border-primary/30 transition-all">
+<span class="material-symbols-outlined text-[18px]" data-icon="timer">timer</span>
+<span class="font-mono-label text-[10px]">OFF</span>
+</button>
+<button class="w-10 h-10 rounded-lg message-sent flex items-center justify-center text-white hover:brightness-110 active:scale-95 transition-all shadow-lg">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+</button>
+</div>
+</div>
+<!-- BOTTOM BAR -->
+<div class="flex items-center justify-between mt-md px-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="lock" style="font-variation-settings: 'FILL' 1;">lock</span>
+<span class="font-mono-label text-[10px] text-text-muted/60 uppercase tracking-tighter">End-to-end encrypted</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-mono-label text-[10px] text-text-muted/40 uppercase tracking-tighter">Ctrl+Enter to send</span>
+<span class="font-mono-label text-[10px] text-text-muted/40 uppercase tracking-tighter">Esc to go back</span>
+</div>
+</div>
+</footer>
+<!-- Background Decorative Shader Element -->
+<div class="absolute inset-0 pointer-events-none opacity-20 -z-10 overflow-hidden">
+
+</div>
+</main>
+<script>
+    // Micro-interaction for the textarea auto-expand
+    const textarea = document.querySelector('textarea');
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        // Logical send action placeholder
+        console.log('Sending message:', textarea.value);
+        textarea.value = '';
+        textarea.style.height = 'auto';
+      }
+    });
+
+    // Simulated Atmosphere: Random activity dots
+    const statusDot = document.querySelector('.status-pulse');
+    setInterval(() => {
+      statusDot.classList.toggle('bg-tertiary');
+      statusDot.classList.toggle('bg-primary');
+    }, 15000);
+  </script>
+</body></html>
