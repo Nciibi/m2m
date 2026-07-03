@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ToastContainer } from "../components/ui";
+import { ToastContainer, NoChatsIllustration, RadarIllustration } from "../components/ui";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import FamilyTab from "../components/FamilyTab";
