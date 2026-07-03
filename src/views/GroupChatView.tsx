@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ToastContainer } from "../components/ui";
 import { useApp } from "../context/AppContext";
-import type { GroupInfo, GroupDetail, GroupMember, ChatMessage } from "../types";
+import type { GroupInfo, GroupDetail, ChatMessage } from "../types";
 
 export default function GroupChatView() {
   const { toasts, removeToast, addToast, setView } = useApp();
