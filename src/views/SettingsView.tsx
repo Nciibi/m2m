@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, Input, Badge, ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
-import Sidebar from "../components/Sidebar";
+import { ToastContainer } from "../components/ui";
+import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon, RefreshIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useTheme } from "../context/ThemeContext";
@@ -23,331 +22,301 @@ export default function SettingsView() {
     handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
     scheduleClipboardClear,
   } = useSettings();
+  
   const [fpCopied, setFpCopied] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
+  const [activeSection, setActiveSection] = useState("identity");
 
   const onBackToHub = () => setView("hub");
 
+  // Scroll spy effect could go here, for simplicity we just map clicks to sections
+  const scrollToSection = (id: string) => {
+    setActiveSection(id);
+    document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const navItems = [
+    { id: 'identity', icon: 'fingerprint', label: 'Identity' },
+    { id: 'security', icon: 'security', label: 'Security' },
+    { id: 'network', icon: 'router', label: 'Network & Discovery' },
+    { id: 'appearance', icon: 'palette', label: 'Appearance' },
+    { id: 'about', icon: 'info', label: 'About M2M' },
+  ];
+
   return (
-    <div className="app-shell">
-      <Sidebar currentView="settings" onNavigate={setView} />
-      <div className="app-main">
-      <div className="app-header">
-        <h1 className="app-header__title">
-          <span className="app-header__icon-bg app-header__icon-bg--accent">
-            <GearIcon size={18} color="white" />
-          </span>
-          Settings
-        </h1>
-        <div className="app-header__actions">
-          <Button variant="secondary" size="sm" onClick={onBackToHub}><ArrowLeftIcon size={16} /> Hub</Button>
-        </div>
-      </div>
+    <div style={{ display: 'flex', width: '100%', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-dark)', overflow: 'hidden' }}>
+      
+      <main className="app-shell" style={{ maxWidth: '1000px', flexDirection: 'column' }}>
+        
+        {/* Settings Header */}
+        <header style={{ height: '64px', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', flexShrink: 0, background: 'rgba(255, 255, 255, 0.02)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--color-text-primary)' }}>settings</span>
+            </div>
+            <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>Settings</h1>
+          </div>
+          <button onClick={onBackToHub} style={{ background: 'var(--color-primary)', color: 'var(--color-bg-dark)', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}>
+            Done
+          </button>
+        </header>
 
-      <div className="app-content settings-content">
-        {/* ─── Identity ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">Identity</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label">Fingerprint</span>
-              <span className="settings-mono">{identity?.fingerprint || "—"}</span>
-              <button className="btn btn--ghost btn--icon-sm" onClick={() => {
-                if (identity?.fingerprint) {
-                  navigator.clipboard.writeText(identity.fingerprint);
-                  setFpCopied(true);
-                  setTimeout(() => setFpCopied(false), 2000);
-                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
-                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
-                  }
-                }
-              }} aria-label="Copy fingerprint">
-                {fpCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+        {/* Two-Column Content */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          
+          {/* Local Sidebar */}
+          <nav style={{ width: '240px', borderRight: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', gap: '4px', padding: '24px 12px', flexShrink: 0, overflowY: 'auto' }}>
+            {navItems.map(item => (
+              <button 
+                key={item.id}
+                onClick={() => scrollToSection(item.id)}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '8px', 
+                  background: activeSection === item.id ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                  color: activeSection === item.id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: activeSection === item.id ? 600 : 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{item.icon}</span>
+                {item.label}
               </button>
-            </div>
-            <div className="settings-row">
-              <span className="settings-label">Public Key</span>
-              <span className="settings-mono settings-mono--truncate">{identity?.public_key_hex || "—"}</span>
-            </div>
-          </div>
-        </section>
+            ))}
+          </nav>
 
-        {/* ─── Network ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">Network</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label">Public IP</span>
-              <span className="settings-mono">{publicIp || "Not yet discovered"}</span>
-              {publicIp && (
-                <button className="btn btn--ghost btn--icon-sm" onClick={() => {
-                  navigator.clipboard.writeText(publicIp);
-                  setIpCopied(true);
-                  setTimeout(() => setIpCopied(false), 2000);
-                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
-                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
-                  }
-                }} aria-label="Copy IP">
-                  {ipCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-                </button>
-              )}
-              <Button size="xs" onClick={handleStunDiscover} loading={stunLoading}>Discover via STUN</Button>
-            </div>
-
-            {networkDiagnostics && (
-              <>
-                <div className="settings-row">
-                  <span className="settings-label">NAT Type</span>
-                  <Badge variant={(["FullCone", "RestrictedCone", "PortRestrictedCone"]).includes(networkDiagnostics.nat_type) ? "success" : "warning"}>
-                    {networkDiagnostics.nat_type}
-                  </Badge>
-                </div>
-                <div className="settings-row">
-                  <span className="settings-label">STUN Servers</span>
-                  <span>{networkDiagnostics.stun_servers?.filter(s => s.reachable).length ?? 0}/{networkDiagnostics.stun_servers?.length ?? 0} reachable</span>
-                </div>
-              </>
-            )}
-
-            <div className="settings-divider" />
-
-            <div className="settings-row">
-              <span className="settings-label">Private Mode</span>
-              <label className="toggle">
-                <input type="checkbox" checked={privateMode} onChange={handlePrivateModeToggle} aria-label="Toggle private mode" />
-                <span className="toggle-slider" />
-              </label>
-              <span className="settings-hint">Hide IP from invites</span>
-            </div>
-
-            <div className="settings-row">
-              <span className="settings-label">Tor</span>
-              <label className="toggle">
-                <input type="checkbox" checked={torEnabled} onChange={async () => { await handleTorToggle(); setTorEnabled(!torEnabled); }} aria-label="Toggle Tor" />
-                <span className="toggle-slider" />
-              </label>
-              <span className="settings-hint">Route connections via Tor</span>
-              <Button size="xs" variant="secondary" onClick={async () => {
-                addToast("Testing Tor…", "info");
-                try {
-                  const result = await invoke<any>("check_connectivity");
-                  const torOk = result?.tor_reachable ?? result?.tor ?? false;
-                  addToast(torOk ? "Tor ✓" : "Tor not reachable via current proxy", torOk ? "success" : "warning");
-                } catch (e) {
-                  addToast("Tor test unavailable: " + e, "warning");
-                }
-              }}>Test Tor</Button>
-            </div>
-
-            <div className="settings-divider" />
-
-            <div className="settings-row">
-              <span className="settings-label">Connectivity</span>
-              <Button size="xs" onClick={handleConnectivityCheck}>Check</Button>
-            </div>
-            {connectivityResult && (
-              <div className="settings-row">
-                <span className="settings-label">Result</span>
-                <span className="settings-mono">{JSON.stringify(connectivityResult)}</span>
+          {/* Scrolling Content Area */}
+          <div style={{ flex: 1, padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '40px' }} onScroll={(e) => {
+            // Simple scroll spy logic can be implemented here if needed.
+          }}>
+            
+            {/* Identity Section */}
+            <section id="section-identity" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Identity</h2>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Your cryptographic identity and fingerprint.</p>
               </div>
-            )}
-          </div>
-        </section>
-
-        {/* ─── Discovery ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">Discovery</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label"><WifiIcon size={16} /> LAN Discovery</span>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={discoveryConfig?.lan_enabled ?? false}
-                  onChange={handleLanToggle}
-                  aria-label="Toggle LAN discovery"
-                />
-                <span className="toggle-slider" />
-              </label>
-              <span className="settings-hint">Broadcast presence on local WiFi</span>
-            </div>
-
-            <div className="settings-row">
-              <span className="settings-label"><GlobeIcon size={16} /> DHT Discovery</span>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={discoveryConfig?.dht_enabled ?? false}
-                  onChange={handleDhtToggle}
-                  aria-label="Toggle DHT discovery"
-                />
-                <span className="toggle-slider" />
-              </label>
-              <span className="settings-hint">Discover peers via DHT network</span>
-            </div>
-
-            <div className="settings-row">
-              <span className="settings-label">Discovered Peers</span>
-              <span>{discoveredPeers.length} found</span>
-              <Button size="xs" variant="secondary" onClick={handleRefreshDiscovery}>Refresh</Button>
-            </div>
-
-            <div className="settings-divider" />
-
-            <p className="text-muted text-sm">
-              ⚠️ Both are <strong>OFF by default</strong> for privacy. When enabled,
-              your IP address is visible to observers on the discovery channel.
-              Ephemeral IDs are used (not your permanent identity key) and
-              rotate periodically.
-            </p>
-          </div>
-        </section>
-
-        {/* ─── Security ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">Security</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label"><EyeOffIcon size={16} /> Screen Capture Protection</span>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={securityConfig?.screen_capture_protection ?? false}
-                  onChange={handleScreenCaptureToggle}
-                  aria-label="Toggle screen capture protection"
-                />
-                <span className="toggle-slider" />
-              </label>
-              <span className="settings-hint">Prevent window from appearing in screenshots</span>
-            </div>
-
-            <div className="settings-row">
-              <span className="settings-label">Clipboard Auto-Clear</span>
-              <select className="select--compact"
-                value={securityConfig?.clipboard_clear_secs ?? 0}
-                onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))}
-                aria-label="Clipboard auto-clear timeout"
-              >
-                <option value={0}>Off</option>
-                <option value={5}>5s</option>
-                <option value={10}>10s</option>
-                <option value={30}>30s</option>
-                <option value={60}>1m</option>
-              </select>
-              <span className="settings-hint">Auto-clear clipboard after copying sensitive data</span>
-            </div>
-
-            <div className="settings-row">
-              <span className="settings-label">Idle Vault Lock</span>
-              <select className="select--compact"
-                value={securityConfig?.idle_lock_secs ?? 0}
-                onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))}
-                aria-label="Idle vault lock timeout"
-              >
-                <option value={0}>Off</option>
-                <option value={60}>1m</option>
-                <option value={300}>5m</option>
-                <option value={600}>10m</option>
-                <option value={1800}>30m</option>
-              </select>
-              <span className="settings-hint">Auto-lock vault after inactivity</span>
-            </div>
-
-            <div className="settings-divider" />
-
-            <div className="settings-row">
-              <span className="settings-label"><LockIcon size={16} /> Vault</span>
-              <Button variant="secondary" size="xs" onClick={handleLockVault}>Lock Now</Button>
-              <Button variant="secondary" size="xs" onClick={handleClearClipboard}>Clear Clipboard</Button>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── STUN Servers ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">STUN Servers</h2>
-          <div className="settings-card">
-            <div className="stun-server-list">
-              {(stunConfig?.servers || []).map((srv, i) => {
-                // Find health info from diagnostics
-                const diagServer = networkDiagnostics?.stun_servers?.find((d: any) => srv.includes(d.server) || d.server.includes(srv));
-                const isHealthy = diagServer?.reachable;
-                return (
-                <div key={i} className="stun-server-item">
-                  <div className="stun-health-item">
-                    <span className={`stun-badge stun-badge--${isHealthy === true ? 'ok' : isHealthy === false ? 'fail' : 'unknown'}`}>
-                      {isHealthy === true ? "OK" : isHealthy === false ? "FAIL" : "?"}
-                    </span>
-                    <span className="stun-health-item__server">{srv}</span>
-                    {diagServer?.rtt_ms && <span className="stun-health-item__rtt">{diagServer.rtt_ms}ms</span>}
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Fingerprint</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-primary)', marginTop: '4px' }}>{identity?.fingerprint || "—"}</div>
                   </div>
-                  <button className="btn btn--icon btn--icon-sm" onClick={() => handleRemoveStunServer(i)} aria-label="Remove STUN server"><CloseIcon size={14} /></button>
+                  <button className="icon-btn" onClick={() => {
+                    if (identity?.fingerprint) {
+                      navigator.clipboard.writeText(identity.fingerprint);
+                      setFpCopied(true);
+                      setTimeout(() => setFpCopied(false), 2000);
+                    }
+                  }}>
+                    {fpCopied ? <CheckIcon size={20} color="var(--color-success)" /> : <CopyIcon size={20} />}
+                  </button>
                 </div>
-                );
-              })}
-            </div>
-            <div className="settings-row">
-              <Input placeholder="host:port" value={stunServerInput} onChange={e => setStunServerInput(e.target.value)} compact mono clearable onClear={() => setStunServerInput("")} />
-              <Button size="xs" onClick={handleAddStunServer} disabled={!stunServerInput.trim()}>Add</Button>
-              <Button variant="secondary" size="xs" onClick={handleResetStunDefaults}>Reset</Button>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── Theme ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">Theme</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label">Appearance</span>
-              <div className="theme-selector">
-                <button className={`btn btn--icon btn--icon-sm ${theme === 'light' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('light')} aria-label="Light theme" title="Light">
-                  <SunIcon size={18} />
-                </button>
-                <button className={`btn btn--icon btn--icon-sm ${theme === 'dark' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('dark')} aria-label="Dark theme" title="Dark">
-                  <MoonIcon size={18} />
-                </button>
-                <button className={`btn btn--icon btn--icon-sm ${theme === 'system' ? 'btn--icon-copied' : ''}`} onClick={() => setTheme('system')} aria-label="System theme" title="System">
-                  <MonitorIcon size={18} />
-                </button>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Public Key</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{identity?.public_key_hex || "—"}</div>
+                  </div>
+                </div>
               </div>
-              <span className="settings-hint">Current: {resolvedTheme}</span>
-            </div>
-            <div className="settings-divider" />
-            <div className="settings-row">
-              <span className="settings-label">Accent Color</span>
-              <input
-                type="color"
-                value={accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-                className="color-picker"
-                aria-label="Accent color"
-              />
-              <span className="settings-mono settings-mono--sm">{accentColor}</span>
-              <Button size="xs" variant="secondary" onClick={() => setAccentColor("#6366f1")}>Reset</Button>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        {/* ─── About ─── */}
-        <section className="settings-section">
-          <h2 className="settings-section__title">About</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <span className="settings-label">Version</span>
-              <span>2.5.x</span>
-            </div>
-            <div className="settings-row">
-              <span className="settings-label">Crypto</span>
-              <span className="text-muted text-sm">Ed25519 · X25519 · XChaCha20-Poly1305 · X3DH · Double Ratchet</span>
-            </div>
-          </div>
-        </section>
-      </div>
+            {/* Security Section */}
+            <section id="section-security" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Security</h2>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Protect your local vault and application data.</p>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-danger)' }}>visibility_off</span>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Screen Capture Protection</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Prevent window from appearing in screenshots</div>
+                    </div>
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={securityConfig?.screen_capture_protection ?? false} onChange={handleScreenCaptureToggle} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
 
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Clipboard Auto-Clear</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Clear sensitive data from clipboard after delay</div>
+                  </div>
+                  <select className="select--compact" value={securityConfig?.clipboard_clear_secs ?? 0} onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '8px', outline: 'none' }}>
+                    <option value={0}>Off</option>
+                    <option value={5}>5s</option>
+                    <option value={10}>10s</option>
+                    <option value={30}>30s</option>
+                    <option value={60}>1m</option>
+                  </select>
+                </div>
+
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Idle Vault Lock</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Auto-lock after inactivity</div>
+                  </div>
+                  <select className="select--compact" value={securityConfig?.idle_lock_secs ?? 0} onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '8px', outline: 'none' }}>
+                    <option value={0}>Off</option>
+                    <option value={60}>1m</option>
+                    <option value={300}>5m</option>
+                    <option value={600}>10m</option>
+                    <option value={1800}>30m</option>
+                  </select>
+                </div>
+
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button onClick={handleLockVault} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Lock Vault Now</button>
+                    <button onClick={handleClearClipboard} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Clear Clipboard</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Network Section */}
+            <section id="section-network" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Network & Discovery</h2>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Configure how you connect to peers.</p>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Private Mode</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Hide IP from generated invites</div>
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={privateMode} onChange={handlePrivateModeToggle} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Tor Routing</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Route outbound connections via Tor (requires restart)</div>
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={torEnabled} onChange={async () => { await handleTorToggle(); setTorEnabled(!torEnabled); }} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-success)' }}>wifi</span>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>LAN Discovery</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Broadcast presence on local network</div>
+                    </div>
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={discoveryConfig?.lan_enabled ?? false} onChange={handleLanToggle} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-warning)' }}>public</span>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>DHT Discovery</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Discover peers globally via DHT</div>
+                    </div>
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={discoveryConfig?.dht_enabled ?? false} onChange={handleDhtToggle} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+
+                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Public IP Check</div>
+                    <button onClick={handleStunDiscover} disabled={stunLoading} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' }}>
+                      {stunLoading ? 'Checking...' : 'Check Now'}
+                    </button>
+                  </div>
+                  {publicIp && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.05)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                      Detected IP: {publicIp}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </section>
+
+            {/* Appearance Section */}
+            <section id="section-appearance" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Appearance</h2>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Customize the visual style of M2M.</p>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Theme Preference</div>
+                  </div>
+                  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '4px', gap: '4px' }}>
+                    <button onClick={() => setTheme('light')} style={{ background: theme === 'light' ? 'rgba(255,255,255,0.1)' : 'transparent', color: theme === 'light' ? 'white' : 'var(--color-text-muted)', border: 'none', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                      <SunIcon size={14} /> Light
+                    </button>
+                    <button onClick={() => setTheme('dark')} style={{ background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'transparent', color: theme === 'dark' ? 'white' : 'var(--color-text-muted)', border: 'none', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                      <MoonIcon size={14} /> Dark
+                    </button>
+                    <button onClick={() => setTheme('system')} style={{ background: theme === 'system' ? 'rgba(255,255,255,0.1)' : 'transparent', color: theme === 'system' ? 'white' : 'var(--color-text-muted)', border: 'none', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                      <MonitorIcon size={14} /> Auto
+                    </button>
+                  </div>
+                </div>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Accent Color</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-text-muted)' }}>{accentColor}</span>
+                    <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} style={{ width: '32px', height: '32px', border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }} />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* About Section */}
+            <section id="section-about" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>About M2M</h2>
+                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>System information and version.</p>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Version</div>
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>2.5.x (Obsidian Prism)</div>
+                </div>
+                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Cryptographic Stack</div>
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: '13px', textAlign: 'right' }}>Ed25519 · X25519<br/>XChaCha20-Poly1305 · Double Ratchet</div>
+                </div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      </div>
     </div>
   );
 }
