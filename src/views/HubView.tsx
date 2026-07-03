@@ -4,7 +4,7 @@ import { ToastContainer } from "../components/ui";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import FamilyTab from "../components/FamilyTab";
-import type { FamilyMember } from "../types";
+import type { FamilyMember, ConnectionInfo } from "../types";
 import { formatTime } from "../utils";
 
 export default function HubView() {
