@@ -44,7 +44,7 @@ export default function ChatView() {
   const grouped = groupByDate(messages);
 
   return (
-    <main className="chat-glass-card w-full max-w-container-max h-[100dvh] md:h-[962px] md:my-auto md:rounded-[32px] flex flex-col relative z-10 overflow-hidden mx-auto shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] border border-white/5 bg-surface/60 backdrop-blur-[60px] saturate-[1.2]">
+    <main className="premium-glass-card w-full h-full flex flex-col relative z-10">
       {/* HEADER (52px) */}
       <header className="h-[52px] min-h-[52px] flex justify-between items-center px-xl border-b border-white/5 bg-surface/80 backdrop-blur-3xl shrink-0">
         <div className="flex items-center gap-md">
