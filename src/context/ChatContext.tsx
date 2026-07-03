@@ -581,7 +581,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unlistenMsg.then((f) => f());
       unlistenConn.then((f) => f());
       unlistenFileReq.then((f) => f());
-      unlistenFileComp.then((f) => f());
+      unlistenFileProgress.then((f) => f());
+      unlistenFileCompleted.then((f) => f());
+      unlistenFileError.then((f) => f());
+      unlistenFileCancelled.then((f) => f());
       unlistenConvMeta.then((f) => f());
       unlistenReaction.then((f) => f());
       unlistenEdit.then((f) => f());
@@ -589,7 +592,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       unlistenDelete.then((f) => f());
       unlistenTyping.then((f) => f());
     };
-  }, [setView, notifPermission, activeConversationId, mutedConversations]);
+  }, [setView, notifPermission, activeConversationId, mutedConversations, addToast]);
 
   return (
     <ChatContext.Provider value={{
