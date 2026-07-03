@@ -98,7 +98,7 @@ export default function SetupView() {
               </button>
             ) : (
               <button 
-                onClick={async () => { try { await invoke("set_first_run_complete"); } catch {} window.location.reload(); }}
+                onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err: any) { alert(typeof err === "string" ? err : "Failed to finalize setup"); } }}
                 className="premium-btn w-full py-md rounded-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] group/btn"
               >
                 <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-[0.03] transition-opacity"></div>
