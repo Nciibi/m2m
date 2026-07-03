@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "./AppContext";
 import type {
-  ConnectionInfo, ChatMessage, FileRequest, ConversationEntry,
+  ConnectionInfo, ChatMessage, FileRequest, ConversationEntry, TransferProgress,
 } from "../types";
 
 interface ChatContextValue {
