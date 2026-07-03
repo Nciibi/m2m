@@ -326,6 +326,13 @@ export default function HubView() {
                         </div>
                         <p className="text-body-base text-on-surface-variant truncate">{c.last_message_preview || "No messages yet."}</p>
                       </div>
+                      {c.unread_count && c.unread_count > 0 ? (
+                        <div className="flex items-center gap-sm">
+                          <span className="bg-primary text-on-primary text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                            {c.unread_count > 99 ? "99+" : c.unread_count}
+                          </span>
+                        </div>
+                      ) : null}
                       <div className="hidden group-hover:flex items-center gap-sm">
                         <button
                           className="text-on-surface-variant hover:text-danger transition-colors p-1 rounded-lg hover:bg-input-bg"
