@@ -47,7 +47,7 @@ export default function VaultView() {
   return (
     <main className="relative z-10 px-gutter w-full flex justify-center items-center min-h-screen">      
       {/* Unlock Vault Card */}
-      <div className="max-w-[380px] w-full rounded-3xl p-xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] border border-white/5 bg-surface/60 backdrop-blur-[60px] saturate-[1.2] flex flex-col items-center animate-in fade-in zoom-in-95 duration-500 relative overflow-hidden group">
+      <div className="premium-glass-card max-w-[380px] w-full p-xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-500 relative group">
         <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
         {/* Icon Container */}
         <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-xl animate-pulse">
@@ -110,17 +110,17 @@ export default function VaultView() {
 
           <button 
             disabled={loading || (!vaultInitialized && (passphrase !== passphraseConfirm || passphrase.length < 12))}
-            className="w-full h-14 rounded-xl text-on-primary-container bg-gradient-to-r from-primary-container to-inverse-primary font-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] disabled:opacity-50 disabled:cursor-not-allowed group/btn relative overflow-hidden" 
+            className="premium-btn w-full h-14 rounded-xl text-on-primary-container bg-gradient-to-r from-primary-container to-inverse-primary font-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] disabled:opacity-50 disabled:cursor-not-allowed group/btn" 
             type="submit"
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-[0.03] transition-opacity"></div>
             {loading ? (
               <>
-                <span className="material-symbols-outlined animate-spin text-[20px]">sync</span>
-                <span className="ml-2">{vaultInitialized ? "Decrypting..." : "Generating Keys..."}</span>
+                <span className="material-symbols-outlined animate-spin text-[20px] relative z-10">sync</span>
+                <span className="ml-2 relative z-10">{vaultInitialized ? "Decrypting..." : "Generating Keys..."}</span>
               </>
             ) : (
-              vaultInitialized ? "Unlock Enclave" : "Initialize Enclave"
+              <span className="relative z-10">{vaultInitialized ? "Unlock Enclave" : "Initialize Enclave"}</span>
             )}
           </button>
         </form>
