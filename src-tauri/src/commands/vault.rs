@@ -245,8 +245,11 @@ pub async fn unlock_vault(
             let xkp = crate::crypto::X25519IdentityKeypair::generate();
             let x_sk_bytes = xkp.secret_key_bytes();
             let x_pub = xkp.public_key_bytes();
-            let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, &new_key, util::AAD_KEY_STORE)
+            let sk_ref = state.storage_key.read().await;
+            let current_key = sk_ref.as_ref().ok_or("storage key not set")?;
+            let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, current_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to encrypt X25519 key: {e}"))?;
+            drop(sk_ref);
             key_store.store_x25519_key(&x_pub, &x_enc, &x_nonce)
                 .map_err(|e| format!("failed to store X25519 key: {e}"))?;
             {

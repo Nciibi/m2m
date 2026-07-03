@@ -86,7 +86,7 @@ export default function VaultView() {
               : "Create a strong passphrase to encrypt your identity."}
           </p>
           <div className="pt-sm">
-            <span className="font-mono-label text-label-xs bg-white/5 px-2 py-1 rounded-md text-text-muted border border-white/5">
+            <span className="font-mono-label text-label-xs bg-input-bg px-2 py-1 rounded-md text-text-muted border border-border-subtle">
               {vaultInitialized ? "Argon2id · AES-256-GCM" : "Minimum 12 chars · Argon2id"}
             </span>
           </div>
@@ -101,7 +101,7 @@ export default function VaultView() {
             </label>
             <div className="relative">
               <input
-                className="w-full bg-input-bg border border-white/10 rounded-xl px-lg py-md pr-12 font-mono-code text-body-lg text-primary placeholder:text-text-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-300"
+                className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md pr-12 font-mono-code text-body-lg text-primary placeholder:text-text-muted/30 focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-300"
                 id="passphrase"
                 placeholder="••••••••••••"
                 required
@@ -129,7 +129,7 @@ export default function VaultView() {
                 Confirm Passphrase
               </label>
               <input
-                className="w-full bg-input-bg border border-white/10 rounded-xl px-lg py-md font-mono-code text-body-lg text-primary placeholder:text-text-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all duration-300"
+                className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md font-mono-code text-body-lg text-primary placeholder:text-text-muted/30 focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-300"
                 placeholder="Re-enter passphrase"
                 required
                 autoComplete="new-password"
@@ -141,7 +141,7 @@ export default function VaultView() {
               {/* Entropy bar */}
               {passphrase.length > 0 && (
                 <div className="space-y-xs pt-xs">
-                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-input-bg rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{ width: `${Math.min(100, (entropy / 80) * 100)}%`, background: entropyColor }}
