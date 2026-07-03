@@ -77,14 +77,14 @@ export default function HubView() {
   };
 
   return (
-    <main className="glass-panel w-full max-w-container-max h-[100dvh] md:h-[962px] md:my-auto md:rounded-[32px] flex flex-col relative z-10 overflow-hidden mx-auto shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] border border-white/5 bg-surface/60 backdrop-blur-[60px] saturate-[1.2]">
+    <main className="premium-glass-card w-full max-w-container-max h-[100dvh] md:h-[962px] md:my-auto flex flex-col relative z-10 mx-auto">
       {/* Header */}
       <header className="h-[64px] px-xl flex items-center justify-between border-b border-border-subtle shrink-0 bg-surface/80 backdrop-blur-3xl">
         <div className="flex items-center gap-md">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary-container to-inverse-primary flex items-center justify-center shadow-lg shadow-primary-container/20">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary-container to-inverse-primary flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.5)]">
             <span className="material-symbols-outlined text-white text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
           </div>
-          <span className="font-headline-2xl text-headline-2xl font-extrabold tracking-tight text-on-surface">M2M</span>
+          <span className="font-headline-2xl text-headline-2xl font-extrabold tracking-tight animate-text-shimmer">M2M</span>
         </div>
         <div className="flex items-center gap-lg">
           <div className="flex items-center gap-sm bg-surface-container-low/50 px-md py-xs rounded-full border border-border-subtle">
@@ -135,9 +135,9 @@ export default function HubView() {
                   <p className="font-body-md text-body-md text-on-surface-variant">Create a secure link for others to join.</p>
                 </div>
               </div>
-              <button onClick={handleGenerateInvite} className="w-full py-md px-xl bg-gradient-to-r from-primary-container to-inverse-primary text-on-primary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] mb-xl border border-white/10 group">
-                <span className="material-symbols-outlined group-hover:rotate-12 transition-transform duration-300">{generatedInvite ? "refresh" : "add_link"}</span>
-                {generatedInvite ? "Regenerate Invite Link" : "Generate Invite Link"}
+              <button onClick={handleGenerateInvite} className="premium-btn w-full py-md px-xl bg-gradient-to-r from-primary-container to-inverse-primary text-on-primary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] mb-xl border border-white/10 group">
+                <span className="material-symbols-outlined group-hover:rotate-12 transition-transform duration-300 relative z-10">{generatedInvite ? "refresh" : "add_link"}</span>
+                <span className="relative z-10">{generatedInvite ? "Regenerate Invite Link" : "Generate Invite Link"}</span>
               </button>
               {generatedInvite && (
                 <div className="space-y-md">
@@ -184,9 +184,9 @@ export default function HubView() {
                     <input value={namingTheirName} onChange={e => setNamingTheirName(e.target.value)} className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none" placeholder="Ghost-Host" type="text"/>
                   </div>
                 </div>
-                <button onClick={handleConnect} disabled={!inviteValid || isConnecting} className="w-full py-md px-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed group">
-                  <span className={`material-symbols-outlined ${isConnecting ? 'animate-spin' : 'group-hover:scale-110 transition-transform duration-300'}`}>{isConnecting ? "sync" : "sensors"}</span>
-                  {isConnecting ? "Connecting..." : "Connect"}
+                <button onClick={handleConnect} disabled={!inviteValid || isConnecting} className="premium-btn w-full py-md px-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed group">
+                  <span className={`material-symbols-outlined relative z-10 ${isConnecting ? 'animate-spin' : 'group-hover:scale-110 transition-transform duration-300'}`}>{isConnecting ? "sync" : "sensors"}</span>
+                  <span className="relative z-10">{isConnecting ? "Connecting..." : "Connect"}</span>
                 </button>
               </div>
               {/* Atmospheric Graphic Element */}
