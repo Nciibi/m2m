@@ -142,6 +142,66 @@ impl KeyStore {
         Ok(result.map(|v| v == "true").unwrap_or(false))
     }
 
+    /// Store the X25519 identity keypair (encrypted with storage key).
+    pub fn store_x25519_key(
+        &self,
+        public_key: &[u8; 32],
+        encrypted_secret: &[u8],
+        nonce: &[u8],
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('x25519_pub', ?1)",
+            params![hex::encode(public_key)],
+        )?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('x25519_enc', ?1)",
+            params![hex::encode(encrypted_secret)],
+        )?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('x25519_nonce', ?1)",
+            params![hex::encode(nonce)],
+        )?;
+        Ok(())
+    }
+
+    /// Load the stored X25519 key material.
+    /// Returns (public_key, encrypted_secret, nonce).
+    pub fn load_x25519_key(&self) -> Result<([u8; 32], Vec<u8>, Vec<u8>), StorageError> {
+        let pub_hex: String = self.conn.query_row(
+            "SELECT value FROM vault_meta WHERE key = 'x25519_pub'",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| StorageError::KeyNotFound)?;
+        let enc_hex: String = self.conn.query_row(
+            "SELECT value FROM vault_meta WHERE key = 'x25519_enc'",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| StorageError::KeyNotFound)?;
+        let nonce_hex: String = self.conn.query_row(
+            "SELECT value FROM vault_meta WHERE key = 'x25519_nonce'",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| StorageError::KeyNotFound)?;
+
+        let pub_bytes = hex::decode(&pub_hex).map_err(|_| StorageError::KeyNotFound)?;
+        let enc_bytes = hex::decode(&enc_hex).map_err(|_| StorageError::KeyNotFound)?;
+        let nonce_bytes = hex::decode(&nonce_hex).map_err(|_| StorageError::KeyNotFound)?;
+
+        let mut pub_arr = [0u8; 32];
+        pub_arr.copy_from_slice(&pub_bytes);
+        Ok((pub_arr, enc_bytes, nonce_bytes))
+    }
+
+    /// Check if an X25519 key has been stored.
+    pub fn has_x25519_key(&self) -> Result<bool, StorageError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM vault_meta WHERE key = 'x25519_pub'",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     /// Mark the vault as initialized (passphrase has been set).
     pub fn set_vault_initialized(&self) -> Result<(), StorageError> {
         self.conn.execute(
