@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { ToastContainer } from "../components/ui";
 import { estimateEntropy } from "../utils";
 import { useApp } from "../context/AppContext";
 import { useVault } from "../context/VaultContext";
 
 export default function VaultView() {
-  const { vaultInitialized, toasts, removeToast, addToast, setView } = useApp();
+  const { vaultInitialized, toasts, removeToast, addToast } = useApp();
   const { handleUnlockVault } = useVault();
 
   const [passphrase, setPassphrase] = useState("");
