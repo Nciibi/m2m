@@ -85,29 +85,52 @@ export default function ChatView() {
               <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-outline"></div>
             </div>
             
-            {msgs.map((m: ChatMessage) => (
-              m.direction === "sent" ? (
-                <div key={m.id} className="flex flex-col items-end gap-xs max-w-[75%] self-end animate-in slide-in-from-right-4 fade-in duration-300">
-                  <div className="sent-bubble px-lg py-md bg-gradient-to-br from-primary to-inverse-primary rounded-t-2xl rounded-bl-2xl rounded-br-sm shadow-[0_8px_24px_rgba(99,102,241,0.35)] border border-outline-variant relative overflow-hidden group">
+            {msgs.map((m: ChatMessage, idx: number) => {
+              const isPrevSame = idx > 0 && msgs[idx - 1].direction === m.direction && (m.timestamp - msgs[idx - 1].timestamp) < 120;
+              const isNextSame = idx < msgs.length - 1 && msgs[idx + 1].direction === m.direction && (msgs[idx + 1].timestamp - m.timestamp) < 120;
+
+              const sentBubbleClass = !isPrevSame && !isNextSame
+                ? "rounded-t-2xl rounded-bl-2xl rounded-br-sm"
+                : !isPrevSame && isNextSame
+                ? "rounded-t-2xl rounded-bl-2xl rounded-br-md"
+                : isPrevSame && isNextSame
+                ? "rounded-l-2xl rounded-r-sm"
+                : "rounded-b-2xl rounded-l-2xl rounded-tr-sm";
+
+              const receivedBubbleClass = !isPrevSame && !isNextSame
+                ? "rounded-t-2xl rounded-br-2xl rounded-bl-sm"
+                : !isPrevSame && isNextSame
+                ? "rounded-t-2xl rounded-br-2xl rounded-bl-md"
+                : isPrevSame && isNextSame
+                ? "rounded-r-2xl rounded-l-sm"
+                : "rounded-b-2xl rounded-r-2xl rounded-tl-sm";
+
+              return m.direction === "sent" ? (
+                <div key={m.id} className={`flex flex-col items-end gap-[2px] max-w-[75%] self-end animate-in slide-in-from-right-4 fade-in duration-300 ${isPrevSame ? "mt-0" : "mt-md"}`}>
+                  <div className={`sent-bubble px-lg py-md bg-gradient-to-br from-primary to-inverse-primary ${sentBubbleClass} shadow-[0_4px_16px_rgba(99,102,241,0.2)] border border-outline-variant relative overflow-hidden group`}>
                     <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"></div>
                     <p className="font-body-md text-white whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
                   </div>
-                  <span className="font-label-xs text-[10px] text-text-muted/70 px-xs tracking-wider">
-                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {m.read_at && " ✓✓"}
-                  </span>
+                  {!isNextSame && (
+                    <span className="font-label-xs text-[10px] text-text-muted/70 px-xs tracking-wider mt-xs">
+                      {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {m.read_at && " ✓✓"}
+                    </span>
+                  )}
                 </div>
               ) : (
-                <div key={m.id} className="flex flex-col items-start gap-xs max-w-[75%] self-start animate-in slide-in-from-left-4 fade-in duration-300">
-                  <div className="received-bubble px-lg py-md bg-input-bg backdrop-blur-xl border border-outline-variant rounded-t-2xl rounded-br-2xl rounded-bl-sm shadow-xl hover:bg-bg-hover transition-colors duration-300">
+                <div key={m.id} className={`flex flex-col items-start gap-[2px] max-w-[75%] self-start animate-in slide-in-from-left-4 fade-in duration-300 ${isPrevSame ? "mt-0" : "mt-md"}`}>
+                  <div className={`received-bubble px-lg py-md bg-input-bg backdrop-blur-xl border border-outline-variant ${receivedBubbleClass} shadow-md hover:bg-bg-hover transition-colors duration-300`}>
                     <p className="font-body-md text-text-primary whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
                   </div>
-                  <span className="font-label-xs text-[10px] text-text-muted px-xs">
-                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  {!isNextSame && (
+                    <span className="font-label-xs text-[10px] text-text-muted px-xs mt-xs">
+                      {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
                 </div>
-              )
-            ))}
+              );
+            })}
           </div>
         ))}
         {typingPeers.length > 0 && (
