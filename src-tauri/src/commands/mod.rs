@@ -169,6 +169,9 @@ pub struct ConversationListItem {
     /// Whether this conversation is archived.
     #[serde(default)]
     pub archived: bool,
+    /// Number of unread received messages.
+    #[serde(default)]
+    pub unread_count: u32,
 }
 
 pub use crate::storage::FamilyMember;
