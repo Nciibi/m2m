@@ -75,8 +75,13 @@ export default function SetupView() {
         <div className="premium-glass-card rounded-3xl max-w-[600px] w-full py-3xl px-2xl flex flex-col items-center text-center relative group">
           <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
           
-          <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-outline-variant mb-2xl transition-all duration-300 transform scale-100 hover:scale-110">
-            <span className="material-symbols-outlined text-primary text-4xl">{STEPS[step].icon}</span>
+          {/* Animated step icon container */}
+          <div className="relative w-24 h-24 mb-2xl flex items-center justify-center">
+            <div className="absolute inset-0 border border-primary/15 rounded-full animate-pulse"></div>
+            <div className="absolute inset-2 border border-primary/25 rounded-full animate-[spin_20s_linear_infinite]" style={{ borderStyle: "dashed" }}></div>
+            <div className="absolute inset-4 bg-primary/10 rounded-full border border-primary/20 flex items-center justify-center backdrop-blur-md transform hover:scale-105 transition-transform duration-300">
+              <span className="material-symbols-outlined text-primary text-4xl">{STEPS[step].icon}</span>
+            </div>
           </div>
           
           <div key={step} className="flex flex-col items-center gap-md min-h-[120px] animate-in fade-in slide-in-from-bottom-4 duration-500">
