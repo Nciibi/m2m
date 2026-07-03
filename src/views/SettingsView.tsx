@@ -27,18 +27,39 @@ export default function SettingsView() {
     <div className="flex flex-col h-screen overflow-hidden w-full relative z-10 text-on-surface bg-transparent font-body-base">
       <style>{`
         .settings-glass-card {
-            background: rgba(12, 14, 24, 0.6);
-            backdrop-filter: blur(60px) saturate(120%);
+            position: relative;
+            background: rgba(12, 14, 24, 0.4);
+            backdrop-filter: blur(60px) saturate(1.4);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 24px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+            overflow: hidden;
+        }
+        .settings-glass-card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: radial-gradient(
+                400px circle at var(--cursor-x) var(--cursor-y),
+                rgba(255, 255, 255, 0.15),
+                transparent 40%
+            );
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        .settings-glass-card:hover::before {
+            opacity: 1;
         }
         .settings-glass-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.2);
         }
         .mac-toggle {
             position: relative;
