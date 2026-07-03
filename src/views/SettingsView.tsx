@@ -42,11 +42,12 @@ export default function SettingsView() {
             top: 0; left: 0; right: 0; bottom: 0;
             border-radius: inherit;
             padding: 1px;
-            background: radial-gradient(
+            background-image: radial-gradient(
                 400px circle at var(--cursor-x) var(--cursor-y),
                 rgba(255, 255, 255, 0.15),
                 transparent 40%
             );
+            background-attachment: fixed;
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor;
             mask-composite: exclude;
