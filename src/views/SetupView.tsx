@@ -67,7 +67,7 @@ export default function SetupView() {
   return (
     <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
       <main className="relative z-10 px-gutter w-full flex justify-center">
-        <div className="bg-surface/60 backdrop-blur-[60px] saturate-[1.2] border border-white/5 max-w-[600px] w-full rounded-3xl py-3xl px-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] flex flex-col items-center text-center relative overflow-hidden group">
+        <div className="premium-glass-card max-w-[600px] w-full py-3xl px-2xl flex flex-col items-center text-center relative group">
           <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
           
           <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-2xl transition-all duration-300 transform scale-100 hover:scale-110">
@@ -91,18 +91,18 @@ export default function SetupView() {
             {step < STEPS.length - 1 ? (
               <button 
                 onClick={goNext}
-                className="w-full py-md rounded-xl bg-gradient-to-r from-primary-container to-inverse-primary text-on-primary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] relative overflow-hidden group/btn"
+                className="premium-btn w-full py-md rounded-xl bg-gradient-to-r from-primary-container to-inverse-primary text-on-primary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] group/btn"
               >
                 <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-[0.03] transition-opacity"></div>
-                {step === 0 ? "Get Started" : "Next"}
+                <span className="relative z-10">{step === 0 ? "Get Started" : "Next"}</span>
               </button>
             ) : (
               <button 
                 onClick={async () => { try { await invoke("set_first_run_complete"); } catch {} window.location.reload(); }}
-                className="w-full py-md rounded-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] relative overflow-hidden group/btn"
+                className="premium-btn w-full py-md rounded-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] group/btn"
               >
                 <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-[0.03] transition-opacity"></div>
-                Start Messaging
+                <span className="relative z-10">Start Messaging</span>
               </button>
             )}
             {step > 0 && (
