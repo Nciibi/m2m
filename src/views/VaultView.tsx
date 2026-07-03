@@ -47,11 +47,7 @@ export default function VaultView() {
 
     setLoading(true);
     try {
-      if (vaultInitialized) {
-        await handleUnlockVault(passphrase);
-      } else {
-        await handleUnlockVault(passphrase);
-      }
+      await handleUnlockVault(passphrase);
       setPassphrase("");
       setPassphraseConfirm("");
     } catch (err: any) {
