@@ -695,11 +695,11 @@
 /* --- Premium Spotlight Card --- */
 .premium-glass-card {
   position: relative;
-  background: rgba(12, 14, 24, 0.4);
-  backdrop-filter: blur(60px) saturate(1.4);
-  box-shadow: 0 0 50px -12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
+  background: var(--color-bg-surface);
+  backdrop-filter: var(--glass-blur-xl) var(--glass-saturate);
+  box-shadow: var(--shadow-app-shell);
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--color-border-default);
 }
 
 .premium-glass-card::before {
