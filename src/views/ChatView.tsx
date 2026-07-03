@@ -111,13 +111,13 @@ export default function ChatView() {
             </div>
             <div className="flex items-center gap-sm shrink-0">
               <button
-                onClick={() => handleRejectFileTransfer(req.transfer_id)}
+                onClick={() => handleRejectFileTransfer(req)}
                 className="px-lg py-sm border border-outline-variant text-on-surface-variant hover:text-danger hover:border-danger/40 rounded-xl font-label-sm active:scale-95 transition-all"
               >
                 Decline
               </button>
               <button
-                onClick={() => handleAcceptFileTransfer(req.transfer_id)}
+                onClick={() => handleAcceptFileTransfer(req)}
                 className="px-lg py-sm bg-gradient-to-r from-primary to-inverse-primary text-white rounded-xl font-label-sm font-bold active:scale-95 transition-all shadow-[0_0_12px_rgba(99,102,241,0.3)]"
               >
                 Accept
