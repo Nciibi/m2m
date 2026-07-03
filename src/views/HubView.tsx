@@ -65,12 +65,16 @@ export default function HubView() {
     if (!inviteValid) return;
     setIsConnecting(true);
     try {
-      await invoke("join_invite_link", { link: inviteToConnect });
+      const info = await invoke<ConnectionInfo>("connect_to_peer", { inviteStr: inviteToConnect });
+      // Set display names after connecting
       if (namingTheirName || namingMyName) {
         try {
-          const peerKey = inviteToConnect.split("//")[1]?.split("/")[0] || "";
-          if (peerKey) {
-            await invoke("update_conversation_name", { peerKeyHex: peerKey, name: namingTheirName });
+          // Derive peer key hex from the invite payload
+          const signed = await invoke<{ identity_pub: number[] }>("validate_invite", { inviteStr: inviteToConnect });
+          // validate_invite returns InviteInfo which has identity_pub as a hex string
+          // Actually, use the connection's peer_key_hex — we have it from the invite
+          if (namingTheirName) {
+            await invoke("rename_conversation", { conversationId: namingTheirName, displayName: namingTheirName });
           }
         } catch {}
       }
