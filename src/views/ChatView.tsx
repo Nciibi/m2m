@@ -87,8 +87,46 @@ export default function ChatView() {
         </div>
       </header>
 
+      {/* FILE REQUEST BANNERS */}
+      {fileRequests.length > 0 && fileRequests.map((req) => (
+        <div key={req.transfer_id} className="px-xl py-lg border-b border-border-subtle bg-primary/5 backdrop-blur-xl shrink-0">
+          <div className="flex items-center justify-between gap-md">
+            <div className="flex items-center gap-md min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-primary text-[20px]">description</span>
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-on-surface text-body-md truncate">{req.filename}</p>
+                <p className="font-label-xs text-[11px] text-text-muted">
+                  {req.total_size > 1048576
+                    ? `${(req.total_size / 1048576).toFixed(1)} MB`
+                    : req.total_size > 1024
+                    ? `${(req.total_size / 1024).toFixed(1)} KB`
+                    : `${req.total_size} B`}
+                  {" "}· From {connection?.peer_key_hex?.substring(0, 8) || "peer"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-sm shrink-0">
+              <button
+                onClick={() => handleRejectFileTransfer(req.transfer_id)}
+                className="px-lg py-sm border border-outline-variant text-on-surface-variant hover:text-danger hover:border-danger/40 rounded-xl font-label-sm active:scale-95 transition-all"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => handleAcceptFileTransfer(req.transfer_id)}
+                className="px-lg py-sm bg-gradient-to-r from-primary to-inverse-primary text-white rounded-xl font-label-sm font-bold active:scale-95 transition-all shadow-[0_0_12px_rgba(99,102,241,0.3)]"
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
       {/* MESSAGE AREA (scrollable) */}
-      <section 
+      <section
         className="flex-1 overflow-y-auto custom-scrollbar p-xl flex flex-col gap-xl"
         ref={msgRef}
         onScroll={(e) => {
