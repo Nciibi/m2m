@@ -10,7 +10,7 @@ export default function ChatView() {
     connection, messages, activeConversationId, typingPeers, conversations,
     handleSendMessage, handleDisconnect, handleMarkConversationRead,
     fileRequests, handleAcceptFileTransfer, handleRejectFileTransfer,
-    handleSendFile,
+    handleSendFile, handleSendReaction, handleRemoveReaction,
   } = useChat();
   
   const [text, setText] = useState("");
