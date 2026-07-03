@@ -68,7 +68,7 @@ export default function VaultView() {
   return (
     <main className="relative z-10 w-full flex justify-center items-center h-full min-h-screen px-gutter">
       {/* Unlock Vault Card */}
-      <div className={`premium-glass-card max-w-[420px] w-full p-2xl flex flex-col items-center relative group ${shake ? "animate-[shake_0.4s_ease]" : ""}`}>
+      <div className={`premium-glass-card rounded-3xl max-w-[420px] w-full p-2xl flex flex-col items-center relative group ${shake ? "animate-[shake_0.4s_ease]" : ""}`}>
 
         {/* Icon */}
         <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-xl">
