@@ -33,9 +33,14 @@ export default function SetupView() {
     return (
       <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
         <main className="relative z-10 px-gutter w-full flex justify-center">
-          <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-outline-variant mb-xl animate-pulse">
-              <span className="material-symbols-outlined text-primary text-4xl">vpn_key</span>
+            {/* Animated Cyber Ring for Initialization */}
+            <div className="relative w-28 h-28 mb-2xl flex items-center justify-center">
+              <div className="absolute inset-0 border border-primary/20 rounded-full animate-[ping_2.5s_infinite]"></div>
+              <div className="absolute inset-2 border-2 border-primary/10 border-t-primary rounded-full animate-spin"></div>
+              <div className="absolute inset-4 border border-primary/30 rounded-full animate-[spin_6s_linear_infinite]" style={{ borderStyle: "dashed" }}></div>
+              <div className="absolute inset-6 bg-primary/10 rounded-full border border-primary/20 flex items-center justify-center backdrop-blur-md">
+                <span className="material-symbols-outlined text-primary text-3xl">vpn_key</span>
+              </div>
             </div>
             <h2 className="font-headline-2xl text-headline-2xl font-bold text-text-primary mb-sm">Initializing Secure Enclave</h2>
             <p className="font-body-md text-text-secondary mb-xl">Generating Ed25519 identity keys.<br />They never leave your device.</p>
