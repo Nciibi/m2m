@@ -1,30 +1,28 @@
 import { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon, RefreshIcon } from "../components/ui/Icons";
+import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function SettingsView() {
-  const { identity, toasts, addToast, removeToast, setView } = useApp();
-  const { theme, setTheme, resolvedTheme, accentColor, setAccentColor } = useTheme();
+  const { identity, toasts, removeToast, setView } = useApp();
+  const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const {
-    networkSettings, publicIp, stunLoading, networkDiagnostics,
-    stunConfig, stunServerInput, privateMode, connectivityResult,
-    handleStunDiscover, handleAddStunServer,
-    handleRemoveStunServer, handleResetStunDefaults, handlePrivateModeToggle,
-    handleConnectivityCheck, handleTorToggle, setStunServerInput,
-    discoveryConfig, discoveredPeers,
-    handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
+    networkSettings, publicIp, stunLoading,
+    privateMode,
+    handleStunDiscover,
+    handlePrivateModeToggle,
+    handleTorToggle,
+    discoveryConfig,
+    handleLanToggle, handleDhtToggle,
     securityConfig,
     handleScreenCaptureToggle, handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
-    scheduleClipboardClear,
   } = useSettings();
   
   const [fpCopied, setFpCopied] = useState(false);
-  const [ipCopied, setIpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
   const [activeSection, setActiveSection] = useState("identity");
 
@@ -86,9 +84,7 @@ export default function SettingsView() {
           </nav>
 
           {/* Scrolling Content Area */}
-          <div style={{ flex: 1, padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '40px' }} onScroll={(e) => {
-            // Simple scroll spy logic can be implemented here if needed.
-          }}>
+          <div style={{ flex: 1, padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '40px' }}>
             
             {/* Identity Section */}
             <section id="section-identity" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

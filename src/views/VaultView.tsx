@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ToastContainer } from "../components/ui";
 import { estimateEntropy } from "../utils";
 import { useApp } from "../context/AppContext";

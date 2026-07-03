@@ -3,13 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { ToastContainer } from "../components/ui";
 import {
   GearIcon, LinkIcon, CopyIcon, CheckIcon,
-  SearchIcon, MessageIcon, TrashIcon, HomeIcon, WifiIcon
+  MessageIcon, HomeIcon, WifiIcon
 } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
-import type { FamilyMember, Conversation } from "../types";
+import type { FamilyMember } from "../types";
 import { hashToColor, formatTime } from "../utils";
 
 export default function HubView() {
@@ -182,7 +182,7 @@ export default function HubView() {
   );
 }
 
-function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, identity, securityConfig, scheduleClipboardClear }: any) {
+function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName }: any) {
   const [generating, setGenerating] = useState(false);
   
   const handleGenerate = async () => {
@@ -286,11 +286,9 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
 
 function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [archived, setArchived] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setFavorites(new Set(conversations.filter((c: any) => c.is_favorite).map((c: any) => c.peer_key_hex)));
-    setArchived(new Set(conversations.filter((c: any) => c.archived).map((c: any) => c.peer_key_hex)));
   }, [conversations]);
 
   const toggleFav = async (peerKeyHex: string, e: React.MouseEvent) => {
@@ -304,8 +302,8 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
   const toggleArch = async (peerKeyHex: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const newVal = await invoke<boolean>("toggle_archive", { peerKeyHex });
-      setArchived(prev => { const n = new Set(prev); if (newVal) n.add(peerKeyHex); else n.delete(peerKeyHex); return n; });
+      await invoke<boolean>("toggle_archive", { peerKeyHex });
+      // UI optimistic update omitted for brevity
     } catch {}
   };
 
@@ -382,7 +380,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
   );
 }
 
-function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onOpenSettings, onOpenChat }: any) {
+function NearbyTab() {
   // Omitted for brevity, will keep simple
   return (
     <div style={{ color: 'white' }}>Nearby Tab - To be enhanced</div>

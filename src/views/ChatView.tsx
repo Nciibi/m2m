@@ -1,7 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
-import { listen } from "@tauri-apps/api/event";
+import { useState, useEffect, useRef } from "react";
 import { ToastContainer } from "../components/ui";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
@@ -9,23 +6,17 @@ import type { ChatMessage } from "../types";
 import { hashToColor } from "../utils";
 
 export default function ChatView() {
-  const { identity, toasts, removeToast, addToast, setView } = useApp();
+  const { toasts, removeToast, setView } = useApp();
   const {
-    connection, messages, setMessages, fileRequests, activeConversationId, typingPeers,
-    reconnecting, reconnectAttempt,
-    handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
-    handleReconnect, handleExportConversation, handleSetRetention,
-    retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
-    handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
-    handleEditMessage, handleDeleteMessage,
+    connection, messages, activeConversationId, typingPeers,
+    handleSendMessage, handleVerify, handleDisconnect,
+    handleMarkConversationRead,
   } = useChat();
   
   const [text, setText] = useState("");
   const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [sending, setSending] = useState(false);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  const [hasOlder, setHasOlder] = useState(true);
   
   const msgRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
