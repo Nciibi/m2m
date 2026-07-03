@@ -31,17 +31,18 @@ export default function GroupChatView() {
     loadGroups();
     const unlisten = listen<any>("m2m://group-event", () => { loadGroups(); });
     const unlistenMsg = listen<any>("m2m://group-message", (event) => {
+      const payload = event.payload.message || event.payload;
       const msg: ChatMessage = {
-        id: event.payload.message_id || Date.now().toString(),
-        content: event.payload.content || "",
+        id: payload.id || Date.now().toString(),
+        content: payload.content || "",
         direction: "received",
-        timestamp: Math.floor(Date.now() / 1000),
+        timestamp: payload.timestamp || Math.floor(Date.now() / 1000),
         read_at: null,
         edited_at: null,
         deleted: false,
         expires_at: null,
         reactions: {},
-        sender_peer_key_hex: event.payload.sender_peer_key_hex || "",
+        sender_peer_key_hex: payload.sender_peer_key_hex || "",
       };
       setMessages((prev) => [...prev, msg]);
     });
