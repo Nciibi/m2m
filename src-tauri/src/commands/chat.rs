@@ -209,6 +209,7 @@ pub async fn list_conversations(
             created_at: c.created_at,
             is_favorite: c.is_favorite.unwrap_or(false),
             archived: c.archived.unwrap_or(false),
+            unread_count: c.unread_count,
         });
     }
 
