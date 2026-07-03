@@ -330,7 +330,7 @@ export default function HubView() {
 
                 {conversations.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-4xl text-on-surface-variant gap-md">
-                    <span className="material-symbols-outlined text-5xl opacity-30">chat_bubble_outline</span>
+                    <NoChatsIllustration />
                     <p className="font-headline-2xl text-headline-2xl text-on-surface">No conversations yet</p>
                     <p className="text-body-md max-w-[300px] text-center">Go to the Connect tab to create or join an encrypted session.</p>
                   </div>
@@ -342,7 +342,7 @@ export default function HubView() {
           {/* ─── NEARBY TAB ─── */}
           {activeTab === "nearby" && (
             <div className="flex flex-col items-center justify-center py-4xl gap-lg">
-              <span className="material-symbols-outlined text-[64px] text-primary/30">wifi_tethering</span>
+              <RadarIllustration />
               <h2 className="font-headline-3xl text-headline-3xl text-on-surface">Nearby Discovery</h2>
               <p className="text-on-surface-variant text-center max-w-md text-body-md">Find and connect with peers securely over your local network using mDNS and DHT.</p>
             </div>
