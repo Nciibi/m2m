@@ -185,12 +185,22 @@ export default function HubView() {
 
                 {generatedInvite && (
                   <div className="space-y-md animate-in fade-in slide-in-from-top-2 duration-300">
-                    <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Your Active Invite</label>
-                    <div className="flex items-center gap-sm bg-input-bg p-md rounded-xl border border-outline-variant">
-                      <span className="font-mono-code text-mono-code text-primary flex-1 break-all select-all">{generatedInvite}</span>
-                      <button onClick={handleCopyInvite} className="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-input-bg shrink-0">
-                        <span className="material-symbols-outlined text-[20px]">{copied ? "check" : "content_copy"}</span>
-                      </button>
+                    <div className="flex justify-between items-center">
+                      <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Active Token</label>
+                      <span className="flex items-center gap-xs font-mono-label text-[10px] text-tertiary">
+                        <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
+                        Awaiting Peer
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-sm bg-input-bg p-md rounded-xl border border-outline-variant relative overflow-hidden group/token">
+                      <div className="absolute top-0 right-0 p-xs font-mono-label text-[9px] text-text-muted/40 uppercase tracking-widest pointer-events-none">ECDH exchange</div>
+                      <span className="font-mono-code text-mono-code text-primary break-all select-all pt-xs leading-relaxed">{generatedInvite}</span>
+                      <div className="flex justify-end border-t border-border-subtle pt-sm mt-xs">
+                        <button onClick={handleCopyInvite} className="flex items-center gap-xs text-on-surface-variant hover:text-primary transition-colors py-xs px-md rounded-lg hover:bg-bg-hover active:scale-95 transition-transform text-sm font-semibold">
+                          <span className="material-symbols-outlined text-[18px]">{copied ? "check" : "content_copy"}</span>
+                          <span>{copied ? "Copied!" : "Copy Token"}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
