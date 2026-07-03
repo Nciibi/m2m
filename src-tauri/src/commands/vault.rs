@@ -186,12 +186,12 @@ pub async fn unlock_vault(
             let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
                 .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
 
-            let xkp = if let Some((x_pub, x_enc, x_nonce)) = x25519_load {
-                let x_sk_bytes = util::crypto_decrypt_storage(&x_enc, &x_nonce, &storage_key, util::AAD_KEY_STORE)
+            let xkp = if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_load {
+                let x_sk_bytes = util::crypto_decrypt_storage(x_enc, x_nonce, &storage_key, util::AAD_KEY_STORE)
                     .map_err(|_| "failed to decrypt X25519 key".to_string())?;
                 let mut x_sk_arr = [0u8; 32];
                 x_sk_arr.copy_from_slice(&x_sk_bytes);
-                crate::crypto::X25519IdentityKeypair::from_bytes(&x_pub, &x_sk_arr)
+                crate::crypto::X25519IdentityKeypair::from_bytes(x_pub, &x_sk_arr)
                     .map_err(|e| format!("failed to reconstruct X25519: {e}"))?
             } else {
                 let xkp = crate::crypto::X25519IdentityKeypair::generate();
