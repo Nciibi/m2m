@@ -92,7 +92,7 @@ export default function ChatView() {
                     <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"></div>
                     <p className="font-body-md text-white whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
                   </div>
-                  <span className="font-label-xs text-[10px] text-white/50 px-xs tracking-wider">
+                  <span className="font-label-xs text-[10px] text-text-muted/70 px-xs tracking-wider">
                     {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     {m.read_at && " ✓✓"}
                   </span>
