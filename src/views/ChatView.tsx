@@ -127,6 +127,47 @@ export default function ChatView() {
         </div>
       ))}
 
+      {/* TRANSFER PROGRESS BARS */}
+      {transfers.map((t) => {
+        const pct = t.total_size > 0 ? Math.min(100, Math.round((t.bytes_transferred / t.total_size) * 100)) : 0;
+        const speed = t.speed_bytes_per_sec > 1048576
+          ? `${(t.speed_bytes_per_sec / 1048576).toFixed(1)} MB/s`
+          : t.speed_bytes_per_sec > 1024
+          ? `${(t.speed_bytes_per_sec / 1024).toFixed(1)} KB/s`
+          : `${t.speed_bytes_per_sec} B/s`;
+        const remaining = t.estimated_remaining_secs > 3600
+          ? `~${Math.round(t.estimated_remaining_secs / 3600)}h`
+          : t.estimated_remaining_secs > 60
+          ? `~${Math.round(t.estimated_remaining_secs / 60)}m`
+          : t.estimated_remaining_secs > 0
+          ? `~${t.estimated_remaining_secs}s`
+          : "almost done";
+        return (
+          <div key={t.transfer_id} className="px-xl py-lg border-b border-border-subtle bg-primary/5 shrink-0">
+            <div className="flex items-center justify-between gap-md mb-sm">
+              <div className="flex items-center gap-md min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-primary text-[18px]">description</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-on-surface text-body-sm truncate">{t.filename}</p>
+                  <p className="font-label-xs text-[10px] text-text-muted">
+                    {pct}% · {speed} · {remaining}
+                  </p>
+                </div>
+              </div>
+              <span className="font-bold text-primary text-body-sm shrink-0">{pct}%</span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-inverse-primary transition-all duration-500 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+
       {/* MESSAGE AREA (scrollable) */}
       <section
         className="flex-1 overflow-y-auto custom-scrollbar p-xl flex flex-col gap-xl"
