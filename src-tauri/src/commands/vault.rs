@@ -204,7 +204,7 @@ pub async fn unlock_vault(
                 *sk_lock = Some(storage_key);
             }
 
-            (kp, xkp, x25519_load.is_none())
+            (kp, xkp, x25519_load.is_none(), None)
         } else {
             // Case 2: Legacy migration
             tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
@@ -271,7 +271,7 @@ pub async fn unlock_vault(
             *sk_lock = Some(storage_key);
         }
 
-        (kp, xkp, false)
+        (kp, xkp, false, None)
     };
 
     // ─── Phase 3: Async state writes ───
