@@ -3,49 +3,64 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 [data-theme="light"] {
-  --color-bg-dark: #eef1f5;
+  --color-bg-dark: #f1f5f9;
   --color-bg-surface: rgba(255, 255, 255, 0.85);
   --color-bg-card: rgba(255, 255, 255, 0.75);
   --color-bg-elevated: rgba(255, 255, 255, 0.9);
-  --color-bg-input: rgba(0, 0, 0, 0.04);
-  --color-bg-input-focus: rgba(0, 0, 0, 0.06);
-  --color-bg-hover: rgba(0, 0, 0, 0.04);
-  --color-bg-active: rgba(0, 0, 0, 0.07);
+  --color-bg-input: rgba(15, 23, 42, 0.04);
+  --color-bg-input-focus: rgba(15, 23, 42, 0.07);
+  --color-bg-hover: rgba(15, 23, 42, 0.04);
+  --color-bg-active: rgba(15, 23, 42, 0.08);
   --color-bg-container-low: #f8fafc;
   --color-bg-container: #ffffff;
   --color-bg-container-high: #f1f5f9;
   --color-bg-container-highest: #e2e8f0;
+  --color-bg-surface-variant: #e2e8f0;
 
   --canvas-gradient:
-    radial-gradient(ellipse 55% 30% at 5% -5%, rgba(99, 102, 241, 0.05), transparent 50%),
-    radial-gradient(ellipse 45% 30% at 95% 105%, rgba(16, 185, 129, 0.03), transparent 50%);
+    radial-gradient(ellipse 55% 30% at 5% -5%, rgba(99, 102, 241, 0.08), transparent 50%),
+    radial-gradient(ellipse 45% 30% at 95% 105%, rgba(16, 185, 129, 0.05), transparent 50%);
 
-  --color-border-default: rgba(0, 0, 0, 0.08);
-  --color-border-active: rgba(99, 102, 241, 0.4);
-  --color-border-accent: rgba(99, 102, 241, 0.12);
+  --color-border-default: rgba(15, 23, 42, 0.08);
+  --color-border-active: rgba(99, 102, 241, 0.5);
+  --color-border-accent: rgba(99, 102, 241, 0.16);
 
   --color-accent: #4f46e5;
   --color-accent-bright: #6366f1;
-  --color-primary: #6366f1;
-  --color-primary-container: #4f46e5;
+  --color-accent-dim: #3730a3;
+  --color-accent-glow: rgba(99, 102, 241, 0.15);
+  --color-accent-glow-strong: rgba(99, 102, 241, 0.25);
+  --color-accent-glow-subtle: rgba(99, 102, 241, 0.04);
+  
+  --color-primary: #4f46e5;
+  --color-primary-container: #6366f1;
+  --color-primary-glow: rgba(79, 70, 229, 0.08);
+
   --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
+  --color-text-secondary: #334155;
   --color-text-muted: #64748b;
   --color-text-accent: #4f46e5;
   --color-text-placeholder: #94a3b8;
 
   --color-success: #059669;
-  --color-danger: #dc2626;
+  --color-success-glow: rgba(5, 150, 105, 0.2);
+  --color-success-bg: rgba(5, 150, 105, 0.06);
+  --color-danger: #d97706; /* Warmer warnings */
+  --color-danger-glow: rgba(220, 38, 38, 0.2);
+  --color-danger-bg: rgba(220, 38, 38, 0.06);
   --color-warning: #d97706;
+  --color-warning-glow: rgba(217, 119, 6, 0.2);
+  --color-warning-bg: rgba(217, 119, 6, 0.06);
 
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md: 0 2px 4px rgba(0,0,0,0.05);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.06);
-  --shadow-accent: 0 0 12px rgba(79,70,229,0.15);
-  --shadow-card: 0 0 0 1px rgba(0,0,0,0.03) inset;
-  --shadow-card-hover: 0 0 0 1px rgba(0,0,0,0.04) inset, 0 4px 16px rgba(0,0,0,0.06);
-  --shadow-app-shell: 0 0 0 1px rgba(0,0,0,0.02) inset, 0 8px 32px -8px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.02);
+  --shadow-accent: 0 0 12px rgba(79,70,229,0.1);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,0.02) inset;
+  --shadow-card-hover: 0 10px 20px -8px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04) inset;
+  --shadow-app-shell: 0 16px 40px -12px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(15, 23, 42, 0.05) inset;
+  --shadow-toast: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.04) inset;
 
-  --scrollbar-thumb: rgba(0,0,0,0.1);
-  --scrollbar-thumb-hover: rgba(0,0,0,0.2);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.1);
+  --scrollbar-thumb-hover: rgba(15, 23, 42, 0.25);
 }
