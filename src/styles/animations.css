@@ -239,7 +239,7 @@
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(
+  background-attachment: fixed; background-image: radial-gradient(
     150px circle at var(--cursor-x) var(--cursor-y),
     rgba(255, 255, 255, 0.3),
     transparent 40%
