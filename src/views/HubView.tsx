@@ -14,7 +14,7 @@ export default function HubView() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
 
   const refreshFamily = async () => {
-    try { setFamilyMembers(await invoke<FamilyMember[]>("get_family_members")); } catch {}
+    try { setFamilyMembers(await invoke<FamilyMember[]>("list_family")); } catch {}
   };
   const connectFamily = async (peerKeyHex: string) => {
     try { await invoke("connect_family_member", { peerKeyHex }); setView("chat"); } catch (e) { throw e; }
