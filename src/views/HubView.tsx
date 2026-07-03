@@ -38,7 +38,10 @@ export default function HubView() {
   const handleGenerateInvite = async () => {
     setIsGenerating(true);
     try {
-      const invite = await invoke<string>("generate_invite_link");
+      // Ensure listener is running to get an address
+      await invoke("start_listening", { address: "0.0.0.0:0" });
+      const address = await invoke<string>("get_listen_address");
+      const invite = await invoke<string>("create_invite", { address, validityMinutes: 60, oneTime: false });
       setGeneratedInvite(invite);
       addToast("Invite link generated!", "success");
     } catch (e: any) {
