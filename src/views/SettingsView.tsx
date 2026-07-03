@@ -1,7 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
 import { ToastContainer } from "../components/ui";
-import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useTheme } from "../context/ThemeContext";
@@ -24,294 +22,299 @@ export default function SettingsView() {
   
   const [fpCopied, setFpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
-  const [activeSection, setActiveSection] = useState("identity");
-
-  const onBackToHub = () => setView("hub");
-
-  // Scroll spy effect could go here, for simplicity we just map clicks to sections
-  const scrollToSection = (id: string) => {
-    setActiveSection(id);
-    document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const navItems = [
-    { id: 'identity', icon: 'fingerprint', label: 'Identity' },
-    { id: 'security', icon: 'security', label: 'Security' },
-    { id: 'network', icon: 'router', label: 'Network & Discovery' },
-    { id: 'appearance', icon: 'palette', label: 'Appearance' },
-    { id: 'about', icon: 'info', label: 'About M2M' },
-  ];
 
   return (
-    <div style={{ display: 'flex', width: '100%', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-dark)', overflow: 'hidden' }}>
-      
-      <main className="app-shell" style={{ maxWidth: '1000px', flexDirection: 'column' }}>
-        
-        {/* Settings Header */}
-        <header style={{ height: '64px', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', flexShrink: 0, background: 'rgba(255, 255, 255, 0.02)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--color-text-primary)' }}>settings</span>
-            </div>
-            <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0 }}>Settings</h1>
+    <div className="flex flex-col h-screen overflow-hidden w-full relative z-10 text-on-surface bg-transparent font-body-base">
+      <style>{`
+        .settings-glass-card {
+            background: rgba(12, 14, 24, 0.6);
+            backdrop-filter: blur(60px) saturate(120%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .settings-glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .mac-toggle {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            background: #33343b;
+            border-radius: 999px;
+            transition: background 0.2s ease;
+        }
+        .mac-toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+        input:checked + .mac-toggle {
+            background: #6366f1;
+        }
+        input:checked + .mac-toggle::after {
+            transform: translateX(16px);
+        }
+        .segmented-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .active-segment {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #c0c1ff;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+      `}</style>
+
+      {/* TopAppBar */}
+      <header className="fixed top-0 w-full z-50 backdrop-blur-3xl border-b border-white/5 bg-surface/60 shadow-sm">
+        <div className="flex justify-between items-center px-lg py-md max-w-container-max mx-auto h-16">
+          <div className="flex items-center gap-md">
+            <span className="material-symbols-outlined text-primary text-2xl">settings</span>
+            <h1 className="font-headline-2xl text-headline-2xl font-bold text-on-surface tracking-tight">Settings</h1>
           </div>
-          <button onClick={onBackToHub} style={{ background: 'var(--color-primary)', color: 'var(--color-bg-dark)', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}>
-            Done
+          <button onClick={() => setView("hub")} className="active:scale-95 duration-200 p-2 hover:bg-white/5 rounded-full transition-colors">
+            <span className="material-symbols-outlined text-on-surface-variant">close</span>
           </button>
-        </header>
+        </div>
+      </header>
 
-        {/* Two-Column Content */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* Scrollable Main Canvas */}
+      <main className="flex-1 overflow-y-auto no-scrollbar pt-20 pb-xl px-gutter">
+        <div className="max-w-[1000px] mx-auto flex flex-col gap-lg">
           
-          {/* Local Sidebar */}
-          <nav style={{ width: '240px', borderRight: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', gap: '4px', padding: '24px 12px', flexShrink: 0, overflowY: 'auto' }}>
-            {navItems.map(item => (
-              <button 
-                key={item.id}
-                onClick={() => scrollToSection(item.id)}
-                style={{ 
-                  display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '8px', 
-                  background: activeSection === item.id ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
-                  color: activeSection === item.id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                  border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: activeSection === item.id ? 600 : 500,
-                  transition: 'all 0.2s'
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          {/* Scrolling Content Area */}
-          <div style={{ flex: 1, padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '40px' }}>
-            
-            {/* Identity Section */}
-            <section id="section-identity" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Identity</h2>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Your cryptographic identity and fingerprint.</p>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Fingerprint</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-primary)', marginTop: '4px' }}>{identity?.fingerprint || "—"}</div>
-                  </div>
-                  <button className="icon-btn" onClick={() => {
-                    if (identity?.fingerprint) {
-                      navigator.clipboard.writeText(identity.fingerprint);
-                      setFpCopied(true);
-                      setTimeout(() => setFpCopied(false), 2000);
-                    }
-                  }}>
-                    {fpCopied ? <CheckIcon size={20} color="var(--color-success)" /> : <CopyIcon size={20} />}
+          {/* 1. IDENTITY */}
+          <section className="settings-glass-card p-lg animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex items-center gap-sm mb-md text-primary">
+              <span className="material-symbols-outlined text-md">fingerprint</span>
+              <h2 className="font-body-lg text-body-lg font-bold uppercase tracking-wider">Identity</h2>
+            </div>
+            <div className="space-y-md">
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-sm text-text-muted">Node Fingerprint</label>
+                <div className="flex items-center justify-between bg-input-bg p-md rounded-lg border border-border-subtle group hover:border-primary/50 transition-colors">
+                  <code className="font-mono-code text-mono-code text-primary break-all">{identity?.fingerprint || "—"}</code>
+                  <button onClick={() => {
+                      if (identity?.fingerprint) {
+                        navigator.clipboard.writeText(identity.fingerprint);
+                        setFpCopied(true);
+                        setTimeout(() => setFpCopied(false), 2000);
+                      }
+                    }} className="text-on-surface-variant hover:text-primary transition-colors shrink-0">
+                    <span className="material-symbols-outlined text-lg">{fpCopied ? "check" : "content_copy"}</span>
                   </button>
                 </div>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Public Key</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{identity?.public_key_hex || "—"}</div>
-                  </div>
+              </div>
+              <div className="flex flex-col gap-xs">
+                <label className="font-label-sm text-text-muted">Public Key</label>
+                <div className="flex items-center justify-between bg-input-bg p-md rounded-lg border border-border-subtle">
+                  <code className="font-mono-code text-mono-code truncate mr-4">{identity?.public_key_hex || "—"}</code>
+                  <button className="text-on-surface-variant hover:text-primary transition-colors">
+                    <span className="material-symbols-outlined text-lg">content_copy</span>
+                  </button>
                 </div>
               </div>
-            </section>
+            </div>
+          </section>
 
-            {/* Security Section */}
-            <section id="section-security" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* 2. THEME */}
+          <section className="settings-glass-card p-lg animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-sm mb-md text-primary">
+              <span className="material-symbols-outlined text-md">palette</span>
+              <h2 className="font-body-lg text-body-lg font-bold uppercase tracking-wider">Appearance</h2>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-md">
               <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Security</h2>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Protect your local vault and application data.</p>
+                <p className="font-body-md text-on-surface mb-1">Interface Theme</p>
+                <p className="font-label-sm text-text-muted">Current: {theme}</p>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-danger)' }}>visibility_off</span>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Screen Capture Protection</div>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Prevent window from appearing in screenshots</div>
-                    </div>
-                  </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={securityConfig?.screen_capture_protection ?? false} onChange={handleScreenCaptureToggle} />
-                    <span className="toggle-slider" />
+              <div className="flex bg-surface-container rounded-xl p-1 border border-border-subtle">
+                <button onClick={() => setTheme('light')} className={`${theme === 'light' ? 'active-segment' : 'segmented-btn'} p-2 rounded-lg flex items-center justify-center transition-all w-12`}><span className="material-symbols-outlined">light_mode</span></button>
+                <button onClick={() => setTheme('dark')} className={`${theme === 'dark' ? 'active-segment' : 'segmented-btn'} p-2 rounded-lg flex items-center justify-center transition-all w-12`}><span className="material-symbols-outlined">dark_mode</span></button>
+                <button onClick={() => setTheme('system')} className={`${theme === 'system' ? 'active-segment' : 'segmented-btn'} p-2 rounded-lg flex items-center justify-center transition-all w-12`}><span className="material-symbols-outlined">desktop_windows</span></button>
+              </div>
+            </div>
+            <div className="h-[1px] bg-border-subtle my-lg"></div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-md">
+                <p className="font-body-md text-on-surface">Accent Color</p>
+                <div className="flex items-center gap-2">
+                   <div className="w-6 h-6 rounded-full ring-2 ring-white/20" style={{ background: accentColor }}></div>
+                   <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="w-6 h-6 opacity-0 absolute cursor-pointer" />
+                </div>
+              </div>
+              <button onClick={() => setAccentColor('#6366f1')} className="font-label-sm text-text-muted hover:text-primary transition-colors underline decoration-dotted">Reset</button>
+            </div>
+          </section>
+
+          {/* 3. NETWORK */}
+          <section className="settings-glass-card p-lg animate-in fade-in slide-in-from-bottom-6 duration-700">
+            <div className="flex items-center gap-sm mb-md text-primary">
+              <span className="material-symbols-outlined text-md">lan</span>
+              <h2 className="font-body-lg text-body-lg font-bold uppercase tracking-wider">Network</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-lg mb-lg">
+              <div className="space-y-md">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-text-muted">Public IP</span>
+                  <span className="font-mono-code text-on-surface flex items-center gap-2">{publicIp || "Unknown"} <span className="material-symbols-outlined text-xs cursor-pointer hover:text-primary">content_copy</span></span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-text-muted">NAT Type</span>
+                  <span className="font-body-md text-on-surface">RestrictedCone</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-text-muted">STUN Status</span>
+                  <span className="font-body-md text-tertiary">3/4 reachable</span>
+                </div>
+              </div>
+              <div className="space-y-md">
+                <div className="flex items-center justify-between">
+                  <span className="font-body-md">Private Mode</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input checked={privateMode} onChange={handlePrivateModeToggle} className="sr-only" type="checkbox"/>
+                    <div className="mac-toggle"></div>
                   </label>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-body-md">Tor Routing</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input checked={torEnabled} onChange={async () => { await handleTorToggle(); setTorEnabled(!torEnabled); }} className="sr-only" type="checkbox"/>
+                    <div className="mac-toggle"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-md">
+              <button className="flex-1 py-2 px-md border border-border-subtle rounded-lg font-label-sm text-on-surface-variant hover:bg-white/5 transition-all">Test Tor</button>
+              <button onClick={handleStunDiscover} className="flex-1 py-2 px-md border border-border-subtle rounded-lg font-label-sm text-on-surface-variant hover:bg-white/5 transition-all">{stunLoading ? "Checking..." : "Check Connectivity"}</button>
+            </div>
+          </section>
 
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Clipboard Auto-Clear</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Clear sensitive data from clipboard after delay</div>
-                  </div>
-                  <select className="select--compact" value={securityConfig?.clipboard_clear_secs ?? 0} onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '8px', outline: 'none' }}>
+          {/* 4. DISCOVERY */}
+          <section className="settings-glass-card p-lg">
+            <div className="flex items-center gap-sm mb-md text-primary">
+              <span className="material-symbols-outlined text-md">radar</span>
+              <h2 className="font-body-lg text-body-lg font-bold uppercase tracking-wider">Discovery</h2>
+            </div>
+            <div className="space-y-md mb-md">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-body-md">LAN Discovery</p>
+                  <p className="text-xs text-text-muted">Search local network for peers</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input checked={discoveryConfig?.lan_enabled ?? false} onChange={handleLanToggle} className="sr-only" type="checkbox"/>
+                  <div className="mac-toggle"></div>
+                </label>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-body-md">DHT Discovery</p>
+                  <p className="text-xs text-text-muted">Distributed Hash Table global search</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input checked={discoveryConfig?.dht_enabled ?? false} onChange={handleDhtToggle} className="sr-only" type="checkbox"/>
+                  <div className="mac-toggle"></div>
+                </label>
+              </div>
+            </div>
+            <div className="flex items-start gap-sm bg-warning/5 border border-warning/20 p-md rounded-lg mt-md">
+              <span className="material-symbols-outlined text-warning text-md">report_problem</span>
+              <p className="text-xs text-warning/90 leading-relaxed">Enabling discovery may reveal your node presence to other entities in the same network segments.</p>
+            </div>
+          </section>
+
+          {/* 5. SECURITY */}
+          <section className="settings-glass-card p-lg">
+            <div className="flex items-center gap-sm mb-md text-primary">
+              <span className="material-symbols-outlined text-md">security</span>
+              <h2 className="font-body-lg text-body-lg font-bold uppercase tracking-wider">Security</h2>
+            </div>
+            <div className="space-y-lg">
+              <div className="flex items-center justify-between">
+                <span className="font-body-md">Screen Capture Protection</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input checked={securityConfig?.screen_capture_protection ?? false} onChange={handleScreenCaptureToggle} className="sr-only" type="checkbox"/>
+                  <div className="mac-toggle"></div>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-md">
+                <div className="flex flex-col gap-xs">
+                  <label className="font-label-sm text-text-muted">Clipboard Auto-Clear</label>
+                  <select value={securityConfig?.clipboard_clear_secs ?? 0} onChange={e => handleClipboardClearSecsChange(parseInt(e.target.value, 10))} className="bg-surface-variant border border-border-subtle rounded-lg text-sm text-on-surface focus:ring-primary focus:border-primary px-3 py-2">
                     <option value={0}>Off</option>
-                    <option value={5}>5s</option>
-                    <option value={10}>10s</option>
-                    <option value={30}>30s</option>
-                    <option value={60}>1m</option>
+                    <option value={5}>5 seconds</option>
+                    <option value={10}>10 seconds</option>
+                    <option value={30}>30 seconds</option>
+                    <option value={60}>1 minute</option>
                   </select>
                 </div>
-
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Idle Vault Lock</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Auto-lock after inactivity</div>
-                  </div>
-                  <select className="select--compact" value={securityConfig?.idle_lock_secs ?? 0} onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '8px', outline: 'none' }}>
+                <div className="flex flex-col gap-xs">
+                  <label className="font-label-sm text-text-muted">Idle Vault Lock</label>
+                  <select value={securityConfig?.idle_lock_secs ?? 0} onChange={e => handleIdleLockSecsChange(parseInt(e.target.value, 10))} className="bg-surface-variant border border-border-subtle rounded-lg text-sm text-on-surface focus:ring-primary focus:border-primary px-3 py-2">
                     <option value={0}>Off</option>
-                    <option value={60}>1m</option>
-                    <option value={300}>5m</option>
-                    <option value={600}>10m</option>
-                    <option value={1800}>30m</option>
+                    <option value={60}>1 minute</option>
+                    <option value={600}>10 minutes</option>
+                    <option value={1800}>30 minutes</option>
+                    <option value={3600}>1 hour</option>
                   </select>
                 </div>
-
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={handleLockVault} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Lock Vault Now</button>
-                    <button onClick={handleClearClipboard} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Clear Clipboard</button>
-                  </div>
-                </div>
               </div>
-            </section>
+              <div className="h-[1px] bg-border-subtle"></div>
+              <div className="flex gap-md">
+                <button onClick={handleLockVault} className="flex-1 py-2 px-md border border-danger/30 text-danger rounded-lg font-label-sm hover:bg-danger/10 transition-all flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-sm">lock</span> Lock Now
+                </button>
+                <button onClick={handleClearClipboard} className="flex-1 py-2 px-md border border-border-subtle text-on-surface-variant rounded-lg font-label-sm hover:bg-white/5 transition-all flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-sm">delete</span> Clear Clipboard
+                </button>
+              </div>
+            </div>
+          </section>
 
-            {/* Network Section */}
-            <section id="section-network" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* 6. ABOUT */}
+          <section className="settings-glass-card p-lg mb-xl">
+            <div className="flex items-center gap-sm mb-md text-primary">
+              <span className="material-symbols-outlined text-md">info</span>
+              <h2 className="font-body-lg text-body-lg font-bold uppercase tracking-wider">About</h2>
+            </div>
+            <div className="flex justify-between items-end">
               <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Network & Discovery</h2>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Configure how you connect to peers.</p>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Private Mode</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Hide IP from generated invites</div>
-                  </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={privateMode} onChange={handlePrivateModeToggle} />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Tor Routing</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Route outbound connections via Tor (requires restart)</div>
-                  </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={torEnabled} onChange={async () => { await handleTorToggle(); setTorEnabled(!torEnabled); }} />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-success)' }}>wifi</span>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>LAN Discovery</div>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Broadcast presence on local network</div>
-                    </div>
-                  </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={discoveryConfig?.lan_enabled ?? false} onChange={handleLanToggle} />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-warning)' }}>public</span>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>DHT Discovery</div>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Discover peers globally via DHT</div>
-                    </div>
-                  </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={discoveryConfig?.dht_enabled ?? false} onChange={handleDhtToggle} />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-
-                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Public IP Check</div>
-                    <button onClick={handleStunDiscover} disabled={stunLoading} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' }}>
-                      {stunLoading ? 'Checking...' : 'Check Now'}
-                    </button>
-                  </div>
-                  {publicIp && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.05)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-                      Detected IP: {publicIp}
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </section>
-
-            {/* Appearance Section */}
-            <section id="section-appearance" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>Appearance</h2>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>Customize the visual style of M2M.</p>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Theme Preference</div>
-                  </div>
-                  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '4px', gap: '4px' }}>
-                    <button onClick={() => setTheme('light')} style={{ background: theme === 'light' ? 'rgba(255,255,255,0.1)' : 'transparent', color: theme === 'light' ? 'white' : 'var(--color-text-muted)', border: 'none', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <SunIcon size={14} /> Light
-                    </button>
-                    <button onClick={() => setTheme('dark')} style={{ background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'transparent', color: theme === 'dark' ? 'white' : 'var(--color-text-muted)', border: 'none', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <MoonIcon size={14} /> Dark
-                    </button>
-                    <button onClick={() => setTheme('system')} style={{ background: theme === 'system' ? 'rgba(255,255,255,0.1)' : 'transparent', color: theme === 'system' ? 'white' : 'var(--color-text-muted)', border: 'none', padding: '6px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <MonitorIcon size={14} /> Auto
-                    </button>
-                  </div>
-                </div>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Accent Color</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-text-muted)' }}>{accentColor}</span>
-                    <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} style={{ width: '32px', height: '32px', border: 'none', borderRadius: '8px', cursor: 'pointer', background: 'none' }} />
-                  </div>
+                <p className="font-headline-2xl font-bold tracking-tight text-on-surface">M2M Messenger</p>
+                <p className="font-label-sm text-text-muted mb-md">Version 2.5.x Stable Build</p>
+                <div className="flex gap-2">
+                  <span className="px-2 py-1 bg-secondary-container/30 border border-secondary-container text-[10px] rounded font-mono-label text-secondary uppercase">Ed25519</span>
+                  <span className="px-2 py-1 bg-secondary-container/30 border border-secondary-container text-[10px] rounded font-mono-label text-secondary uppercase">X25519</span>
+                  <span className="px-2 py-1 bg-secondary-container/30 border border-secondary-container text-[10px] rounded font-mono-label text-secondary uppercase">XChaCha20</span>
                 </div>
               </div>
-            </section>
-
-            {/* About Section */}
-            <section id="section-about" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>About M2M</h2>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)' }}>System information and version.</p>
+              <div className="w-16 h-16 opacity-20 hover:opacity-100 transition-opacity duration-700">
+                <div className="w-full h-full bg-gradient-to-br from-primary to-tertiary rounded-xl rotate-12"></div>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)', overflow: 'hidden' }}>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Version</div>
-                  <div style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>2.5.x (Obsidian Prism)</div>
-                </div>
-                <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Cryptographic Stack</div>
-                  <div style={{ color: 'var(--color-text-secondary)', fontSize: '13px', textAlign: 'right' }}>Ed25519 · X25519<br/>XChaCha20-Poly1305 · Double Ratchet</div>
-                </div>
-              </div>
-            </section>
+            </div>
+          </section>
 
-          </div>
         </div>
       </main>
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

@@ -34,12 +34,24 @@ function AppInner() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && e.target instanceof Element && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
         setHelpOpen((prev) => !prev);
       }
     };
+    
+    // Premium Mouse Spotlight Effect
+    const handleMouseMove = (e: MouseEvent) => {
+      document.documentElement.style.setProperty('--cursor-x', `${e.clientX}px`);
+      document.documentElement.style.setProperty('--cursor-y', `${e.clientY}px`);
+    };
+
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("mousemove", handleMouseMove);
+    
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("mousemove", handleMouseMove);
+    };
   }, []);
 
   const viewComponent = (() => {

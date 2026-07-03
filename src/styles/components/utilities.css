@@ -691,3 +691,46 @@
   .msg-area { padding: var(--space-md); }
   .conv-list { padding: var(--space-sm) var(--space-md); }
 }
+
+/* --- Premium Spotlight Card --- */
+.premium-glass-card {
+  position: relative;
+  background: rgba(12, 14, 24, 0.4);
+  backdrop-filter: blur(60px) saturate(1.4);
+  border-radius: 32px;
+  box-shadow: 0 0 50px -12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.premium-glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    800px circle at var(--cursor-x) var(--cursor-y),
+    rgba(255, 255, 255, 0.15),
+    transparent 40%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.premium-glass-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    600px circle at var(--cursor-x) var(--cursor-y),
+    rgba(99, 102, 241, 0.08),
+    transparent 40%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+

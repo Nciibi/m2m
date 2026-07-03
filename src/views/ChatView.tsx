@@ -3,30 +3,25 @@ import { ToastContainer } from "../components/ui";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
-import { hashToColor } from "../utils";
 
 export default function ChatView() {
   const { toasts, removeToast, setView } = useApp();
   const {
     connection, messages, activeConversationId, typingPeers,
-    handleSendMessage, handleVerify, handleDisconnect,
-    handleMarkConversationRead,
+    handleSendMessage, handleDisconnect, handleMarkConversationRead,
   } = useChat();
   
   const [text, setText] = useState("");
-  const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [sending, setSending] = useState(false);
   
   const msgRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll logic
   useEffect(() => { 
     if (!scrolledUp && endRef.current) endRef.current.scrollIntoView({ behavior: "smooth" }); 
   }, [messages, scrolledUp]);
 
-  // Mark as read
   useEffect(() => {
     const hasUnread = messages.some((m) => m.direction === "received" && m.read_at === null);
     if (hasUnread && activeConversationId) {
@@ -35,7 +30,6 @@ export default function ChatView() {
     }
   }, [messages, activeConversationId, handleMarkConversationRead]);
 
-  // Send message
   const submit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!text.trim() || sending) return;
@@ -43,143 +37,142 @@ export default function ChatView() {
     try {
       await handleSendMessage(text.trim());
       setText("");
+      if (endRef.current) endRef.current.scrollIntoView({ behavior: "smooth" });
     } catch {} finally { setSending(false); }
   };
-
-  const backToHub = () => setView("hub");
 
   const grouped = groupByDate(messages);
 
   return (
-    <div style={{ display: 'flex', width: '100%', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-dark)', overflow: 'hidden', position: 'relative' }}>
-      {/* Background Glows */}
-      <div style={{ position: 'absolute', top: '10%', right: '-20%', width: '60%', height: '60%', background: 'radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 60%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '-20%', left: '-10%', width: '50%', height: '50%', background: 'radial-gradient(circle, rgba(16, 185, 129, 0.05) 0%, transparent 60%)', pointerEvents: 'none' }} />
-
-      <main style={{ 
-        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10,
-        maxWidth: '1000px', margin: 'auto', background: 'rgba(12, 14, 24, 0.85)', backdropFilter: 'blur(32px)',
-        border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', overflow: 'hidden'
-      }}>
-        
-        {/* Header */}
-        <header style={{ height: '64px', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', background: 'rgba(255, 255, 255, 0.02)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button onClick={backToHub} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-              <span className="material-symbols-outlined">arrow_back</span>
-            </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: `linear-gradient(135deg, ${hashToColor(activeConversationId || '')}, ${hashToColor((activeConversationId || '').slice(16))})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700 }}>
-                {(activeConversationId || '?').charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  Peer Contact
-                  {connection?.peer_verified && <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--color-success)' }}>verified</span>}
-                </h2>
-                <div style={{ fontSize: '12px', color: connection?.state === "established" ? 'var(--color-success)' : 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
-                  {connection?.state === "established" ? "Online & Encrypted" : connection?.state || "Offline"}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button className="icon-btn" onClick={() => setShowFp(true)} title="Verify Fingerprint">
-              <span className="material-symbols-outlined">security</span>
-            </button>
-            <button className="icon-btn" style={{ color: 'var(--color-danger)' }} onClick={handleDisconnect} title="Disconnect">
-              <span className="material-symbols-outlined">power_settings_new</span>
-            </button>
-          </div>
-        </header>
-
-        {/* Messages Area */}
-        <div 
-          ref={msgRef} 
-          style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}
-          onScroll={(e) => {
-            const el = e.currentTarget;
-            setScrolledUp(el.scrollHeight - el.scrollTop - el.clientHeight > 100);
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <span style={{ background: 'rgba(255,255,255,0.05)', padding: '6px 16px', borderRadius: '12px', fontSize: '12px', color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--color-warning)' }}>lock</span>
-              End-to-End Encrypted Session
+    <main className="chat-glass-card w-full max-w-container-max h-[100dvh] md:h-[962px] md:my-auto md:rounded-[32px] flex flex-col relative z-10 overflow-hidden mx-auto shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] border border-white/5 bg-surface/60 backdrop-blur-[60px] saturate-[1.2]">
+      {/* HEADER (52px) */}
+      <header className="h-[52px] min-h-[52px] flex justify-between items-center px-xl border-b border-white/5 bg-surface/80 backdrop-blur-3xl shrink-0">
+        <div className="flex items-center gap-md">
+          <span className="material-symbols-outlined text-outline text-[20px]">shield</span>
+          <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wide">Encrypted Session</span>
+        </div>
+        <div className="flex items-center gap-lg">
+          <button onClick={() => setView("hub")} className="text-on-surface-variant hover:text-primary transition-colors flex items-center">
+            <span className="material-symbols-outlined text-[22px]">arrow_back</span>
+          </button>
+          <div className="flex items-center gap-sm px-md py-xs bg-tertiary-container/10 rounded-full border border-tertiary-container/20">
+            <span className={`w-1.5 h-1.5 rounded-full ${connection?.state === "established" ? "bg-tertiary pulse-green" : "bg-warning"}`}></span>
+            <span className={`font-label-xs text-label-xs font-bold ${connection?.state === "established" ? "text-tertiary" : "text-warning"}`}>
+              {connection?.state === "established" ? "Online" : connection?.state || "Offline"}
             </span>
           </div>
+          <button onClick={handleDisconnect} className="px-md py-1 border border-danger/30 text-danger hover:bg-danger/10 rounded-lg font-label-sm transition-all">
+            Disconnect
+          </button>
+        </div>
+      </header>
 
-          {Object.entries(grouped).map(([label, msgs]) => (
-            <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="chat-date-separator">{label}</div>
-              {msgs.map((m: ChatMessage) => (
-                <div key={m.id} className={`chat-bubble chat-bubble-${m.direction}`}>
-                  {m.deleted ? (
-                    <em style={{ opacity: 0.5 }}>Message deleted</em>
-                  ) : (
-                    <div>{m.content}</div>
-                  )}
-                  <div className="chat-bubble-time">
-                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {m.direction === "sent" && m.read_at && <span style={{ marginLeft: '4px', color: '#4ade80' }}>✓✓</span>}
+      {/* MESSAGE AREA (scrollable) */}
+      <section 
+        className="flex-1 overflow-y-auto custom-scrollbar p-xl flex flex-col gap-xl"
+        ref={msgRef}
+        onScroll={(e) => {
+            const el = e.currentTarget;
+            setScrolledUp(el.scrollHeight - el.scrollTop - el.clientHeight > 100);
+        }}
+      >
+        {Object.entries(grouped).map(([label, msgs]) => (
+          <div key={label} className="flex flex-col gap-xl">
+            {/* Date Separator */}
+            <div className="flex items-center gap-lg py-md opacity-40">
+              <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-outline"></div>
+              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest whitespace-nowrap">{label}</span>
+              <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-outline"></div>
+            </div>
+            
+            {msgs.map((m: ChatMessage) => (
+              m.direction === "sent" ? (
+                <div key={m.id} className="flex flex-col items-end gap-xs max-w-[75%] self-end animate-in slide-in-from-right-4 fade-in duration-300">
+                  <div className="sent-bubble px-lg py-md bg-gradient-to-br from-primary to-inverse-primary rounded-t-2xl rounded-bl-2xl rounded-br-sm shadow-[0_8px_24px_rgba(99,102,241,0.35)] border border-white/10 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"></div>
+                    <p className="font-body-md text-white whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
                   </div>
+                  <span className="font-label-xs text-[10px] text-white/50 px-xs tracking-wider">
+                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {m.read_at && " ✓✓"}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ))}
-
-          {typingPeers.length > 0 && (
-            <div style={{ display: 'flex', gap: '8px', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '16px', alignSelf: 'flex-start', width: 'fit-content' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-text-muted)', animation: 'dotBounce 1.4s ease-in-out infinite both' }} />
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-text-muted)', animation: 'dotBounce 1.4s ease-in-out infinite both', animationDelay: '0.16s' }} />
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-text-muted)', animation: 'dotBounce 1.4s ease-in-out infinite both', animationDelay: '0.32s' }} />
-            </div>
-          )}
-          <div ref={endRef} />
-        </div>
-
-        {/* Input Area */}
-        <footer style={{ padding: '24px', background: 'rgba(12, 14, 24, 0.9)', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-          <form onSubmit={submit} className="chat-input-wrapper">
-            <button type="button" className="chat-action-btn chat-attach-btn" onClick={handleSendFile}>
-              <span className="material-symbols-outlined">attach_file</span>
-            </button>
-            <textarea
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
-              placeholder="Message..."
-              className="chat-input"
-              rows={1}
-              disabled={connection?.state !== "established"}
-            />
-            <button type="submit" disabled={!text.trim() || sending || connection?.state !== "established"} className="chat-action-btn chat-send-btn">
-              {sending ? <span className="material-symbols-outlined" style={{ animation: 'spin 1s linear infinite' }}>sync</span> : <span className="material-symbols-outlined">send</span>}
-            </button>
-          </form>
-        </footer>
-      </main>
-
-      {/* Fingerprint Verification Modal */}
-      {showFp && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}>
-          <div style={{ background: 'var(--color-bg-surface-variant)', border: '1px solid var(--color-border-subtle)', borderRadius: '24px', padding: '32px', maxWidth: '400px', width: '100%', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', color: 'white' }}>Verify Identity</h3>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Compare this fingerprint with your peer out-of-band.</p>
-            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '12px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-primary)', wordBreak: 'break-all', marginBottom: '24px' }}>
-              {connection?.peer_fingerprint || "Unknown"}
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowFp(false)} style={{ background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => { handleVerify(); setShowFp(false); }} style={{ background: 'var(--color-success)', color: 'var(--color-bg-dark)', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Verify Match</button>
-            </div>
+              ) : (
+                <div key={m.id} className="flex flex-col items-start gap-xs max-w-[75%] self-start animate-in slide-in-from-left-4 fade-in duration-300">
+                  <div className="received-bubble px-lg py-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-t-2xl rounded-br-2xl rounded-bl-sm shadow-xl hover:bg-white/10 transition-colors duration-300">
+                    <p className="font-body-md text-text-primary whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
+                  </div>
+                  <span className="font-label-xs text-[10px] text-text-muted px-xs">
+                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              )
+            ))}
           </div>
-        </div>
-      )}
+        ))}
+        {typingPeers.length > 0 && (
+          <div className="flex flex-col items-start gap-xs max-w-[75%] self-start">
+             <div className="received-bubble px-lg py-md shadow-lg flex gap-1">
+               <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-pulse"></span>
+               <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-pulse" style={{ animationDelay: '200ms' }}></span>
+               <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-pulse" style={{ animationDelay: '400ms' }}></span>
+             </div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </section>
 
+      {/* INPUT AREA */}
+      <div className="p-xl border-t border-white/5 input-blur shrink-0">
+        <form onSubmit={submit} className="flex items-center gap-md bg-white/5 rounded-2xl p-sm border border-white/10">
+          <div className="flex items-center gap-xs px-xs">
+            <button type="button" className="p-sm text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined text-[20px]">attach_file</span>
+            </button>
+            <button type="button" className="p-sm text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
+            </button>
+          </div>
+          <textarea 
+            value={text}
+            onChange={(e) => {
+                setText(e.target.value);
+                e.target.style.height = '48px';
+                e.target.style.height = `${e.target.scrollHeight}px`;
+                e.target.style.overflowY = e.target.scrollHeight > 150 ? 'auto' : 'hidden';
+            }}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submit();
+                }
+            }}
+            disabled={connection?.state !== "established"}
+            className="flex-1 bg-transparent border-none focus:ring-0 text-text-primary font-body-md py-md custom-scrollbar resize-none h-[48px]" 
+            placeholder="Type a secure message..."
+          ></textarea>
+          <div className="flex items-center gap-md pr-sm">
+            <button type="button" className="flex items-center gap-xs px-md py-1.5 bg-black/40 hover:bg-black/60 rounded-full border border-white/5 transition-all group">
+              <span className="material-symbols-outlined text-[16px] text-warning">timer</span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-text-primary transition-colors">Off</span>
+            </button>
+            <button type="submit" disabled={!text.trim() || sending} className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-inverse-primary text-white flex items-center justify-center disabled:opacity-50 transition-all duration-300 shadow-[0_0_15px_rgba(99,102,241,0.4)] hover:shadow-[0_0_25px_rgba(99,102,241,0.7)] active:scale-90 group shrink-0">
+              <span className={`material-symbols-outlined text-[20px] ${sending ? 'animate-spin' : 'group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform duration-300'}`}>{sending ? "sync" : "send"}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* FOOTER */}
+      <footer className="px-xl py-lg border-t border-white/5 bg-surface-container-lowest/50 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-sm">
+          <span className="material-symbols-outlined text-sm text-tertiary">lock</span>
+          <span className="font-mono-label text-[10px] text-text-muted uppercase tracking-widest">End-to-end encrypted</span>
+        </div>
+        <span className="font-mono-label text-[10px] text-text-muted">Enter to send</span>
+      </footer>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </div>
+    </main>
   );
 }
 

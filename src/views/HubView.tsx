@@ -1,388 +1,287 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ToastContainer } from "../components/ui";
-import {
-  GearIcon, LinkIcon, CopyIcon, CheckIcon,
-  MessageIcon, HomeIcon, WifiIcon
-} from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
-import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
 import type { FamilyMember } from "../types";
-import { hashToColor, formatTime } from "../utils";
+import { formatTime } from "../utils";
 
 export default function HubView() {
-  const { identity, setView, toasts, removeToast } = useApp();
-  const {
-    connection, generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
-    isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
-    handleConnect, setNamingMyName, setNamingTheirName, handleOpenChat,
-    handleDeleteConversation, conversations,
-    mutedConversations, handleMuteConversation, handleUnmuteConversation,
-  } = useChat();
-  const {
-    networkSettings, privateMode, openSettings,
-    discoveryConfig, discoveredPeers,
-    handleConnectDiscoveredPeer, handleRefreshDiscovery,
-    securityConfig, scheduleClipboardClear,
-  } = useSettings();
-  
-  const [tab, setTab] = useState<"connect" | "chats" | "family" | "nearby">("connect");
-  const [copied, setCopied] = useState(false);
-  const [search, setSearch] = useState("");
-  const [family, setFamily] = useState<FamilyMember[]>([]);
+  const { identity, toasts, removeToast, setView } = useApp();
+  const { conversations, handleOpenChat: ctxHandleOpenChat } = useChat();
+  const [activeTab, setActiveTab] = useState<"connect" | "chats" | "nearby" | "family">("connect");
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
 
-  const handleCopy = () => {
-    copyInvite();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
-      scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+  const refreshFamily = async () => {
+    try { setFamilyMembers(await invoke<FamilyMember[]>("get_family_members")); } catch {}
+  };
+  const connectFamily = async (peerKeyHex: string) => {
+    try { await invoke("connect_family_member", { peerKeyHex }); setView("chat"); } catch (e) { throw e; }
+  };
+
+  useEffect(() => { refreshFamily(); }, []);
+
+  // State for Connect Tab
+  const [generatedInvite, setGeneratedInvite] = useState("");
+  const [inviteToConnect, setInviteToConnect] = useState("");
+  const [namingMyName, setNamingMyName] = useState("");
+  const [namingTheirName, setNamingTheirName] = useState("");
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const inviteValid = inviteToConnect.startsWith("m2m://") && inviteToConnect.length > 20;
+
+  // Search for Chats
+  const [search, setSearch] = useState("");
+
+  const handleGenerateInvite = async () => {
+    try {
+      const invite = await invoke<string>("generate_invite_link");
+      setGeneratedInvite(invite);
+    } catch (e) {}
+  };
+
+  const handleCopyInvite = () => {
+    if (generatedInvite) {
+      navigator.clipboard.writeText(generatedInvite);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const loadFamily = useCallback(async () => {
+  const handleConnect = async () => {
+    if (!inviteValid) return;
+    setIsConnecting(true);
     try {
-      const f = await invoke<FamilyMember[]>("list_family");
-      setFamily(f);
-    } catch { /* noop */ }
-  }, []);
-
-  const handleFamilyConnect = useCallback(async (peerKeyHex: string) => {
-    await invoke<any>("connect_family_member", { peerKeyHex });
-    setView("chat");
-  }, [setView]);
-
-  useEffect(() => {
-    if (tab === "family") loadFamily();
-  }, [tab, loadFamily]);
-
-  // Global keyboard shortcuts for Hub
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && e.key === "n") {
-        e.preventDefault();
-        setTab("connect");
+      await invoke("join_invite_link", { link: inviteToConnect });
+      if (namingTheirName || namingMyName) {
+        try {
+          const peerKey = inviteToConnect.split("//")[1]?.split("/")[0] || "";
+          if (peerKey) {
+            await invoke("update_conversation_name", { peerKeyHex: peerKey, name: namingTheirName });
+          }
+        } catch {}
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
+      setView("chat");
+    } catch (e) {
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
-  const filtered = conversations.filter(c => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (c.display_name || "").toLowerCase().includes(q) ||
-      (c.peer_display_name || "").toLowerCase().includes(q) ||
-      (c.last_message_preview || "").toLowerCase().includes(q) ||
-      c.peer_key_hex.toLowerCase().includes(q);
-  });
-
-  return (
-    <div style={{ display: 'flex', width: '100%', height: '100vh', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-      {/* Background Glows matching 236 */}
-      <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '40%', height: '40%', background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.15) 0%, transparent 70%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '40%', height: '40%', background: 'radial-gradient(circle at center, rgba(99, 102, 241, 0.15) 0%, transparent 70%)', pointerEvents: 'none' }} />
-      
-      {/* Main Glass Shell */}
-      <main className="app-shell" style={{ maxWidth: '1000px', flexDirection: 'column' }}>
-        
-        {/* Header */}
-        <header className="hub-header">
-          <div className="hub-header__brand">
-            <div className="hub-header__logo">
-              <span className="material-symbols-outlined" style={{ color: 'white', fontSize: 20 }}>security</span>
-            </div>
-            <span className="hub-header__title">M2M</span>
-          </div>
-          <div className="hub-header__actions">
-            <div className="hub-status-pill">
-              <span style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: connection?.state === "established" ? 'var(--color-success)' : isConnecting ? 'var(--color-warning)' : 'var(--color-text-muted)',
-                boxShadow: connection?.state === "established" ? '0 0 8px var(--color-success)' : undefined
-              }} />
-              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-primary)' }}>
-                {isConnecting ? "Connecting" : connection?.state === "established" ? "Online" : "Offline"}
-              </span>
-            </div>
-            <button className="icon-btn" onClick={openSettings} title="Settings">
-              <GearIcon size={22} />
-            </button>
-          </div>
-        </header>
-
-        {/* Tab Bar */}
-        <nav className="hub-tab-bar">
-          <button className={`hub-tab ${tab === "connect" ? "hub-tab--active" : ""}`} onClick={() => setTab("connect")}>
-            <LinkIcon size={18} /> Connect
-          </button>
-          <button className={`hub-tab ${tab === "chats" ? "hub-tab--active" : ""}`} onClick={() => setTab("chats")}>
-            <MessageIcon size={18} /> Chats
-            {conversations.length > 0 && <span className="hub-tab-badge">{conversations.length}</span>}
-          </button>
-          <button className={`hub-tab ${tab === "nearby" ? "hub-tab--active" : ""}`} onClick={() => setTab("nearby")}>
-            <WifiIcon size={18} /> Nearby
-            {discoveredPeers.length > 0 && <span className="hub-tab-badge">{discoveredPeers.length}</span>}
-          </button>
-          <button className={`hub-tab ${tab === "family" ? "hub-tab--active" : ""}`} onClick={() => setTab("family")}>
-            <HomeIcon size={18} /> Family
-            {family.length > 0 && <span className="hub-tab-badge">{family.length}</span>}
-          </button>
-        </nav>
-
-        {/* Content Area */}
-        <div className="hub-content">
-          {tab === "connect" ? (
-            <ConnectTab
-              generatedInvite={generatedInvite} inviteToConnect={inviteToConnect}
-              inviteValid={inviteValid} namingMyName={namingMyName} namingTheirName={namingTheirName}
-              isConnecting={isConnecting} onGenerateInvite={handleGenerateInvite}
-              onCopyInvite={handleCopy} copied={copied}
-              setInviteToConnect={setInviteToConnect} onConnect={handleConnect}
-              setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
-              networkSettings={networkSettings} privateMode={privateMode} identity={identity}
-              securityConfig={securityConfig} scheduleClipboardClear={scheduleClipboardClear}
-            />
-          ) : tab === "nearby" ? (
-            <NearbyTab
-              discoveryConfig={discoveryConfig}
-              discoveredPeers={discoveredPeers}
-              onConnect={handleConnectDiscoveredPeer}
-              onRefresh={handleRefreshDiscovery}
-              onOpenSettings={openSettings}
-              onOpenChat={handleOpenChat}
-            />
-          ) : tab === "family" ? (
-            <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
-          ) : (
-            <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} mutedConversations={mutedConversations} onMute={handleMuteConversation} onUnmute={handleUnmuteConversation} />
-          )}
-        </div>
-
-        {/* Footer (from Connect view in 236) */}
-        {tab === "connect" && (
-          <footer className="hub-footer">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Your Identity Fingerprint</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--color-primary)', background: 'rgba(255,255,255,0.05)', padding: '4px 12px', borderRadius: 8, border: '1px solid var(--color-border-subtle)' }}>
-                  {identity?.fingerprint || "Loading..."}
-                </span>
-              </div>
-            </div>
-          </footer>
-        )}
-
-      </main>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </div>
-  );
-}
-
-function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName }: any) {
-  const [generating, setGenerating] = useState(false);
-  
-  const handleGenerate = async () => {
-    setGenerating(true);
-    try {
-      await onGenerateInvite();
-    } finally { setGenerating(false); }
+  const handleOpenChat = (peerKeyHex: string) => {
+    const conv = conversations.find(c => c.peer_key_hex === peerKeyHex);
+    if (conv) {
+      ctxHandleOpenChat(conv);
+    }
   };
 
   return (
-    <div className="connect-grid">
-      {/* Host a Connection */}
-      <section className="glass-card-section">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(192,193,255,0.1)', border: '1px solid rgba(192,193,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--color-primary)' }}>broadcast_on_personal</span>
+    <main className="glass-panel w-full max-w-container-max h-[100dvh] md:h-[962px] md:my-auto md:rounded-[32px] flex flex-col relative z-10 overflow-hidden mx-auto shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] border border-white/5 bg-surface/60 backdrop-blur-[60px] saturate-[1.2]">
+      {/* Header */}
+      <header className="h-[64px] px-xl flex items-center justify-between border-b border-border-subtle shrink-0 bg-surface/80 backdrop-blur-3xl">
+        <div className="flex items-center gap-md">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary-container to-inverse-primary flex items-center justify-center shadow-lg shadow-primary-container/20">
+            <span className="material-symbols-outlined text-white text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
           </div>
-          <div>
-            <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)' }}>Host a Connection</h2>
-            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Create a secure link for others to join.</p>
-          </div>
+          <span className="font-headline-2xl text-headline-2xl font-extrabold tracking-tight text-on-surface">M2M</span>
         </div>
-
-        <button 
-          onClick={handleGenerate}
-          disabled={generating}
-          style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', fontSize: '18px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', marginBottom: '24px' }}
-          className="btn-generate-glow"
-        >
-          {generating ? "Generating..." : "Generate Invite Link"}
-        </button>
-
-        {generatedInvite && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Your Active Invite</label>
-            <div className="invite-output-box">
-              <span className="invite-text">{generatedInvite}</span>
-              <button className="icon-btn" onClick={onCopyInvite} title="Copy">
-                {copied ? <CheckIcon size={20} color="var(--color-success)" /> : <CopyIcon size={20} />}
-              </button>
-            </div>
+        <div className="flex items-center gap-lg">
+          <div className="flex items-center gap-sm bg-surface-container-low/50 px-md py-xs rounded-full border border-border-subtle">
+            <div className="w-2 h-2 rounded-full bg-tertiary-fixed-dim status-glow animate-pulse"></div>
+            <span className="font-label-sm text-label-sm text-on-surface">Online</span>
           </div>
-        )}
-      </section>
-
-      {/* Join a Connection */}
-      <section className="glass-card-section">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(78,222,163,0.1)', border: '1px solid rgba(78,222,163,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--color-success)' }}>key</span>
-          </div>
-          <div>
-            <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-text-primary)' }}>Join a Connection</h2>
-            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Enter a link to start an encrypted chat.</p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Invite Link</label>
-            <input 
-              value={inviteToConnect} 
-              onChange={e => setInviteToConnect(e.target.value)}
-              placeholder="m2m://..." 
-              style={{ width: '100%', background: 'var(--color-bg-input)', border: '1px solid var(--color-border-subtle)', borderRadius: 12, padding: '12px 16px', color: 'var(--color-primary)', fontFamily: 'var(--font-mono)', outline: 'none' }}
-            />
-            {inviteValid && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-success)', fontSize: 12, marginTop: 4 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
-                <span>Valid Invite Found</span>
-              </div>
-            )}
-          </div>
-
-          {inviteValid && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Your Name</label>
-                <input value={namingMyName} onChange={e => setNamingMyName(e.target.value)} placeholder="Nexus-01" style={{ width: '100%', background: 'var(--color-bg-input)', border: '1px solid var(--color-border-subtle)', borderRadius: 12, padding: '12px 16px', color: 'white', outline: 'none' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Their Name</label>
-                <input value={namingTheirName} onChange={e => setNamingTheirName(e.target.value)} placeholder="Ghost-Host" style={{ width: '100%', background: 'var(--color-bg-input)', border: '1px solid var(--color-border-subtle)', borderRadius: 12, padding: '12px 16px', color: 'white', outline: 'none' }} />
-              </div>
-            </div>
-          )}
-
-          <button 
-            onClick={onConnect}
-            disabled={isConnecting || !inviteToConnect}
-            style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', background: 'var(--color-success)', color: 'var(--color-bg-dark)', fontSize: '18px', fontWeight: 700, cursor: isConnecting || !inviteToConnect ? 'not-allowed' : 'pointer', opacity: isConnecting || !inviteToConnect ? 0.5 : 1, transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-          >
-            <span className="material-symbols-outlined">sensors</span>
-            {isConnecting ? "Connecting..." : "Connect"}
+          <button onClick={() => setView("settings")} className="text-on-surface-variant hover:text-primary transition-colors active:scale-95">
+            <span className="material-symbols-outlined text-[20px]">settings</span>
           </button>
         </div>
-      </section>
-    </div>
-  );
-}
+      </header>
 
-function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    setFavorites(new Set(conversations.filter((c: any) => c.is_favorite).map((c: any) => c.peer_key_hex)));
-  }, [conversations]);
-
-  const toggleFav = async (peerKeyHex: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const newVal = await invoke<boolean>("toggle_favorite", { peerKeyHex });
-      setFavorites(prev => { const n = new Set(prev); if (newVal) n.add(peerKeyHex); else n.delete(peerKeyHex); return n; });
-    } catch {}
-  };
-
-  const toggleArch = async (peerKeyHex: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await invoke<boolean>("toggle_archive", { peerKeyHex });
-      // UI optimistic update omitted for brevity
-    } catch {}
-  };
-
-  const sorted = [...conversations].sort((a: any, b: any) => {
-    if ((a.archived ? 1 : 0) !== (b.archived ? 1 : 0)) return (a.archived ? 1 : 0) - (b.archived ? 1 : 0);
-    if ((a.is_favorite ? 1 : 0) !== (b.is_favorite ? 1 : 0)) return (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0);
-    return (b.last_message_at || 0) - (a.last_message_at || 0);
-  });
-
-  return (
-    <div className="chats-layout">
-      {conversations.length > 0 && (
-        <div style={{ position: 'relative' }}>
-          <span className="material-symbols-outlined" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }}>search</span>
-          <input 
-            type="text" 
-            placeholder="Search conversations..." 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', height: 40, background: 'rgba(0,0,0,0.4)', border: '1px solid var(--color-border-subtle)', borderRadius: 12, paddingLeft: 48, paddingRight: 16, color: 'white', outline: 'none' }}
-          />
+      {/* Tab Bar */}
+      <nav className="h-[44px] px-xl flex items-center border-b border-border-subtle bg-surface-container-lowest/30 shrink-0">
+        <div className="flex items-center h-full gap-xl">
+          <button onClick={() => setActiveTab("connect")} className={`h-full flex items-center gap-sm px-xs border-b-2 transition-all ${activeTab === "connect" ? "border-primary text-on-surface" : "border-transparent text-on-surface-variant hover:text-on-surface group"}`}>
+            <span className="material-symbols-outlined text-[18px]">link</span>
+            <span className={`font-label-sm text-label-sm ${activeTab === "connect" ? "font-bold" : ""}`}>Connect</span>
+          </button>
+          <button onClick={() => setActiveTab("chats")} className={`h-full flex items-center gap-sm px-xs border-b-2 transition-all ${activeTab === "chats" ? "border-primary text-on-surface" : "border-transparent text-on-surface-variant hover:text-on-surface group"}`}>
+            <span className="material-symbols-outlined text-[18px]">chat_bubble</span>
+            <span className={`font-label-sm text-label-sm ${activeTab === "chats" ? "font-bold" : ""}`}>Chats</span>
+            {conversations.length > 0 && <span className="bg-primary-container text-on-primary-container text-[10px] px-1.5 py-0.5 rounded-full font-bold">{conversations.length}</span>}
+          </button>
+          <button onClick={() => setActiveTab("nearby")} className={`h-full flex items-center gap-sm px-xs border-b-2 transition-all ${activeTab === "nearby" ? "border-primary text-on-surface" : "border-transparent text-on-surface-variant hover:text-on-surface group"}`}>
+            <span className="material-symbols-outlined text-[18px]">wifi</span>
+            <span className={`font-label-sm text-label-sm ${activeTab === "nearby" ? "font-bold" : ""}`}>Nearby</span>
+          </button>
+          <button onClick={() => setActiveTab("family")} className={`h-full flex items-center gap-sm px-xs border-b-2 transition-all ${activeTab === "family" ? "border-primary text-on-surface" : "border-transparent text-on-surface-variant hover:text-on-surface group"}`}>
+            <span className="material-symbols-outlined text-[18px]">group</span>
+            <span className={`font-label-sm text-label-sm ${activeTab === "family" ? "font-bold" : ""}`}>Family</span>
+          </button>
         </div>
-      )}
+      </nav>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {sorted.map((c: any) => {
-          const isMuted = mutedConversations?.includes(c.peer_key_hex);
-          return (
-            <div key={c.id} className="chat-item" onClick={() => onOpenChat(c)}>
-              <div className="chat-item-avatar" style={{ background: `linear-gradient(135deg, ${hashToColor(c.peer_key_hex)}, ${hashToColor(c.peer_key_hex.slice(16))})` }}>
-                {(c.display_name || c.peer_display_name || c.peer_key_hex).charAt(0).toUpperCase()}
-                {c.is_online && <span className="status-dot" />}
-              </div>
-              <div className="chat-item-body">
-                <div className="chat-item-top">
-                  <span className="chat-item-name">
-                    {c.display_name || c.peer_display_name || "Unknown Peer"}
-                    {favorites.has(c.peer_key_hex) && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--color-warning)', marginLeft: 4 }}>star</span>}
-                  </span>
-                  {c.last_message_at && <span className="chat-item-time">{formatTime(c.last_message_at)}</span>}
+      {/* Main Content Area */}
+      <div className="flex-1 p-xl overflow-y-auto space-y-xl custom-scrollbar flex flex-col">
+        {activeTab === "connect" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-xl h-full">
+            {/* Host Connection */}
+            <section className="glass-card rounded-2xl p-xl flex flex-col h-full">
+              <div className="flex items-center gap-md mb-xl">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <span className="material-symbols-outlined text-primary">broadcast_on_personal</span>
                 </div>
-                <div className="chat-item-preview">{c.last_message_preview || "No messages yet."}</div>
+                <div>
+                  <h2 className="font-headline-2xl text-headline-2xl text-on-surface">Host a Connection</h2>
+                  <p className="font-body-md text-body-md text-on-surface-variant">Create a secure link for others to join.</p>
+                </div>
               </div>
-              <div className="chat-item-actions">
-                <button className="icon-btn" onClick={(e) => toggleFav(c.peer_key_hex, e)} title="Favorite">
-                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{favorites.has(c.peer_key_hex) ? "star" : "star_border"}</span>
-                </button>
-                <button className="icon-btn" onClick={(e) => { e.stopPropagation(); isMuted ? onUnmute(c.peer_key_hex) : onMute(c.peer_key_hex); }} title="Mute">
-                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{isMuted ? "notifications_off" : "notifications"}</span>
-                </button>
-                <button className="icon-btn" onClick={(e) => toggleArch(c.peer_key_hex, e)} title="Archive">
-                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>archive</span>
-                </button>
-                <button className="icon-btn icon-btn--danger" onClick={(e) => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }} title="Delete">
-                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>delete</span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
+              <button onClick={handleGenerateInvite} className="w-full py-md px-xl bg-gradient-to-r from-primary-container to-inverse-primary text-on-primary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] mb-xl border border-white/10 group">
+                <span className="material-symbols-outlined group-hover:rotate-12 transition-transform duration-300">{generatedInvite ? "refresh" : "add_link"}</span>
+                {generatedInvite ? "Regenerate Invite Link" : "Generate Invite Link"}
+              </button>
+              {generatedInvite && (
+                <div className="space-y-md">
+                  <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Your Active Invite</label>
+                  <div className="flex items-center gap-sm bg-input-bg p-md rounded-xl border border-border-subtle group">
+                    <span className="font-mono-code text-mono-code text-primary flex-1 break-all overflow-hidden whitespace-nowrap">{generatedInvite}</span>
+                    <button onClick={handleCopyInvite} className="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-white/5">
+                      <span className="material-symbols-outlined text-[20px]">{copied ? "check" : "content_copy"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
 
-        {conversations.length === 0 && (
-          <div style={{ textAlign: 'center', marginTop: 60 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--color-text-muted)', marginBottom: 16 }}>chat_bubble</span>
-            <p style={{ fontSize: 18, fontWeight: 600, color: 'white' }}>No conversations yet</p>
-            <p style={{ color: 'var(--color-text-secondary)', marginBottom: 24 }}>Host a connection or join one to start chatting.</p>
-            <button className="btn-generate-glow" style={{ border: 'none', padding: '12px 24px', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }} onClick={onGetStarted}>
-              Get Started
-            </button>
+            {/* Join Connection */}
+            <section className="glass-card rounded-2xl p-xl flex flex-col h-full">
+              <div className="flex items-center gap-md mb-xl">
+                <div className="w-10 h-10 rounded-xl bg-tertiary/10 flex items-center justify-center border border-tertiary/20">
+                  <span className="material-symbols-outlined text-tertiary">key</span>
+                </div>
+                <div>
+                  <h2 className="font-headline-2xl text-headline-2xl text-on-surface">Join a Connection</h2>
+                  <p className="font-body-md text-body-md text-on-surface-variant">Enter a link to start an encrypted chat.</p>
+                </div>
+              </div>
+              <div className="space-y-xl">
+                <div className="space-y-md">
+                  <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Invite Link</label>
+                  <input value={inviteToConnect} onChange={e => setInviteToConnect(e.target.value)} className="w-full bg-input-bg border border-border-subtle rounded-xl px-xl py-md text-primary font-mono-code focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-outline-variant outline-none transition-all" placeholder="m2m://..." type="text"/>
+                  {inviteValid && (
+                    <div className="flex items-center gap-sm text-tertiary font-label-sm text-label-sm px-xs">
+                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                      <span>Valid Invite Found</span>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-lg">
+                  <div className="space-y-md">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Your Name (Optional)</label>
+                    <input value={namingMyName} onChange={e => setNamingMyName(e.target.value)} className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none" placeholder="Nexus-01" type="text"/>
+                  </div>
+                  <div className="space-y-md">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Their Name (Optional)</label>
+                    <input value={namingTheirName} onChange={e => setNamingTheirName(e.target.value)} className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none" placeholder="Ghost-Host" type="text"/>
+                  </div>
+                </div>
+                <button onClick={handleConnect} disabled={!inviteValid || isConnecting} className="w-full py-md px-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed group">
+                  <span className={`material-symbols-outlined ${isConnecting ? 'animate-spin' : 'group-hover:scale-110 transition-transform duration-300'}`}>{isConnecting ? "sync" : "sensors"}</span>
+                  {isConnecting ? "Connecting..." : "Connect"}
+                </button>
+              </div>
+              {/* Atmospheric Graphic Element */}
+              <div className="mt-auto pt-4xl flex justify-center">
+                <div className="relative w-32 h-32 flex items-center justify-center opacity-30">
+                  <div className="absolute inset-0 border border-primary/20 rounded-full animate-ping"></div>
+                  <div className="absolute inset-4 border border-tertiary/20 rounded-full animate-[ping_2s_infinite]"></div>
+                  <span className="material-symbols-outlined text-primary/40 text-4xl">vpn_lock</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeTab === "chats" && (
+          <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full gap-lg overflow-hidden h-full">
+            {/* Search Bar */}
+            <div className="relative shrink-0">
+              <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-text-muted text-[20px]">search</span>
+              <input value={search} onChange={e => setSearch(e.target.value)} className="w-full h-[36px] bg-black/40 backdrop-blur-3xl border border-white/10 rounded-lg pl-10 pr-md text-body-md text-white focus:ring-1 focus:ring-primary/50 outline-none transition-all" placeholder="Search conversations…" type="text"/>
+            </div>
+            {/* Conversation List */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-sm">
+              {conversations.filter(c => c.peer_key_hex.includes(search) || (c.display_name && c.display_name.toLowerCase().includes(search.toLowerCase()))).map((c, i) => (
+                <div key={c.peer_key_hex} onClick={() => handleOpenChat(c.peer_key_hex)} className="group inner-glass h-16 p-md rounded-xl flex items-center gap-md cursor-pointer hover:bg-white/10 hover:border-white/20 transition-all duration-300 hover:scale-[1.01] hover:shadow-lg animate-in slide-in-from-bottom-2 fade-in" style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}>
+                  <div className="relative flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6366f1] to-[#a855f7] flex items-center justify-center font-bold text-white text-lg">
+                      {(c.display_name || c.peer_key_hex).charAt(0).toUpperCase()}
+                    </div>
+                    {c.is_online && <div className="absolute top-0 right-0 w-3 h-3 bg-tertiary border-2 border-[#030408] rounded-full status-dot"></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-xs">
+                      <div className="flex items-center gap-xs">
+                        <span className="font-bold text-white truncate">{c.display_name || c.peer_key_hex.substring(0, 16)}</span>
+                        {c.is_favorite && <span className="material-symbols-outlined text-warning text-[16px]">star</span>}
+                      </div>
+                      <span className="text-label-xs text-text-muted">{formatTime(c.last_message_at ?? 0)}</span>
+                    </div>
+                    <p className="text-body-base text-secondary truncate">{c.last_message_preview || "No messages yet."}</p>
+                  </div>
+                  <div className="hidden group-hover:flex items-center gap-sm text-text-muted">
+                    <span className="material-symbols-outlined text-[18px] hover:text-danger" onClick={(e) => { e.stopPropagation(); invoke("delete_conversation", { peerKeyHex: c.peer_key_hex }); }}>delete</span>
+                  </div>
+                </div>
+              ))}
+              {conversations.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-text-muted">
+                  <span className="material-symbols-outlined text-4xl mb-4 opacity-50">chat_bubble_outline</span>
+                  <p>No conversations yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "nearby" && (
+          <div className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto w-full gap-lg overflow-hidden h-full">
+            <span className="material-symbols-outlined text-[64px] text-primary/50 mb-4">wifi_tethering</span>
+            <h2 className="font-headline-3xl text-headline-3xl text-on-surface">Nearby Discovery</h2>
+            <p className="text-on-surface-variant text-center max-w-md">Find and connect with peers securely over your local network using mDNS and DHT.</p>
+          </div>
+        )}
+
+        {activeTab === "family" && (
+          <div className="flex-1 max-w-3xl mx-auto w-full h-full overflow-y-auto custom-scrollbar">
+             <FamilyTab family={familyMembers} onRefresh={refreshFamily} onConnect={connectFamily} />
           </div>
         )}
       </div>
-    </div>
-  );
-}
 
-function NearbyTab() {
-  // Omitted for brevity, will keep simple
-  return (
-    <div style={{ color: 'white' }}>Nearby Tab - To be enhanced</div>
+      {/* Footer */}
+      <footer className="shrink-0 border-t border-border-subtle bg-surface-container-lowest/50 p-xl flex flex-col md:flex-row items-center justify-between gap-xl">
+        <div className="flex flex-col gap-sm">
+          <span className="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-[0.2em]">Your Identity Fingerprint</span>
+          <div className="flex items-center gap-md">
+            <span className="font-mono-code text-mono-code text-secondary px-md py-xs bg-white/5 rounded-lg border border-border-subtle">
+              {identity?.fingerprint || "Loading fingerprint..."}
+            </span>
+            <button onClick={() => { if(identity?.fingerprint) { navigator.clipboard.writeText(identity.fingerprint); setCopied(true); setTimeout(() => setCopied(false), 2000); } }} className="text-on-surface-variant hover:text-primary transition-colors p-sm rounded-lg hover:bg-white/5 active:scale-90" title="Copy Fingerprint">
+              <span className="material-symbols-outlined text-[18px]">{copied ? "check" : "content_copy"}</span>
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-4xl">
+          <div className="flex flex-col items-end">
+            <span className="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-[0.2em]">End-to-End Encryption</span>
+            <div className="flex items-center gap-sm mt-1">
+              <span className="font-mono-label text-mono-label text-tertiary bg-tertiary/10 px-2 py-0.5 rounded border border-tertiary/20">Ed25519</span>
+              <span className="font-mono-label text-mono-label text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">XChaCha20-Poly1305</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </main>
   );
 }
