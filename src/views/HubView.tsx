@@ -30,6 +30,7 @@ export default function HubView() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
   const inviteValid = inviteToConnect.startsWith("m2m://") && inviteToConnect.length > 20;
 
   // Search for Chats
