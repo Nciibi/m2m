@@ -20,6 +20,7 @@ import SetupView from "./views/SetupView";
 import VaultView from "./views/VaultView";
 import HubView from "./views/HubView";
 import ChatView from "./views/ChatView";
+import GroupChatView from "./views/GroupChatView";
 import SettingsView from "./views/SettingsView";
 
 function AppInner() {
