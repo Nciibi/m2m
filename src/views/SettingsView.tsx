@@ -106,13 +106,13 @@ export default function SettingsView() {
       `}</style>
 
       {/* TopAppBar */}
-      <header className="fixed top-0 w-full z-50 backdrop-blur-3xl border-b border-white/5 bg-surface/60 shadow-sm">
+      <header className="fixed top-0 w-full z-50 backdrop-blur-3xl border-b border-border-subtle bg-surface/60 shadow-sm">
         <div className="flex justify-between items-center px-lg py-md max-w-container-max mx-auto h-16">
           <div className="flex items-center gap-md">
             <span className="material-symbols-outlined text-primary text-2xl">settings</span>
             <h1 className="font-headline-2xl text-headline-2xl font-bold text-on-surface tracking-tight">Settings</h1>
           </div>
-          <button onClick={() => setView("hub")} className="active:scale-95 duration-200 p-2 hover:bg-white/5 rounded-full transition-colors">
+          <button onClick={() => setView("hub")} className="active:scale-95 duration-200 p-2 hover:bg-input-bg rounded-full transition-colors">
             <span className="material-symbols-outlined text-on-surface-variant">close</span>
           </button>
         </div>
@@ -225,8 +225,8 @@ export default function SettingsView() {
               </div>
             </div>
             <div className="flex gap-md">
-              <button className="flex-1 py-2 px-md border border-border-subtle rounded-lg font-label-sm text-on-surface-variant hover:bg-white/5 transition-all">Test Tor</button>
-              <button onClick={handleStunDiscover} className="flex-1 py-2 px-md border border-border-subtle rounded-lg font-label-sm text-on-surface-variant hover:bg-white/5 transition-all">{stunLoading ? "Checking..." : "Check Connectivity"}</button>
+              <button className="flex-1 py-2 px-md border border-border-subtle rounded-lg font-label-sm text-on-surface-variant hover:bg-input-bg transition-all">Test Tor</button>
+              <button onClick={handleStunDiscover} className="flex-1 py-2 px-md border border-border-subtle rounded-lg font-label-sm text-on-surface-variant hover:bg-input-bg transition-all">{stunLoading ? "Checking..." : "Check Connectivity"}</button>
             </div>
           </section>
 
@@ -305,7 +305,7 @@ export default function SettingsView() {
                 <button onClick={handleLockVault} className="flex-1 py-2 px-md border border-danger/30 text-danger rounded-lg font-label-sm hover:bg-danger/10 transition-all flex items-center justify-center gap-2">
                   <span className="material-symbols-outlined text-sm">lock</span> Lock Now
                 </button>
-                <button onClick={handleClearClipboard} className="flex-1 py-2 px-md border border-border-subtle text-on-surface-variant rounded-lg font-label-sm hover:bg-white/5 transition-all flex items-center justify-center gap-2">
+                <button onClick={handleClearClipboard} className="flex-1 py-2 px-md border border-border-subtle text-on-surface-variant rounded-lg font-label-sm hover:bg-input-bg transition-all flex items-center justify-center gap-2">
                   <span className="material-symbols-outlined text-sm">delete</span> Clear Clipboard
                 </button>
               </div>
