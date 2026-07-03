@@ -358,10 +358,76 @@ export default function HubView() {
 
           {/* ─── NEARBY TAB ─── */}
           {activeTab === "nearby" && (
-            <div className="flex flex-col items-center justify-center py-4xl gap-lg">
-              <RadarIllustration />
-              <h2 className="font-headline-3xl text-headline-3xl text-on-surface">Nearby Discovery</h2>
-              <p className="text-on-surface-variant text-center max-w-md text-body-md">Find and connect with peers securely over your local network using mDNS and DHT.</p>
+            <div className="flex flex-col gap-lg">
+              <div className="flex items-center justify-between gap-md">
+                <div>
+                  <h2 className="font-headline-2xl text-headline-2xl text-on-surface">Nearby Discovery</h2>
+                  <p className="text-body-md text-on-surface-variant">Find peers on your local network or DHT.</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const peers = await invoke<DiscoveredPeer[]>("refresh_discovery");
+                      setDiscoveredPeers(peers);
+                      addToast(`Found ${peers.length} peer${peers.length !== 1 ? 's' : ''}`, "success");
+                    } catch (e: any) {
+                      addToast("Discovery failed: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
+                    }
+                  }}
+                  className="btn-secondary py-sm px-xl rounded-xl font-label-sm text-label-sm flex items-center gap-sm"
+                >
+                  <span className="material-symbols-outlined text-[18px]">radar</span>
+                  Scan
+                </button>
+              </div>
+
+              {discoveredPeers.length > 0 ? (
+                <div className="space-y-sm">
+                  {discoveredPeers.map((peer) => (
+                    <div
+                      key={peer.id_hex}
+                      className="inner-glass p-md rounded-xl flex items-center justify-between gap-md"
+                    >
+                      <div className="flex items-center gap-md min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-tertiary to-secondary flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-white text-[18px]">wifi</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-on-surface truncate">{peer.id_hex.substring(0, 16)}</p>
+                          <div className="flex items-center gap-xs">
+                            <span className="text-label-xs text-on-surface-variant">{peer.address}</span>
+                            <span className={`text-label-xs px-1 py-0.5 rounded ${peer.method === "lan" ? "bg-tertiary/10 text-tertiary" : "bg-primary/10 text-primary"}`}>
+                              {peer.method === "lan" ? "LAN" : "DHT"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await invoke("connect_discovered_peer", { address: peer.address });
+                            addToast("Connected!", "success");
+                            setView("chat");
+                          } catch (e: any) {
+                            addToast("Connection failed: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
+                          }
+                        }}
+                        className="btn-primary py-sm px-lg rounded-xl font-label-sm text-label-sm flex items-center gap-xs shrink-0"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">sensors</span>
+                        Connect
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-4xl gap-lg">
+                  <RadarIllustration />
+                  <p className="text-on-surface-variant text-center max-w-md text-body-md">
+                    No peers discovered yet. Tap <strong>Scan</strong> to search your local network and DHT.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
