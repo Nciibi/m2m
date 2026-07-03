@@ -20,7 +20,11 @@ export default function HubView() {
     try { await invoke("connect_family_member", { peerKeyHex }); setView("chat"); } catch (e) { throw e; }
   };
 
-  useEffect(() => { refreshFamily(); }, []);
+  useEffect(() => {
+    refreshFamily();
+    // Load discovered peers on mount
+    invoke<DiscoveredPeer[]>("get_discovered_peers").then(setDiscoveredPeers).catch(() => {});
+  }, []);
 
   // State for Connect Tab
   const [generatedInvite, setGeneratedInvite] = useState("");
