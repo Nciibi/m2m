@@ -151,6 +151,9 @@ pub async fn unlock_vault(
     let vault_was_initialized = key_store.is_vault_initialized().unwrap_or(false);
     let has_identity = key_store.has_identity().unwrap_or(false);
 
+    // Pre-read X25519 existence before any async work (key_store is !Send across .await).
+    let has_x25519 = has_identity && key_store.has_x25519_key().unwrap_or(false);
+
     let keypair = if has_identity {
         // ── Existing identity ──
         let (pub_bytes, enc_sk, nonce) = key_store
@@ -169,34 +172,40 @@ pub async fn unlock_vault(
             let mut sk_arr = [0u8; 64];
             sk_arr.copy_from_slice(&sk_bytes);
 
+            // Pre-read X25519 encrypted material (synchronous, no .await)
+            let x25519_preload = if has_x25519 {
+                match key_store.load_x25519_key() {
+                    Ok((xp, xe, xn)) => Some((xp, xe, xn)),
+                    Err(e) => return Err(format!("failed to load X25519 key: {e}")),
+                }
+            } else {
+                None
+            };
+
             {
                 let mut sk_lock = state.storage_key.write().await;
                 *sk_lock = Some(storage_key);
             }
 
-            // Load X25519 key from storage
-            let x25519_kp = if key_store.has_x25519_key().unwrap_or(false) {
-                let (x_pub, x_enc, x_nonce) = key_store.load_x25519_key()
-                    .map_err(|e| format!("failed to load X25519 key: {e}"))?;
+            // Now handle X25519 (storage_key is in state)
+            let x25519_kp = if let Some((x_pub, x_enc, x_nonce)) = x25519_preload {
                 let sk = state.storage_key.read().await;
-                let storage_key = sk.as_ref()
-                    .ok_or("storage key not set")?;
-                let x_sk_bytes = util::crypto_decrypt_storage(&x_enc, &x_nonce, storage_key, util::AAD_KEY_STORE)
-                    .map_err(|_| "failed to decrypt X25519 key — passphrase may have changed".to_string())?;
+                let st_key = sk.as_ref().ok_or("storage key not set")?;
+                let x_sk_bytes = util::crypto_decrypt_storage(&x_enc, &x_nonce, st_key, util::AAD_KEY_STORE)
+                    .map_err(|_| "failed to decrypt X25519 key".to_string())?;
                 drop(sk);
                 let mut x_sk_arr = [0u8; 32];
                 x_sk_arr.copy_from_slice(&x_sk_bytes);
                 crate::crypto::X25519IdentityKeypair::from_bytes(&x_pub, &x_sk_arr)
                     .map_err(|e| format!("failed to reconstruct X25519: {e}"))?
             } else {
-                // First unlock after upgrade: generate X25519 key and persist it
+                // First unlock after upgrade: generate X25519 key
                 let xkp = crate::crypto::X25519IdentityKeypair::generate();
                 let x_sk_bytes = xkp.secret_key_bytes();
                 let x_pub = xkp.public_key_bytes();
                 let sk = state.storage_key.read().await;
-                let storage_key = sk.as_ref()
-                    .ok_or("storage key not set")?;
-                let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, storage_key, util::AAD_KEY_STORE)
+                let st_key = sk.as_ref().ok_or("storage key not set")?;
+                let (x_nonce, x_enc) = util::crypto_encrypt_storage(&x_sk_bytes, st_key, util::AAD_KEY_STORE)
                     .map_err(|e| format!("failed to encrypt X25519 key: {e}"))?;
                 drop(sk);
                 key_store.store_x25519_key(&x_pub, &x_enc, &x_nonce)
@@ -214,9 +223,6 @@ pub async fn unlock_vault(
             // Case 2: Legacy migration — decrypt with legacy key, re-encrypt with Argon2id
             tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
             let legacy_key = util::derive_storage_key(&pub_bytes);
-            // Legacy ciphertext was encrypted WITHOUT AAD. Empty AAD (b"") is
-            // equivalent to the old None argument in libsodium — libsodium
-            // skips AAD processing when adlen == 0 regardless of the pointer.
             let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"")
                 .map_err(|e| format!("failed to decrypt legacy identity: {e}"))?;
 
@@ -224,7 +230,6 @@ pub async fn unlock_vault(
             sk_arr.copy_from_slice(&sk_bytes);
 
             // Re-encrypt with the new passphrase-derived key AND domain AAD.
-            // Future unlocks will use AAD_KEY_STORE.
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
             let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
