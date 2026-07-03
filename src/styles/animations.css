@@ -210,3 +210,49 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+@keyframes text-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.animate-text-shimmer {
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.8) 20%,
+    rgba(255, 255, 255, 1) 40%,
+    rgba(255, 255, 255, 1) 60%,
+    rgba(255, 255, 255, 0.8) 80%
+  );
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: text-shimmer 3s linear infinite;
+}
+
+.premium-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.premium-btn::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(
+    150px circle at var(--cursor-x) var(--cursor-y),
+    rgba(255, 255, 255, 0.3),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.premium-btn:hover::before {
+  opacity: 1;
+}
+.premium-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+}
+
