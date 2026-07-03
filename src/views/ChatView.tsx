@@ -46,7 +46,7 @@ export default function ChatView() {
   return (
     <main className="premium-glass-card w-full h-full flex flex-col relative z-10">
       {/* HEADER (52px) */}
-      <header className="h-[52px] min-h-[52px] flex justify-between items-center px-xl border-b border-white/5 bg-surface/80 backdrop-blur-3xl shrink-0">
+      <header className="h-[52px] min-h-[52px] flex justify-between items-center px-xl border-b border-border-subtle bg-surface/80 backdrop-blur-3xl shrink-0">
         <div className="flex items-center gap-md">
           <span className="material-symbols-outlined text-outline text-[20px]">shield</span>
           <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wide">Encrypted Session</span>
@@ -88,7 +88,7 @@ export default function ChatView() {
             {msgs.map((m: ChatMessage) => (
               m.direction === "sent" ? (
                 <div key={m.id} className="flex flex-col items-end gap-xs max-w-[75%] self-end animate-in slide-in-from-right-4 fade-in duration-300">
-                  <div className="sent-bubble px-lg py-md bg-gradient-to-br from-primary to-inverse-primary rounded-t-2xl rounded-bl-2xl rounded-br-sm shadow-[0_8px_24px_rgba(99,102,241,0.35)] border border-white/10 relative overflow-hidden group">
+                  <div className="sent-bubble px-lg py-md bg-gradient-to-br from-primary to-inverse-primary rounded-t-2xl rounded-bl-2xl rounded-br-sm shadow-[0_8px_24px_rgba(99,102,241,0.35)] border border-outline-variant relative overflow-hidden group">
                     <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"></div>
                     <p className="font-body-md text-white whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
                   </div>
@@ -99,7 +99,7 @@ export default function ChatView() {
                 </div>
               ) : (
                 <div key={m.id} className="flex flex-col items-start gap-xs max-w-[75%] self-start animate-in slide-in-from-left-4 fade-in duration-300">
-                  <div className="received-bubble px-lg py-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-t-2xl rounded-br-2xl rounded-bl-sm shadow-xl hover:bg-white/10 transition-colors duration-300">
+                  <div className="received-bubble px-lg py-md bg-input-bg backdrop-blur-xl border border-outline-variant rounded-t-2xl rounded-br-2xl rounded-bl-sm shadow-xl hover:bg-bg-hover transition-colors duration-300">
                     <p className="font-body-md text-text-primary whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
                   </div>
                   <span className="font-label-xs text-[10px] text-text-muted px-xs">
@@ -123,8 +123,8 @@ export default function ChatView() {
       </section>
 
       {/* INPUT AREA */}
-      <div className="p-xl border-t border-white/5 input-blur shrink-0">
-        <form onSubmit={submit} className="flex items-center gap-md bg-white/5 rounded-2xl p-sm border border-white/10">
+      <div className="p-xl border-t border-border-subtle input-blur shrink-0">
+        <form onSubmit={submit} className="flex items-center gap-md bg-input-bg rounded-2xl p-sm border border-outline-variant">
           <div className="flex items-center gap-xs px-xs">
             <button type="button" className="p-sm text-on-surface-variant hover:text-primary transition-colors">
               <span className="material-symbols-outlined text-[20px]">attach_file</span>
@@ -152,7 +152,7 @@ export default function ChatView() {
             placeholder="Type a secure message..."
           ></textarea>
           <div className="flex items-center gap-md pr-sm">
-            <button type="button" className="flex items-center gap-xs px-md py-1.5 bg-black/40 hover:bg-black/60 rounded-full border border-white/5 transition-all group">
+            <button type="button" className="flex items-center gap-xs px-md py-1.5 bg-input-bg hover:bg-input-bg/80 rounded-full border border-border-subtle transition-all group">
               <span className="material-symbols-outlined text-[16px] text-warning">timer</span>
               <span className="font-label-sm text-label-sm text-on-surface-variant group-hover:text-text-primary transition-colors">Off</span>
             </button>
@@ -164,7 +164,7 @@ export default function ChatView() {
       </div>
 
       {/* FOOTER */}
-      <footer className="px-xl py-lg border-t border-white/5 bg-surface-container-lowest/50 flex justify-between items-center shrink-0">
+      <footer className="px-xl py-lg border-t border-border-subtle bg-surface-container-lowest/50 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-sm">
           <span className="material-symbols-outlined text-sm text-tertiary">lock</span>
           <span className="font-mono-label text-[10px] text-text-muted uppercase tracking-widest">End-to-end encrypted</span>

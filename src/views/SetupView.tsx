@@ -34,7 +34,7 @@ export default function SetupView() {
       <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
         <main className="relative z-10 px-gutter w-full flex justify-center">
           <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-xl animate-pulse">
+            <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-outline-variant mb-xl animate-pulse">
               <span className="material-symbols-outlined text-primary text-4xl">vpn_key</span>
             </div>
             <h2 className="font-headline-2xl text-headline-2xl font-bold text-text-primary mb-sm">Initializing Secure Enclave</h2>
@@ -44,7 +44,7 @@ export default function SetupView() {
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '100ms' }}></span>
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></span>
             </div>
-            <div className="mt-2xl font-mono-label text-label-xs bg-white/5 px-2 py-1 rounded-md text-text-muted border border-white/5">
+            <div className="mt-2xl font-mono-label text-label-xs bg-input-bg px-2 py-1 rounded-md text-text-muted border border-border-subtle">
               Ed25519 · X25519 · XChaCha20-Poly1305
             </div>
           </div>
@@ -57,7 +57,7 @@ export default function SetupView() {
   if (!isFirstRun) {
     return (
       <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 animate-pulse">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-outline-variant animate-pulse">
           <span className="material-symbols-outlined text-primary text-4xl">lock</span>
         </div>
       </div>
@@ -70,7 +70,7 @@ export default function SetupView() {
         <div className="premium-glass-card rounded-3xl max-w-[600px] w-full py-3xl px-2xl flex flex-col items-center text-center relative group">
           <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
           
-          <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-2xl transition-all duration-300 transform scale-100 hover:scale-110">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-outline-variant mb-2xl transition-all duration-300 transform scale-100 hover:scale-110">
             <span className="material-symbols-outlined text-primary text-4xl">{STEPS[step].icon}</span>
           </div>
           
@@ -81,7 +81,7 @@ export default function SetupView() {
 
           <div className="flex gap-3 my-2xl">
             {STEPS.map((_, i) => (
-              <div key={i} className={`w-3 h-3 rounded-full flex items-center justify-center transition-all duration-300 ${i === step ? 'bg-primary scale-125' : i < step ? 'bg-tertiary' : 'bg-white/10'}`}>
+              <div key={i} className={`w-3 h-3 rounded-full flex items-center justify-center transition-all duration-300 ${i === step ? 'bg-primary scale-125' : i < step ? 'bg-tertiary' : 'bg-input-bg/60'}`}>
                 {i < step && <span className="material-symbols-outlined text-[8px] text-black font-bold">check</span>}
               </div>
             ))}
@@ -108,14 +108,14 @@ export default function SetupView() {
             {step > 0 && (
               <button 
                 onClick={goBack}
-                className="w-full py-sm rounded-xl bg-transparent text-text-muted border border-white/10 font-label-sm text-label-sm font-semibold hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+                className="w-full py-sm rounded-xl bg-transparent text-text-muted border border-outline-variant font-label-sm text-label-sm font-semibold hover:text-white hover:bg-input-bg active:scale-95 transition-all"
               >
                 Back
               </button>
             )}
           </div>
 
-          <div className="mt-2xl font-mono-label text-[10px] text-white/30 uppercase tracking-widest">
+          <div className="mt-2xl font-mono-label text-[10px] text-text-muted/30 uppercase tracking-widest">
             Ed25519 · X25519 · XChaCha20-Poly1305
           </div>
         </div>
