@@ -21,6 +21,7 @@ export interface ConversationEntry {
   created_at: number;
   is_favorite?: boolean;
   archived?: boolean;
+  unread_count?: number;
 }
 
 export interface IdentityInfo {
