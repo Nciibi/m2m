@@ -130,6 +130,19 @@ export interface SecurityConfig {
   idle_lock_secs: number;
 }
 
+export interface TransferProgress {
+  transfer_id: string;
+  peer_key_hex: string;
+  filename: string;
+  total_size: number;
+  bytes_transferred: number;
+  chunks_completed: number;
+  chunks_total: number;
+  state: string;
+  speed_bytes_per_sec: number;
+  estimated_remaining_secs: number;
+}
+
 export interface NatTypeInfo {
   nat_type: string;
   stun_servers: Array<{
