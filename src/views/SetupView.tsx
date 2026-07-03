@@ -67,7 +67,7 @@ export default function SetupView() {
   return (
     <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
       <main className="relative z-10 px-gutter w-full flex justify-center">
-        <div className="premium-glass-card max-w-[600px] w-full py-3xl px-2xl flex flex-col items-center text-center relative group">
+        <div className="premium-glass-card rounded-3xl max-w-[600px] w-full py-3xl px-2xl flex flex-col items-center text-center relative group">
           <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
           
           <div className="w-20 h-20 rounded-full flex items-center justify-center bg-white/5 border border-white/10 mb-2xl transition-all duration-300 transform scale-100 hover:scale-110">
