@@ -223,7 +223,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     try {
       setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: conv.peer_key_hex }));
     } catch { /* noop */ }
-  }, [setView]);
+    // Mark messages as read when opening a conversation
+    try {
+      await invoke("mark_messages_read", { conversationId: conv.peer_key_hex });
+    } catch { /* noop */ }
+    // Refresh conversation list to update unread counts
+    loadConversations();
+  }, [setView, loadConversations]);
 
   const handleDeleteConversation = useCallback(() => {
     loadConversations();
