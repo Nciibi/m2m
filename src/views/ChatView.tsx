@@ -187,6 +187,12 @@ export default function ChatView() {
                 <div key={m.id} className={`flex flex-col items-start gap-[2px] max-w-[75%] self-start animate-in slide-in-from-left-4 fade-in duration-300 ${isPrevSame ? "mt-0" : "mt-md"}`}>
                   <div className={`received-bubble px-lg py-md bg-input-bg backdrop-blur-xl border border-outline-variant ${receivedBubbleClass} shadow-md hover:bg-bg-hover transition-colors duration-300`}>
                     <p className="font-body-md text-text-primary whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
+                  {m.expires_at && !m.deleted && (
+                    <div className="flex items-center gap-1 mt-xs opacity-60">
+                      <span className="material-symbols-outlined text-[12px]">timer</span>
+                      <span className="font-label-xs text-[10px]">{Math.max(0, Math.floor((m.expires_at - Math.floor(Date.now() / 1000)) / 60))}m</span>
+                    </div>
+                  )}
                   </div>
                   {!isNextSame && (
                     <span className="font-label-xs text-[10px] text-text-muted px-xs mt-xs">
