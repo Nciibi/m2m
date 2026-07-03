@@ -33,6 +33,7 @@ export default function SetupView() {
     return (
       <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
         <main className="relative z-10 px-gutter w-full flex justify-center">
+          <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
             {/* Animated Cyber Ring for Initialization */}
             <div className="relative w-28 h-28 mb-2xl flex items-center justify-center">
               <div className="absolute inset-0 border border-primary/20 rounded-full animate-[ping_2.5s_infinite]"></div>
