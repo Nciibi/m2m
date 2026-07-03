@@ -227,7 +227,7 @@ export default function ChatView() {
                   {/* Reaction buttons (show on hover) */}
                   <div className="flex items-center gap-1 mt-1 px-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => {
-                      const hasReacted = Object.values(m.reactions || {}).some((reactors) => reactors.includes("self") && Object.keys(m.reactions).find(k => m.reactions![k] === reactors) === emoji);
+                      const hasReacted = m.reactions?.[emoji]?.includes("self") ?? false;
                       return (
                         <button
                           key={emoji}
