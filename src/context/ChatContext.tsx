@@ -57,8 +57,8 @@ interface ChatContextValue {
   handleMuteConversation: (peerKeyHex: string) => Promise<void>;
   handleUnmuteConversation: (peerKeyHex: string) => Promise<void>;
   // File Transfer
-  handleAcceptFileTransfer: (transferId: string) => Promise<void>;
-  handleRejectFileTransfer: (transferId: string) => Promise<void>;
+  handleAcceptFileTransfer: (req: FileRequest) => Promise<void>;
+  handleRejectFileTransfer: (req: FileRequest) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
