@@ -208,7 +208,7 @@ export default function ChatView() {
       <div className="p-xl border-t border-border-subtle input-blur shrink-0">
         <form onSubmit={submit} className="flex items-center gap-md bg-input-bg rounded-2xl p-sm border border-outline-variant">
           <div className="flex items-center gap-xs px-xs">
-            <button type="button" className="p-sm text-on-surface-variant hover:text-primary transition-colors">
+            <button type="button" onClick={handleSendFile} className="p-sm text-on-surface-variant hover:text-primary transition-colors">
               <span className="material-symbols-outlined text-[20px]">attach_file</span>
             </button>
             <button type="button" className="p-sm text-on-surface-variant hover:text-primary transition-colors">
