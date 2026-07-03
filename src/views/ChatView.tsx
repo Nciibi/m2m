@@ -169,6 +169,12 @@ export default function ChatView() {
                   <div className={`sent-bubble px-lg py-md bg-gradient-to-br from-primary to-inverse-primary ${sentBubbleClass} shadow-[0_4px_16px_rgba(99,102,241,0.2)] border border-outline-variant relative overflow-hidden group`}>
                     <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"></div>
                     <p className="font-body-md text-white whitespace-pre-wrap break-words">{m.deleted ? <em className="opacity-50">Deleted</em> : m.content}</p>
+                  {m.expires_at && !m.deleted && (
+                    <div className="flex items-center gap-1 mt-xs opacity-60">
+                      <span className="material-symbols-outlined text-[12px]">timer</span>
+                      <span className="font-label-xs text-[10px]">{Math.max(0, Math.floor((m.expires_at - Math.floor(Date.now() / 1000)) / 60))}m</span>
+                    </div>
+                  )}
                   </div>
                   {!isNextSame && (
                     <span className="font-label-xs text-[10px] text-text-muted/70 px-xs tracking-wider mt-xs">
