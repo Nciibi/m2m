@@ -64,9 +64,16 @@ export default function VaultView() {
       {/* Unlock Vault Card */}
       <div className={`premium-glass-card rounded-3xl max-w-[420px] w-full p-2xl flex flex-col items-center relative group ${shake ? "animate-[shake_0.4s_ease]" : ""}`}>
 
-        {/* Icon */}
-        <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-border-subtle mb-xl">
-          <span className="material-symbols-outlined text-primary text-4xl">{vaultInitialized ? "lock" : "key"}</span>
+        {/* Animated Cyber Icon Container */}
+        <div className="relative w-24 h-24 mb-xl flex items-center justify-center">
+          {/* Animated concentric scanning rings */}
+          <div className="absolute inset-0 border border-primary/20 rounded-full animate-[ping_3s_infinite] opacity-60"></div>
+          <div className="absolute inset-2 border border-primary/30 rounded-full animate-[spin_10s_linear_infinite]" style={{ borderStyle: "dashed" }}></div>
+          <div className="absolute inset-4 bg-primary/10 rounded-full border border-primary/30 flex items-center justify-center backdrop-blur-md">
+            <span className={`material-symbols-outlined text-primary text-3xl ${loading ? "animate-spin" : "group-hover:scale-110 transition-transform duration-300"}`}>
+              {loading ? "sync" : vaultInitialized ? "lock" : "enhanced_encryption"}
+            </span>
+          </div>
         </div>
 
         {/* Header */}
