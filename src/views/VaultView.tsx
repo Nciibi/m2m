@@ -50,8 +50,7 @@ export default function VaultView() {
       if (vaultInitialized) {
         await handleUnlockVault(passphrase);
       } else {
-        await invoke("setup_vault", { passphrase });
-        setView("hub");
+        await handleUnlockVault(passphrase);
       }
       setPassphrase("");
       setPassphraseConfirm("");
