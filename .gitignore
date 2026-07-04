@@ -28,3 +28,43 @@ src-tauri/target2
 target
 relay-server/target
 
+# ===== INTERNAL / DO NOT RELEASE =====
+
+# Secrets & API keys
+.claude/.env
+.claude/settings.json
+.claude/settings.local.json
+.env
+*.env.local
+
+# AI agent configs, prompts, plans, skills
+CLAUDE.md
+prompt.txt
+.claude/plans/
+.claude/skills/
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+skills/
+plans/
+
+# Internal audits & design docs
+project-audit.md
+docs/design-bible*.md
+docs/design-system.md
+docs/full_analysis.md
+docs/ui-ux-upgrade-phase-1-summary.md
+docs/wcag-contrast-audit.md
+docs/ui/implementation_prompts/
+
+# Stitch mockups & prototypes
+stitch-*.html
+236/
+UX/
+
+# Build output & debug logs
+src-tauri/cargo_check_output.txt
+src-tauri/check_err.txt
+
+# Test reports
+tests_report*.json
+
