@@ -188,6 +188,9 @@ describe("ChatContext", () => {
       </ChatProvider>
     );
 
+    // Ignore mount-effect invokes (e.g. get_muted_conversations); assert only
+    // the reaction handler makes no call when there is no active connection.
+    mockInvoke.mockClear();
     await user.click(screen.getByText("Send Reaction"));
     expect(mockInvoke).not.toHaveBeenCalled();
   });
