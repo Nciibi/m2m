@@ -290,7 +290,7 @@ export default function SettingsView() {
             <div className="settings-row">
               <Input placeholder="host:port" value={stunServerInput} onChange={e => setStunServerInput(e.target.value)} compact mono clearable onClear={() => setStunServerInput("")} />
               <Button size="xs" onClick={handleAddStunServer} disabled={!stunServerInput.trim()}>Add</Button>
-              <Button variant="secondary" size="xs" onClick={handleResetStunDefaults}>Reset</Button>
+              <Button variant="secondary" size="xs" onClick={handleResetStunDefaults} aria-label="Reset STUN servers to defaults">Reset</Button>
             </div>
           </div>
         </section>
