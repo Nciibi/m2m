@@ -235,7 +235,7 @@ describe("SettingsView", () => {
     const user = userEvent.setup();
     settingsState.stunConfig = { servers: ["stun.l.google.com:19302"], private_mode: false };
     render(<SettingsView />);
-    await user.click(screen.getByRole("button", { name: /reset/i }));
+    await user.click(screen.getByRole("button", { name: /reset stun servers to defaults/i }));
     expect(settingsState.handleResetStunDefaults).toHaveBeenCalledTimes(1);
   });
 
