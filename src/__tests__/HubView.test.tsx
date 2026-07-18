@@ -106,7 +106,8 @@ describe("HubView", () => {
 
   it("renders the app title", () => {
     render(<HubView />);
-    expect(screen.getByText("M2M")).toBeInTheDocument();
+    // The sidebar brand also shows "M2M", so scope to the header heading.
+    expect(screen.getByRole("heading", { name: "M2M" })).toBeInTheDocument();
   });
 
   it("shows Offline badge by default", () => {
