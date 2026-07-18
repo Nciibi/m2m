@@ -107,7 +107,8 @@ describe("SettingsView", () => {
 
   it("renders the settings title", () => {
     render(<SettingsView />);
-    expect(screen.getByText("Settings")).toBeInTheDocument();
+    // The sidebar also has a "Settings" nav item, so scope to the header heading.
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("shows back to hub button", () => {
