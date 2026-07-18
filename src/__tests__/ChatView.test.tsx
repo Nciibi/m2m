@@ -86,6 +86,9 @@ describe("ChatView", () => {
     state.messages = [];
     state.fileRequests = [];
     state.activeConversationId = null;
+    state.typingPeers = [];
+    state.reconnecting = false;
+    state.reconnectAttempt = 0;
     state.toasts = [];
     vi.clearAllMocks();
   });
