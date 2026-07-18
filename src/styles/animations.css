@@ -211,6 +211,23 @@
   to   { opacity: 1; }
 }
 
+/* ─── Bounce (empty-state illustrations — gentle vertical drift, alternates) ─── */
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-6px); }
+}
+
+/* ─── Ping (empty-state illustrations — expanding fading ring) ─── */
+@keyframes ping {
+  0%   { transform: scale(1); opacity: 0.6; }
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+/* ─── Dash (empty-state illustrations — marching connection line) ─── */
+@keyframes dash {
+  to { stroke-dashoffset: -12; }
+}
+
 @keyframes text-shimmer {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
