@@ -325,7 +325,7 @@ export default function SettingsView() {
                 aria-label="Accent color"
               />
               <span className="settings-mono settings-mono--sm">{accentColor}</span>
-              <Button size="xs" variant="secondary" onClick={() => setAccentColor("#6366f1")}>Reset</Button>
+              <Button size="xs" variant="secondary" onClick={() => setAccentColor("#6366f1")} aria-label="Reset accent color">Reset</Button>
             </div>
           </div>
         </section>
