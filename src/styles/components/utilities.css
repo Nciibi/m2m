@@ -305,6 +305,39 @@
 .conv-empty__desc { max-width: 320px; text-align: center; line-height: 1.6; color: var(--color-text-muted); font-weight: 400; }
 .conv-search { padding-bottom: var(--space-sm); }
 
+/* ─── Empty-state Illustrations (NoChats / Radar / Family) ─── */
+.empty-illustration {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+  user-select: none;
+  pointer-events: none;
+}
+.empty-illustration--sm { width: 12rem; height: 12rem; }   /* NoChats / Family (w-48) */
+.empty-illustration--lg { width: 14rem; height: 14rem; }   /* Radar (w-56) */
+.empty-illustration__glow {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full, 9999px);
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+  filter: blur(24px);
+  animation: pulse 2s ease-in-out infinite;
+}
+.empty-illustration__svg { position: absolute; }
+.empty-illustration__svg--grid { opacity: 0.2; }
+.empty-illustration__svg--front { position: relative; }
+.empty-illustration__bounce { animation: bounce 4s ease-in-out infinite alternate; }
+.empty-illustration__bounce--slow { animation: bounce 5s ease-in-out infinite alternate; }
+.empty-illustration__bounce--fast { animation: bounce 3s ease-in-out infinite alternate; }
+.empty-illustration__pulse { animation: pulse 2s ease-in-out infinite; }
+.empty-illustration__ping { animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite; transform-origin: center; }
+.empty-illustration__dash { animation: dash 10s linear infinite; }
+.empty-illustration__sweep { transform-origin: 110px 110px; animation: spin 6s linear infinite; }
+.empty-illustration__target { animation: pulse 2s ease-in-out infinite; transform-origin: center; }
+.empty-illustration__target--slow { animation: pulse 3s ease-in-out infinite; transform-origin: center; }
+
 .relative-time { font-size: var(--text-xs); color: var(--color-text-muted); flex-shrink: 0; }
 
 /* ─── Nearby Tab ─── */
