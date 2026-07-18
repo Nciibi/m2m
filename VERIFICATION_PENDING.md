@@ -34,6 +34,13 @@ prefix with `!` to run in-session (e.g. `!npm run build`).
   msg-footer-row, msg-content.
 - Sidebar wired into all 4 chrome views (chat/hub/settings/groups); SetupView
   correctly excluded (full-screen onboarding). All `currentView` props valid.
+- SetupView re-swept explicitly: zero Tailwind/material-symbols. All 6 views
+  confirmed fully migrated.
+- EmptyStates.tsx (NoChats/Radar/Family illustrations) migrated off Tailwind
+  → custom CSS. Added `.empty-illustration*` rules to utilities.css and
+  `bounce`/`ping`/`dash` keyframes to animations.css. All 16 referenced classes
+  resolve; keyframes (pulse/spin pre-existing + bounce/ping/dash new) all exist.
+  Public barrel exports (ui/index.ts) unchanged — no caller impact.
 - Type layer spot-checked at migration-risk sites: `ChatMessage` interface
   declares all 10 fields the GroupChatView listener constructs (incl.
   `sender_peer_key_hex`); `direction: string` accepts "sent"/"received".
