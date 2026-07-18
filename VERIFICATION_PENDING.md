@@ -16,17 +16,27 @@ prefix with `!` to run in-session (e.g. `!npm run build`).
 
 ## What WAS verified (read-only, passing)
 
-- `tsc --noEmit` ran clean across all 5 views (ChatView, SettingsView, HubView,
-  VaultView, GroupChatView). This is the type-checking half of `npm run build`.
-- Whole-tree sweep: zero `material-symbols`, zero Tailwind/glass utility classes,
-  no `@tailwind` directives, no `tailwind.config.*`, no dead CDN/font link in
-  `index.html`.
-- Every CSS class referenced by the 5 views resolves to a real rule in
-  `src/styles/` (spot-checked conv-*, msg-*, vault-*, setup-*, settings-*,
-  app-header__icon-bg--accent, naming-panel).
-- Every component prop / type field used in GroupChatView.tsx matches its source
-  (ViewName union includes "groups"; GroupInfo/GroupDetail/ChatMessage fields;
-  Badge variant "default"; Input compact/mono props).
+- `vitest run` PASSED last session: **95/95 tests green, zero unhandled errors**
+  across all 7 test files (test-mock alignment completed — see git log). NOTE:
+  the `vitest run` row above is stale; the suite is green. The remaining unknown
+  is purely the `vite build` bundling step.
+- Whole-tree sweep (re-confirmed this session): zero `material-symbols`, zero
+  Tailwind utility classes / `@tailwind` directives / `tailwind.config.*` in
+  `src`, no dead CDN/font link in `index.html`.
+- **Every** static AND dynamically-constructed (`className={\`...\`}`) class
+  across all 5 views resolves to a real rule in `src/styles/`. Verified every
+  conditional modifier branch: stun-badge--{ok,fail,unknown}, msg-bubble--{sent,
+  received,deleted}, msg-status--{sending,sent,delivered,read}, msg-reaction--self,
+  reaction-picker__btn--active, app-header__icon-bg--{success,warning,accent},
+  vault-icon--{loading,idle}, vault-form--shake, setup-step-content--{left,right},
+  step-dot--{active,done}, tab-bar__tab--active, btn--icon-{copied,sm},
+  conv-avatar--online, fp-grid(__item), conv-empty__{title,desc}, msg-sender-label,
+  msg-footer-row, msg-content.
+- Sidebar wired into all 4 chrome views (chat/hub/settings/groups); SetupView
+  correctly excluded (full-screen onboarding). All `currentView` props valid.
+- Type layer spot-checked at migration-risk sites: `ChatMessage` interface
+  declares all 10 fields the GroupChatView listener constructs (incl.
+  `sender_peer_key_hex`); `direction: string` accepts "sent"/"received".
 
 ## Migration summary
 
