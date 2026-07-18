@@ -1,480 +1,533 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ToastContainer, NoChatsIllustration, RadarIllustration } from "../components/ui";
+import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
+import {
+  GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
+  SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon, ClockIcon,
+} from "../components/ui/Icons";
+import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
+import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
-import type { FamilyMember, ConnectionInfo, DiscoveredPeer } from "../types";
-import { formatTime } from "../utils";
+import type { FamilyMember } from "../types";
+import { hashToColor, formatTime } from "../utils";
 
 export default function HubView() {
-  const { identity, toasts, removeToast, addToast, setView } = useApp();
-  const { conversations, handleOpenChat: ctxHandleOpenChat } = useChat();
-  const [activeTab, setActiveTab] = useState<"connect" | "chats" | "nearby" | "family">("connect");
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const { identity, setView, toasts, removeToast } = useApp();
+  const {
+    connection, generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
+    isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
+    handleConnect, setNamingMyName, setNamingTheirName, handleOpenChat,
+    handleDeleteConversation, conversations,
+    mutedConversations, handleMuteConversation, handleUnmuteConversation,
+  } = useChat();
+  const {
+    networkSettings, privateMode, openSettings,
+    discoveryConfig, discoveredPeers,
+    handleConnectDiscoveredPeer, handleRefreshDiscovery,
+    securityConfig, scheduleClipboardClear,
+  } = useSettings();
+  const [tab, setTab] = useState<"connect" | "chats" | "family" | "nearby">("connect");
+  const [copied, setCopied] = useState(false);
+  const [search, setSearch] = useState("");
+  const [family, setFamily] = useState<FamilyMember[]>([]);
+  const [_familyLoading, setFamilyLoading] = useState(false);
 
-  const refreshFamily = async () => {
-    try { setFamilyMembers(await invoke<FamilyMember[]>("list_family")); } catch {}
-  };
-  const connectFamily = async (peerKeyHex: string) => {
-    try { await invoke("connect_family_member", { peerKeyHex }); setView("chat"); } catch (e) { throw e; }
+  const handleCopy = () => {
+    copyInvite();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+      scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+    }
   };
 
-  useEffect(() => {
-    refreshFamily();
-    // Load discovered peers on mount
-    invoke<DiscoveredPeer[]>("get_discovered_peers").then(setDiscoveredPeers).catch(() => {});
+  const loadFamily = useCallback(async () => {
+    try {
+      setFamilyLoading(true);
+      const f = await invoke<FamilyMember[]>("list_family");
+      setFamily(f);
+    } catch { /* noop */ }
+    finally { setFamilyLoading(false); }
   }, []);
 
-  // State for Connect Tab
-  const [generatedInvite, setGeneratedInvite] = useState("");
-  const [inviteToConnect, setInviteToConnect] = useState("");
-  const [namingMyName, setNamingMyName] = useState("");
-  const [namingTheirName, setNamingTheirName] = useState("");
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
-  const inviteValid = inviteToConnect.startsWith("m2m://") && inviteToConnect.length > 20;
+  const handleFamilyConnect = useCallback(async (peerKeyHex: string) => {
+    // connect emits m2m://connection event which ChatContext picks up
+    await invoke<any>("connect_family_member", { peerKeyHex });
+    setView("chat");
+  }, [setView]);
 
-  // Search for Chats
-  const [search, setSearch] = useState("");
+  // Load family on mount and when switching to family tab
+  useEffect(() => {
+    if (tab === "family") loadFamily();
+  }, [tab, loadFamily]);
 
-  const handleGenerateInvite = async () => {
-    setIsGenerating(true);
-    try {
-      // Ensure listener is running to get an address
-      await invoke("start_listening", { address: "0.0.0.0:0" });
-      const address = await invoke<string>("get_listen_address");
-      const invite = await invoke<string>("create_invite", { address, validityMinutes: 60, oneTime: false });
-      setGeneratedInvite(invite);
-      addToast("Invite link generated!", "success");
-    } catch (e: any) {
-      const msg = typeof e === "string" ? e : e?.message || "Failed to generate invite link";
-      addToast(msg, "error");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+  // Derive connection state for the status badge
+  const connectionBadge = (() => {
+    if (isConnecting) return { dot: null, label: "Connecting…", variant: "warning" as const };
+    if (connection?.state === "established") return { dot: <OnlineDot />, label: "Connected", variant: "success" as const };
+    return { dot: <OfflineDot />, label: "Offline", variant: "default" as const };
+  })();
 
-  const handleCopyInvite = () => {
-    if (generatedInvite) {
-      navigator.clipboard.writeText(generatedInvite);
-      setCopied(true);
-      addToast("Copied to clipboard!", "success");
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleConnect = async () => {
-    if (!inviteValid) return;
-    setIsConnecting(true);
-    try {
-      const info = await invoke<ConnectionInfo>("connect_to_peer", { inviteStr: inviteToConnect });
-      // Set display names after connecting
-      if (info.peer_key_hex && (namingTheirName || namingMyName)) {
-        try {
-          if (namingMyName || namingTheirName) {
-            await invoke("send_conversation_names", {
-              peerKeyHex: info.peer_key_hex,
-              myName: namingMyName || "Me",
-              theirName: namingTheirName || "Them",
-            });
-          }
-        } catch (e) {
-          console.warn("Failed to set display names:", e);
-        }
+  // Global keyboard shortcuts for Hub
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "n") {
+        e.preventDefault();
+        setTab("connect");
       }
-      setView("chat");
-    } catch (e: any) {
-      const msg = typeof e === "string" ? e : e?.message || "Connection failed";
-      addToast(msg, "error");
-    } finally {
-      setIsConnecting(false);
-    }
-  };
+      if (e.key === "Escape") {
+        // Already on hub — no-op
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
-  const handleOpenChat = (peerKeyHex: string) => {
-    const conv = conversations.find(c => c.peer_key_hex === peerKeyHex);
-    if (conv) {
-      ctxHandleOpenChat(conv);
-    }
-  };
-
-  const handleDeleteConversation = async (e: React.MouseEvent, peerKeyHex: string) => {
-    e.stopPropagation();
-    try {
-      await invoke("delete_conversation_cmd", { conversationId: peerKeyHex });
-      addToast("Conversation deleted", "success");
-    } catch (err: any) {
-      addToast("Failed to delete conversation", "error");
-    }
-  };
+  const filtered = conversations.filter(c => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (c.display_name || "").toLowerCase().includes(q) ||
+      (c.peer_display_name || "").toLowerCase().includes(q) ||
+      (c.last_message_preview || "").toLowerCase().includes(q) ||
+      c.peer_key_hex.toLowerCase().includes(q);
+  });
 
   return (
-    <main className="premium-glass-card w-full h-full flex flex-col relative z-10">
-      {/* Header */}
-      <header className="h-[56px] px-xl flex items-center justify-between border-b border-border-subtle shrink-0 bg-surface/40 backdrop-blur-3xl">
-        <div className="flex items-center gap-md">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary-container to-inverse-primary flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.4)]">
-            <span className="material-symbols-outlined text-white text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
-          </div>
-          <span className="font-headline-2xl text-headline-2xl font-extrabold tracking-tight animate-text-shimmer">M2M</span>
-        </div>
-        <div className="flex items-center gap-lg">
-          <div className="flex items-center gap-sm bg-surface-container-low/50 px-md py-xs rounded-full border border-border-subtle">
-            <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
-            <span className="font-label-sm text-label-sm text-on-surface-variant">Online</span>
-          </div>
-          <button onClick={() => setView("groups")} className="text-on-surface-variant hover:text-primary transition-colors active:scale-95 p-1 rounded-lg hover:bg-input-bg" title="Group Chats">
-            <span className="material-symbols-outlined text-[20px]">groups</span>
-          </button>
-          <button onClick={() => setView("settings")} className="text-on-surface-variant hover:text-primary transition-colors active:scale-95 p-1 rounded-lg hover:bg-input-bg">
-            <span className="material-symbols-outlined text-[20px]">settings</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Tab Bar */}
-      <nav className="h-[44px] px-xl flex items-center border-b border-border-subtle shrink-0">
-        <div className="flex items-center h-full gap-xl">
-          {([
-            { id: "connect" as const, icon: "link", label: "Connect" },
-            { id: "chats" as const, icon: "chat_bubble", label: "Chats", badge: conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0) },
-            { id: "nearby" as const, icon: "wifi", label: "Nearby" },
-            { id: "family" as const, icon: "group", label: "Family" },
-          ]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`h-full flex items-center gap-sm px-xs border-b-2 transition-all duration-200 ${
-                activeTab === tab.id
-                  ? "border-primary text-on-surface"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
-              <span className={`font-label-sm text-label-sm ${activeTab === tab.id ? "font-bold" : ""}`}>{tab.label}</span>
-              {tab.badge && tab.badge > 0 ? (
-                <span className="bg-primary-container text-on-primary-container text-[10px] px-1.5 py-0.5 rounded-full font-bold min-w-[18px] text-center">{tab.badge}</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      {/* Main Content Area — fills remaining space and scrolls */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="p-xl">
-
-          {/* ─── CONNECT TAB ─── */}
-          {activeTab === "connect" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-xl">
-              {/* Host Connection */}
-              <section className="glass-card rounded-2xl p-xl flex flex-col">
-                <div className="flex items-center gap-md mb-xl">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                    <span className="material-symbols-outlined text-primary">broadcast_on_personal</span>
-                  </div>
-                  <div>
-                    <h2 className="font-headline-2xl text-headline-2xl text-on-surface">Host a Connection</h2>
-                    <p className="font-body-md text-body-md text-on-surface-variant">Create a secure link for others to join.</p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleGenerateInvite}
-                  disabled={isGenerating}
-                  className="premium-btn w-full py-md px-xl bg-gradient-to-r from-primary-container to-inverse-primary text-white rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] mb-lg border border-outline-variant disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="material-symbols-outlined relative z-10">{isGenerating ? "sync" : generatedInvite ? "refresh" : "add_link"}</span>
-                  <span className="relative z-10">{isGenerating ? "Generating..." : generatedInvite ? "Regenerate Invite" : "Generate Invite Link"}</span>
-                </button>
-
-                {generatedInvite && (
-                  <div className="space-y-md animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="flex justify-between items-center">
-                      <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Active Token</label>
-                      <span className="flex items-center gap-xs font-mono-label text-[10px] text-tertiary">
-                        <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
-                        Awaiting Peer
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-sm bg-input-bg p-md rounded-xl border border-outline-variant relative overflow-hidden group/token">
-                      <div className="absolute top-0 right-0 p-xs font-mono-label text-[9px] text-text-muted/40 uppercase tracking-widest pointer-events-none">ECDH exchange</div>
-                      <span className="font-mono-code text-mono-code text-primary break-all select-all pt-xs leading-relaxed">{generatedInvite}</span>
-                      <div className="flex justify-end border-t border-border-subtle pt-sm mt-xs">
-                        <button onClick={handleCopyInvite} className="flex items-center gap-xs text-on-surface-variant hover:text-primary transition-colors py-xs px-md rounded-lg hover:bg-bg-hover active:scale-95 transition-transform text-sm font-semibold">
-                          <span className="material-symbols-outlined text-[18px]">{copied ? "check" : "content_copy"}</span>
-                          <span>{copied ? "Copied!" : "Copy Token"}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Atmospheric ping rings */}
-                {!generatedInvite && (
-                  <div className="flex-1 flex items-center justify-center pt-xl">
-                    <div className="relative w-24 h-24 flex items-center justify-center opacity-20">
-                      <div className="absolute inset-0 border border-primary/30 rounded-full animate-ping"></div>
-                      <div className="absolute inset-4 border border-primary/20 rounded-full animate-[ping_2s_infinite]"></div>
-                      <span className="material-symbols-outlined text-primary text-3xl">vpn_lock</span>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              {/* Join Connection */}
-              <section className="glass-card rounded-2xl p-xl flex flex-col">
-                <div className="flex items-center gap-md mb-xl">
-                  <div className="w-10 h-10 rounded-xl bg-tertiary/10 flex items-center justify-center border border-tertiary/20">
-                    <span className="material-symbols-outlined text-tertiary">key</span>
-                  </div>
-                  <div>
-                    <h2 className="font-headline-2xl text-headline-2xl text-on-surface">Join a Connection</h2>
-                    <p className="font-body-md text-body-md text-on-surface-variant">Enter a link to start an encrypted chat.</p>
-                  </div>
-                </div>
-
-                <div className="space-y-lg flex-1">
-                  <div className="space-y-sm">
-                    <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Invite Link</label>
-                    <input
-                      value={inviteToConnect}
-                      onChange={e => setInviteToConnect(e.target.value)}
-                      className="w-full bg-input-bg border border-outline-variant rounded-xl px-lg py-md text-primary font-mono-code focus:ring-2 focus:ring-primary placeholder:text-outline-variant outline-none transition-all"
-                      placeholder="m2m://..."
-                      type="text"
-                    />
-                    {inviteValid && (
-                      <div className="flex items-center gap-sm text-tertiary font-label-sm text-label-sm px-xs animate-in fade-in duration-200">
-                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                        <span>Valid Invite Found</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-lg">
-                    <div className="space-y-sm">
-                      <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Your Name</label>
-                      <input
-                        value={namingMyName}
-                        onChange={e => setNamingMyName(e.target.value)}
-                        className="w-full bg-input-bg border border-outline-variant rounded-xl px-lg py-md text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
-                        placeholder="Optional"
-                        type="text"
-                      />
-                    </div>
-                    <div className="space-y-sm">
-                      <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Their Name</label>
-                      <input
-                        value={namingTheirName}
-                        onChange={e => setNamingTheirName(e.target.value)}
-                        className="w-full bg-input-bg border border-outline-variant rounded-xl px-lg py-md text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
-                        placeholder="Optional"
-                        type="text"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleConnect}
-                    disabled={!inviteValid || isConnecting}
-                    className="premium-btn w-full py-md px-xl bg-gradient-to-r from-tertiary-container to-tertiary text-white rounded-xl font-headline-2xl text-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.15)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] border border-outline-variant disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span className={`material-symbols-outlined relative z-10 ${isConnecting ? 'animate-spin' : ''}`}>
-                      {isConnecting ? "sync" : "sensors"}
-                    </span>
-                    <span className="relative z-10">{isConnecting ? "Connecting..." : "Connect"}</span>
-                  </button>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {/* ─── CHATS TAB ─── */}
-          {activeTab === "chats" && (
-            <div className="flex flex-col gap-lg">
-              {/* Search */}
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full h-[40px] bg-input-bg border border-outline-variant rounded-xl pl-10 pr-md text-body-md text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
-                  placeholder="Search conversations…"
-                  type="text"
-                />
-              </div>
-
-              {/* Conversation List */}
-              <div className="space-y-sm">
-                {conversations
-                  .filter(c => c.peer_key_hex.includes(search) || (c.display_name && c.display_name.toLowerCase().includes(search.toLowerCase())))
-                  .map((c) => (
-                    <div
-                      key={c.peer_key_hex}
-                      onClick={() => handleOpenChat(c.peer_key_hex)}
-                      className="group inner-glass p-md rounded-xl flex items-center gap-md cursor-pointer hover:bg-bg-hover transition-all duration-200"
-                    >
-                      <div className="relative flex-shrink-0">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-[#a855f7] flex items-center justify-center font-bold text-white text-lg">
-                          {(c.display_name || c.peer_key_hex).charAt(0).toUpperCase()}
-                        </div>
-                        {c.is_online && <div className="absolute top-0 right-0 w-3 h-3 bg-tertiary border-2 border-surface-container-lowest rounded-full"></div>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center mb-xs">
-                          <div className="flex items-center gap-xs">
-                            <span className="font-bold text-on-surface truncate">{c.display_name || c.peer_key_hex.substring(0, 16)}</span>
-                            {c.is_favorite && <span className="material-symbols-outlined text-warning text-[16px]">star</span>}
-                          </div>
-                          <span className="text-label-xs text-on-surface-variant shrink-0">{formatTime(c.last_message_at ?? 0)}</span>
-                        </div>
-                        <p className="text-body-base text-on-surface-variant truncate">{c.last_message_preview || "No messages yet."}</p>
-                      </div>
-                      {c.unread_count && c.unread_count > 0 ? (
-                        <div className="flex items-center gap-sm">
-                          <span className="bg-primary text-on-primary text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                            {c.unread_count > 99 ? "99+" : c.unread_count}
-                          </span>
-                        </div>
-                      ) : null}
-                      <div className="hidden group-hover:flex items-center gap-sm">
-                        <button
-                          className="text-on-surface-variant hover:text-danger transition-colors p-1 rounded-lg hover:bg-input-bg"
-                          onClick={(e) => handleDeleteConversation(e, c.peer_key_hex)}
-                          title="Delete conversation"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                {conversations.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-4xl text-on-surface-variant gap-md">
-                    <NoChatsIllustration />
-                    <p className="font-headline-2xl text-headline-2xl text-on-surface">No conversations yet</p>
-                    <p className="text-body-md max-w-[300px] text-center">Go to the Connect tab to create or join an encrypted session.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ─── NEARBY TAB ─── */}
-          {activeTab === "nearby" && (
-            <div className="flex flex-col gap-lg">
-              <div className="flex items-center justify-between gap-md">
-                <div>
-                  <h2 className="font-headline-2xl text-headline-2xl text-on-surface">Nearby Discovery</h2>
-                  <p className="text-body-md text-on-surface-variant">Find peers on your local network or DHT.</p>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      const peers = await invoke<DiscoveredPeer[]>("refresh_discovery");
-                      setDiscoveredPeers(peers);
-                      addToast(`Found ${peers.length} peer${peers.length !== 1 ? 's' : ''}`, "success");
-                    } catch (e: any) {
-                      addToast("Discovery failed: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
-                    }
-                  }}
-                  className="btn-secondary py-sm px-xl rounded-xl font-label-sm text-label-sm flex items-center gap-sm"
-                >
-                  <span className="material-symbols-outlined text-[18px]">radar</span>
-                  Scan
-                </button>
-              </div>
-
-              {discoveredPeers.length > 0 ? (
-                <div className="space-y-sm">
-                  {discoveredPeers.map((peer) => (
-                    <div
-                      key={peer.id_hex}
-                      className="inner-glass p-md rounded-xl flex items-center justify-between gap-md"
-                    >
-                      <div className="flex items-center gap-md min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-tertiary to-secondary flex items-center justify-center shrink-0">
-                          <span className="material-symbols-outlined text-white text-[18px]">wifi</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-bold text-on-surface truncate">{peer.id_hex.substring(0, 16)}</p>
-                          <div className="flex items-center gap-xs">
-                            <span className="text-label-xs text-on-surface-variant">{peer.address}</span>
-                            <span className={`text-label-xs px-1 py-0.5 rounded ${peer.method === "lan" ? "bg-tertiary/10 text-tertiary" : "bg-primary/10 text-primary"}`}>
-                              {peer.method === "lan" ? "LAN" : "DHT"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await invoke("connect_discovered_peer", { address: peer.address });
-                            addToast("Connected!", "success");
-                            setView("chat");
-                          } catch (e: any) {
-                            addToast("Connection failed: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
-                          }
-                        }}
-                        className="btn-primary py-sm px-lg rounded-xl font-label-sm text-label-sm flex items-center gap-xs shrink-0"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">sensors</span>
-                        Connect
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-4xl gap-lg">
-                  <RadarIllustration />
-                  <p className="text-on-surface-variant text-center max-w-md text-body-md">
-                    No peers discovered yet. Tap <strong>Scan</strong> to search your local network and DHT.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ─── FAMILY TAB ─── */}
-          {activeTab === "family" && (
-            <FamilyTab family={familyMembers} onRefresh={refreshFamily} onConnect={connectFamily} />
-          )}
+    <div className="app-shell">
+      <Sidebar currentView="hub" onNavigate={setView} />
+      <div className="app-main">
+      <div className="app-header">
+        <h1 className="app-header__title">
+          <span className="app-header__icon-bg app-header__icon-bg--accent">
+            <img src="logo.svg" alt="M2M" width="20" height="20" style={{ borderRadius: '4px' }} />
+          </span>
+          M2M
+        </h1>
+        <div className="app-header__actions">
+          <Badge variant={connectionBadge.variant} compact>
+            {connectionBadge.dot} {connectionBadge.label}
+          </Badge>
+          <button className="btn btn--icon" onClick={openSettings} id="settings-btn" aria-label="Settings"><GearIcon size={20} /></button>
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="shrink-0 border-t border-border-subtle bg-surface/40 backdrop-blur-3xl px-xl py-md flex flex-col md:flex-row items-center justify-between gap-md">
-        <div className="flex flex-col gap-xs">
-          <span className="font-label-xs text-label-xs text-on-surface-variant uppercase tracking-[0.15em]">Identity Fingerprint</span>
-          <div className="flex items-center gap-sm">
-            <span className="font-mono-code text-mono-code text-secondary px-sm py-xs bg-input-bg rounded-lg border border-border-subtle text-[11px]">
-              {identity?.fingerprint || "Loading..."}
-            </span>
-            <button
-              onClick={() => {
-                if (identity?.fingerprint) {
-                  navigator.clipboard.writeText(identity.fingerprint);
-                  addToast("Fingerprint copied!", "success");
-                }
-              }}
-              className="text-on-surface-variant hover:text-primary transition-colors p-1 rounded-lg hover:bg-input-bg"
-              title="Copy Fingerprint"
-            >
-              <span className="material-symbols-outlined text-[16px]">content_copy</span>
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-md">
-          <span className="font-mono-label text-mono-label text-tertiary/60 bg-tertiary/5 px-2 py-0.5 rounded border border-tertiary/10 text-[10px]">Ed25519</span>
-          <span className="font-mono-label text-mono-label text-primary/60 bg-primary/5 px-2 py-0.5 rounded border border-primary/10 text-[10px]">XChaCha20</span>
-        </div>
-      </footer>
+      <div className="tab-bar" role="tablist">
+        <button className={`tab-bar__tab ${tab === "connect" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("connect")} role="tab" aria-selected={tab === "connect"}>
+          <LinkIcon size={16} /> Connect
+        </button>
+        <button className={`tab-bar__tab ${tab === "chats" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("chats")} role="tab" aria-selected={tab === "chats"}>
+          <MessageIcon size={16} /> Chats
+          {conversations.length > 0 && <span className="tab-bar__badge">{conversations.length}</span>}
+        </button>
+        <button className={`tab-bar__tab ${tab === "nearby" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("nearby")} role="tab" aria-selected={tab === "nearby"}>
+          <WifiIcon size={16} /> Nearby
+          {discoveredPeers.length > 0 && <span className="tab-bar__badge">{discoveredPeers.length}</span>}
+        </button>
+        <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" aria-selected={tab === "family"}>
+          <HomeIcon size={16} /> Family
+          {family.length > 0 && <span className="tab-bar__badge">{family.length}</span>}
+        </button>
+      </div>
+
+      <div className="app-content">
+        {tab === "connect" ? (
+          <ConnectTab
+            generatedInvite={generatedInvite} inviteToConnect={inviteToConnect}
+            inviteValid={inviteValid} namingMyName={namingMyName} namingTheirName={namingTheirName}
+            isConnecting={isConnecting} onGenerateInvite={handleGenerateInvite}
+            onCopyInvite={handleCopy} copied={copied}
+            setInviteToConnect={setInviteToConnect} onConnect={handleConnect}
+            setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
+            networkSettings={networkSettings} privateMode={privateMode} identity={identity}
+            securityConfig={securityConfig} scheduleClipboardClear={scheduleClipboardClear}
+          />
+        ) : tab === "nearby" ? (
+          <NearbyTab
+            discoveryConfig={discoveryConfig}
+            discoveredPeers={discoveredPeers}
+            onConnect={handleConnectDiscoveredPeer}
+            onRefresh={handleRefreshDiscovery}
+            onOpenSettings={openSettings}
+            onOpenChat={handleOpenChat}
+          />
+        ) : tab === "family" ? (
+          <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
+        ) : (
+          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} mutedConversations={mutedConversations} onMute={handleMuteConversation} onUnmute={handleUnmuteConversation} />
+        )}
+      </div>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </main>
+      </div>
+    </div>
   );
 }
+
+function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity, securityConfig, scheduleClipboardClear }: any) {
+  const [generating, setGenerating] = useState(false);
+  const [fpCopied, setFpCopied] = useState(false);
+  const [inviteHistory, setInviteHistory] = useState<string[]>([]);
+  const [inviteCreatedAt, setInviteCreatedAt] = useState<number | null>(null);
+  const [inviteExpiry, setInviteExpiry] = useState<number>(60);
+  const [isListening, setIsListening] = useState(false);
+  const [expiryRemaining, setExpiryRemaining] = useState<number>(0);
+
+  // Check if we're listening
+  useEffect(() => {
+    invoke("get_listen_address").then((addr: any) => {
+      setIsListening(!!addr && addr !== "Not listening");
+    }).catch(() => {});
+  }, []);
+
+  // Invite countdown timer
+  useEffect(() => {
+    if (!inviteCreatedAt) { setExpiryRemaining(0); return; }
+    const update = () => {
+      const elapsed = (Date.now() / 1000) - inviteCreatedAt;
+      const rem = Math.max(0, inviteExpiry * 60 - elapsed);
+      setExpiryRemaining(rem);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [inviteCreatedAt, inviteExpiry]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await onGenerateInvite();
+      setInviteCreatedAt(Date.now() / 1000);
+      setInviteExpiry(60);
+      setIsListening(true);
+    } finally { setGenerating(false); }
+  };
+
+  // Track generated invite in history
+  useEffect(() => {
+    if (generatedInvite) {
+      setInviteHistory((prev) => {
+        const next = [generatedInvite, ...prev.filter(i => i !== generatedInvite)].slice(0, 5);
+        return next;
+      });
+    }
+  }, [generatedInvite]);
+
+  return (
+    <div className="centered-view">
+      <div className="invite-section">
+        <Card header={{ icon: <PlusIcon size={18} color="var(--color-accent-bright)" />, title: "Host a Connection" }} description="Generate a one-time signed invite for a peer to connect to you securely.">
+          {isListening && (
+            <div className="listening-indicator">
+              <span className="listening-indicator__dot" />
+              Listening for incoming connections
+            </div>
+          )}
+          {!generatedInvite ? (
+            <Button id="generate-invite-btn" onClick={handleGenerate} loading={generating}>Generate Invite Link</Button>
+          ) : (
+            <>
+              <div className="invite-output">
+                <div className="invite-output__field">
+                  <span className="invite-output__text">{generatedInvite}</span>
+                </div>
+                <button className={`btn btn--icon ${copied ? 'btn--icon-copied' : ''}`} onClick={onCopyInvite} id="copy-invite-btn" aria-label="Copy invite">
+                  {copied ? <span className="copied-pop"><CheckIcon size={18} /></span> : <CopyIcon size={18} />}
+                </button>
+              </div>
+              {expiryRemaining > 0 && (
+                <div className="invite-countdown">
+                  <ClockIcon size={14} />
+                  Expires in {Math.floor(expiryRemaining / 60)}m:{Math.floor(expiryRemaining % 60).toString().padStart(2, "0")}
+                </div>
+              )}
+            </>
+          )}
+          {inviteHistory.length > 0 && (
+            <div className="invite-history">
+              <div className="invite-history__title">Recent Invites</div>
+              {inviteHistory.map((inv, i) => (
+                <div key={i} className="invite-history__item" onClick={() => {
+                  navigator.clipboard.writeText(inv);
+                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                  }
+                }}>
+                  <span>{inv.substring(0, 40)}…</span>
+                  <CopyIcon size={12} />
+                </div>
+              ))}
+            </div>
+          )}
+          {networkSettings?.tor_enabled && !privateMode && generatedInvite && (
+            <div className="tor-warning">
+              <span>⚠️</span>
+              <div><strong className="tor-warning__title">Tor Inbound Warning</strong><p className="tor-warning__text">Tor is enabled for outbound connections, but this invite contains your real IP address.</p></div>
+            </div>
+          )}
+        </Card>
+
+        <Card header={{ icon: <LinkIcon size={18} color="var(--color-success)" />, iconVariant: "success" as const, title: "Join a Connection" }} description="Paste an invite link from a trusted peer to connect.">
+          <div className="flex-row">
+            <Input id="invite-input" placeholder="m2m://..." value={inviteToConnect} onChange={e => setInviteToConnect(e.target.value)} mono clearable onClear={() => setInviteToConnect("")} />
+            <Button id="connect-btn" onClick={onConnect} disabled={isConnecting || !inviteToConnect} loading={isConnecting} size="sm">Connect</Button>
+          </div>
+          {inviteValid && (
+            <div className="naming-panel">
+              <div className="naming-panel__valid"><CheckIcon size={16} /> Valid Invite Found</div>
+              <label>Your Name <Input placeholder="How they will see you" value={namingMyName} onChange={e => setNamingMyName(e.target.value)} compact /></label>
+              <label>Their Name <Input placeholder="How you want to see them" value={namingTheirName} onChange={e => setNamingTheirName(e.target.value)} compact /></label>
+            </div>
+          )}
+        </Card>
+
+        <div className="divider" />
+
+        <div className="fingerprint-box" id="fingerprint-display">
+          <span className="fingerprint-label">Your Identity Fingerprint</span>
+          <span className="fingerprint-value-row">
+            {identity?.fingerprint}
+            <button className="btn btn--ghost btn--icon-sm" onClick={() => {
+              if (identity?.fingerprint) {
+                navigator.clipboard.writeText(identity.fingerprint);
+                setFpCopied(true);
+                setTimeout(() => setFpCopied(false), 2000);
+              }
+            }} aria-label="Copy">
+              {fpCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [archived, setArchived] = useState<Set<string>>(new Set());
+
+  // Init from conversation data
+  useEffect(() => {
+    setFavorites(new Set(conversations.filter((c: any) => c.is_favorite).map((c: any) => c.peer_key_hex)));
+    setArchived(new Set(conversations.filter((c: any) => c.archived).map((c: any) => c.peer_key_hex)));
+  }, [conversations]);
+
+  const toggleFav = async (peerKeyHex: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newVal = await invoke<boolean>("toggle_favorite", { peerKeyHex });
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
+        return next;
+      });
+    } catch { /* noop */ }
+  };
+
+  const toggleArch = async (peerKeyHex: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newVal = await invoke<boolean>("toggle_archive", { peerKeyHex });
+      setArchived((prev) => {
+        const next = new Set(prev);
+        if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
+        return next;
+      });
+    } catch { /* noop */ }
+  };
+  // Sort conversations: favorites first, then by recency, archived at bottom
+  const sorted = [...conversations].sort((a: any, b: any) => {
+    if ((a.archived ? 1 : 0) !== (b.archived ? 1 : 0)) return (a.archived ? 1 : 0) - (b.archived ? 1 : 0);
+    if ((a.is_favorite ? 1 : 0) !== (b.is_favorite ? 1 : 0)) return (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0);
+    return (b.last_message_at || 0) - (a.last_message_at || 0);
+  });
+
+  return (
+    <div className="conv-list">
+      {conversations.length > 0 && (
+        <div className="conv-search">
+          <Input placeholder="Search conversations…" value={search} onChange={e => setSearch(e.target.value)} icon={<SearchIcon size={16} />} clearable onClear={() => setSearch("")} />
+        </div>
+      )}
+
+      {conversations.length === 0 ? (
+        <div className="conv-empty">
+          <MessageIcon size={48} color="var(--color-text-muted)" />
+          <p className="conv-empty__title">{search ? "No conversations found" : "No conversations yet"}</p>
+          <p className="conv-empty__desc">
+            {search
+              ? "Try adjusting your search terms or clear the filter."
+              : "Generate an invite link to host a connection, or paste an invite from a peer to join."}
+          </p>
+          {!search && (
+            <Button onClick={onGetStarted} icon={<PlusIcon size={18} />}>
+              Get Started
+            </Button>
+          )}
+        </div>
+      ) : (
+        sorted.map((c: any) => {
+          const isMuted = mutedConversations?.includes(c.peer_key_hex);
+          return (
+          <div key={c.id} className="conv-item" onClick={() => onOpenChat(c)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpenChat(c)}>
+            <div className="conv-avatar-wrap">
+              <div className={`conv-avatar ${c.is_online ? 'conv-avatar--online' : ''}`} style={{
+                background: `linear-gradient(135deg, ${hashToColor(c.peer_key_hex)}, ${hashToColor(c.peer_key_hex.slice(16))})`,
+              }}>
+                {(c.display_name || c.peer_display_name || c.peer_key_hex).charAt(0).toUpperCase()}
+              </div>
+              {c.is_online && <span className="online-dot" />}
+            </div>
+            <div className="conv-body">
+              <div className="conv-top">
+                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <span className="mute-indicator">🔇</span> : null}</span>
+                {c.last_message_at && <span className="relative-time">{formatTime(c.last_message_at)}</span>}
+              </div>
+              <span className="conv-preview">{c.last_message_preview || "No messages yet."}</span>
+            </div>
+            <div className="conv-actions">
+              {/* Favorite toggle */}
+              <button className="btn btn--icon btn--icon-sm" title={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
+                onClick={(e) => toggleFav(c.peer_key_hex, e)}
+                aria-label={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
+                style={{ color: favorites.has(c.peer_key_hex) ? 'var(--color-warning)' : undefined }}>
+                {favorites.has(c.peer_key_hex) ? "★" : "☆"}
+              </button>
+              {/* Archive toggle */}
+              <button className="btn btn--icon btn--icon-sm" title={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}
+                onClick={(e) => toggleArch(c.peer_key_hex, e)}
+                aria-label={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}>
+                {archived.has(c.peer_key_hex) ? "📂" : "📁"}
+              </button>
+              <button className="btn btn--icon btn--icon-sm"
+                title={isMuted ? "Unmute conversation" : "Mute conversation"}
+                onClick={e => { e.stopPropagation(); isMuted ? onUnmute(c.peer_key_hex) : onMute(c.peer_key_hex); }}
+                aria-label={isMuted ? "Unmute" : "Mute"}>
+                {isMuted ? "🔇" : "🔔"}
+              </button>
+              <button className="btn btn--icon btn--icon-sm"
+                onClick={e => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }}
+                aria-label="Delete">
+                <TrashIcon size={16} />
+              </button>
+            </div>
+          </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onOpenSettings, onOpenChat }: any) {
+  const [connecting, setConnecting] = useState<string | null>(null);
+
+  const handleConnectPeer = async (address: string) => {
+    setConnecting(address);
+    try {
+      const info = await onConnect(address);
+      if (info?.peer_key_hex && onOpenChat) {
+        onOpenChat({
+          peer_key_hex: info.peer_key_hex,
+          is_online: true,
+          retention_policy: "none",
+          display_name: null,
+          peer_display_name: null,
+          id: info.peer_key_hex,
+        });
+      }
+    } catch {
+      // toast already shown by handler
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  // Discovery not active
+  if (!discoveryConfig?.lan_enabled && !discoveryConfig?.dht_enabled) {
+    return (
+      <div className="centered-view">
+        <div className="conv-empty">
+          <p className="conv-empty__title">Discovery Not Active</p>
+          <p className="conv-empty__desc">
+            Enable LAN or DHT discovery in Settings to find nearby peers.
+            Both are <strong>OFF by default</strong> — privacy first.
+          </p>
+          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
+            <GearIcon size={16} /> Open Settings
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // No peers found
+  if (discoveredPeers.length === 0) {
+    return (
+      <div className="centered-view">
+        <div className="conv-empty">
+          <WifiIcon size={48} color="var(--color-text-muted)" />
+          <p className="conv-empty__title">No Peers Found</p>
+          <p className="conv-empty__desc">
+            {discoveryConfig?.lan_enabled
+              ? "No LAN peers detected. Make sure other M2M users are on the same network with LAN discovery enabled."
+              : ""}
+            {discoveryConfig?.lan_enabled && discoveryConfig?.dht_enabled ? " " : ""}
+            {discoveryConfig?.dht_enabled
+              ? "No DHT peers found. They may be offline or behind a symmetric NAT."
+              : ""}
+          </p>
+          <Button variant="secondary" size="xs" onClick={onRefresh}>Refresh</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="conv-list">
+      <div className="nearby-actions">
+        <Button variant="secondary" size="xs" onClick={onRefresh}>Refresh</Button>
+      </div>
+      {discoveredPeers.map((peer: any, idx: number) => (
+        <div key={`${peer.method}-${peer.id_hex}-${idx}`} className="conv-item" role="listitem">
+          <div className="conv-avatar conv-avatar--online" style={{
+            background: `linear-gradient(135deg, #22c55e, #16a34a)`,
+          }}>
+            <WifiIcon size={18} color="white" />
+          </div>
+          <div className="conv-body">
+            <div className="conv-top">
+              <span className="conv-name">
+                {peer.method === "lan" ? "LAN Peer" : "DHT Peer"}
+              </span>
+              <span className="conv-time">{formatTime(peer.last_seen)}</span>
+            </div>
+            <div className="conv-preview">
+              {peer.address}
+              <span className={`badge badge--${peer.method === "lan" ? "info" : "warning"} badge--inline`}>
+                {peer.method === "lan" ? "LAN" : "DHT"}
+              </span>
+            </div>
+            <div className="conv-preview conv-preview--mono">
+              {peer.id_hex.slice(0, 16)}...
+            </div>
+          </div>
+          <div className="conv-status conv-status--actions">
+            <Button
+              size="xs"
+              onClick={() => handleConnectPeer(peer.address)}
+              disabled={connecting === peer.address}
+              loading={connecting === peer.address}
+            >
+              Connect
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+

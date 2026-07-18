@@ -10,3 +10,4 @@ export { default as LoadingSpinner } from "./LoadingSpinner";
 export { default as ProgressBar } from "./ProgressBar";
 export { default as UpdateBanner } from "./UpdateBanner";
 export { NoChatsIllustration, RadarIllustration, FamilyIllustration } from "./EmptyStates";
+export * from "./icons/index";

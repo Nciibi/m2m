@@ -9,128 +9,18 @@
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#030408" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f1f5f9" media="(prefers-color-scheme: light)" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <title>M2M Secure Messenger</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script>
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              "background": "var(--color-bg-dark)",
-              "surface": "var(--color-bg-surface)",
-              "surface-container": "var(--color-bg-container)",
-              "surface-container-low": "var(--color-bg-container-low)",
-              "surface-container-high": "var(--color-bg-container-high)",
-              "surface-container-highest": "var(--color-bg-container-highest)",
-              "surface-container-lowest": "var(--color-bg-dark)",
-              "surface-variant": "var(--color-bg-surface-variant)",
-              
-              "primary": "var(--color-accent)",
-              "primary-container": "var(--color-primary-container)",
-              "inverse-primary": "var(--color-accent-bright)",
-              
-              "secondary": "var(--color-text-secondary)",
-              "tertiary": "var(--color-success)",
-              "tertiary-container": "var(--color-success-bg)",
-              "warning": "var(--color-warning)",
-              "danger": "var(--color-danger)",
-              "error": "var(--color-danger)",
-              
-              "text-primary": "var(--color-text-primary)",
-              "text-secondary": "var(--color-text-secondary)",
-              "text-muted": "var(--color-text-muted)",
-              
-              "on-surface": "var(--color-text-primary)",
-              "on-surface-variant": "var(--color-text-muted)",
-              "on-background": "var(--color-text-primary)",
-              "on-primary": "#ffffff",
-              "on-primary-container": "#ffffff",
-              "on-tertiary": "#ffffff",
-              "on-tertiary-container": "#ffffff",
-              
-              "border-subtle": "var(--color-border-default)",
-              "outline": "var(--color-border-strong)",
-              "outline-variant": "var(--color-border-card)",
-              "input-bg": "var(--color-bg-input)",
-            },
-            borderRadius: {
-              "DEFAULT": "0.25rem",
-              "lg": "0.5rem",
-              "xl": "0.75rem",
-              "full": "9999px"
-            },
-            spacing: {
-              "lg": "16px",
-              "4xl": "64px",
-              "xs": "4px",
-              "xl": "24px",
-              "3xl": "48px",
-              "container-max": "1000px",
-              "gutter": "16px",
-              "md": "12px",
-              "sm": "8px",
-              "2xl": "32px"
-            },
-            fontFamily: {
-              "body-xl": ["Inter"],
-              "headline-4xl": ["Inter"],
-              "body-md": ["Inter"],
-              "headline-3xl": ["Inter"],
-              "headline-2xl": ["Inter"],
-              "body-lg": ["Inter"],
-              "mono-label": ["JetBrains Mono"],
-              "body-base": ["Inter"],
-              "mono-code": ["JetBrains Mono"],
-              "label-xs": ["Inter"],
-              "label-sm": ["Inter"]
-            },
-            fontSize: {
-              "body-xl": ["1.05rem", {"lineHeight": "1.6", "fontWeight": "400"}],
-              "headline-4xl": ["1.75rem", {"lineHeight": "1.2", "fontWeight": "700"}],
-              "body-md": ["0.875rem", {"lineHeight": "1.5", "fontWeight": "400"}],
-              "headline-3xl": ["1.4rem", {"lineHeight": "1.3", "fontWeight": "600"}],
-              "headline-2xl": ["1.2rem", {"lineHeight": "1.4", "fontWeight": "600"}],
-              "body-lg": ["0.9375rem", {"lineHeight": "1.6", "fontWeight": "400"}],
-              "mono-label": ["0.75rem", {"lineHeight": "1rem", "letterSpacing": "0.02em", "fontWeight": "500"}],
-              "body-base": ["0.8125rem", {"lineHeight": "1.5", "fontWeight": "400"}],
-              "mono-code": ["0.8125rem", {"lineHeight": "1.5", "letterSpacing": "-0.01em", "fontWeight": "400"}],
-              "label-xs": ["0.68rem", {"lineHeight": "0.875rem", "fontWeight": "500"}],
-              "label-sm": ["0.75rem", {"lineHeight": "1rem", "fontWeight": "500"}]
-            },
-            keyframes: {
-              blob: {
-                "0%": { transform: "translate(0px, 0px) scale(1)" },
-                "33%": { transform: "translate(30px, -50px) scale(1.1)" },
-                "66%": { transform: "translate(-20px, 20px) scale(0.9)" },
-                "100%": { transform: "translate(0px, 0px) scale(1)" }
-              }
-            },
-            animation: {
-              blob: "blob 15s infinite alternate ease-in-out"
-            }
-          }
-        }
-      }
-    </script>
-  <body class="bg-background min-h-screen text-on-surface">
-    
-    <!-- Premium Animated Background System -->
-    <div class="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-background">
-      <!-- Animated Orbs -->
-      <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full dark:mix-blend-screen mix-blend-normal filter blur-[120px] opacity-[0.07] dark:opacity-30 animate-blob bg-primary/40"></div>
-      <div class="absolute top-[20%] right-[-10%] w-[40vw] h-[40vw] rounded-full dark:mix-blend-screen mix-blend-normal filter blur-[150px] opacity-[0.05] dark:opacity-20 animate-blob animation-delay-2000 bg-tertiary/40"></div>
-      <div class="absolute bottom-[-20%] left-[20%] w-[60vw] h-[60vw] rounded-full dark:mix-blend-screen mix-blend-normal filter blur-[120px] opacity-[0.05] dark:opacity-20 animate-blob animation-delay-4000 bg-inverse-primary/40"></div>
-      
-      <!-- Grain Overlay -->
-      <div class="absolute inset-0 opacity-[0.05] dark:opacity-[0.03] mix-blend-overlay dark:mix-blend-overlay" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E');"></div>
+  </head>
+  <body>
+    <!-- Animated background system — styled in styles/layout.css, driven by CSS only (no network assets). -->
+    <div class="app-backdrop" aria-hidden="true">
+      <div class="app-backdrop__orb app-backdrop__orb--1"></div>
+      <div class="app-backdrop__orb app-backdrop__orb--2"></div>
+      <div class="app-backdrop__orb app-backdrop__orb--3"></div>
+      <div class="app-backdrop__grain"></div>
     </div>
 
-    <div id="root" class="relative z-10 w-full h-screen"></div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

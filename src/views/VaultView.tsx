@@ -1,201 +1,194 @@
-import { useState } from "react";
-import { ToastContainer } from "../components/ui";
+import { useState, useEffect } from "react";
+import { Button, Input, ToastContainer } from "../components/ui";
+import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon, CheckIcon } from "../components/ui/Icons";
 import { estimateEntropy } from "../utils";
 import { useApp } from "../context/AppContext";
 import { useVault } from "../context/VaultContext";
 
 export default function VaultView() {
-  const { vaultInitialized, toasts, removeToast, addToast } = useApp();
+  const { identity, vaultInitialized, toasts, removeToast, addToast } = useApp();
   const { handleUnlockVault } = useVault();
-
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
+  const [vaultError, setVaultError] = useState("");
+  const [showPassphrase, setShowPassphrase] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [shake, setShake] = useState(false);
+  const [showTips, setShowTips] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
+  const [strength, setStrength] = useState({ percent: 0, bits: 0, label: "", cls: "" });
 
-  const entropy = estimateEntropy(passphrase);
-  let entropyColor = "var(--color-danger)";
-  let entropyLabel = "Weak";
-  if (entropy > 40) { entropyColor = "var(--color-warning)"; entropyLabel = "Fair"; }
-  if (entropy > 60) { entropyColor = "var(--color-success)"; entropyLabel = "Strong"; }
+  const isFirstTime = !vaultInitialized;
 
-  const triggerShake = () => {
-    setShake(true);
-    setTimeout(() => setShake(false), 500);
-  };
+  useEffect(() => {
+    const entropy = estimateEntropy(passphrase);
+    let percent: number, label: string, cls: string;
+    if (passphrase.length === 0) { percent = 0; label = ""; cls = ""; }
+    else if (passphrase.length < 12) { percent = Math.min(30, passphrase.length * 5); label = "Too short (min 12)"; cls = "weak"; }
+    else if (entropy < 40) { percent = 40; label = "Weak"; cls = "weak"; }
+    else if (entropy < 60) { percent = 65; label = "Fair"; cls = "fair"; }
+    else if (entropy < 80) { percent = 85; label = "Strong"; cls = "strong"; }
+    else { percent = 100; label = "Very Strong"; cls = "very-strong"; }
+    setStrength({ percent, bits: Math.round(entropy), label, cls });
+  }, [passphrase]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-    setError("");
-
-    if (!vaultInitialized) {
-      if (passphrase.length < 12) {
-        setError("Passphrase must be at least 12 characters.");
-        triggerShake();
-        return;
-      }
-      if (passphrase !== passphraseConfirm) {
-        setError("Passphrases do not match.");
-        triggerShake();
-        return;
-      }
-    }
-
+  const handleUnlock = async () => {
+    setVaultError("");
+    if (passphrase.length < 12) { setVaultError("Passphrase must be at least 12 characters."); setShakeKey(k => k + 1); return; }
+    if (isFirstTime && passphraseConfirm !== passphrase) { setVaultError("Passphrases do not match."); setShakeKey(k => k + 1); return; }
+    const est = estimateEntropy(passphrase);
+    if (est < 40) { setVaultError(`Passphrase too weak: ~${Math.round(est)} bits. Use longer (aim for 60+).`); setShakeKey(k => k + 1); return; }
     setLoading(true);
     try {
       await handleUnlockVault(passphrase);
       setPassphrase("");
       setPassphraseConfirm("");
-    } catch (err: any) {
-      const msg = typeof err === "string" ? err : err?.message || "Unlock failed. Check your passphrase.";
-      setError(msg);
-      triggerShake();
+    } catch (e: any) {
+      const msg = typeof e === "string" ? e : e?.message || "Unlock failed. Check your passphrase.";
+      setVaultError(msg);
+      setShakeKey(k => k + 1);
       addToast(msg, "error");
     } finally {
       setLoading(false);
     }
   };
 
+  const colorMap: Record<string, string> = { weak: "var(--color-danger)", fair: "var(--color-warning)", strong: "var(--color-success)", "very-strong": "#22d3ee" };
+
   return (
-    <main className="relative z-10 w-full flex justify-center items-center h-full min-h-screen px-gutter">
-      {/* Unlock Vault Card */}
-      <div className={`premium-glass-card rounded-3xl max-w-[420px] w-full p-2xl flex flex-col items-center relative group ${shake ? "animate-[shake_0.4s_ease]" : ""}`}>
-
-        {/* Animated Cyber Icon Container */}
-        <div className="relative w-24 h-24 mb-xl flex items-center justify-center">
-          {/* Animated concentric scanning rings */}
-          <div className="absolute inset-0 border border-primary/20 rounded-full animate-[ping_3s_infinite] opacity-60"></div>
-          <div className="absolute inset-2 border border-primary/30 rounded-full animate-[spin_10s_linear_infinite]" style={{ borderStyle: "dashed" }}></div>
-          <div className="absolute inset-4 bg-primary/10 rounded-full border border-primary/30 flex items-center justify-center backdrop-blur-md">
-            <span className={`material-symbols-outlined text-primary text-3xl ${loading ? "animate-spin" : "group-hover:scale-110 transition-transform duration-300"}`}>
-              {loading ? "sync" : vaultInitialized ? "lock" : "enhanced_encryption"}
-            </span>
-          </div>
+    <div className="app-shell">
+      <div className="centered-view">
+        <div className={`vault-icon ${loading ? "vault-icon--loading" : "vault-icon--idle"}`}>
+          {loading ? <UnlockIcon size={36} color="var(--color-accent-bright)" /> : <LockIcon size={36} color="var(--color-accent-bright)" />}
         </div>
 
-        {/* Header */}
-        <div className="text-center mb-xl space-y-sm">
-          <h1 className="font-headline-3xl text-headline-3xl text-on-surface tracking-tight font-bold">
-            {vaultInitialized ? "Unlock Your Vault" : "Setup Your Vault"}
-          </h1>
-          <p className="font-body-md text-body-md text-on-surface-variant">
-            {vaultInitialized
-              ? "Enter your passphrase to decrypt your local data."
-              : "Create a strong passphrase to encrypt your identity."}
-          </p>
-          <div className="pt-sm">
-            <span className="font-mono-label text-label-xs bg-input-bg px-2 py-1 rounded-md text-text-muted border border-border-subtle">
-              {vaultInitialized ? "Argon2id · AES-256-GCM" : "Minimum 12 chars · Argon2id"}
-            </span>
-          </div>
-        </div>
+        <h2 className="centered-view__title centered-view__title--spaced" style={{ fontSize: "var(--text-xl)", fontWeight: 700 }}>
+          {isFirstTime ? "Set Up Your Vault" : "Unlock Your Vault"}
+        </h2>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="w-full space-y-lg">
-          {/* Passphrase Input */}
-          <div className="space-y-xs">
-            <label htmlFor="passphrase" className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-              Passphrase
-            </label>
-            <div className="relative">
-              <input
-                className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md pr-12 font-mono-code text-body-lg text-primary placeholder:text-text-muted/30 focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-300"
-                id="passphrase"
-                placeholder="••••••••••••"
-                required
-                autoComplete="current-password"
-                type={showPassword ? "text" : "password"}
+        <p className="centered-view__desc" style={{ fontSize: "var(--text-sm)", lineHeight: 1.5, marginBottom: "var(--space-xs)" }}>
+          {isFirstTime
+            ? "Choose a strong passphrase to encrypt your identity keys and message history."
+            : "Enter your passphrase to decrypt your local data."}
+        </p>
+
+        <p className="vault-crypto-hint" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-xl)" }}>
+          Minimum 12 chars · Argon2id
+        </p>
+
+        {!isFirstTime && identity?.fingerprint && (
+          <div className="fp-hint">
+            This vault belongs to {identity.fingerprint.substring(0, 16)}…
+          </div>
+        )}
+
+        <div className={`vault-form ${vaultError ? "vault-form--shake" : ""}`} key={shakeKey}>
+          <div className="vault-input-group">
+            <div className="vault-input-wrap">
+              <Input
+                id="vault-passphrase"
+                type={showPassphrase ? "text" : "password"}
+                placeholder="Passphrase"
                 value={passphrase}
-                onChange={e => { setPassphrase(e.target.value); setError(""); }}
-                minLength={vaultInitialized ? 1 : 12}
+                onChange={e => { setPassphrase(e.target.value); setVaultError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                autoFocus
+                error={vaultError || undefined}
+                clearable
+                onClear={() => { setPassphrase(""); setVaultError(""); }}
               />
+              <div className="vault-input-actions">
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      setPassphrase(text);
+                      setVaultError("");
+                    } catch { /* noop */ }
+                  }}
+                  className="vault-paste-btn"
+                  title="Paste from clipboard"
+                  aria-label="Paste passphrase"
+                >
+                  Paste
+                </button>
+                <button
+                  onClick={() => setShowPassphrase(!showPassphrase)}
+                  aria-label={showPassphrase ? "Hide passphrase" : "Show passphrase"}
+                  className="vault-toggle-btn"
+                >
+                  {showPassphrase ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {passphrase.length > 0 && (
+              <div className="strength-container">
+                <div className="strength-bar">
+                  <div className="strength-fill" style={{ width: `${strength.percent}%`, background: colorMap[strength.cls] || "transparent" }} />
+                </div>
+                <div className="strength-info">
+                  <span className="strength-label" style={{ color: colorMap[strength.cls] || "var(--color-text-muted)" }}>
+                    {strength.label && `${strength.label} — ${strength.bits} bits`}
+                  </span>
+                  <span className="strength-chars">{passphrase.length} chars</span>
+                </div>
+              </div>
+            )}
+
+            {isFirstTime && (
+              <div className="vault-input-wrap">
+                <Input
+                  id="vault-passphrase-confirm"
+                  type={showPassphrase ? "text" : "password"}
+                  placeholder="Confirm passphrase"
+                  value={passphraseConfirm}
+                  onChange={e => setPassphraseConfirm(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                  error={passphraseConfirm && passphrase !== passphraseConfirm ? "Passphrases do not match" : undefined}
+                />
+                {passphraseConfirm && passphrase === passphraseConfirm && passphrase.length >= 12 && (
+                  <span className="vault-match-check">
+                    <CheckIcon size={14} color="var(--color-success)" />
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="vault-input-sub-row">
               <button
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-on-surface transition-colors duration-200 p-1"
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
+                onClick={() => setShowTips(!showTips)}
+                className="vault-tips-toggle"
               >
-                <span className="material-symbols-outlined text-[20px]">{showPassword ? "visibility_off" : "visibility"}</span>
+                {showTips ? "Hide tips" : "What makes a strong passphrase?"}
               </button>
             </div>
-          </div>
 
-          {/* Confirm Passphrase (setup only) */}
-          {!vaultInitialized && (
-            <div className="space-y-xs">
-              <label className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                Confirm Passphrase
-              </label>
-              <input
-                className="w-full bg-input-bg border border-border-subtle rounded-xl px-lg py-md font-mono-code text-body-lg text-primary placeholder:text-text-muted/30 focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-300"
-                placeholder="Re-enter passphrase"
-                required
-                autoComplete="new-password"
-                type={showPassword ? "text" : "password"}
-                value={passphraseConfirm}
-                onChange={e => { setPassphraseConfirm(e.target.value); setError(""); }}
-                minLength={12}
-              />
-              {/* Entropy bar */}
-              {passphrase.length > 0 && (
-                <div className="space-y-xs pt-xs">
-                  <div className="w-full h-1.5 bg-input-bg rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, (entropy / 80) * 100)}%`, background: entropyColor }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[11px]">
-                    <span style={{ color: entropyColor }}>{entropyLabel} · {entropy.toFixed(0)} bits</span>
-                    {passphraseConfirm.length > 0 && passphrase !== passphraseConfirm && (
-                      <span className="text-danger font-bold">Does not match</span>
-                    )}
-                    {passphrase.length > 0 && passphraseConfirm.length > 0 && passphrase === passphraseConfirm && (
-                      <span className="text-tertiary font-bold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">check_circle</span> Match
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="flex items-center gap-sm p-md bg-error-container border border-error rounded-xl text-danger text-body-md animate-in fade-in slide-in-from-top-2 duration-200">
-              <span className="material-symbols-outlined text-[18px]">error</span>
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Submit Button */}
-          <button
-            disabled={loading || (!vaultInitialized && (passphrase !== passphraseConfirm || passphrase.length < 12))}
-            className="premium-btn w-full h-14 rounded-xl text-white bg-gradient-to-r from-primary-container to-inverse-primary font-headline-2xl font-bold flex items-center justify-center gap-md hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
-            type="submit"
-          >
-            {loading ? (
-              <>
-                <span className="material-symbols-outlined animate-spin text-[20px] relative z-10">sync</span>
-                <span className="relative z-10">{vaultInitialized ? "Decrypting..." : "Generating Keys..."}</span>
-              </>
-            ) : (
-              <span className="relative z-10">{vaultInitialized ? "Unlock Enclave" : "Initialize Enclave"}</span>
+            {showTips && (
+              <div className="tips-box">
+                <strong>Tips:</strong>
+                <ul>
+                  <li>Use 5+ random words (diceware method)</li>
+                  <li>Aim for 60+ bits of entropy</li>
+                  <li>Avoid common phrases or song lyrics</li>
+                  <li>Include a mix of cases, numbers, or symbols</li>
+                  <li>"correct-horse-battery-staple" style is excellent</li>
+                </ul>
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="mt-xl flex items-center justify-center gap-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shadow-[0_0_8px_var(--color-success)]"></span>
-          <p className="font-mono-label text-[10px] text-text-muted uppercase tracking-[0.2em] select-none">Enclave Offline & Isolated</p>
+            {vaultError && (
+              <div className="vault-error">{vaultError}</div>
+            )}
+
+            <div className="vault-submit-wrap">
+              <Button id="vault-unlock-btn" onClick={handleUnlock} loading={loading} fullWidth>
+                {isFirstTime ? "Create Vault" : "Unlock"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
-
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </main>
+    </div>
   );
 }

@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ToastContainer } from "../components/ui";
+import { Button, ToastContainer } from "../components/ui";
+import { KeyIcon, CheckIcon, LockIcon } from "../components/ui/Icons";
 import { useApp } from "../context/AppContext";
 
 const STEPS = [
-  { title: "Welcome to M2M", desc: "A private, end-to-end encrypted messenger. No servers, no accounts, no tracking.", icon: "rocket_launch" },
-  { title: "Your Identity is Local", desc: "Your keys are generated on this device and never leave it.", icon: "vpn_key" },
-  { title: "End-to-End Encrypted", desc: "Messages use X3DH + Double Ratchet. Ed25519 signing, X25519 key exchange, XChaCha20-Poly1305 encryption.", icon: "lock" },
-  { title: "Ready to Go!", desc: "Share your invite link with a trusted peer to start chatting.", icon: "check_circle" },
+  { title: "Welcome to M2M", desc: "A private, end-to-end encrypted messenger. No servers, no accounts, no tracking.", icon: "🚀" },
+  { title: "Your Identity is Local", desc: "Your keys are generated on this device and never leave it.", icon: "🔑" },
+  { title: "End-to-End Encrypted", desc: "Messages use X3DH + Double Ratchet (Signal protocol). Ed25519 signing, X25519 key exchange, XChaCha20-Poly1305 encryption.", icon: "🔒" },
+  { title: "Ready to Go!", desc: "Share your invite link with a trusted peer to start chatting. Both sides must generate and share invites.", icon: "✅" },
 ];
 
 export default function SetupView() {
@@ -15,6 +16,7 @@ export default function SetupView() {
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
   const [isFirstRun, setIsFirstRun] = useState(false);
+  const [slideDir, setSlideDir] = useState<"right" | "left">("right");
 
   useEffect(() => {
     invoke<boolean>("is_first_run")
@@ -26,35 +28,26 @@ export default function SetupView() {
       .finally(() => setTimeout(() => setLoading(false), 2200));
   }, []);
 
-  const goNext = () => { if (step < STEPS.length - 1) setStep(s => s + 1); };
-  const goBack = () => { if (step > 0) setStep(s => s - 1); };
+  const goNext = () => { setSlideDir("right"); if (step < STEPS.length - 1) setStep(s => s + 1); };
+  const goBack = () => { setSlideDir("left"); if (step > 0) setStep(s => s - 1); };
 
   if (loading) {
     return (
-      <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
-        <main className="relative z-10 px-gutter w-full flex justify-center">
-          <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
-            {/* Animated Cyber Ring for Initialization */}
-            <div className="relative w-28 h-28 mb-2xl flex items-center justify-center">
-              <div className="absolute inset-0 border border-primary/20 rounded-full animate-[ping_2.5s_infinite]"></div>
-              <div className="absolute inset-2 border-2 border-primary/10 border-t-primary rounded-full animate-spin"></div>
-              <div className="absolute inset-4 border border-primary/30 rounded-full animate-[spin_6s_linear_infinite]" style={{ borderStyle: "dashed" }}></div>
-              <div className="absolute inset-6 bg-primary/10 rounded-full border border-primary/20 flex items-center justify-center backdrop-blur-md">
-                <span className="material-symbols-outlined text-primary text-3xl">vpn_key</span>
-              </div>
-            </div>
-            <h2 className="font-headline-2xl text-headline-2xl font-bold text-text-primary mb-sm">Initializing Secure Enclave</h2>
-            <p className="font-body-md text-text-secondary mb-xl">Generating Ed25519 identity keys.<br />They never leave your device.</p>
-            <div className="flex gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '100ms' }}></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '200ms' }}></span>
-            </div>
-            <div className="mt-2xl font-mono-label text-label-xs bg-input-bg px-2 py-1 rounded-md text-text-muted border border-border-subtle">
-              Ed25519 · X25519 · XChaCha20-Poly1305
-            </div>
+      <div className="app-shell">
+        <div className="centered-view">
+          <div className="setup-icon__container">
+            <KeyIcon size={36} color="white" />
+            <div className="sonar-ring sonar-ring--1" />
+            <div className="sonar-ring sonar-ring--2" />
+            <div className="sonar-ring sonar-ring--3" />
           </div>
-        </main>
+          <h2 className="setup-title">Initializing Secure Enclave</h2>
+          <p className="setup-desc">Generating Ed25519 identity keys.<br />They never leave your device.</p>
+          <div className="loading-dots" role="status" aria-label="Generating identity keys">
+            <span /><span /><span />
+          </div>
+          <div className="crypto-badge">Ed25519 · X25519 · XChaCha20-Poly1305</div>
+        </div>
         <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
@@ -62,75 +55,49 @@ export default function SetupView() {
 
   if (!isFirstRun) {
     return (
-      <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center bg-input-bg border border-outline-variant animate-pulse">
-          <span className="material-symbols-outlined text-primary text-4xl">lock</span>
+      <div className="app-shell">
+        <div className="centered-view">
+          <div className="setup-icon__container">
+            <LockIcon size={36} color="white" />
+            <div className="sonar-ring sonar-ring--1" />
+          </div>
+          <h2 className="setup-title">Initializing Secure Enclave</h2>
+          <div className="loading-dots" role="status"><span /><span /><span /></div>
         </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
   }
 
   return (
-    <div className="flex w-full min-h-screen items-center justify-center relative overflow-hidden bg-background">
-      <main className="relative z-10 px-gutter w-full flex justify-center">
-        <div className="premium-glass-card rounded-3xl max-w-[600px] w-full py-3xl px-2xl flex flex-col items-center text-center relative group">
-          <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
-          
-          {/* Animated step icon container */}
-          <div className="relative w-24 h-24 mb-2xl flex items-center justify-center">
-            <div className="absolute inset-0 border border-primary/15 rounded-full animate-pulse"></div>
-            <div className="absolute inset-2 border border-primary/25 rounded-full animate-[spin_20s_linear_infinite]" style={{ borderStyle: "dashed" }}></div>
-            <div className="absolute inset-4 bg-primary/10 rounded-full border border-primary/20 flex items-center justify-center backdrop-blur-md transform hover:scale-105 transition-transform duration-300">
-              <span className="material-symbols-outlined text-primary text-4xl">{STEPS[step].icon}</span>
-            </div>
-          </div>
-          
-          <div key={step} className="flex flex-col items-center gap-md min-h-[120px] animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="font-headline-3xl text-headline-3xl font-bold text-text-primary m-0 tracking-tight">{STEPS[step].title}</h2>
-            <p className="font-body-lg text-text-secondary m-0 leading-relaxed max-w-[80%]">{STEPS[step].desc}</p>
-          </div>
-
-          <div className="flex gap-3 my-2xl">
-            {STEPS.map((_, i) => (
-              <div key={i} className={`w-3 h-3 rounded-full flex items-center justify-center transition-all duration-300 ${i === step ? 'bg-primary scale-125' : i < step ? 'bg-tertiary' : 'bg-input-bg/60'}`}>
-                {i < step && <span className="material-symbols-outlined text-[8px] text-black font-bold">check</span>}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex flex-col gap-lg w-full max-w-[300px]">
-            {step < STEPS.length - 1 ? (
-              <button 
-                onClick={goNext}
-                className="premium-btn w-full py-md rounded-xl bg-gradient-to-r from-primary-container to-inverse-primary text-on-primary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] group/btn"
-              >
-                <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-[0.03] transition-opacity"></div>
-                <span className="relative z-10">{step === 0 ? "Get Started" : "Next"}</span>
-              </button>
-            ) : (
-              <button 
-                onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err: any) { alert(typeof err === "string" ? err : "Failed to finalize setup"); } }}
-                className="premium-btn w-full py-md rounded-xl bg-gradient-to-r from-tertiary-container to-tertiary text-on-tertiary-container font-headline-2xl text-headline-2xl font-bold hover:brightness-125 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] group/btn"
-              >
-                <div className="absolute inset-0 bg-white opacity-0 group-hover/btn:opacity-[0.03] transition-opacity"></div>
-                <span className="relative z-10">Start Messaging</span>
-              </button>
-            )}
-            {step > 0 && (
-              <button 
-                onClick={goBack}
-                className="w-full py-sm rounded-xl bg-transparent text-text-muted border border-outline-variant font-label-sm text-label-sm font-semibold hover:text-white hover:bg-input-bg active:scale-95 transition-all"
-              >
-                Back
-              </button>
-            )}
-          </div>
-
-          <div className="mt-2xl font-mono-label text-[10px] text-text-muted/30 uppercase tracking-widest">
-            Ed25519 · X25519 · XChaCha20-Poly1305
-          </div>
+    <div className="app-shell">
+      <div className="centered-view">
+        <div className="setup-icon__container">
+          <span className="setup-emoji">{STEPS[step].icon}</span>
         </div>
-      </main>
+        <div key={step} className={`setup-step-content setup-step-content--${slideDir}`}>
+          <h2 className="setup-title">{STEPS[step].title}</h2>
+          <p className="setup-desc">{STEPS[step].desc}</p>
+        </div>
+        <div className="step-indicator" role="tablist" aria-label="Onboarding steps">
+          {STEPS.map((_, i) => (
+            <div key={i} className={`step-dot ${i === step ? "step-dot--active" : ""} ${i < step ? "step-dot--done" : ""}`} role="tab" aria-selected={i === step}>
+              {i < step && <CheckIcon size={12} color="white" />}
+            </div>
+          ))}
+        </div>
+        <div className="onboarding-actions">
+          {step < STEPS.length - 1 ? (
+            <Button onClick={goNext}>{step === 0 ? "Get Started" : "Next"}</Button>
+          ) : (
+            <Button onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err: any) { alert(typeof err === "string" ? err : "Failed to finalize setup"); } }}>
+              Start Messaging
+            </Button>
+          )}
+          {step > 0 && <Button variant="ghost" onClick={goBack}>Back</Button>}
+        </div>
+        <div className="crypto-badge onboarding-badge">Ed25519 · X25519 · XChaCha20-Poly1305</div>
+      </div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

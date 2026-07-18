@@ -109,8 +109,8 @@
   --text-4xl: 1.75rem;
   --text-5xl: 2.25rem;
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 
   --font-weight-normal: 400;
   --font-weight-medium: 500;
