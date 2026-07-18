@@ -78,6 +78,16 @@ vi.mock("../context/SettingsContext", () => ({
   }),
 }));
 
+vi.mock("../context/ThemeContext", () => ({
+  useTheme: () => ({
+    theme: "system",
+    setTheme: vi.fn(),
+    resolvedTheme: "dark",
+    accentColor: "#6366f1",
+    setAccentColor: vi.fn(),
+  }),
+}));
+
 import SettingsView from "../views/SettingsView";
 
 describe("SettingsView", () => {
