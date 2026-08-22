@@ -135,6 +135,10 @@ pub struct IncomingFileTransfer {
     /// Total bytes received so far.
     #[allow(dead_code)]
     pub bytes_received: u64,
+    /// Byte stride between chunk offsets, inferred from total_size/total_chunks
+    /// and validated against protocol::MAX_FILE_CHUNK_SIZE. Used to bounds-check
+    /// every incoming chunk write.
+    pub chunk_stride: u64,
     /// Bitmask of received chunks: true = chunk received.
     /// Size = total_chunks, initialized to all false.
     pub chunks_bitmask: Vec<bool>,
