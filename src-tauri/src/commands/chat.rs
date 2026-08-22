@@ -626,6 +626,20 @@ pub async fn delete_message(
     peer_key_hex: String,
     message_id: String,
 ) -> Result<(), String> {
+    // Validate ownership locally BEFORE sending: the message must exist in
+    // this conversation and be one of our sent messages (H4).
+    {
+        let ms = state.message_store.lock().await;
+        if let Some(ref store) = *ms {
+            let owned = store
+                .delete_message(&message_id, &peer_key_hex, "sent")
+                .map_err(|e| format!("delete failed: {e}"))?;
+            if !owned {
+                return Err("message not found in this conversation".to_string());
+            }
+        }
+    }
+
     let conns = state.connections.read().await;
     let conn_arc = conns
         .get(&peer_key_hex)
@@ -644,12 +658,6 @@ pub async fn delete_message(
         session.send_encrypted_typed(write_half, protocol::PacketType::MessageDelete, &serialized)
             .await
             .map_err(|e| format!("send delete failed: {e}"))?;
-    }
-
-    // Update local storage
-    let ms = state.message_store.lock().await;
-    if let Some(ref store) = *ms {
-        let _ = store.delete_message(&message_id);
     }
 
     Ok(())
