@@ -1050,9 +1050,26 @@ pub fn spawn_receive_loop(
                                 if let Ok(chunk) = protocol::deserialize::<protocol::FileTransferChunkData>(&plaintext) {
                                     let mut transfers = state.incoming_transfers.write().await;
                                     if let Some(transfer) = transfers.get_mut(&chunk.transfer_id) {
+                                        // Transfer must belong to THIS peer and be actively
+                                        // accepted (Transferring) — prevents cross-peer chunk
+                                        // injection into another conversation's transfer and
+                                        // writing into paused/unaccepted/cancelled temp files.
+                                        if transfer.peer_key_hex != peer_key_hex {
+                                            tracing::warn!(
+                                                                transfer_id = %chunk.transfer_id,
+                                                                "file chunk from wrong peer — ignoring"
+                                                            );
+                                        } else if transfer.state != crate::state::TransferState::Transferring {
+                                            tracing::debug!(
+                                                                transfer_id = %chunk.transfer_id,
+                                                                state = ?transfer.state,
+                                                                "file chunk for non-active transfer — ignoring"
+                                                            );
+                                        }
                                         // Bounds-check the peer-controlled index and payload size
                                         // against validated transfer parameters BEFORE any seek or
                                         // write: prevents writes past declared EOF (H3).
+                                        else {
                                         let idx = chunk.chunk_index as usize;
                                         if idx >= transfer.total_chunks as usize {
                                             tracing::warn!(
