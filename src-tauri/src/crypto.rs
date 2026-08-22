@@ -495,6 +495,26 @@ pub struct DoubleRatchet {
     skipped_keys: HashMap<u64, [u8; 32]>,
 }
 
+impl Drop for DoubleRatchet {
+    fn drop(&mut self) {
+        // Wipe all secret ratchet state: root key, chain keys, and every
+        // cached skipped-message key. Without this the material survives
+        // in freed heap memory after a session ends.
+        self.root_key.zeroize();
+        if let Some(k) = self.send_chain_key.as_mut() {
+            k.zeroize();
+        }
+        if let Some(k) = self.recv_chain_key.as_mut() {
+            k.zeroize();
+        }
+        for k in self.skipped_keys.values_mut() {
+            k.zeroize();
+        }
+        self.skipped_keys.clear();
+        self.their_ratchet_pub.zeroize();
+    }
+}
+
 impl DoubleRatchet {
     /// Initialize the Double Ratchet from X3DH output.
     ///
