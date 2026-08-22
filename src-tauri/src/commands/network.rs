@@ -512,6 +512,16 @@ pub async fn connect_to_peer(
     // Get our listener address so we can race accept vs connect.
     let listen_addr = *state.listen_addr.read().await;
 
+    // Relay auth token (if a relay with authentication is configured) —
+    // required by hardened relay servers on CONNECT.
+    let relay_auth_token = state
+        .relay_config
+        .read()
+        .await
+        .as_ref()
+        .map(|c| c.auth_token.clone())
+        .unwrap_or_default();
+
     // ── TCP Hole Punch: race accept vs connect simultaneously ──
     // Both peers race listener.accept() against connect(peer_candidates).
     // Whichever succeeds first determines our handshake role.
@@ -521,7 +531,7 @@ pub async fn connect_to_peer(
         remote_addr,
         strategy_name,
         latency,
-    } = hole_punch::ConnectionManager::connect(&peer_addrs, listen_addr)
+    } = hole_punch::ConnectionManager::connect(&peer_addrs, listen_addr, &relay_auth_token)
         .await
         .map_err(|e| format!("connection failed (tried {} candidates): {e}", peer_addrs.len()))?;
 
