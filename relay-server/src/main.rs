@@ -128,14 +128,39 @@ async fn send_error(stream: &mut TcpStream, code: u8, msg: &str) {
 
 // ─── Relay ID ────────────────────────────────────────────────────────────────
 
+/// Generate an unguessable relay bridge ID: 128 bits of CSPRNG output, hex-encoded.
+///
+/// The old implementation used 32 bits of wall-clock nanoseconds, making
+/// bridge IDs enumerable — with unauthenticated CONNECT this allowed any
+/// third party to hijack a pending bridge.
 fn generate_relay_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos() as u32;
-    let bytes = [ts as u8, (ts >> 8) as u8, (ts >> 16) as u8, (ts >> 24) as u8];
+    let bytes: [u8; 16] = rand::random();
     hex::encode(bytes)
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+/// Constant-time byte-slice equality (no early exit on mismatch).
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Verify a provided auth token against the configured token.
+///
+/// When no token is configured (`auth_token` empty), authentication is
+/// disabled and everything is accepted.
+fn verify_auth(provided: &[u8], auth_token: &str) -> bool {
+    if auth_token.is_empty() {
+        return true;
+    }
+    constant_time_eq(provided, auth_token.as_bytes())
 }
 
 // ─── Registration Reader ─────────────────────────────────────────────────────
