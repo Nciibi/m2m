@@ -970,6 +970,7 @@ pub fn spawn_receive_loop(
                                         if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
                                             transfers.retain(|_, t| now.saturating_sub(t.created_at) < STALE_TRANSFER_SECS);
                                         }
+                                        accepted = transfers.len() < MAX_PENDING_INCOMING_TRANSFERS;
                                         if accepted {
                                         transfers.entry(transfer_id.clone()).or_insert_with(|| {
                                             let (temp_file, temp_path) = match util::create_temp_file() {
