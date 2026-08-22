@@ -289,14 +289,14 @@ async fn run_hole_punch(
 }
 
 /// Run the relay strategy: connect to the relay server and request a bridge.
-async fn run_relay(s: Strategy) -> Result<StrategyResult, ConnectionError> {
+async fn run_relay(s: Strategy, auth_token: &str) -> Result<StrategyResult, ConnectionError> {
     let peer = s.peer_addr();
     let relay_id = s.relay_id().unwrap_or("").to_string();
     let start = Instant::now();
 
     tracing::debug!(target = %peer, relay_id = %relay_id, "relay strategy: connecting");
 
-    let stream = crate::relay::connect_via_relay(peer, &relay_id)
+    let stream = crate::relay::connect_via_relay(peer, &relay_id, auth_token)
         .await
         .map_err(|e| {
             tracing::warn!(target = %peer, error = %e, "relay strategy failed");
