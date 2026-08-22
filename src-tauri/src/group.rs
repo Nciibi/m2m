@@ -423,9 +423,13 @@ impl GroupManager {
 
         let our_init_key = group
             .our_initial_chain_key
+            .as_ref()
+            .copied()
             .ok_or("no our initial key")?;
         let our_verify_key = group
             .our_verification_key
+            .as_ref()
+            .copied()
             .ok_or("no our verification key")?;
 
         let their_own_bundle = GroupSenderKeyData {
