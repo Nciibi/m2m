@@ -1485,6 +1485,11 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(edit) = crate::protocol::deserialize::<crate::protocol::MessageEditData>(&plaintext) {
+                                    // Mirror the send-side size cap on receive (H4).
+                                    if edit.new_content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
+                                        tracing::warn!(peer = %peer_key_hex, "rejected oversized message edit");
+                                        continue;
+                                    }
                                     // Encrypt new content first (no lock held yet)
                                     let encrypted_result = {
                                         let sk = state.storage_key.read().await;
@@ -1494,12 +1499,30 @@ pub fn spawn_receive_loop(
                                             ).ok()
                                         })
                                     };
-                                    // Then update storage (separate lock scope)
+                                    // Then update storage (separate lock scope), scoped to the
+                                    // sender's conversation and 'received' messages only (H4) —
+                                    // a peer can never rewrite our own sent messages or rows in
+                                    // unrelated conversations.
+                                    let mut accepted = false;
                                     if let Some((nonce, encrypted)) = encrypted_result {
                                         let ms = state.message_store.lock().await;
                                         if let Some(ref store) = *ms {
-                                            let _ = store.edit_message(&edit.message_id, &encrypted, &nonce);
+                                            match store.edit_message(&edit.message_id, &peer_key_hex, "received", &encrypted, &nonce) {
+                                                Ok(true) => accepted = true,
+                                                Ok(false) => {
+                                                    tracing::warn!(
+                                                        peer = %peer_key_hex,
+                                                        "edit for message outside sender conversation — rejected"
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, "failed to persist edit");
+                                                }
+                                            }
                                         }
+                                    }
+                                    if !accepted {
+                                        continue;
                                     }
 
                                     // Notify frontend
