@@ -565,7 +565,6 @@ pub async fn edit_message(
     // Validate + persist locally BEFORE sending, so edits to messages we
     // don't own (wrong conversation or not our own sent message) are
     // rejected outright (H4).
-    let mut persisted = false;
     let history = *state.history_enabled.read().await;
     if history {
         let sk = state.storage_key.read().await;
@@ -574,7 +573,7 @@ pub async fn edit_message(
             match util::crypto_encrypt_storage(new_content.as_bytes(), key, util::AAD_MSG_STORE) {
                 Ok((nonce, encrypted)) => {
                     match store.edit_message(&message_id, &peer_key_hex, "sent", &encrypted, &nonce) {
-                        Ok(true) => persisted = true,
+                        Ok(true) => {}
                         Ok(false) => {
                             return Err("message not found in this conversation".to_string());
                         }
@@ -605,8 +604,6 @@ pub async fn edit_message(
             .await
             .map_err(|e| format!("send edit failed: {e}"))?;
     }
-
-    let _ = persisted;
 
     Ok(ChatMessage {
         id: message_id,
