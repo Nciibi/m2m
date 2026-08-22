@@ -955,6 +955,7 @@ pub fn spawn_receive_loop(
                                     let safe_name = network::sanitize_filename(&filename)
                                         .unwrap_or_else(|| format!("file_{}", transfer_id));
 
+                                    let mut accepted = false;
                                     {
                                         const MAX_PENDING_INCOMING_TRANSFERS: usize = 20;
                                         const STALE_TRANSFER_SECS: u64 = 60 * 60;
