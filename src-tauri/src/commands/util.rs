@@ -364,17 +364,18 @@ pub fn crypto_decrypt_storage(
     aead::open(ciphertext, Some(aad), &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
 }
 
-/// Create a temporary file pre-allocated to the given size.
+/// Create a temporary file for an incoming transfer.
 /// Returns (Option<File>, Option<PathBuf>) — either both Some or both None.
 /// The file is created in the OS temp directory with a unique name.
-pub fn create_temp_file(size: u64) -> std::io::Result<(std::fs::File, std::path::PathBuf)> {
+///
+/// The file is NOT pre-allocated: it grows as chunks are written. Never call
+/// `set_len` with a peer-declared size — callers must validate sizes against
+/// `protocol::MAX_FILE_SIZE` before accepting a transfer at all.
+pub fn create_temp_file() -> std::io::Result<(std::fs::File, std::path::PathBuf)> {
     let mut path = std::env::temp_dir();
     path.push(format!("m2m_{}", uuid::Uuid::new_v4()));
 
     let file = std::fs::File::create(&path)?;
-    // Pre-allocate the file to the full expected size.
-    // This ensures we have enough disk space and avoids fragmentation.
-    file.set_len(size)?;
 
     Ok((file, path))
 }
