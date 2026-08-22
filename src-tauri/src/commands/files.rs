@@ -720,16 +720,17 @@ async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_i
 
 /// Compute the best chunk size for the given connection strategy.
 ///
-/// - host, ipv6, port-mapped (local/fast paths): 512 KiB
+/// - host, ipv6, port-mapped (local/fast paths): 256 KiB
 /// - srflx, prflx (internet hole-punch): 256 KiB
 /// - relay (high-latency): 128 KiB
 /// - default: 256 KiB
+///
+/// Never exceeds `protocol::MAX_FILE_CHUNK_SIZE` — the receiving side
+/// rejects transfers whose implied chunk stride is larger than that.
 pub(super) fn compute_chunk_size(strategy_name: &str) -> usize {
     match strategy_name {
-        "host" | "ipv6" | "port-mapped" => 512 * 1024,
-        "srflx" | "prflx" => 256 * 1024,
         "relay" => 128 * 1024,
-        _ => 256 * 1024,
+        _ => protocol::MAX_FILE_CHUNK_SIZE,
     }
 }
 
