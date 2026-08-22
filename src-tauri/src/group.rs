@@ -86,6 +86,24 @@ pub struct Group {
     pub last_message_preview: Option<String>,
 }
 
+impl Drop for Group {
+    fn drop(&mut self) {
+        // Wipe per-group secret material. SenderKeyChain instances wipe
+        // themselves via their own Drop.
+        use zeroize::Zeroize;
+        if let Some(k) = self.our_initial_chain_key.as_mut() {
+            k.zeroize();
+        }
+        if let Some(k) = self.our_signing_key.as_mut() {
+            k.zeroize();
+        }
+        for k in self.verification_keys.values_mut() {
+            k.zeroize();
+        }
+        self.verification_keys.clear();
+    }
+}
+
 impl Group {
     /// Create a new group as the admin/creator.
     /// Generates our Sender Key chain and signing key.
