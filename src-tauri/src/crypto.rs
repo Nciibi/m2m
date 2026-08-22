@@ -354,7 +354,7 @@ pub fn x3dh_initiate(
     }
 
     // Derive root_key (32B) + chain_key (32B) = 64B total
-    let output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
+    let mut output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
     let mut root_key = [0u8; 32];
     let mut chain_key = [0u8; 32];
     root_key.copy_from_slice(&output[..32]);
@@ -433,7 +433,7 @@ fn x3dh_respond_raw(
         dh4.0.zeroize();
     }
 
-    let output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
+    let mut output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
     let mut root_key = [0u8; 32];
     let mut chain_key = [0u8; 32];
     root_key.copy_from_slice(&output[..32]);
