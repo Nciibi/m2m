@@ -33,6 +33,15 @@ pub async fn send_file(
 
     let metadata = std::fs::metadata(path).map_err(|e| format!("cannot read file: {e}"))?;
     let total_size = metadata.len();
+    if total_size == 0 {
+        return Err("cannot send an empty file".to_string());
+    }
+    if total_size > protocol::MAX_FILE_SIZE {
+        return Err(format!(
+            "file exceeds maximum transfer size ({} bytes)",
+            protocol::MAX_FILE_SIZE
+        ));
+    }
     let filename = path.file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
