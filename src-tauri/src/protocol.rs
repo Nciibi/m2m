@@ -380,6 +380,32 @@ impl Drop for MessageBody {
 
 // --- File Transfer Messages ---
 
+/// Validate peer-declared transfer parameters before any allocation.
+///
+/// Rejects oversized files, absurd chunk counts, and inconsistent
+/// size/chunk combinations. Returns the inferred chunk stride
+/// (sender's chunk size) on success.
+pub fn validate_transfer_request(
+    total_size: u64,
+    total_chunks: u32,
+) -> Result<u64, &'static str> {
+    if total_size > MAX_FILE_SIZE {
+        return Err("file exceeds maximum transfer size");
+    }
+    if total_chunks > MAX_TOTAL_CHUNKS {
+        return Err("too many chunks");
+    }
+    if total_size == 0 || total_chunks == 0 {
+        // Empty transfers are pointless and a DoS nuisance; reject them.
+        return Err("empty file transfer");
+    }
+    let stride = total_size.div_ceil(total_chunks as u64);
+    if stride > MAX_FILE_CHUNK_SIZE as u64 {
+        return Err("declared chunks too few for declared size");
+    }
+    Ok(stride)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileTransferRequestData {
     pub transfer_id: String,
