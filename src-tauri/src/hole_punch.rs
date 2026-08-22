@@ -144,6 +144,7 @@ impl ConnectionManager {
     pub async fn connect(
         peer_candidates: &[WireCandidate],
         our_listener_addr: Option<SocketAddr>,
+        relay_auth_token: &str,
     ) -> Result<StrategyResult, ConnectionError> {
         if peer_candidates.is_empty() {
             return Err(ConnectionError::NoCandidates);
@@ -200,7 +201,8 @@ impl ConnectionManager {
 
         // Spawn a relay task for each relay candidate.
         for strat in relay_list {
-            set.spawn(run_relay(strat));
+            let token = relay_auth_token.to_string();
+            set.spawn(run_relay(strat, &token));
         }
 
         // Collect results. First success wins; log failures but keep going.
