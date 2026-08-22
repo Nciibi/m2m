@@ -334,11 +334,11 @@ pub fn x3dh_initiate(
     their_bundle: &PrekeyBundle,           // IK_B, SPK_B, [OPK_B]
 ) -> Result<X3DHSessionKeys, CryptoError> {
     // DH1 = DH(IK_A, SPK_B)
-    let dh1 = our_identity.diffie_hellman(&their_bundle.signed_prekey)?;
+    let mut dh1 = our_identity.diffie_hellman(&their_bundle.signed_prekey)?;
     // DH2 = DH(EK_A, IK_B)
-    let dh2 = our_ephemeral.diffie_hellman(&their_bundle.identity_key)?;
+    let mut dh2 = our_ephemeral.diffie_hellman(&their_bundle.identity_key)?;
     // DH3 = DH(EK_A, SPK_B)
-    let dh3 = our_ephemeral.diffie_hellman(&their_bundle.signed_prekey)?;
+    let mut dh3 = our_ephemeral.diffie_hellman(&their_bundle.signed_prekey)?;
 
     // Build SK = DH1 || DH2 || DH3 || [DH4]
     let mut sk = Vec::with_capacity(96);
@@ -348,8 +348,9 @@ pub fn x3dh_initiate(
 
     // DH4 = DH(EK_A, OPK_B) if OPK available
     if let Some(opk) = &their_bundle.one_time_prekey {
-        let dh4 = our_ephemeral.diffie_hellman(opk)?;
+        let mut dh4 = our_ephemeral.diffie_hellman(opk)?;
         sk.extend_from_slice(&dh4);
+        dh4.zeroize();
     }
 
     // Derive root_key (32B) + chain_key (32B) = 64B total
@@ -358,6 +359,14 @@ pub fn x3dh_initiate(
     let mut chain_key = [0u8; 32];
     root_key.copy_from_slice(&output[..32]);
     chain_key.copy_from_slice(&output[32..]);
+
+    // Intermediate DH outputs and the concatenated SK are secret material —
+    // wipe them before returning so they don't linger in memory.
+    output.zeroize();
+    sk.zeroize();
+    dh1.zeroize();
+    dh2.zeroize();
+    dh3.zeroize();
 
     Ok(X3DHSessionKeys { root_key, chain_key })
 }
