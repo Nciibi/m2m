@@ -11,7 +11,8 @@
 ///
 /// Client → Server:
 ///   - 0x01 REGISTER  body=[auth_token]  — register for incoming connections
-///   - 0x02 CONNECT   body=[1B id_len][relay_id] — request bridge to peer
+///   - 0x02 CONNECT   body=[1B id_len][relay_id][1B tok_len][token] — request bridge
+///     (the token section is required when RELAY_AUTH_TOKEN is set; optional otherwise)
 ///   - 0x03 KEEPALIVE body=empty — extend registration TTL
 ///
 /// Server → Client:
