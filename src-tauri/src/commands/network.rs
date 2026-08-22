@@ -1004,15 +1004,13 @@ pub fn spawn_receive_loop(
                                                 error: None,
                                             }
                                         });
-                                            true
                                         } else {
                                             tracing::warn!(
                                                 peer = %peer_key_hex,
                                                 transfer_id = %transfer_id,
                                                 "too many concurrent incoming transfers — rejecting"
                                             );
-                                            false
-                                        };
+                                        }
                                     }
                                     if accepted {
                                         let _ = app_handle.emit("m2m://file-request", FileRequestEvent {
