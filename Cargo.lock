@@ -2472,9 +2472,10 @@ dependencies = [
 
 [[package]]
 name = "m2m-relay"
-version = "0.1.0"
+version = "3.6.21"
 dependencies = [
  "hex",
+ "rand 0.9.4",
  "tokio",
  "tracing",
  "tracing-subscriber",
