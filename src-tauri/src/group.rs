@@ -852,7 +852,7 @@ mod group_tests {
         .unwrap();
 
         // Save old initial chain key
-        let old_key = gm.get_group("g1").unwrap().our_initial_chain_key;
+        let old_key = gm.get_group("g1").unwrap().our_initial_chain_key.clone();
 
         let _ = gm.remove_member("g1", "bob", "alice");
 
