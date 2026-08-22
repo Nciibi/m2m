@@ -313,6 +313,7 @@ pub async fn register(config: &RelayConfig) -> Result<(TcpStream, String), Relay
 pub async fn connect_via_relay(
     relay_addr: SocketAddr,
     peer_relay_id: &str,
+    auth_token: &str,
 ) -> Result<TcpStream, RelayError> {
     tracing::info!(relay = %relay_addr, peer_relay = %peer_relay_id, "connecting via relay");
 
@@ -324,11 +325,18 @@ pub async fn connect_via_relay(
 
     let _ = stream.set_nodelay(true);
 
-    // Build CONNECT body: [1B id_len][relay_id bytes]
+    // Build CONNECT body v2: [1B id_len][relay_id bytes][1B tok_len][token bytes]
+    // Servers without auth configured ignore the trailing token section;
+    // servers WITH auth require it (older clients are rejected).
     let id_bytes = peer_relay_id.as_bytes();
     let id_len = id_bytes.len().min(255) as u8;
     let mut body = vec![id_len];
     body.extend_from_slice(&id_bytes[..id_len as usize]);
+
+    let token_bytes = auth_token.as_bytes();
+    let tok_len = token_bytes.len().min(255) as u8;
+    body.push(tok_len);
+    body.extend_from_slice(&token_bytes[..tok_len as usize]);
 
     write_relay_frame(&mut stream, RelayRequest::Connect as u8, &body).await?;
 
