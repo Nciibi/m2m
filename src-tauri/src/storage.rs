@@ -1058,13 +1058,27 @@ impl MessageStore {
     // ─── Reactions ─────────────────────────────────────
 
     /// Store or remove a reaction on a message.
+    ///
+    /// `conversation_id` scopes the operation: the message must exist in that
+    /// conversation or the call is a no-op (returns Ok(false)). This prevents
+    /// a peer from reacting to messages in unrelated conversations.
     pub fn upsert_reaction(
         &self,
         message_id: &str,
         reaction: &str,
         peer_key_hex: &str,
         remove: bool,
-    ) -> Result<(), StorageError> {
+        conversation_id: &str,
+    ) -> Result<bool, StorageError> {
+        // Ownership gate: message must belong to the given conversation.
+        let owns = self.conn.query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1 AND conversation_id = ?2",
+            rusqlite::params![message_id, conversation_id],
+            |row| row.get::<_, i64>(0),
+        )? > 0;
+        if !owns {
+            return Ok(false);
+        }
         if remove {
             self.conn.execute(
                 "DELETE FROM reactions WHERE message_id = ?1 AND reaction = ?2 AND peer_key_hex = ?3",
@@ -1078,7 +1092,7 @@ impl MessageStore {
                 rusqlite::params![message_id, reaction, peer_key_hex, now],
             )?;
         }
-        Ok(())
+        Ok(true)
     }
 
     /// Get all reactions for a list of message IDs.
