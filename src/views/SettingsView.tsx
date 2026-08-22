@@ -342,7 +342,7 @@ export default function SettingsView() {
           <div className="settings-card">
             <div className="settings-row">
               <span className="settings-label">Version</span>
-              <span>2.5.x</span>
+              <span>{appVersion || "unknown"}</span>
             </div>
             <div className="settings-row">
               <span className="settings-label">Crypto</span>
