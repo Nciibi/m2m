@@ -17,7 +17,7 @@ use sodiumoxide::crypto::kx;
 use sodiumoxide::crypto::scalarmult::curve25519 as scalarmult;
 use sodiumoxide::crypto::sign;
 use sodiumoxide::randombytes;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 
 use thiserror::Error;
