@@ -928,22 +928,59 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(req) = protocol::deserialize::<FileTransferRequestData>(&plaintext) {
-                                    // Pre-register the transfer with a temp file on disk.
-                                    // Chunks will be streamed to the temp file as they arrive.
                                     let total_chunks = req.total_chunks;
                                     let total_size = req.total_size;
                                     let transfer_id = req.transfer_id.clone();
                                     let filename = req.filename.clone();
                                     let file_hash = req.file_hash.clone();
 
+                                    // Validate peer-declared parameters BEFORE any allocation.
+                                    // total_size/total_chunks are attacker-controlled; without
+                                    // this check a single 64 KiB frame could force a ~4 GiB
+                                    // bitmask allocation and an unbounded sparse temp file.
+                                    let chunk_stride = match protocol::validate_transfer_request(total_size, total_chunks) {
+                                        Ok(stride) => stride,
+                                        Err(reason) => {
+                                            tracing::warn!(
+                                                transfer_id = %transfer_id,
+                                                peer = %peer_key_hex,
+                                                total_size,
+                                                total_chunks,
+                                                reason,
+                                                "rejected file transfer request"
+                                            );
+                                            return;
+                                        }
+                                    };
+
                                     // Sanitize the filename from the peer (path traversal protection).
                                     let safe_name = network::sanitize_filename(&filename)
                                         .unwrap_or_else(|| format!("file_{}", transfer_id));
 
                                     {
+                                        const MAX_PENDING_INCOMING_TRANSFERS: usize = 20;
+                                        const STALE_TRANSFER_SECS: u64 = 60 * 60;
+
                                         let mut transfers = state.incoming_transfers.write().await;
+                                        // Bound concurrent pending transfers: first prune
+                                        // stale entries, then reject when still at capacity.
+                                        if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
+                                            let now = std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_secs();
+                                            transfers.retain(|_, t| now.saturating_sub(t.created_at) < STALE_TRANSFER_SECS);
+                                        }
+                                        if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
+                                            tracing::warn!(
+                                                peer = %peer_key_hex,
+                                                transfer_id = %transfer_id,
+                                                "too many concurrent incoming transfers — rejecting"
+                                            );
+                                            return;
+                                        }
                                         transfers.entry(transfer_id.clone()).or_insert_with(|| {
-                                            let (temp_file, temp_path) = match util::create_temp_file(total_size) {
+                                            let (temp_file, temp_path) = match util::create_temp_file() {
                                                 Ok((f, p)) => (Some(f), Some(p)),
                                                 Err(e) => {
                                                     tracing::warn!(error = %e, "failed to create temp file for transfer");
@@ -965,6 +1002,7 @@ pub fn spawn_receive_loop(
                                                 temp_path,
                                                 chunks_received: 0,
                                                 bytes_received: 0,
+                                                chunk_stride,
                                                 chunks_bitmask: vec![false; total_chunks as usize],
                                                 state: crate::state::TransferState::Pending,
                                                 created_at: std::time::SystemTime::now()
