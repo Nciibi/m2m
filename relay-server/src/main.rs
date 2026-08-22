@@ -422,7 +422,7 @@ async fn main() {
 
     loop {
         match listener.accept().await {
-            Ok((stream, peer_addr)) => {
+            Ok((mut stream, peer_addr)) => {
                 // ── Connection caps (anti-DoS) ──
                 let ip = peer_addr.ip();
                 {
