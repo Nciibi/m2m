@@ -1432,15 +1432,36 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(rxn) = crate::protocol::deserialize::<crate::protocol::MessageReactionData>(&plaintext) {
-                                    // Store locally
+                                    // Mirror the send-side cap on receive (H4).
+                                    if rxn.reaction.chars().count() > 10 {
+                                        tracing::warn!(peer = %peer_key_hex, "rejected oversized reaction");
+                                        continue;
+                                    }
+                                    // Store locally, scoped to the sender's conversation (H4):
+                                    // reactions to messages in other conversations are dropped.
                                     let ms = state.message_store.lock().await;
+                                    let mut accepted = false;
                                     if let Some(ref store) = *ms {
-                                        let _ = store.upsert_reaction(
+                                        match store.upsert_reaction(
                                             &rxn.message_id, &rxn.reaction,
-                                            &peer_key_hex, rxn.remove,
-                                        );
+                                            &peer_key_hex, rxn.remove, &peer_key_hex,
+                                        ) {
+                                            Ok(true) => accepted = true,
+                                            Ok(false) => {
+                                                tracing::warn!(
+                                                    peer = %peer_key_hex,
+                                                    "reaction for message outside sender conversation — rejected"
+                                                );
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "failed to store reaction");
+                                            }
+                                        }
                                     }
                                     drop(ms);
+                                    if !accepted {
+                                        continue;
+                                    }
 
                                     // Notify frontend
                                     let _ = app_handle.emit("m2m://reaction", serde_json::json!({
