@@ -54,6 +54,11 @@ const DEFAULT_PORT: u16 = 3478;
 const READER_IDLE_TIMEOUT: Duration = Duration::from_secs(300); // 5 min
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 
+/// Maximum concurrent connections from a single IP address.
+const MAX_CONNECTIONS_PER_IP: usize = 16;
+/// Maximum total concurrent connections (global cap).
+const MAX_TOTAL_CONNECTIONS: usize = 1024;
+
 /// A registered peer awaiting a bridge connection.
 ///
 /// The `bridge_tx` channel is used to deliver the other peer's TCP stream
