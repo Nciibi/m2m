@@ -343,8 +343,8 @@ impl GroupManager {
             // Build the bundle for THEM:
             // - They get THEIR OWN signing key (so they can send)
             // - They get OUR initial chain key + verification key (so they can decrypt our messages)
-            let our_init_key = group.our_initial_chain_key.ok_or("no our initial key")?;
-            let our_verify_key = group.our_verification_key.ok_or("no our verification key")?;
+            let our_init_key = group.our_initial_chain_key.as_ref().copied().ok_or("no our initial key")?;
+            let our_verify_key = group.our_verification_key.as_ref().copied().ok_or("no our verification key")?;
 
             // Their own sender key bundle (signing key included — only for the recipient)
             let their_own_bundle = GroupSenderKeyData {
