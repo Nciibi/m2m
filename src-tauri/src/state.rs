@@ -107,9 +107,11 @@ impl OutgoingFileTransfer {
 /// State for an in-progress file transfer (receiving side).
 ///
 /// Chunks are written directly to a temporary file on disk as they arrive,
-/// NOT buffered in RAM. Only a sparse bitmask is kept in memory to track
-/// which chunks have been received. This prevents OOM attacks from peers
-/// claiming large files (e.g. 4GB).
+/// NOT buffered in RAM. Only a bounded bitmask is kept in memory to track
+/// which chunks have been received. Peer-declared sizes/chunk counts are
+/// validated against protocol::MAX_FILE_SIZE / MAX_TOTAL_CHUNKS before this
+/// struct is ever constructed, and the number of concurrent incoming
+/// transfers is capped.
 pub struct IncomingFileTransfer {
     #[allow(dead_code)]
     pub transfer_id: String,
