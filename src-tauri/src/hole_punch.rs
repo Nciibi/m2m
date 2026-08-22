@@ -202,7 +202,7 @@ impl ConnectionManager {
         // Spawn a relay task for each relay candidate.
         for strat in relay_list {
             let token = relay_auth_token.to_string();
-            set.spawn(run_relay(strat, &token));
+            set.spawn(async move { run_relay(strat, &token).await });
         }
 
         // Collect results. First success wins; log failures but keep going.
