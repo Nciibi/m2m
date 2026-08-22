@@ -562,6 +562,34 @@ pub async fn edit_message(
         .unwrap_or_default()
         .as_secs();
 
+    // Validate + persist locally BEFORE sending, so edits to messages we
+    // don't own (wrong conversation or not our own sent message) are
+    // rejected outright (H4).
+    let mut persisted = false;
+    let history = *state.history_enabled.read().await;
+    if history {
+        let sk = state.storage_key.read().await;
+        let ms = state.message_store.lock().await;
+        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            match util::crypto_encrypt_storage(new_content.as_bytes(), key, util::AAD_MSG_STORE) {
+                Ok((nonce, encrypted)) => {
+                    match store.edit_message(&message_id, &peer_key_hex, "sent", &encrypted, &nonce) {
+                        Ok(true) => persisted = true,
+                        Ok(false) => {
+                            return Err("message not found in this conversation".to_string());
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "failed to encrypt edit for storage");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to encrypt edit for storage");
+                }
+            }
+        }
+    }
+
     // Send edit packet to peer
     {
         let mut conn = conn_arc.lock().await;
@@ -578,29 +606,7 @@ pub async fn edit_message(
             .map_err(|e| format!("send edit failed: {e}"))?;
     }
 
-    // Update local storage
-    let history = *state.history_enabled.read().await;
-    if history {
-        let sk = state.storage_key.read().await;
-        let ms = state.message_store.lock().await;
-        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-            match util::crypto_encrypt_storage(new_content.as_bytes(), key, util::AAD_MSG_STORE) {
-                Ok((nonce, encrypted)) => {
-                    // Users may only edit their own sent messages in this conversation.
-                    match store.edit_message(&message_id, &peer_key_hex, "sent", &encrypted, &nonce) {
-                        Ok(true) => {}
-                        Ok(false) => return Err("message not found in this conversation".to_string()),
-                        Err(e) => {
-                            tracing::error!(error = %e, "failed to persist edit");
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to encrypt edit for storage");
-                }
-            }
-        }
-    }
+    let _ = persisted;
 
     Ok(ChatMessage {
         id: message_id,
