@@ -369,11 +369,11 @@ pub async fn send_reaction(
         return Err("reaction too long".to_string());
     }
 
-    // Store locally first
+    // Store locally first (scoped to this conversation — H4)
     {
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
-            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, false)
+            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, false, &peer_key_hex)
                 .map_err(|e| format!("failed to store reaction: {e}"))?;
         }
     }
@@ -407,11 +407,11 @@ pub async fn remove_reaction(
     message_id: String,
     reaction: String,
 ) -> Result<(), String> {
-    // Remove locally
+    // Remove locally (scoped to this conversation — H4)
     {
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
-            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, true)
+            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, true, &peer_key_hex)
                 .map_err(|e| format!("failed to remove reaction: {e}"))?;
         }
     }
@@ -586,7 +586,14 @@ pub async fn edit_message(
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
             match util::crypto_encrypt_storage(new_content.as_bytes(), key, util::AAD_MSG_STORE) {
                 Ok((nonce, encrypted)) => {
-                    let _ = store.edit_message(&message_id, &encrypted, &nonce);
+                    // Users may only edit their own sent messages in this conversation.
+                    match store.edit_message(&message_id, &peer_key_hex, "sent", &encrypted, &nonce) {
+                        Ok(true) => {}
+                        Ok(false) => return Err("message not found in this conversation".to_string()),
+                        Err(e) => {
+                            tracing::error!(error = %e, "failed to persist edit");
+                        }
+                    }
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "failed to encrypt edit for storage");
