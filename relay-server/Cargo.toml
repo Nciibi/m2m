@@ -1,6 +1,6 @@
 [package]
 name = "m2m-relay"
-version = "0.1.0"
+version = "3.6.21"
 description = "M2M TCP Relay Server — standalone binary for self-hosting"
 authors = ["M2M Contributors"]
 edition = "2021"
@@ -10,3 +10,5 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
+# CSPRNG for unguessable relay bridge IDs (getrandom-backed)
+rand = "0.9"
