@@ -1040,6 +1040,26 @@ pub fn spawn_receive_loop(
                                 if let Ok(chunk) = protocol::deserialize::<protocol::FileTransferChunkData>(&plaintext) {
                                     let mut transfers = state.incoming_transfers.write().await;
                                     if let Some(transfer) = transfers.get_mut(&chunk.transfer_id) {
+                                        // Bounds-check the peer-controlled index and payload size
+                                        // against validated transfer parameters BEFORE any seek or
+                                        // write: prevents writes past declared EOF (H3).
+                                        let idx = chunk.chunk_index as usize;
+                                        if idx >= transfer.total_chunks as usize {
+                                            tracing::warn!(
+                                                chunk = chunk.chunk_index,
+                                                total = transfer.total_chunks,
+                                                "file chunk index out of range — skipping"
+                                            );
+                                        } else if (chunk.data.len() as u64) > transfer.chunk_stride {
+                                            tracing::warn!(
+                                                chunk = chunk.chunk_index,
+                                                len = chunk.data.len(),
+                                                stride = transfer.chunk_stride,
+                                                "file chunk larger than declared stride — skipping"
+                                            );
+                                        } else if transfer.chunks_bitmask[idx] {
+                                            tracing::trace!(chunk = chunk.chunk_index, "duplicate file chunk — ignoring");
+                                        } else {
                                         // Verify chunk hash before writing to disk
                                         let hash = sodiumoxide::crypto::hash::sha256::hash(&chunk.data);
                                         let hash_valid = hash.0.to_vec() == chunk.chunk_hash;
@@ -1048,18 +1068,14 @@ pub fn spawn_receive_loop(
                                             tracing::warn!(chunk = chunk.chunk_index, "file chunk hash mismatch — skipping");
                                         } else if let Some(ref mut file) = transfer.temp_file {
                                             use std::io::{Seek, Write};
-                                            let offset = (chunk.chunk_index as u64)
-                                                * (crate::protocol::MAX_FILE_CHUNK_SIZE as u64);
+                                            let offset = (idx as u64) * transfer.chunk_stride;
                                             match file.seek(std::io::SeekFrom::Start(offset)) {
                                                 Ok(_) => {
                                                     match file.write_all(&chunk.data) {
                                                         Ok(_) => {
                                                             transfer.chunks_received += 1;
-                                                            if let Some(bit) = transfer.chunks_bitmask
-                                                                .get_mut(chunk.chunk_index as usize)
-                                                            {
-                                                                *bit = true;
-                                                            }
+                                                            transfer.bytes_received += chunk.data.len() as u64;
+                                                            transfer.chunks_bitmask[idx] = true;
                                                         }
                                                         Err(e) => {
                                                             tracing::warn!(error = %e, chunk = chunk.chunk_index, "failed to write chunk to temp file");
@@ -1072,6 +1088,7 @@ pub fn spawn_receive_loop(
                                             }
                                         } else {
                                             tracing::warn!("no temp file available for transfer - skipping chunk");
+                                        }
                                         }
                                     }
                                 }
