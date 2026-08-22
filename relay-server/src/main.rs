@@ -253,8 +253,7 @@ async fn handle_register(
     auth_token: &str,
 ) {
     if !auth_token.is_empty() {
-        let provided = String::from_utf8_lossy(&auth_body);
-        if provided.trim() != auth_token {
+        if !verify_auth(&auth_body, auth_token) {
             tracing::warn!(peer = %peer_addr, "authentication failed");
             send_error(&mut stream, 1, "authentication failed").await;
             return;
