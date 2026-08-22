@@ -25,6 +25,16 @@ pub const MAX_TEXT_MESSAGE_SIZE: usize = 64 * 1024;
 /// Maximum file chunk size: 256 KiB.
 pub const MAX_FILE_CHUNK_SIZE: usize = 256 * 1024;
 
+/// Maximum file transfer size accepted from (or offered to) a peer: 2 GiB.
+/// Peer-declared sizes above this are rejected before any allocation or
+/// disk pre-allocation happens.
+pub const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
+
+/// Maximum number of chunks in an incoming transfer. With the smallest
+/// adaptive chunk size (128 KiB) this covers exactly MAX_FILE_SIZE, and
+/// bounds the receive bitmask to 16 KiB per transfer.
+pub const MAX_TOTAL_CHUNKS: u32 = 16 * 1024;
+
 /// Maximum handshake message size: 4 KiB.
 pub const MAX_HANDSHAKE_SIZE: usize = 4 * 1024;
 
