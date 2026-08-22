@@ -1149,24 +1149,46 @@ impl MessageStore {
     // ─── Message Editing ──────────────────────────────
 
     /// Update a message's content (edit). Stores the edit timestamp.
-    pub fn edit_message(&self, message_id: &str, new_content_encrypted: &[u8], new_content_nonce: &[u8]) -> Result<(), StorageError> {
+    ///
+    /// Scoped to a conversation AND direction: peer-initiated edits may only
+    /// touch `received` messages in the sender's own conversation; user
+    /// edits target their own `sent` messages. Returns false if no
+    /// matching row was found (foreign or unknown message).
+    pub fn edit_message(
+        &self,
+        message_id: &str,
+        conversation_id: &str,
+        expected_direction: &str,
+        new_content_encrypted: &[u8],
+        new_content_nonce: &[u8],
+    ) -> Result<bool, StorageError> {
         let now = chrono::Utc::now().timestamp();
-        self.conn.execute(
-            "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2, edited_at = ?3 WHERE id = ?4",
-            rusqlite::params![new_content_encrypted, new_content_nonce, now, message_id],
+        let changed = self.conn.execute(
+            "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2, edited_at = ?3
+             WHERE id = ?4 AND conversation_id = ?5 AND direction = ?6",
+            rusqlite::params![new_content_encrypted, new_content_nonce, now, message_id, conversation_id, expected_direction],
         )?;
-        Ok(())
+        Ok(changed > 0)
     }
 
     // ─── Message Deletion ─────────────────────────────
 
     /// Soft-delete a message (mark as deleted so peers see a placeholder).
-    pub fn delete_message(&self, message_id: &str) -> Result<(), StorageError> {
-        self.conn.execute(
-            "UPDATE messages SET deleted = 1 WHERE id = ?1",
-            rusqlite::params![message_id],
+    ///
+    /// Scoped like [`edit_message`]: returns false if the message does not
+    /// exist in the given conversation with the expected direction.
+    pub fn delete_message(
+        &self,
+        message_id: &str,
+        conversation_id: &str,
+        expected_direction: &str,
+    ) -> Result<bool, StorageError> {
+        let changed = self.conn.execute(
+            "UPDATE messages SET deleted = 1
+             WHERE id = ?1 AND conversation_id = ?2 AND direction = ?3",
+            rusqlite::params![message_id, conversation_id, expected_direction],
         )?;
-        Ok(())
+        Ok(changed > 0)
     }
 
     // ─── Self-Destruct (Expired Messages) ─────────────
