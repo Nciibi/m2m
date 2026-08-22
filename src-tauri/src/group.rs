@@ -856,7 +856,7 @@ mod group_tests {
 
         let _ = gm.remove_member("g1", "bob", "alice");
 
-        let new_key = gm.get_group("g1").unwrap().our_initial_chain_key;
+        let new_key = gm.get_group("g1").unwrap().our_initial_chain_key.clone();
         assert!(old_key != new_key, "sender key should rotate after removal");
     }
 
@@ -911,7 +911,7 @@ mod group_tests {
         // Bob needs to receive Alice's sender key to decrypt
         {
             let group = gm.get_group_mut("g1").unwrap();
-            let init_key = group.our_initial_chain_key.unwrap();
+            let init_key = group.our_initial_chain_key.clone().unwrap();
             let verify_key = group.our_verification_key.unwrap();
             // Bob stores Alice's receiver chain (simulating receiving the bundle)
             group.store_receiver_key("alice", &init_key, &verify_key);
@@ -1000,7 +1000,7 @@ mod group_tests {
         // Bob stores Alice's key
         {
             let group = gm.get_group_mut("g1").unwrap();
-            let init_key = group.our_initial_chain_key.unwrap();
+            let init_key = group.our_initial_chain_key.clone().unwrap();
             let verify_key = group.our_verification_key.unwrap();
             group.store_receiver_key("alice", &init_key, &verify_key);
         }
