@@ -404,30 +404,33 @@ fn x3dh_respond_raw(
     // DH1 = DH(SPK_B, IK_A) — use SPK_B's secret, IK_A's public
     let ik_a = sm::GroupElement::from_slice(their_identity)
         .ok_or(CryptoError::InvalidKeyLength)?;
-    let dh1 = sm::scalarmult(&spk_scalar, &ik_a)
+    let dh1_g = sm::scalarmult(&spk_scalar, &ik_a)
         .map_err(|_| CryptoError::KeyDerivationFailed)?;
 
     // DH2 = DH(IK_B, EK_A)
-    let dh2 = our_identity.diffie_hellman(their_ephemeral)?;
+    let mut dh2 = our_identity.diffie_hellman(their_ephemeral)?;
 
     // For DH3 = DH(SPK_B, EK_A), use SPK_B's secret again
     let ek_a = sm::GroupElement::from_slice(their_ephemeral)
         .ok_or(CryptoError::InvalidKeyLength)?;
-    let dh3 = sm::scalarmult(&spk_scalar, &ek_a)
+    let dh3_g = sm::scalarmult(&spk_scalar, &ek_a)
         .map_err(|_| CryptoError::KeyDerivationFailed)?;
 
     let mut sk = Vec::with_capacity(96);
-    sk.extend_from_slice(&dh1.0);
+    let mut dh1 = dh1_g.0;
+    let mut dh3 = dh3_g.0;
+    sk.extend_from_slice(&dh1);
     sk.extend_from_slice(&dh2);
-    sk.extend_from_slice(&dh3.0);
+    sk.extend_from_slice(&dh3);
 
     // DH4 = DH(OPK_B, EK_A) if available
     if let Some(opk) = our_one_time_prekey {
         let opk_scalar = sm::Scalar::from_slice(&opk.secret_key.0)
             .ok_or(CryptoError::InvalidKeyLength)?;
-        let dh4 = sm::scalarmult(&opk_scalar, &ek_a)
+        let mut dh4 = sm::scalarmult(&opk_scalar, &ek_a)
             .map_err(|_| CryptoError::KeyDerivationFailed)?;
         sk.extend_from_slice(&dh4.0);
+        dh4.0.zeroize();
     }
 
     let output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
@@ -435,6 +438,14 @@ fn x3dh_respond_raw(
     let mut chain_key = [0u8; 32];
     root_key.copy_from_slice(&output[..32]);
     chain_key.copy_from_slice(&output[32..]);
+
+    // Intermediate DH outputs and the concatenated SK are secret material —
+    // wipe them before returning so they don't linger in memory.
+    output.zeroize();
+    sk.zeroize();
+    dh1.zeroize();
+    dh2.zeroize();
+    dh3.zeroize();
 
     Ok(X3DHSessionKeys { root_key, chain_key })
 }
