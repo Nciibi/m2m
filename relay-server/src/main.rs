@@ -297,6 +297,7 @@ async fn handle_connect(
     peer_addr: SocketAddr,
     body: Vec<u8>,
     state: Arc<RwLock<HashMap<String, Registration>>>,
+    auth_token: &str,
 ) {
     if body.is_empty() {
         send_error(&mut stream, 2, "missing relay_id").await;
@@ -308,6 +309,28 @@ async fn handle_connect(
         return;
     }
     let relay_id = String::from_utf8_lossy(&body[1..=id_len]).to_string();
+
+    // Optional trailing auth section: [1B tok_len][token bytes].
+    // Clients compiled against the hardened protocol always send it.
+    let provided_token: &[u8] = if body.len() > 1 + id_len {
+        let tok_len = body[1 + id_len] as usize;
+        let tok_start = 2 + id_len;
+        if tok_len > 0 && body.len() >= tok_start + tok_len {
+            &body[tok_start..tok_start + tok_len]
+        } else {
+            &[]
+        }
+    } else {
+        &[]
+    };
+
+    // CONNECT is authenticated too — without this, anyone who guesses or
+    // learns a pending relay_id could hijack the bridge.
+    if !verify_auth(provided_token, auth_token) {
+        tracing::warn!(peer = %peer_addr, "CONNECT authentication failed");
+        send_error(&mut stream, 5, "authentication failed").await;
+        return;
+    }
 
     // Remove the registration (consume it — single-use)
     let registration = state.write().await.remove(&relay_id);
@@ -328,8 +351,9 @@ async fn handle_connect(
             }
         }
         None => {
-            tracing::warn!(relay_id = %relay_id, peer = %peer_addr, "unknown relay_id");
-            send_error(&mut stream, 4, &format!("unknown relay_id: {relay_id}")).await;
+            // Do NOT echo the attacker-supplied relay_id back.
+            tracing::warn!(relay_id_len = relay_id.len(), peer = %peer_addr, "unknown relay_id");
+            send_error(&mut stream, 4, "unknown relay_id").await;
         }
     }
 }
