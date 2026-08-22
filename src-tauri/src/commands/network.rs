@@ -1125,19 +1125,32 @@ pub fn spawn_receive_loop(
                                         } else {
                                             let hash_valid = if let Some(ref mut file) = transfer.temp_file {
                                                 use std::io::{Read, Seek};
-                                                let mut buf = Vec::with_capacity(transfer.total_size as usize);
-                                                match file.seek(std::io::SeekFrom::Start(0))
-                                                    .and_then(|_| file.read_to_end(&mut buf))
-                                                {
-                                                    Ok(_) => {
-                                                        let hash = sodiumoxide::crypto::hash::sha256::hash(&buf);
-                                                        hash.0.to_vec() == transfer.file_hash
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::warn!(error = %e, "failed to read temp file for hash verification");
-                                                        false
+                                                // Stream-hash the temp file in fixed-size chunks —
+                                                // never buffer the whole file in RAM (peer could
+                                                // have declared up to MAX_FILE_SIZE).
+                                                let mut hasher = sodiumoxide::crypto::hash::sha256::State::new();
+                                                let mut buf = vec![0u8; crate::protocol::MAX_FILE_CHUNK_SIZE];
+                                                let mut hashed_len: u64 = 0;
+                                                let mut read_ok = true;
+                                                if file.seek(std::io::SeekFrom::Start(0)).is_err() {
+                                                    read_ok = false;
+                                                }
+                                                while read_ok {
+                                                    match file.read(&mut buf) {
+                                                        Ok(0) => break,
+                                                        Ok(n) => {
+                                                            hasher.update(&buf[..n]);
+                                                            hashed_len += n as u64;
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!(error = %e, "failed to read temp file for hash verification");
+                                                            read_ok = false;
+                                                        }
                                                     }
                                                 }
+                                                read_ok
+                                                    && hashed_len == transfer.total_size
+                                                    && hasher.finalize().0.to_vec() == transfer.file_hash
                                             } else {
                                                 false
                                             };
