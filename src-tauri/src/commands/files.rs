@@ -210,6 +210,7 @@ pub async fn accept_file_transfer(
                     temp_path: None,
                     chunks_received: 0,
                     bytes_received: 0,
+                    chunk_stride: 0,
                     chunks_bitmask: Vec::new(),
                     state: TransferState::Transferring,
                     created_at: std::time::SystemTime::now()
