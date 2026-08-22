@@ -848,10 +848,27 @@ pub struct SenderKeyChain {
     max_cache: usize,
 }
 
+impl Drop for SenderKeyChain {
+    fn drop(&mut self) {
+        self.chain_key.zeroize();
+        for k in self.cached_keys.values_mut() {
+            k.drop_keys();
+        }
+        self.cached_keys.clear();
+    }
+}
+
 #[derive(Debug, Clone)]
 struct CachedSenderKey {
     nonce: [u8; 24],
     key: [u8; 32],
+}
+
+impl CachedSenderKey {
+    fn drop_keys(&mut self) {
+        self.key.zeroize();
+        self.nonce.zeroize();
+    }
 }
 
 /// Context strings for Sender Key HKDF steps.
