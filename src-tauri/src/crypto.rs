@@ -312,6 +312,11 @@ pub struct PrekeyBundle {
 }
 
 /// Output of X3DH key agreement.
+///
+/// Key material is zeroized when dropped (ZeroizeOnDrop), so the plaintext
+/// root/chain keys never linger in freed heap memory after being consumed
+/// by `DoubleRatchet::new`.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct X3DHSessionKeys {
     pub root_key: [u8; 32],   // Root key for Double Ratchet
     pub chain_key: [u8; 32],  // Initial chain key
