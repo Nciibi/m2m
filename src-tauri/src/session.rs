@@ -1000,6 +1000,9 @@ impl Drop for Session {
     fn drop(&mut self) {
         // Ensure session keys are zeroized on drop (SessionKeys has its own Drop).
         self.session_keys.take();
+        // Drop the Double Ratchet — its own Drop zeroizes the root key,
+        // chain keys and skipped-key cache.
+        self.ratchet.take();
         self.peer_identity_pub.zeroize();
         self.tx_counter = 0;
         self.rx_high_water_mark = 0;
