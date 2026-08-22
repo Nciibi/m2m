@@ -1547,12 +1547,28 @@ pub fn spawn_receive_loop(
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(del) = crate::protocol::deserialize::<crate::protocol::MessageDeleteData>(&plaintext) {
-                                    // Soft-delete locally
+                                    // Soft-delete locally, scoped to the sender's conversation
+                                    // and 'received' messages only (H4).
                                     let ms = state.message_store.lock().await;
+                                    let mut accepted = false;
                                     if let Some(ref store) = *ms {
-                                        let _ = store.delete_message(&del.message_id);
+                                        match store.delete_message(&del.message_id, &peer_key_hex, "received") {
+                                            Ok(true) => accepted = true,
+                                            Ok(false) => {
+                                                tracing::warn!(
+                                                    peer = %peer_key_hex,
+                                                    "delete for message outside sender conversation — rejected"
+                                                );
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "failed to persist delete");
+                                            }
+                                        }
                                     }
                                     drop(ms);
+                                    if !accepted {
+                                        continue;
+                                    }
 
                                     // Notify frontend
                                     let _ = app_handle.emit("m2m://delete", serde_json::json!({
