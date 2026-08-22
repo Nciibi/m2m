@@ -414,11 +414,35 @@ async fn main() {
     });
 
     // Accept connections
+    // Concurrent connection accounting for per-IP / global caps.
+    let conn_counts: Arc<std::sync::Mutex<HashMap<std::net::IpAddr, usize>>> =
+        Arc::new(std::sync::Mutex::new(HashMap::new()));
+    let total_conns = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
     loop {
         match listener.accept().await {
             Ok((stream, peer_addr)) => {
+                // ── Connection caps (anti-DoS) ──
+                let ip = peer_addr.ip();
+                {
+                    let mut counts = conn_counts.lock().unwrap();
+                    let total = total_conns.load(std::sync::atomic::Ordering::Relaxed);
+                    if total >= MAX_TOTAL_CONNECTIONS
+                        || counts.get(&ip).copied().unwrap_or(0) >= MAX_CONNECTIONS_PER_IP
+                    {
+                        tracing::warn!(peer = %peer_addr, "connection limit exceeded — rejecting");
+                        drop(counts);
+                        let _ = stream.shutdown().await;
+                        continue;
+                    }
+                    *counts.entry(ip).or_insert(0) += 1;
+                    total_conns.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+
                 let state = state.clone();
                 let auth = auth_token.clone();
+                let conn_counts = conn_counts.clone();
+                let total_conns = total_conns.clone();
                 tokio::spawn(async move {
                     let mut stream = stream;
                     // Read the first frame to determine client's intent.
@@ -428,17 +452,29 @@ async fn main() {
                             if msg_type != 0x01 && msg_type != 0x02 {
                                 tracing::warn!(peer = %peer_addr, msg_type, "unknown request type");
                                 let _ = send_error(&mut stream, 6, &format!("unknown type {msg_type}")).await;
-                                return;
-                            }
-                            match msg_type {
-                                0x01 => handle_register(stream, peer_addr, body, state, &auth).await,
-                                0x02 => handle_connect(stream, peer_addr, body, state).await,
-                                _ => unreachable!(),
+                            } else {
+                                match msg_type {
+                                    0x01 => handle_register(stream, peer_addr, body, state, &auth).await,
+                                    0x02 => handle_connect(stream, peer_addr, body, state, &auth).await,
+                                    _ => unreachable!(),
+                                }
                             }
                         }
                         Err(e) => {
                             tracing::warn!(peer = %peer_addr, error = %e, "failed to read initial frame");
                         }
+                    }
+
+                    // Release connection slots
+                    {
+                        let mut counts = conn_counts.lock().unwrap();
+                        if let Some(c) = counts.get_mut(&peer_addr.ip()) {
+                            *c = c.saturating_sub(1);
+                            if *c == 0 {
+                                counts.remove(&peer_addr.ip());
+                            }
+                        }
+                        total_conns.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 });
             }
