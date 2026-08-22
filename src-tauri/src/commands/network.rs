@@ -938,8 +938,7 @@ pub fn spawn_receive_loop(
                                     // total_size/total_chunks are attacker-controlled; without
                                     // this check a single 64 KiB frame could force a ~4 GiB
                                     // bitmask allocation and an unbounded sparse temp file.
-                                    let chunk_stride = match protocol::validate_transfer_request(total_size, total_chunks) {
-                                        Ok(stride) => stride,
+                                    match protocol::validate_transfer_request(total_size, total_chunks) {
                                         Err(reason) => {
                                             tracing::warn!(
                                                 transfer_id = %transfer_id,
@@ -949,9 +948,8 @@ pub fn spawn_receive_loop(
                                                 reason,
                                                 "rejected file transfer request"
                                             );
-                                            return;
                                         }
-                                    };
+                                        Ok(chunk_stride) => {
 
                                     // Sanitize the filename from the peer (path traversal protection).
                                     let safe_name = network::sanitize_filename(&filename)
@@ -964,21 +962,14 @@ pub fn spawn_receive_loop(
                                         let mut transfers = state.incoming_transfers.write().await;
                                         // Bound concurrent pending transfers: first prune
                                         // stale entries, then reject when still at capacity.
+                                        let now = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs();
                                         if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
-                                            let now = std::time::SystemTime::now()
-                                                .duration_since(std::time::UNIX_EPOCH)
-                                                .unwrap_or_default()
-                                                .as_secs();
                                             transfers.retain(|_, t| now.saturating_sub(t.created_at) < STALE_TRANSFER_SECS);
                                         }
-                                        if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
-                                            tracing::warn!(
-                                                peer = %peer_key_hex,
-                                                transfer_id = %transfer_id,
-                                                "too many concurrent incoming transfers — rejecting"
-                                            );
-                                            return;
-                                        }
+                                        if transfers.len() < MAX_PENDING_INCOMING_TRANSFERS {
                                         transfers.entry(transfer_id.clone()).or_insert_with(|| {
                                             let (temp_file, temp_path) = match util::create_temp_file() {
                                                 Ok((f, p)) => (Some(f), Some(p)),
