@@ -1941,6 +1941,7 @@ mod session_tests {
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&timestamp.to_be_bytes());
+        append_candidates_to_sign_data(&mut sign_data, &[]);
         let signature = alice_identity.sign(&sign_data);
 
         let init = HandshakeInit {
@@ -1998,6 +1999,7 @@ mod session_tests {
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&stale_ts.to_be_bytes());
+        append_candidates_to_sign_data(&mut sign_data, &[]);
         let signature = alice_identity.sign(&sign_data);
 
         let init = HandshakeInit {
