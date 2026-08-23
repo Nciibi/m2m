@@ -577,18 +577,8 @@ pub async fn edit_message(
             .map_err(|e| format!("send edit failed: {e}"))?;
     }
 
-    Ok(ChatMessage {
-        id: message_id,
-        content: new_content,
-        direction: "sent".to_string(),
-        timestamp: now,
-        read_at: None,
-        edited_at: Some(now as i64),
-        deleted: false,
-        expires_at: None,
-        reactions: std::collections::HashMap::new(),
-        sender_peer_key_hex: String::new(),
-    })
+    Ok(ChatMessage::new(message_id, new_content, "sent".to_string(), now)
+        .with_edited_at(Some(now as i64)))
 }
 
 /// Delete a message (soft-delete — shows placeholder to both sides).
@@ -828,18 +818,8 @@ pub async fn search_messages(
                 let text = String::from_utf8(decrypted).ok()?;
                 if text.to_lowercase().contains(&query_lower) {
                     // Only store the ID and timestamp — frontend already has content
-                    Some(ChatMessage {
-                        id: m.id.clone(),
-                        content: text,
-                        direction: if m.direction == "sent" { "sent".to_string() } else { "received".to_string() },
-                        timestamp: m.timestamp as u64,
-                        read_at: None,
-                        edited_at: None,
-                        deleted: false,
-                        expires_at: None,
-                        reactions: std::collections::HashMap::new(),
-                        sender_peer_key_hex: String::new(),
-                    })
+                    let direction = if m.direction == "sent" { "sent" } else { "received" };
+                    Some(ChatMessage::new(m.id.clone(), text, direction.to_string(), m.timestamp as u64))
                 } else {
                     None
                 }
