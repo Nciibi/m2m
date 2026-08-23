@@ -331,7 +331,11 @@ impl KeyStore {
                     label: row.get(4)?,
                 })
             })?;
-            rows.collect::<Result<Vec<AccountRow>, _>>()?
+            let mut out: Vec<AccountRow> = Vec::new();
+            for row in rows {
+                out.push(row.map_err(StorageError::Database)?);
+            }
+            Ok(out)
         }
 
         pub fn count_accounts(&self) -> Result<i64, StorageError> {
