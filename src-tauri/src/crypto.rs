@@ -1912,11 +1912,11 @@ mod crypto_tests {
         // X25519: raw scalar � raw point (no clamping surprises � both impls clamp)
         let scalar: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0xA5);
         let point: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0x5A);
-        let shared = golden_x25519_raw(&scalar, &point);
+        let shared = golden::x25519_raw(&scalar, &point);
         println!("X_SHARED= {:?}", shared);
 
         // AEAD seal with fixed nonce
-        let ct = golden_aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
+        let ct = golden::aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
         println!("AEAD_CT = {:?}", ct);
 
         panic!("capture run � read values above");
@@ -1930,14 +1930,14 @@ mod crypto_tests {
 
         let scalar: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0xA5);
         let point: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0x5A);
-        assert_eq!(golden_x25519_raw(&scalar, &point), GOLDEN_X25519_SHARED, "X25519 shared mismatch");
+        assert_eq!(golden::x25519_raw(&scalar, &point), GOLDEN_X25519_SHARED, "X25519 shared mismatch");
 
-        let ct = golden_aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
+        let ct = golden::aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
         assert_eq!(ct.len(), GOLDEN_AEAD_CT.len());
         assert!(ct.iter().zip(GOLDEN_AEAD_CT.iter()).all(|(a, b)| a == b), "AEAD ciphertext mismatch");
 
         // And the decrypt direction opens the libsodium-produced ciphertext.
-        let pt = golden_aead_open(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, &ct, GOLDEN_AEAD_AAD).unwrap();
+        let pt = golden::aead_open(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, &ct, GOLDEN_AEAD_AAD).unwrap();
         assert_eq!(pt, GOLDEN_AEAD_PT);
     }
 }
