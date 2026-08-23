@@ -531,6 +531,18 @@ impl KeyStore {
         Ok(count > 0)
     }
 
+    /// Check if a public key belongs to a previously-connected peer
+    /// (present in the `peers` table). Used by the incoming-connection
+    /// contact allowlist gate (H5).
+    pub fn is_known_peer(&self, public_key: &[u8; 32]) -> Result<bool, StorageError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM peers WHERE public_key = ?1",
+            params![public_key.as_slice()],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     /// Get all family members including expired ones (for export).
     pub fn list_family_all(&self) -> Result<Vec<FamilyMember>, StorageError> {
         let mut stmt = self.conn.prepare(
