@@ -17,24 +17,17 @@
   --color-bg-container-highest: #e2e8f0;
   --color-bg-surface-variant: #e2e8f0;
 
+  /* Accent: only the BASE hue is overridden in light mode. All derived
+     tints/glows/gradients are color-mix() formulas in tokens.css keyed off
+     --color-accent, so a user-picked accent re-skins both themes correctly. */
+  --color-accent: #4f46e5;
+
   --canvas-gradient:
-    radial-gradient(ellipse 55% 30% at 5% -5%, rgba(99, 102, 241, 0.08), transparent 50%),
+    radial-gradient(ellipse 55% 30% at 5% -5%, var(--color-accent-glow-subtle), transparent 50%),
     radial-gradient(ellipse 45% 30% at 95% 105%, rgba(16, 185, 129, 0.05), transparent 50%);
 
-  --color-border-default: rgba(15, 23, 42, 0.08);
-  --color-border-active: rgba(99, 102, 241, 0.5);
-  --color-border-accent: rgba(99, 102, 241, 0.16);
-
-  --color-accent: #4f46e5;
-  --color-accent-bright: #6366f1;
-  --color-accent-dim: #3730a3;
-  --color-accent-glow: rgba(99, 102, 241, 0.15);
-  --color-accent-glow-strong: rgba(99, 102, 241, 0.25);
-  --color-accent-glow-subtle: rgba(99, 102, 241, 0.04);
-  
-  --color-primary: #4f46e5;
-  --color-primary-container: #6366f1;
-  --color-primary-glow: rgba(79, 70, 229, 0.08);
+  --color-border-active: color-mix(in srgb, var(--color-accent) 50%, transparent);
+  --color-border-accent: color-mix(in srgb, var(--color-accent) 16%, transparent);
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #334155;
