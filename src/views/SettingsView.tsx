@@ -292,6 +292,81 @@ export default function SettingsView() {
             </div>
 
             <div className="settings-row">
+              <span className="settings-label"><LockIcon size={16} /> Air-Gap Mode</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.air_gap_mode ?? false}
+                  onChange={handleAirGapToggle}
+                  aria-label="Toggle air-gap mode"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">LAN-only: blocks STUN, port forwarding, relay registration, discovery, and Tor</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label"><LockIcon size={16} /> Ephemeral Conversations</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.ephemeral_mode ?? false}
+                  onChange={handleEphemeralModeToggle}
+                  aria-label="Toggle ephemeral conversations"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">RAM only: no message, reaction, or edit is ever written to disk</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Send Batching Delay</span>
+              <select className="select--compact"
+                value={securityConfig?.send_batching_ms ?? 0}
+                onChange={e => handleSendBatchingChange(parseInt(e.target.value, 10))}
+                aria-label="Random send delay for traffic analysis resistance"
+              >
+                <option value={0}>Off</option>
+                <option value={250}>~0–250ms</option>
+                <option value={1000}>~0–1s</option>
+                <option value={5000}>~0–5s</option>
+              </select>
+              <span className="settings-hint">Random pre-send delay so message timing leaks less</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Typing Cover Traffic</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.cover_typing_traffic ?? false}
+                  onChange={handleCoverTypingToggle}
+                  aria-label="Toggle typing indicator cover traffic"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">Randomize typing-indicator timing so keystroke cadence leaks less</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Duress Passphrase</span>
+              {duressConfigured ? (
+                <Button variant="secondary" size="xs" onClick={() => clearDuressPassphrase()}>Remove</Button>
+              ) : (
+                <Button variant="secondary" size="xs" onClick={async () => {
+                  const input = window.prompt(
+                    "Set a DISTINCT duress passphrase (min 12 chars).\n\n⚠ IRREVERSIBLE: entering it at unlock will silently DELETE all local data and show a normal wrong-password error.\n\nThere is no confirmation at unlock — that is the point.",
+                    ""
+                  );
+                  if (!input) return;
+                  if (!window.confirm("Register this duress passphrase? Entering it at unlock wipes the vault. This cannot be undone.")) return;
+                  await setDuressPassphrase(input);
+                }}>Set…</Button>
+              )}
+              <span className="settings-hint">{duressConfigured ? "Registered — entering it at unlock wipes the vault" : "Coercion resistance: a special passphrase that wipes everything"}</span>
+            </div>
+
+            <div className="settings-row">
               <span className="settings-label">Clipboard Auto-Clear</span>
               <select className="select--compact"
                 value={securityConfig?.clipboard_clear_secs ?? 0}
