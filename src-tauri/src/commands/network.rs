@@ -945,27 +945,86 @@ pub fn spawn_receive_loop(
     reconnect_info: Option<crate::reconnect::ReconnectInfo>,
 ) {    let hb_peer = peer_key_hex.clone();
     let hb_state = state.clone();
-    // Spawn a heartbeat worker: sends a Heartbeat every HEARTBEAT_INTERVAL_SECS
-    // and expects an ack within HEARTBEAT_TIMEOUT_SECS.
+    let hb_app = app_handle.clone();
+    let hb_reconnect = reconnect_info.clone();
+    // Spawn a heartbeat worker: probes the peer with a Heartbeat every
+    // HEARTBEAT_INTERVAL_SECS and requires a HeartbeatAck within
+    // HEARTBEAT_TIMEOUT_SECS of each probe; otherwise the connection is
+    // torn down as dead (half-open TCP would otherwise linger forever).
+    // The worker polls at half the timeout so a dead peer is detected
+    // within one timeout window of its missed ack instead of waiting for
+    // the next full probe interval.
     tokio::spawn(async move {
+        let poll_secs = crate::protocol::HEARTBEAT_TIMEOUT_SECS
+            .min(crate::protocol::HEARTBEAT_INTERVAL_SECS)
+            / 2;
         let mut interval = tokio::time::interval(
-            std::time::Duration::from_secs(crate::protocol::HEARTBEAT_INTERVAL_SECS),
+            std::time::Duration::from_secs(poll_secs.max(1)),
         );
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
-            let conns = hb_state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&hb_peer) {
+
+            let mut dead_reason: Option<String> = None;
+            {
+                let conns = hb_state.connections.read().await;
+                let Some(conn_arc) = conns.get(&hb_peer) else {
+                    // Connection removed — stop heartbeat
+                    break;
+                };
                 let mut conn = conn_arc.lock().await;
-                match crate::network::send_heartbeat(&mut conn.write_half).await {
-                    Ok(_) => tracing::trace!(peer = %hb_peer, "heartbeat sent"),
-                    Err(e) => {
-                        tracing::info!(peer = %hb_peer, error = %e, "heartbeat failed — disconnecting");
-                        break;
+
+                // Liveness check: was the most recent probe answered in time?
+                if let Some(sent_at) = conn.last_hb_sent {
+                    let acked =
+                        matches!(conn.last_hb_ack, Some(ack_at) if ack_at >= sent_at);
+                    if !acked
+                        && sent_at.elapsed()
+                            >= std::time::Duration::from_secs(
+                                crate::protocol::HEARTBEAT_TIMEOUT_SECS,
+                            )
+                    {
+                        dead_reason = Some("heartbeat ack timeout".to_string());
                     }
                 }
-            } else {
-                // Connection removed — stop heartbeat
+
+                // Send the periodic probe (also acts as keep-alive traffic).
+                if dead_reason.is_none() {
+                    let probe_due = conn.last_hb_sent.map_or(true, |sent_at| {
+                        sent_at.elapsed()
+                            >= std::time::Duration::from_secs(
+                                crate::protocol::HEARTBEAT_INTERVAL_SECS,
+                            )
+                    });
+                    if probe_due {
+                        match crate::network::send_heartbeat(&mut conn.write_half).await {
+                            Ok(_) => {
+                                conn.last_hb_sent = Some(std::time::Instant::now());
+                                tracing::trace!(peer = %hb_peer, "heartbeat sent");
+                            }
+                            Err(e) => {
+                                dead_reason = Some(format!("heartbeat send failed: {e}"));
+                            }
+                        }
+                    }
+                }
+            } // guards dropped before teardown writes
+
+            if let Some(reason) = dead_reason {
+                tracing::info!(peer = %hb_peer, reason = %reason, "connection dead — cleaning up");
+                if let Some(ri) = hb_reconnect.clone() {
+                    let mut pr = hb_state.pending_reconnects.write().await;
+                    pr.insert(hb_peer.clone(), ri);
+                }
+                let was_verified = hb_reconnect.as_ref()
+                    .map(|ri| ri.peer_verified).unwrap_or(false);
+                let _ = hb_app.emit("m2m://connection", ConnectionEvent {
+                    peer_key_hex: hb_peer.clone(),
+                    state: "disconnected".to_string(),
+                    peer_fingerprint: None,
+                    peer_verified: was_verified,
+                });
+                hb_state.connections.write().await.remove(&hb_peer);
                 break;
             }
         }
