@@ -2677,6 +2677,99 @@ mod tests {
         assert!(result.is_none());
     }
 
+    // ─── Metadata-at-rest tests (H-secondary) ─────────────────
+
+    /// Family nicknames/addresses must be stored as envelopes and decrypt
+    /// with the right key; legacy plaintext rows still read back.
+    #[test]
+    fn test_family_metadata_encrypted_at_rest() {
+        let store = mem_keystore();
+        let key = test_key();
+        let pk = [0x11u8; 32];
+
+        store.add_family_member(&pk, "Alice Home", Some(30), Some("192.168.1.50:7777"), Some(&key)).unwrap();
+
+        // Raw row must not leak plaintext metadata.
+        let raw_nick: String = store.conn.query_row(
+            "SELECT nickname FROM family WHERE public_key = ?1",
+            params![pk.as_slice()], |r| r.get(0)).unwrap();
+        assert!(raw_nick.starts_with("enc1:"), "nickname must be an envelope, got {raw_nick}");
+        assert!(!raw_nick.contains("Alice"));
+
+        // Right key decrypts.
+        let members = store.list_family(Some(&key)).unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].nickname, "Alice Home");
+        assert_eq!(members[0].last_address.as_deref(), Some("192.168.1.50:7777"));
+
+        // list_family_all (export path) also decrypts.
+        let all = store.list_family_all(Some(&key)).unwrap();
+        assert_eq!(all[0].nickname, "Alice Home");
+
+        // Nickname update re-encrypts; read-back works.
+        store.set_family_nickname(&pk, "Renamed", Some(&key)).unwrap();
+        let renamed = store.list_family(Some(&key)).unwrap();
+        assert_eq!(renamed[0].nickname, "Renamed");
+
+        // Legacy plaintext row (key = None write) reads fine without a key
+        // AND with a key (open_meta_value passes non-envelope values through).
+        let pk2 = [0x22u8; 32];
+        store.add_family_member(&pk2, "Plaintext Bob", None, None, None).unwrap();
+        let mixed_none = store.list_family(None).unwrap();
+        assert_eq!(mixed_none.len(), 2);
+        let bob = mixed_none.iter().find(|m| m.public_key_hex == hex::encode(pk2)).unwrap();
+        assert_eq!(bob.nickname, "Plaintext Bob");
+        let mixed_keyed = store.list_family(Some(&key)).unwrap();
+        let bob2 = mixed_keyed.iter().find(|m| m.public_key_hex == hex::encode(pk2)).unwrap();
+        assert_eq!(bob2.nickname, "Plaintext Bob");
+    }
+
+    /// Reaction text must be encrypted at rest, dedupe correctly despite
+    /// per-write random nonces, remove by decrypted match, and skip
+    /// undecryptable rows on read.
+    #[test]
+    fn test_reaction_metadata_encrypted_at_rest() {
+        let store = mem_messagestore();
+        let key = test_key();
+        let peer = [0x33u8; 32];
+        store.ensure_conversation("conv-r", &peer).unwrap();
+        store.store_message("m-1", "conv-r", "sent", b"hello", 1000, true).unwrap();
+
+        // Keyed insert → envelope on disk.
+        store.upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
+        let raw: String = store.conn.query_row(
+            "SELECT reaction FROM reactions WHERE message_id = 'm-1'", [], |r| r.get(0)).unwrap();
+        assert!(raw.starts_with("enc1:"), "reaction must be an envelope, got {raw}");
+
+        // Read back with right key.
+        let map = store.get_reactions(&["m-1".to_string()], Some(&key)).unwrap();
+        assert_eq!(map["m-1"][0].0, "👍");
+
+        // Duplicate insert from same peer does NOT create a second row
+        // (random nonces would defeat SQL-level uniqueness).
+        store.upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
+        let count: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+
+        // Remove matches by DECRYPTED text.
+        store.upsert_reaction("m-1", "👍", &hex::encode(peer), true, "conv-r", Some(&key)).unwrap();
+        let count_after: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count_after, 0);
+
+        // Wrong-key read skips the undecryptable row instead of erroring.
+        let wrong = StorageKey::new([0xEE; 32]);
+        store.upsert_reaction("m-1", "❤️", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
+        let skipped = store.get_reactions(&["m-1".to_string()], Some(&wrong)).unwrap();
+        assert!(skipped.is_empty(), "undecryptable reactions must be skipped");
+
+        // Legacy plaintext reaction still readable without a key.
+        store.upsert_reaction("m-1", "legacy", &hex::encode(peer), false, "conv-r", None).unwrap();
+        let legacy_map = store.get_reactions(&["m-1".to_string()], None).unwrap();
+        assert_eq!(legacy_map["m-1"].iter().find(|(r, _, _)| r == "legacy").is_some(), true);
+    }
+
     /// Metadata-at-rest (H-secondary): keyed writes must produce an
     /// "enc1:" envelope on disk and decrypt back with the right key;
     /// wrong-key reads must NOT return the plaintext.
