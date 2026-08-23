@@ -1737,9 +1737,10 @@ pub fn spawn_receive_loop(
                                         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
                                             if let Ok(stored) = store.load_sent_messages_since(&peer_key_hex, sync.since_timestamp as i64) {
                                                 stored.iter().filter_map(|msg| {
-                                                    util::crypto_decrypt_storage(
+                                                    crate::storage::MessageStore::decrypt_stored_content(
                                                         &msg.content_encrypted, &msg.content_nonce,
-                                                        key, util::AAD_MSG_STORE,
+                                                        msg.content_key_wrapped.as_deref(),
+                                                        key,
                                                     ).ok().and_then(|d| String::from_utf8(d).ok())
                                                      .map(|text| (text, msg.expires_at))
                                                 }).collect()
