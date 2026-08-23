@@ -259,13 +259,53 @@ pub async fn attempt_reconnect(
 
         // Try direct TCP connection to the last-known address
         match tokio::net::TcpStream::connect(&info.peer_address_hint).await {
-            Ok(stream) => {
-                let (read_half, write_half) = stream.into_split();
-                let mut session = crate::session::Session::new();
-                session.peer_identity_pub = hex::decode(&info.peer_key_hex)
+            Ok(mut stream) => {
+                // ── Real cryptographic handshake before claiming success (M4) ──
+                let expected_peer_pub: [u8; 32] = hex::decode(&info.peer_key_hex)
                     .map_err(|e| format!("invalid peer key: {e}"))?
                     .try_into()
                     .map_err(|_| "peer key length mismatch")?;
+
+                let x25519_pub = {
+                    let x = state.x25519_identity.read().await;
+                    x.as_ref().map(|k| k.public_key_bytes()).unwrap_or([0u8; 32])
+                };
+
+                let mut session = crate::session::Session::new();
+                {
+                    let id_lock = state.identity.read().await;
+                    let kp = id_lock.as_ref().ok_or("identity not initialized")?;
+                    if let Err(e) = session
+                        .handshake_as_initiator(
+                            &mut stream,
+                            kp,
+                            &expected_peer_pub,
+                            Vec::new(),
+                            x25519_pub,
+                        )
+                        .await
+                    {
+                        tracing::warn!(
+                            peer = %peer_key_hex,
+                            error = %e,
+                            "reconnect handshake failed — peer reachable but handshake rejected"
+                        );
+                        let _ = app_handle.emit("m2m://reconnect-attempt", crate::commands::ReconnectAttemptEvent {
+                            peer_key_hex: peer_key_hex.clone(),
+                            attempt: attempt + 1,
+                            max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
+                            delay_secs: delay.as_secs(),
+                            state: "handshake_failed".to_string(),
+                        });
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+                }
+
+                // Handshake succeeded — the session now has real keys and the
+                // peer's identity is cryptographically verified against the
+                // stored fingerprint.
+                let (read_half, write_half) = stream.into_split();
                 session.peer_verified = info.peer_verified;
                 session.ratchet_interval = info.ratchet_interval;
 
