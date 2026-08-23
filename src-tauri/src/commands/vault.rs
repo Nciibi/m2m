@@ -1085,7 +1085,6 @@ fn seal_imported_identity(
 ///
 /// After calling this, the user must unlock the vault again to perform
 /// sensitive operations. Active connections remain open.
-#[tauri::command]
 /// Duress wipe: zeroize every in-memory secret, close all stores, and
 /// delete every local database + persisted config. Called ONLY from the
 /// duress path in `unlock_vault`. Deleting keys.db destroys every wrapped
