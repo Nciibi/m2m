@@ -15,6 +15,7 @@
 //! - commands: Tauri IPC bridge (no secrets exposed to UI)
 
 mod candidate;
+mod capture_monitor;
 mod commands;
 pub mod crypto;
 mod dht;
@@ -70,10 +71,31 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(app_state)
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Hide to tray instead of quitting — app stays running for background messages
-                let _ = window.hide();
-                api.prevent_close();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // Hide to tray instead of quitting — app stays running for background messages
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+                // Re-apply capture protection whenever the window is focused:
+                // idempotent FFI call that heals any silent protection drop
+                // (e.g. after a webview recreation or driver hiccup).
+                tauri::WindowEvent::Focused(true) => {
+                    let Some(state) = window.app_handle().try_state::<Arc<AppState>>() else {
+                        return;
+                    };
+                    let enabled = state
+                        .security_config
+                        .try_read()
+                        .map(|c| c.screen_capture_protection)
+                        .unwrap_or(false);
+                    if enabled {
+                        if let Err(e) = window_security::apply_screen_protection(window.app_handle(), true) {
+                            tracing::warn!(error = %e, "failed to re-apply capture protection on focus");
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .setup(|app| {
