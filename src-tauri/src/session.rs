@@ -1393,6 +1393,7 @@ mod session_tests {
         let stale_frame = crate::network::RawFrame {
             packet_type: PacketType::EncryptedMessage,
             body: stale_bytes,
+            version: crate::protocol::PROTOCOL_VERSION,
         };
         let err = bob.decrypt_message(&stale_frame).unwrap_err();
         assert!(
