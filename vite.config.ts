@@ -25,5 +25,21 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     setupFiles: ["./src/__tests__/setup.ts"],
     css: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/__tests__/**",
+        "src/main.tsx",
+        "src/components/ui/icons/**"
+      ],
+      thresholds: {
+        statements: 20,
+        branches: 15,
+        functions: 20,
+        lines: 20
+      }
+    }
   },
 }));
