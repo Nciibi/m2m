@@ -239,7 +239,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // ── Security handlers ──
 
   const handleScreenCaptureToggle = useCallback(async () => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false };
     const newConfig: SecurityConfig = {
       ...current,
       screen_capture_protection: !current.screen_capture_protection,
@@ -257,7 +257,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleClipboardClearSecsChange = useCallback(async (secs: number) => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false };
     const newConfig: SecurityConfig = { ...current, clipboard_clear_secs: secs };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -268,7 +268,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleIdleLockSecsChange = useCallback(async (secs: number) => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false };
     const newConfig: SecurityConfig = { ...current, idle_lock_secs: secs };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -279,7 +279,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleRequireKnownContactToggle = useCallback(async () => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false };
     const newConfig: SecurityConfig = {
       ...current,
       require_known_contact: !current.require_known_contact,
