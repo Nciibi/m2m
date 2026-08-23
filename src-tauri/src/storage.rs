@@ -1496,6 +1496,7 @@ impl MessageStore {
                     rusqlite::params![rowid],
                 )?;
             }
+            let stored = seal_meta_value(key, reaction, AAD_REACTION)?;
             self.conn.execute(
                 "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
                  VALUES (?1, ?2, ?3, ?4)",
