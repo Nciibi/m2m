@@ -307,11 +307,16 @@ pub async fn unlock_vault(
     // ─── Phase 4: Encrypt X25519 data (no .await, no key_store) then DB writes ───
     let x25519_store_data = if needs_store_x25519 {
         let xkp_ref = state.x25519_identity.read().await;
-        let xkp = xkp_ref.as_ref().expect("X25519 key must exist");
+        // Return errors instead of panicking on IPC-reachable paths (M6).
+        let xkp = xkp_ref
+            .as_ref()
+            .ok_or("internal error: X25519 key missing after unlock")?;
         let x_sk_bytes = xkp.secret_key_bytes();
         let x_pub = xkp.public_key_bytes();
         let sk = state.storage_key.read().await;
-        let st_key = sk.as_ref().expect("storage key must exist");
+        let st_key = sk
+            .as_ref()
+            .ok_or("internal error: storage key missing after unlock")?;
         let result = util::crypto_encrypt_storage(&x_sk_bytes, st_key, util::AAD_KEY_STORE)
             .ok()
             .map(|(n, e)| (x_pub, e, n));
