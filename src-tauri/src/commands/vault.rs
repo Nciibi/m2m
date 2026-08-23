@@ -192,7 +192,7 @@ pub async fn unlock_vault(
 
         if was_init {
             // Case 3: Normal unlock
-            let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
+            let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.clone()).await?;
             let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &storage_key, util::AAD_KEY_STORE)
                 .map_err(|_| "incorrect passphrase or corrupted data".to_string())?;
             let mut sk_arr = [0u8; 64];
