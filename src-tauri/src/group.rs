@@ -1052,4 +1052,109 @@ mod group_tests {
             assert_eq!(decrypted, msg);
         }
     }
+
+    // ─── Trust model v2 (H2): signed sender-key bundles ─────────────────────
+
+    fn make_signed_bundle(
+        owner_id: &crate::crypto::IdentityKeypair,
+        group_id: &str,
+    ) -> (GroupSenderKeyData, [u8; 32]) {
+        let mut gm = make_group_manager();
+        let owner_hex = hex::encode(owner_id.public_key_bytes());
+        gm.create_group(group_id.to_string(), "G".to_string(), 1, owner_hex.clone(), &[])
+            .unwrap();
+        let mut bundle = {
+            let g = gm.get_group(group_id).unwrap();
+            g.own_sender_bundle().unwrap()
+        };
+        bundle.sender_peer_key_hex = owner_hex.clone();
+        bundle.signature = owner_id.sign(&sender_key_bundle_sign_bytes(&bundle));
+        (bundle, owner_id.public_key_bytes())
+    }
+
+    #[test]
+    fn test_sender_key_bundle_signature_roundtrip() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let bob_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let bob_hex = hex::encode(bob_id.public_key_bytes());
+
+        let mut gm_alice = make_group_manager();
+        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex.clone(), &[])
+            .unwrap();
+
+        // Bob joins with his own keys and announces a signed bundle.
+        let mut gm_bob = make_group_manager();
+        gm_bob.join_group("g".to_string(), "G".to_string(), 1, bob_hex.clone(), false, &[alice_hex.clone()])
+            .unwrap();
+        let mut bundle = {
+            let g = gm_bob.get_group("g").unwrap();
+            g.own_sender_bundle().unwrap()
+        };
+        bundle.sender_peer_key_hex = bob_hex.clone();
+        bundle.signature = bob_id.sign(&sender_key_bundle_sign_bytes(&bundle));
+
+        let receipt = gm_alice.handle_sender_key(&bundle, &alice_hex, &bob_id.public_key_bytes());
+        assert_eq!(receipt.unwrap(), SenderKeyReceipt::NewMember);
+        assert!(gm_alice.get_group("g").unwrap().verification_keys.contains_key(&bob_hex));
+    }
+
+    #[test]
+    fn test_unsigned_bundle_rejected() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let (mut bundle, bob_pub) = make_signed_bundle(&crate::crypto::IdentityKeypair::generate().unwrap(), "g");
+        bundle.signature = Vec::new(); // strip signature
+
+        let mut gm_alice = make_group_manager();
+        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[]).unwrap();
+        assert!(gm_alice.handle_sender_key(&bundle, "", &bob_pub).is_err());
+    }
+
+    #[test]
+    fn test_wrong_signer_bundle_rejected() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        // Bundle signed by Mallory but claiming Bob as sender.
+        let mallory_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let bob_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let (mut bundle, _) = make_signed_bundle(&mallory_id, "g");
+        bundle.sender_peer_key_hex = hex::encode(bob_id.public_key_bytes());
+        bundle.signature = mallory_id.sign(&sender_key_bundle_sign_bytes(&bundle));
+
+        let mut gm_alice = make_group_manager();
+        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[]).unwrap();
+        // Claimed sender != transport peer → rejected.
+        assert!(gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes()).is_err());
+        // Even if transport peer == claimed sender, the signature is under the
+        // WRONG identity key → still rejected.
+        assert!(gm_alice.handle_sender_key(&bundle, "", &mallory_id.public_key_bytes()).is_err());
+    }
+
+    #[test]
+    fn test_private_key_material_bundle_rejected() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let (mut bundle, bob_pub) = make_signed_bundle(&crate::crypto::IdentityKeypair::generate().unwrap(), "g");
+        bundle.signing_key = Some(vec![0u8; 64]); // private key material
+
+        let mut gm_alice = make_group_manager();
+        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[]).unwrap();
+        assert!(gm_alice.handle_sender_key(&bundle, "", &bob_pub).is_err());
+    }
+
+    #[test]
+    fn test_join_group_generates_own_keys() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let mut gm_bob = make_group_manager();
+        let b1 = gm_bob.join_group("g".to_string(), "G".to_string(), 1,
+            "bob".to_string(), false, &[alice_hex.clone()]).unwrap();
+        let b2 = gm_bob.join_group("g".to_string(), "G".to_string(), 2,
+            "bob".to_string(), false, &[alice_hex]).unwrap();
+        // Re-joining is idempotent: same chain key returned, no new keys.
+        assert_eq!(b1.chain_key, b2.chain_key);
+        assert!(b1.signing_key.is_none() && b2.signing_key.is_none());
+        assert_eq!(gm_bob.get_group("g").unwrap().members.len(), 2); // bob + alice
+    }
 }
