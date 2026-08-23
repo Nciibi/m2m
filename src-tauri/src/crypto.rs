@@ -688,12 +688,23 @@ impl DoubleRatchet {
     ///
     /// `ratchet_key` is the peer's new DH public key if this message triggers a ratchet.
     ///
+    /// ## Transactional receive (H3)
+    ///
+    /// ALL state derivations — DH ratchet, gap-filling, chain advancement —
+    /// run on tentative local copies and are committed only after the AEAD
+    /// tag verifies. A forged or corrupted frame therefore leaves every
+    /// piece of ratchet state untouched. The pre-fix implementation advanced
+    /// the root/receive chains *before* authentication, so one injected
+    /// garbage frame with a fake ratchet key permanently desynced the
+    /// session (irreversible DoS by an active attacker).
+    ///
     /// ## Out-of-order message handling
     ///
     /// If `message_number` is below the current receiving chain position, the
-    /// skipped message key cache is consulted. If the key was cached during a
-    /// previous gap derivation, the message decrypts successfully. If not, the
-    /// message is unrecoverable and an error is returned.
+    /// skipped message key cache is consulted BEFORE any ratchet processing.
+    /// A cached key is consumed only when its decryption succeeds, so a
+    /// corrupted retransmission cannot burn the key needed for the genuine
+    /// frame.
     ///
     /// The cache is capped at [`MAX_SKIP`] entries (2000). Beyond this, new
     /// messages are rejected as `MaxSkippedKeysExceeded` to prevent memory
@@ -706,64 +717,135 @@ impl DoubleRatchet {
         message_number: u64,
         ratchet_key: Option<&[u8; 32]>,
     ) -> Result<Vec<u8>, CryptoError> {
-        // If peer sent a new ratchet key, perform DH ratchet first
-        if let Some(new_pub) = ratchet_key {
-            self.dh_ratchet_step(new_pub)?;
-        }
-
         // ── Check skipped message key cache for out-of-order messages ──
+        // Runs before ratchet handling: a malformed frame carrying a bogus
+        // ratchet key must never reach state-mutating code paths.
         if message_number < self.recv_message_number {
-            return match self.skipped_keys.remove(&message_number) {
-                Some(saved_key) => {
-                    // Decrypt with the previously-cached message key
-                    Self::decrypt_with_key(&saved_key, ciphertext, nonce, aad)
+            let saved_key = match self.skipped_keys.get(&message_number) {
+                Some(k) => *k,
+                None => {
+                    return Err(CryptoError::DoubleRatchetError(format!(
+                        "message key for {} not found (already consumed or never cached)",
+                        message_number
+                    )));
                 }
-                None => Err(CryptoError::DoubleRatchetError(format!(
-                    "message key for {} not found (already consumed or never cached)", message_number
-                ))),
             };
+            let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, aad);
+            if result.is_ok() {
+                self.skipped_keys.remove(&message_number);
+            } else {
+                saved_key.zeroize();
+            }
+            return result;
         }
 
-        let recv_chain = self.recv_chain_key
-            .ok_or(CryptoError::DoubleRatchetError("no recv chain key".into()))?;
+        // ── Tentative derivation + verification ──
+        let tentative =
+            Self::receive_tentative(self, ciphertext, nonce, aad, message_number, ratchet_key)?;
 
-        // ── Derive through gap, caching intermediate keys ──
-        // Cap how far ahead of the receive counter a single message may pull
-        // the chain: a peer announcing a huge message number must not make us
-        // derive millions of HKDFs before AEAD verification ever happens
-        // (CPU amplification DoS).
-        let gap = (message_number - self.recv_message_number) as usize;
+        // ── Commit atomically — the AEAD tag has verified ──
+        Ok(tentative.commit(self))
+    }
+
+    /// Derive the receive state for a frame WITHOUT touching persistent
+    /// ratchet state, and verify its AEAD tag.
+    ///
+    /// Every secret computed here lives in locals and is zeroized on any
+    /// error path; nothing observable on `&self` changes even if this frame
+    /// is forged garbage (H3).
+    fn receive_tentative(
+        dr: &DoubleRatchet,
+        ciphertext: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+        message_number: u64,
+        ratchet_key: Option<&[u8; 32]>,
+    ) -> Result<TentativeReceive, CryptoError> {
+        let mut tent_root = dr.root_key;
+        let mut tent_chain = match dr.recv_chain_key {
+            Some(c) => c,
+            None => {
+                return Err(CryptoError::DoubleRatchetError(
+                    "no recv chain key".into(),
+                ));
+            }
+        };
+        let mut tent_their_pub = dr.their_ratchet_pub;
+        let mut tent_recv_num = dr.recv_message_number;
+        let mut staged_skips: Vec<(u64, [u8; 32])> = Vec::new();
+
+        // Scrub all tentative secrets (helper for the error exits below).
+        macro_rules! scrub_and {
+            ($err:expr) => {{
+                tent_root.zeroize();
+                tent_chain.zeroize();
+                for (_, k) in staged_skips.iter_mut() {
+                    k.zeroize();
+                }
+                return Err($err);
+            }};
+        }
+
+        // If peer sent a new ratchet key, compute the DH ratchet on locals.
+        if let Some(new_pub) = ratchet_key {
+            let shared = match dr.our_ratchet_keypair.diffie_hellman(new_pub) {
+                Ok(s) => s,
+                Err(e) => scrub_and!(e),
+            };
+            let out = hkdf(&tent_root, &shared, b"M2M-DH-RATCHET", 64);
+            let mut new_root = [0u8; 32];
+            let mut new_chain = [0u8; 32];
+            new_root.copy_from_slice(&out[..32]);
+            new_chain.copy_from_slice(&out[32..]);
+            tent_root.zeroize();
+            tent_root = new_root;
+            tent_chain.zeroize();
+            tent_chain = new_chain;
+            tent_their_pub = *new_pub;
+            tent_recv_num = 0;
+        }
+
+        // ── Cap gap size: reject absurd message numbers before burning CPU ──
+        let gap = (message_number - tent_recv_num) as usize;
         if gap > MAX_GAP_DERIVATION {
-            return Err(CryptoError::DoubleRatchetError(format!(
+            scrub_and!(CryptoError::DoubleRatchetError(format!(
                 "message number {} is {} messages ahead — exceeds max gap derivation ({})",
                 message_number, gap, MAX_GAP_DERIVATION
             )));
         }
 
-        let mut current_chain = recv_chain;
-        while self.recv_message_number < message_number {
-            // Check cache capacity BEFORE deriving so we never burn CPU on a
-            // key that would be rejected anyway.
-            if self.skipped_keys.len() >= MAX_SKIP {
-                return Err(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
+        // ── Derive through gap, staging intermediate keys ──
+        while tent_recv_num < message_number {
+            if dr.skipped_keys.len() + staged_skips.len() >= MAX_SKIP {
+                scrub_and!(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
             }
-            let (msg_key, next_chain) = Self::derive_message_key(&current_chain);
-
-            self.skipped_keys.insert(self.recv_message_number, msg_key.0);
-
-            current_chain = next_chain;
-            self.recv_message_number += 1;
+            let (msg_key, next_chain) = Self::derive_message_key(&tent_chain);
+            staged_skips.push((tent_recv_num, msg_key.0));
+            tent_chain.zeroize();
+            tent_chain = next_chain;
+            tent_recv_num += 1;
         }
 
         // Derive the message key for THIS message
-        let (msg_key, next_chain) = Self::derive_message_key(&current_chain);
-        self.recv_chain_key = Some(next_chain);
-        self.recv_message_number += 1;
+        let (msg_key, next_chain) = Self::derive_message_key(&tent_chain);
 
-        // Decrypt with XChaCha20-Poly1305
-        let result = Self::decrypt_with_key(&msg_key.0, ciphertext, nonce, aad);
-        drop(msg_key);
-        result
+        // ── Authenticate — still nothing committed ──
+        match Self::decrypt_with_key(&msg_key.0, ciphertext, nonce, aad) {
+            Ok(plaintext) => Ok(TentativeReceive {
+                root_key: tent_root,
+                recv_chain_key: next_chain,
+                their_ratchet_pub: tent_their_pub,
+                recv_message_number: tent_recv_num + 1,
+                skipped_clear: ratchet_key.is_some(),
+                staged_skips,
+                plaintext,
+            }),
+            Err(e) => {
+                drop(msg_key); // MessageKey zeroizes its bytes
+                next_chain.zeroize();
+                scrub_and!(e)
+            }
+        }
     }
 
     /// Decrypt ciphertext using a raw 32-byte message key.
