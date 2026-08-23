@@ -1469,10 +1469,13 @@ impl MessageStore {
         expected_direction: &str,
     ) -> Result<bool, StorageError> {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
+        // Overwrite with an equal-length zero blob: same-size in-place
+        // replacement is stronger than setting NULL, which may leave the
+        // old cell bytes in place depending on how SQLite rewrites the row.
         let changed = self.conn.execute(
-            "UPDATE messages SET deleted = 1, content_key_wrapped = NULL
+            "UPDATE messages SET deleted = 1, content_key_wrapped = ?4
              WHERE id = ?1 AND conversation_id = ?2 AND direction = ?3",
-            rusqlite::params![message_id, conversation_id, expected_direction],
+            rusqlite::params![message_id, conversation_id, expected_direction, vec![0u8; WRAPPED_CEK_LEN]],
         )?;
         Ok(changed > 0)
     }
