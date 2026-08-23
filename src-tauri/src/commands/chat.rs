@@ -440,6 +440,10 @@ pub async fn mark_messages_read(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<u32, String> {
+    // Ephemeral mode: read state lives in RAM only.
+    if state.security_config.read().await.ephemeral_mode {
+        return Ok(0);
+    }
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store.mark_messages_read(&conversation_id)
