@@ -376,6 +376,7 @@ impl AppState {
             identity: RwLock::new(None),
             x25519_identity: RwLock::new(None),
             active_signed_prekey: RwLock::new(None),
+            active_one_time_prekey: RwLock::new(None),
             connections: RwLock::new(HashMap::new()),
             listen_addr: RwLock::new(None),
             incoming_tx: Mutex::new(None),
