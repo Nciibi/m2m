@@ -491,6 +491,7 @@ impl Session {
         sign_data.extend_from_slice(&init.ephemeral_pub);
         sign_data.extend_from_slice(&init.x25519_identity_pub);
         sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
+        append_candidates_to_sign_data(&mut sign_data, &init.candidates);
         crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature)
             .map_err(|_| SessionError::HandshakeFailed("initiator signature invalid".to_string()))?;
 
@@ -534,6 +535,7 @@ impl Session {
         our_sign_data.extend_from_slice(&ek_b_pub);
         our_sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
         our_sign_data.extend_from_slice(&now.to_be_bytes());
+        append_candidates_to_sign_data(&mut our_sign_data, &local_candidates);
         let signature = identity.sign(&our_sign_data);
 
         let response = HandshakeResponse {
