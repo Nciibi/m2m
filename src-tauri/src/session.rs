@@ -1,4 +1,4 @@
-﻿/// M2M â€” Session Module
+/// M2M — Session Module
 ///
 /// Manages encrypted session state: handshake execution, message encryption/decryption,
 /// replay protection, sequencing, and session lifecycle.
@@ -461,7 +461,7 @@ impl Session {
         // Replay protection (M1): reject stale/future timestamps.
         validate_handshake_timestamp(init.timestamp)?;
 
-        // â”€â”€ Resolve DH4 participation deterministically (H6) â”€â”€
+        // ── Resolve DH4 participation deterministically (H6) ──
         let opk_for_handshake: Option<&EphemeralKeypair> = match (&init.used_opk, one_time_prekey)
         {
             (Some(signaled_pub), Some(opk)) => {
@@ -474,7 +474,7 @@ impl Session {
             }
             (Some(_), None) => {
                 return Err(SessionError::HandshakeFailed(
-                    "initiator used a one-time prekey we do not hold â€” invite may be stale"
+                    "initiator used a one-time prekey we do not hold — invite may be stale"
                         .to_string(),
                 ));
             }
@@ -590,7 +590,7 @@ impl Session {
         stream: &mut W,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
-        // â”€â”€ Double Ratchet path (if active) â”€â”€
+        // ── Double Ratchet path (if active) ──
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
         if let Some(ratchet) = self.ratchet.as_mut() {
@@ -615,7 +615,7 @@ impl Session {
             return Ok(());
         }
 
-        // â”€â”€ Legacy SessionKeys path â”€â”€
+        // ── Legacy SessionKeys path ──
         let keys = self
             .session_keys
             .as_mut()
@@ -654,7 +654,7 @@ impl Session {
 
         let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body)?;
 
-        // â”€â”€ Double Ratchet path (if dr_header present) â”€â”€
+        // ── Double Ratchet path (if dr_header present) ──
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
         if let Some(dr_hdr) = &envelope.dr_header {
@@ -671,7 +671,7 @@ impl Session {
             return Ok(body);
         }
 
-        // â”€â”€ Legacy path: replay protection + SessionKeys â”€â”€
+        // ── Legacy path: replay protection + SessionKeys ──
         if envelope.counter <= self.rx_high_water_mark {
             return Err(SessionError::ReplayDetected {
                 received: envelope.counter,
@@ -693,7 +693,7 @@ impl Session {
         // Remove padding to recover original plaintext
         let plaintext = crate::crypto::unpad_message_variable(&padded)?;
 
-        // â•â•â• Forward Secrecy Ratchet â•â•â•
+        // ═══ Forward Secrecy Ratchet ═══
         // Evolve the receiving key AFTER successful decryption.
         // The sender ratcheted their tx_key after encrypting; we ratchet
         // our rx_key (which mirrors their tx_key) after decrypting.
@@ -718,7 +718,7 @@ impl Session {
         Ok(())
     }
 
-    /// Send a file transfer request to the peer (v2 â€” with per-chunk hashes and protocol version).
+    /// Send a file transfer request to the peer (v2 — with per-chunk hashes and protocol version).
     pub async fn send_file_request_v2<W: AsyncWrite + Unpin>(
         &mut self,
         stream: &mut W,
@@ -733,7 +733,7 @@ impl Session {
         self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes).await
     }
 
-    /// Send a file transfer request to the peer (v1 â€” backward compat).
+    /// Send a file transfer request to the peer (v1 — backward compat).
     #[cfg(test)]
     pub async fn send_file_request<W: AsyncWrite + Unpin>(
         &mut self,
@@ -884,7 +884,7 @@ impl Session {
         packet_type: PacketType,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
-        // â”€â”€ Double Ratchet path (X3DH+DR sessions) â”€â”€
+        // ── Double Ratchet path (X3DH+DR sessions) ──
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
         if let Some(ratchet) = self.ratchet.as_mut() {
@@ -909,7 +909,7 @@ impl Session {
             return Ok(());
         }
 
-        // â”€â”€ Legacy SessionKeys path â”€â”€
+        // ── Legacy SessionKeys path ──
         let keys = self
             .session_keys
             .as_mut()
@@ -975,7 +975,7 @@ impl Session {
     ///
     /// Automatically detects whether the envelope uses the Double Ratchet (DR header present)
     /// or the legacy SessionKeys path. For DR envelopes, replay protection is provided by
-    /// the chain key advancement â€” old message numbers produce different chain states.
+    /// the chain key advancement — old message numbers produce different chain states.
     pub fn decrypt_typed_frame(&mut self, frame: &RawFrame) -> Result<Vec<u8>, SessionError> {
         if self.state != ConnectionState::Established {
             return Err(SessionError::InvalidState);
@@ -984,7 +984,7 @@ impl Session {
 
         let envelope: EncryptedEnvelope = protocol::deserialize(&frame.body)?;
 
-        // â”€â”€ Double Ratchet path (X3DH+DR sessions) â”€â”€
+        // ── Double Ratchet path (X3DH+DR sessions) ──
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
         if let Some(dr_hdr) = &envelope.dr_header {
@@ -1000,7 +1000,7 @@ impl Session {
             return Ok(plaintext);
         }
 
-        // â”€â”€ Legacy path: replay protection + SessionKeys â”€â”€
+        // ── Legacy path: replay protection + SessionKeys ──
         if envelope.counter <= self.rx_high_water_mark {
             return Err(SessionError::ReplayDetected {
                 received: envelope.counter,
@@ -1045,7 +1045,7 @@ impl Drop for Session {
     fn drop(&mut self) {
         // Ensure session keys are zeroized on drop (SessionKeys has its own Drop).
         self.session_keys.take();
-        // Drop the Double Ratchet â€” its own Drop zeroizes the root key,
+        // Drop the Double Ratchet — its own Drop zeroizes the root key,
         // chain keys and skipped-key cache.
         self.ratchet.take();
         self.peer_identity_pub.zeroize();
@@ -1059,7 +1059,7 @@ impl Drop for Session {
 /// Includes the packet type and BOTH identity public keys (ours and peer's)
 /// sorted lexicographically to produce the same value on both sides of
 /// the session. This binds ciphertexts to a specific session pair for
-/// defense-in-depth â€” the chain keys are already session-unique via X3DH.
+/// defense-in-depth — the chain keys are already session-unique via X3DH.
 ///
 /// This is a free function (not a method on `Session`) so callers can
 /// extract the identity keys before taking a mutable borrow on `self`.
@@ -1106,7 +1106,7 @@ fn validate_handshake_timestamp(timestamp: u64) -> Result<(), SessionError> {
 fn now_unix_secs() -> u64 {
     // A clock before the Unix epoch is an environment problem, not a reason
     // to crash: fall back to 0 (which also fails the freshness check above,
-    // failing safe rather than panicking â€” M6).
+    // failing safe rather than panicking — M6).
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -1142,7 +1142,7 @@ mod session_tests {
         alice_keys
     }
 
-    // â”€â”€â”€ Unit Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── Unit Tests ───────────────────────────────────────────
 
     #[test]
     fn test_session_new() {
@@ -1208,7 +1208,7 @@ mod session_tests {
         init_crypto();
         let s = Session::new();
         assert_eq!(s.established_at, 0);
-        // Not yet established â€” check_expiry should return Ok
+        // Not yet established — check_expiry should return Ok
         assert!(s.check_expiry().is_ok());
     }
 
@@ -1234,7 +1234,7 @@ mod session_tests {
     fn test_state_transitions_reject_operations() {
         init_crypto();
         let mut s = Session::new();
-        // No session keys, wrong state â€” operations should fail
+        // No session keys, wrong state — operations should fail
         let _dummy: &[u8] = &[];
         let result = s.decrypt_message(&RawFrame {
             version: PROTOCOL_VERSION,
@@ -1281,7 +1281,7 @@ mod session_tests {
         assert_eq!(s.established_at, now);
     }
 
-    // â”€â”€â”€ Async Integration Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── Async Integration Tests ──────────────────────────────
 
     #[tokio::test]
     async fn test_send_and_receive_text() {
@@ -1341,7 +1341,7 @@ mod session_tests {
 
         // Alice encodes a text message body directly and sends it via send_message's
         // internal send_encrypted path. Since send_text is async, we use it.
-        let test_text = "Secret message ðŸ”’";
+        let test_text = "Secret message 🔒";
         let msg_id = alice.send_text(&mut alice_w, test_text).await.unwrap();
         assert!(!msg_id.is_empty());
 
@@ -1374,7 +1374,7 @@ mod session_tests {
 
         let mut alice = Session::new();
         let mut bob = Session::new();
-        // NO counter adjustments here â€” that is the point of this test.
+        // NO counter adjustments here — that is the point of this test.
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
@@ -1387,7 +1387,7 @@ mod session_tests {
         assert_eq!(bob.tx_counter, 0);
         assert_eq!(bob.rx_high_water_mark, 0);
 
-        // â”€â”€ Direction 1: Alice → Bob (first frame must NOT be rejected) â”€â”€
+        // ── Direction 1: Alice → Bob (first frame must NOT be rejected) ──
         let (mut a2b_w, mut a2b_r) = tokio::io::duplex(65536);
         let msg_id = alice.send_text(&mut a2b_w, "hello bob").await.unwrap();
         let frame = crate::network::read_frame_impl(&mut a2b_r).await.unwrap();
@@ -1400,7 +1400,7 @@ mod session_tests {
             other => panic!("expected Text body, got {:?}", other),
         }
 
-        // â”€â”€ Direction 2: Bob → Alice (his independent counter starts at 0) â”€â”€
+        // ── Direction 2: Bob → Alice (his independent counter starts at 0) ──
         let (mut b2a_w, mut b2a_r) = tokio::io::duplex(65536);
         let reply_id = bob.send_text(&mut b2a_w, "hi alice").await.unwrap();
         let frame = crate::network::read_frame_impl(&mut b2a_r).await.unwrap();
@@ -1413,8 +1413,8 @@ mod session_tests {
             other => panic!("expected Text body, got {:?}", other),
         }
 
-        // â”€â”€ Replay protection still works within the session: a frame with
-        // an already-seen counter must be rejected as a replay. â”€â”€
+        // ── Replay protection still works within the session: a frame with
+        // an already-seen counter must be rejected as a replay. ──
         let stale_envelope = crate::protocol::EncryptedEnvelope {
             nonce: vec![0u8; 24],
             counter: 1, // already consumed by Bob's watermark
@@ -1517,7 +1517,7 @@ mod session_tests {
         let frame2 = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
         bob.decrypt_message(&frame2).unwrap();
 
-        // Try to replay frame1 â€” should be rejected
+        // Try to replay frame1 — should be rejected
         let replay_result = bob.decrypt_message(&frame1_clone);
         assert!(matches!(replay_result, Err(SessionError::ReplayDetected { .. })),
             "replayed message should be rejected");
@@ -1575,7 +1575,7 @@ mod session_tests {
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        // Send one message â€” this triggers ratchet on both sides
+        // Send one message — this triggers ratchet on both sides
         alice.send_text(&mut alice_w, "Message 1").await.unwrap();
         let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
         bob.decrypt_message(&frame).unwrap();
@@ -1587,9 +1587,9 @@ mod session_tests {
             "bob rx_key should change after ratchet (mirrors alice tx)");
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // Handshake integration â€” full success
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
+    // Handshake integration — full success
+    // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
     async fn test_handshake_full_success() {
@@ -1670,9 +1670,9 @@ mod session_tests {
             "initiator should have responder's candidates");
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // Handshake â€” initiator failure modes
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
+    // Handshake — initiator failure modes
+    // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
     async fn test_initiator_rejects_wrong_packet_type() {
@@ -1812,9 +1812,9 @@ mod session_tests {
             "expected HandshakeFailed for identity mismatch, got: {:?}", result);
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // Handshake â€” responder failure modes
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
+    // Handshake — responder failure modes
+    // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
     async fn test_responder_rejects_version_mismatch() {
@@ -1899,7 +1899,7 @@ mod session_tests {
         let (alice_identity, _alice_x25519) = make_identities();
 
         let eph = EphemeralKeypair::generate();
-        let timestamp = now_unix_secs(); // fresh â€” this test targets bad HandshakeComplete
+        let timestamp = now_unix_secs(); // fresh — this test targets bad HandshakeComplete
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&timestamp.to_be_bytes());
@@ -1994,9 +1994,9 @@ mod session_tests {
         );
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
     // State machine edge cases
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
     async fn test_handshake_from_wrong_state() {
@@ -2018,12 +2018,12 @@ mod session_tests {
             "handshake from Established state should fail");
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
     // X3DH + Double Ratchet Integration Tests
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
 
     /// Helper: build Bob's PrekeyBundle for X3DH integration tests.
-    /// Returns (spk, bundle) â€” the caller needs spk secret key for responder handshake.
+    /// Returns (spk, bundle) — the caller needs spk secret key for responder handshake.
     fn make_bob_prekey(
         bob_x25519: &crate::crypto::X25519IdentityKeypair,
         bob_identity: &IdentityKeypair,
@@ -2112,7 +2112,7 @@ mod session_tests {
             &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
         ).await.unwrap();
 
-        // Bob reads the file request â€” typed frame via DR path
+        // Bob reads the file request — typed frame via DR path
         let req_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         assert_eq!(req_frame.packet_type, PacketType::FileTransferRequest);
         let plaintext = bob_session.decrypt_typed_frame(&req_frame).unwrap();
@@ -2238,16 +2238,16 @@ mod session_tests {
         let f2 = network::read_frame_impl(&mut bob_io).await.unwrap();
         bob_session.decrypt_message(&f2).unwrap();
 
-        // Replay f1 â€” should be rejected by DR chain advancement
+        // Replay f1 — should be rejected by DR chain advancement
         let replay = bob_session.decrypt_message(&f1);
         assert!(replay.is_err(), "replayed message should fail");
 
         alice.await.unwrap().unwrap();
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
     // Typed-Frame Double Ratchet Tests (direct setup)
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ═══════════════════════════════════════════════════════════
 
     fn make_session_with_ratchet() -> (Session, Session) {
         init_crypto();
@@ -2439,156 +2439,5 @@ mod session_tests {
         let result = session.decrypt_typed_frame(&frame);
         assert!(matches!(result, Err(SessionError::InvalidState)),
             "expected InvalidState without ratchet, got {:?}", result);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // H6: One-time prekey (OPK) integration tests
-    // ═══════════════════════════════════════════════════════════
-
-    /// H6 regression: when the invite's prekey bundle carries a one-time
-    /// prekey, the initiator must include DH4 in the X3DH shared secret and
-    /// signal it via used_opk; the responder must apply its OPK secret.
-    /// Both sides must independently derive identical ratchet state.
-    #[tokio::test]
-    async fn test_x3dh_handshake_with_one_time_prekey() {
-        init_crypto();
-        let (alice_id, alice_x25519) = make_identities();
-        let (bob_id, bob_x25519) = make_identities();
-        let bob_pub = bob_id.public_key_bytes();
-
-        // Bob generates SPK + OPK (as create_invite does).
-        let bob_spk = crate::crypto::EphemeralKeypair::generate();
-        let sig = bob_id.sign(&bob_spk.public_key_bytes());
-        let bob_opk = crate::crypto::EphemeralKeypair::generate();
-        let bundle = crate::crypto::PrekeyBundle {
-            identity_key: bob_x25519.public_key_bytes(),
-            signed_prekey: bob_spk.public_key_bytes(),
-            signed_prekey_sig: sig,
-            one_time_prekey: Some(bob_opk.public_key_bytes()),
-        };
-
-        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
-
-        let alice = tokio::spawn(async move {
-            let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await?;
-            session.send_text(&mut alice_io, "hello with DH4").await?;
-            Ok::<_, SessionError>(())
-        });
-
-        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
-
-        let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, Some(&bob_opk), &init_frame, vec![],
-        ).await.unwrap();
-        assert_eq!(bob_session.state, ConnectionState::Established,
-            "handshake with OPK must succeed — DH4 must be applied on both sides");
-
-        let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
-        let body = bob_session.decrypt_message(&msg_frame).unwrap();
-        match body {
-            MessageBody::Text { ref content, .. } => assert_eq!(content, "hello with DH4"),
-            ref other => panic!("expected Text, got {:?}", other),
-        }
-
-        alice.await.unwrap().unwrap();
-    }
-
-    /// H6 regression: an initiator signaling a one-time prekey the responder
-    /// does not hold (stale invite / attacker-crafted bundle) must fail with
-    /// a CLEAN error — never silently derive a mismatched SK or desync.
-    #[tokio::test]
-    async fn test_x3dh_responder_rejects_unknown_used_opk() {
-        init_crypto();
-        let (alice_id, alice_x25519) = make_identities();
-        let (bob_id, bob_x25519) = make_identities();
-        let bob_pub = bob_id.public_key_bytes();
-
-        let bob_spk = crate::crypto::EphemeralKeypair::generate();
-        let sig = bob_id.sign(&bob_spk.public_key_bytes());
-        // OPK pub that Bob does NOT hold the secret for.
-        let stranger_opk = crate::crypto::EphemeralKeypair::generate();
-        let bundle = crate::crypto::PrekeyBundle {
-            identity_key: bob_x25519.public_key_bytes(),
-            signed_prekey: bob_spk.public_key_bytes(),
-            signed_prekey_sig: sig,
-            one_time_prekey: Some(stranger_opk.public_key_bytes()),
-        };
-
-        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
-
-        let alice = tokio::spawn(async move {
-            let mut session = Session::new();
-            let _ = session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await;
-        });
-
-        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
-        let mut bob_session = Session::new();
-        let result = bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await;
-
-        assert!(
-            matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("one-time prekey")),
-            "expected clean one-time-prekey rejection, got: {:?}",
-            result
-        );
-        assert_ne!(bob_session.state, ConnectionState::Established);
-        drop(alice);
-    }
-
-    /// H6 regression: responder must NOT apply its OPK when the initiator
-    /// did not use one — otherwise SK inputs mismatch and every message
-    /// fails. (No-OPK invite connecting to a responder that happens to hold
-    /// an OPK from a newer invite.)
-    #[tokio::test]
-    async fn test_x3dh_no_opk_initiator_with_opk_holding_responder() {
-        init_crypto();
-        let (alice_id, alice_x25519) = make_identities();
-        let (bob_id, bob_x25519) = make_identities();
-        let bob_pub = bob_id.public_key_bytes();
-
-        let bob_spk = crate::crypto::EphemeralKeypair::generate();
-        let sig = bob_id.sign(&bob_spk.public_key_bytes());
-        // Bundle WITHOUT OPK (e.g. older invite format), but Bob holds an
-        // active OPK from a newer invite.
-        let bundle = crate::crypto::PrekeyBundle {
-            identity_key: bob_x25519.public_key_bytes(),
-            signed_prekey: bob_spk.public_key_bytes(),
-            signed_prekey_sig: sig,
-            one_time_prekey: None,
-        };
-        let bob_opk = crate::crypto::EphemeralKeypair::generate();
-
-        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
-
-        let alice = tokio::spawn(async move {
-            let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await?;
-            session.send_text(&mut alice_io, "no opk path").await?;
-            Ok::<_, SessionError>(())
-        });
-
-        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
-        let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, Some(&bob_opk), &init_frame, vec![],
-        ).await.unwrap();
-
-        let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
-        let body = bob_session.decrypt_message(&msg_frame).unwrap();
-        match body {
-            MessageBody::Text { ref content, .. } => assert_eq!(content, "no opk path"),
-            ref other => panic!("expected Text, got {:?}", other),
-        }
-
-        alice.await.unwrap().unwrap();
     }
 }
