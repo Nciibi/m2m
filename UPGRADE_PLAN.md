@@ -10,10 +10,18 @@
   (self-generated member keys, identity-signed bundles, admin checks on receive,
   rotation+fan-out on membership change), conversation-scoped edits/deletes/reactions,
   chunk state/peer gating
+- ✅ **Phase 3 (M1–M6)** done — handshake ±5min freshness window (+test), gap-derivation
+  cap (MAX_GAP_DERIVATION=1000) + pre-check of skipped-key cache, HKDF RFC 5869 bound
+  assert, `attempt_reconnect` now performs a real authenticated handshake before emitting
+  "established", Argon2id + file hashing moved to `spawn_blocking`, IPC-reachable
+  `.expect()` panics converted to errors.
+  ⏳ **M7 (OPK support)** deferred — needs bundle generation/replenishment, SPK
+  persistence/rotation; wire-visible feature work, tracked separately.
 - ✅ **Phase 6** mostly done — updater footgun removed (plugin + empty-pubkey config +
   UpdateBanner), `release.yml` with tauri-action draft releases + tag/version check +
   signing-secret hooks. Remaining (needs owner action): obtain Apple/Windows signing
-  certs, decide on a hosted updater endpoint before re-enabling it.
+  certs, decide on a hosted updater endpoint before re-enabling it. Linux distro
+  packaging (.deb/.rpm/AppImage/AUR) planned as follow-up.
 - ⏳ **Phase 0** remaining: rotate `STITCH_API_KEY` + purge git history (destructive;
   requires force-push coordination)
 
