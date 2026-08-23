@@ -423,9 +423,19 @@ impl Session {
         // Replay protection (M1): reject stale/future timestamps.
         validate_handshake_timestamp(response.timestamp)?;
 
-        // Initialize Double Ratchet
+        // Initialize Double Ratchet.
+        //
+        // The initiator's INITIAL DR ratchet keypair is the X3DH ephemeral
+        // (ek_a) itself — Signal-style. A previous version generated a
+        // separate `dh_ratchet` keypair whose public was NEVER transmitted,
+        // while the responder assumes the peer's ratchet pub is
+        // `init.ephemeral_pub` (= ek_a). When the responder then sent its
+        // first message (forced DH ratchet), the two sides derived DIFFERENT
+        // DH secrets and the frame failed AEAD. Reusing ek_a makes both
+        // sides agree: initiator ratchets against response.ephemeral_pub
+        // (ek_b), responder against init.ephemeral_pub (ek_a).
         self.ratchet = Some(DoubleRatchet::new(
-            x3dh_out, dh_ratchet, response.ephemeral_pub, true,
+            x3dh_out, ek_a, response.ephemeral_pub, true,
         ));
 
         // Send HandshakeComplete encrypted with Double Ratchet
