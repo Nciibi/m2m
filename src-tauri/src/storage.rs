@@ -749,6 +749,9 @@ impl MessageStore {
             .filter_map(|r| r.ok())
             .collect();
 
+        if !existing_columns.contains(&"last_message_at".to_string()) {
+            conn.execute("ALTER TABLE conversations ADD COLUMN last_message_at INTEGER", [])?;
+        }
         if !existing_columns.contains(&"display_name".to_string()) {
             conn.execute("ALTER TABLE conversations ADD COLUMN display_name TEXT", [])?;
         }
