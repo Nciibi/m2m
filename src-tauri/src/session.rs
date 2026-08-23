@@ -1876,8 +1876,11 @@ mod session_tests {
 
         let bob_xp = bob_x25519.public_key_bytes();
         let mut session = Session::new();
+        // Freshness check fires after parsing the init but before any
+        // further I/O, so a duplex stream suffices.
+        let (_mut _io_tx, mut io_rx) = tokio::io::duplex(65536);
         let result = session.handshake_as_responder(
-            &mut tokio::io::sink(), &bob_identity, &frame, vec![], bob_xp,
+            &mut io_rx, &bob_identity, &frame, vec![], bob_xp,
         ).await;
         assert!(
             matches!(result, Err(SessionError::HandshakeFailed(e)) if e.contains("timestamp")),
