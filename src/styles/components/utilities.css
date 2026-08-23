@@ -777,3 +777,25 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: none !important;
 }
 
+/* ─── Message Hover/Focus Actions (keyboard-accessible react/menu buttons) ─── */
+.msg-bubble-action {
+  all: unset; cursor: pointer;
+  position: absolute; top: -14px; z-index: 11;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--radius-full);
+  background: var(--color-bg-elevated); border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary); box-shadow: var(--shadow-sm);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.msg-bubble-action:hover { color: var(--color-accent-bright); border-color: var(--color-accent-bright); }
+.msg-bubble-action--react { right: 32px; }
+.msg-bubble-action--menu { right: 4px; }
+.msg-bubble--received .msg-bubble-action--react { right: auto; left: 32px; }
+.msg-bubble--received .msg-bubble-action--menu { left: 4px; }
+.msg-bubble:hover .msg-bubble-action,
+.msg-bubble:focus-within .msg-bubble-action,
+.msg-bubble-action:focus-visible,
+.msg-bubble-action[aria-expanded="true"] { opacity: 1; pointer-events: auto; }
+.msg-bubble-action[aria-expanded="true"] { color: var(--color-accent-bright); border-color: var(--color-accent-bright); }
+
