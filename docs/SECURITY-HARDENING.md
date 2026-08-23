@@ -76,26 +76,26 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 ## 4. Military-Grade Checklist
 
 ### Deniability & coercion resistance
-- [ ] **Hidden volume** — decoy vault under fake passphrase opens boring data; indistinguishable ciphertext (TrueCrypt-style)
-- [ ] **Duress passphrase** — special password silently unlocks decoy and/or triggers wipe instead of revealing real vault
-- [ ] No usernames/identifiers anywhere — keep absolute
+- [ ] **Hidden volume** — TrueCrypt-style indistinguishable ciphertext. PARTIALLY covered: multi-account vaults already let a plausible decoy account coexist with the real one (each passphrase selects its account), but ciphertext is not yet indistinguishable between accounts
+- [x] **Duress passphrase** — registered hash (Argon2id + fresh salt, only the hash stored); entering it at unlock zeroizes all in-memory secrets, deletes every local DB (+WAL/SHM) and security.json, then returns the IDENTICAL generic wrong-passphrase error (`duress.rs`, `vault.rs::execute_duress_wipe`). Constant-time compare; no confirmation prompt at unlock by design; strength-gated at registration so it can actually trigger. Tested.
+- [x] No usernames/identifiers anywhere — keep absolute
 
 ### Data at rest
-- [ ] **Crypto-shredding for deletion** — destroy per-message keys instead of deleting rows; ciphertext becomes unrecoverable regardless of WAL/disk remnants (current `secure_delete` + skip-VACUUM leaves remnants, `storage.rs:1039-1054`)
-- [ ] Disable crash dumps (minidumps contain decrypted message buffers)
-- [ ] Full `VirtualLock`/mlock coverage on all plaintext secrets
+- [x] **Crypto-shredding for deletion** — per-message content keys wrapped under the vault key; deletion shreds the wrapped keys and truncates WAL, making ciphertext unrecoverable even from remnants (H7, tested)
+- [x] Disable crash dumps — `SetErrorMode` hardening on Windows; `RLIMIT_CORE=0` via `setrlimit` on Unix; runs FIRST at startup before any key material exists (`lib.rs::disable_crash_dumps`). Note: WER *local-dumps* registry policy is machine-level and outside app control — high-risk users should also verify it's disabled system-wide.
+- [ ] Full `VirtualLock`/mlock coverage on all plaintext secrets — PARTIAL: `StorageKey` is mlock'd+zeroized (panic-on-fail), all identity/X25519/ephemeral/prekey secrets are zeroize-on-drop. Remaining gap: mlock for non-storage-key secrets requires pinning them at stable heap addresses (per-field locks are invalidated by Rust moves) — needs a `LockedBox` container refactor.
 
 ### Traffic analysis resistance
-- [ ] **Fixed-size / bucketed frame padding** — message sizes currently reveal content type (64 KiB text vs chunks vs reactions)
-- [ ] Optional batching delay for sends — send-time reveals nothing
+- [x] **Fixed-size / bucketed frame padding** — exponential-tier padding (64B→1KB … >4KB→16KB) with tamper-checked padding suffix (`crypto.rs::pad_message_variable`, tested)
+- [x] Optional batching delay for sends — random 0..N ms pre-send jitter on every message frame (never handshake/keepalive), configured via `send_batching_ms` (`session.rs::apply_send_jitter`), OFF by default
 - [x] **Encrypted+authenticated heartbeats** — heartbeats now travel through the session AEAD path (`Session::send_heartbeat`/`send_heartbeat_ack`, Double Ratchet or legacy SessionKeys); plaintext keepalives were a liveness oracle and forgeable. Only a DECRYPTABLE ack counts as liveness, so injected frames can't defeat the heartbeat timeout. Fixing this exposed and repaired two latent Double Ratchet bugs: the responder could never send first ("no send chain key" — encrypt now forces a DH ratchet when no send chain exists) and the initiator could never decrypt that reply (receive path now accepts a ratcheted frame with no prior receive chain; initiator's initial DR ratchet keypair is the X3DH ephemeral, matching the responder's assumption).
-- [ ] Consider cover traffic for typing indicators / read receipts timing metadata
+- [x] Cover traffic for typing indicators — randomized 0–600 ms indicator delay when `cover_typing_traffic` enabled (read receipts are local-only in M2M, no wire timing to cover)
 
 ### Supply chain & build integrity
-- [ ] **Reproducible builds** — released binaries verifiably match source; without this every other claim is unverifiable
-- [ ] Migrate archived sodiumoxide → RustCrypto (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`)
-- [ ] **Signed updates** via Tauri updater signatures — unsigned update channel is the kill-chain
-- [ ] Dependency pinning + periodic `cargo audit` (CI already runs this)
+- [x] **Reproducible builds scaffolding** — pinned toolchain (`src-tauri/rust-toolchain.toml`), locked-dependency release script with fixed SOURCE_DATE_EPOCH + published hashes (`scripts/build-release.sh`). Full reproducibility claim still needs two independent CI machines producing byte-identical artifacts.
+- [ ] Migrate archived sodiumoxide → RustCrypto (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) — deliberately deferred: a whole-crypto-library swap must be its own change with test-vector validation, not a batch item.
+- [x] **Signed updates wiring** — `tauri-plugin-updater` registered, `createUpdaterArtifacts: true`; channel INERT until maintainer sets pubkey+endpoint per `docs/SIGNED-UPDATES.md`
+- [x] Dependency pinning + periodic `cargo audit` (CI already runs this); sysinfo pinned to exact version
 
 ### Assurance (what makes "military-grade" a fact, not marketing)
 - [ ] **External crypto audit** — non-negotiable; the entire difference between claims and reality
@@ -104,13 +104,13 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 - [ ] Bug bounty program
 
 ### Operational features for high-risk users
-- [ ] **Emergency panic wipe** — hotkey zeroizes vault keys + deletes storage mid-session
-- [ ] **Air-gap mode** — LAN-only operation, no internet-facing listener
-- [ ] **Ephemeral RAM-only sessions** — conversation never touches SQLite
+- [ ] **Emergency panic wipe** — hotkey zeroizes vault keys + deletes storage mid-session (the duress wipe routine `execute_duress_wipe` provides the machinery; a hotkey binding is the remaining piece)
+- [x] **Air-gap mode** — `SecurityConfig.air_gap_mode`: blocks STUN discovery/connectivity checks, invite creation (STUN/UPnP/relay), peer-discovery enablement, and Tor enable; LAN-only listening/connecting unaffected (`AppState::ensure_not_air_gapped`)
+- [x] **Ephemeral RAM-only sessions** — `SecurityConfig.ephemeral_mode`: gates EVERY conversation write (messages sent/received, reactions, edits, deletes, group messages, read receipts, display-name metadata); UI still works live, nothing touches SQLite
 - [ ] Hardware-backed key sealing (TPM 2.0 / Secure Enclave) — disk theft alone yields nothing
 
 ### Documentation for high-risk users
-- [ ] Official guides: run M2M in **Tails**, **Whonix**, or **Qubes OS**
+- [x] Official guides: run M2M in **Tails**, **Whonix**, or **Qubes OS** (`docs/HIGH-RISK-ENVIRONMENTS.md`, including honest limits of each)
 - [ ] Ship hardened VM image (Debian + M2M + Tor preconfigured)
 
 ---
