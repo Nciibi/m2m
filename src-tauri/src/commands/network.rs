@@ -1588,19 +1588,51 @@ pub fn spawn_receive_loop(
                     }
                 }
                 PacketType::Heartbeat => {
+                    // Encrypted heartbeat: decrypt first (forged/garbage
+                    // frames are dropped, never acked), then answer with an
+                    // encrypted ack while still holding the connection lock.
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        let _ = network::send_heartbeat_ack(&mut conn.write_half).await;
+                        match conn.session.decrypt_typed_frame(&frame) {
+                            Ok(_) => {
+                                let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
+                                if let Err(e) = session.send_heartbeat_ack(write_half).await {
+                                    tracing::warn!(peer = %peer_key_hex, error = %e, "failed to send heartbeat ack");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "failed to decrypt heartbeat");
+                            }
+                        }
                     }
                 }
                 PacketType::HeartbeatAck => {
-                    // Peer answered our probe — mark the connection live so
-                    // the heartbeat worker does not tear it down.
-                    let conns = state.connections.read().await;
-                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
-                        let mut conn = conn_arc.lock().await;
-                        conn.last_hb_ack = Some(std::time::Instant::now());
+                    // Peer answered our probe — but only a DECRYPTABLE ack
+                    // counts as liveness (plaintext/injected acks must not
+                    // defeat the timeout).
+                    let decrypted = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(conn_arc) => {
+                                let mut conn = conn_arc.lock().await;
+                                Some(conn.session.decrypt_typed_frame(&frame))
+                            }
+                            None => None,
+                        }
+                    };
+                    match decrypted {
+                        Some(Ok(_)) => {
+                            let conns = state.connections.read().await;
+                            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                                let mut conn = conn_arc.lock().await;
+                                conn.last_hb_ack = Some(std::time::Instant::now());
+                            }
+                        }
+                        Some(Err(e)) => {
+                            tracing::warn!(error = %e, "failed to decrypt heartbeat ack");
+                        }
+                        None => {}
                     }
                 }
                 PacketType::ConversationMeta => {
