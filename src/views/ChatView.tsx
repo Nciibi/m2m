@@ -421,129 +421,16 @@ export default function ChatView() {
               <span className="date-sep__line" />
             </div>
             {msgs.map((m: ChatMessage, i: number) => (
-              <div key={m.id} className={`msg-bubble msg-bubble--${m.direction}${m.deleted ? ' msg-bubble--deleted' : ''}`}
-                style={{ animationDelay: `${i * 0.05}s` }}
-                onMouseEnter={() => setPickerMsgId(m.id)}
-                onMouseLeave={() => setPickerMsgId(null)}
-                onContextMenu={(e) => { e.preventDefault(); setContextMsgId(m.id); }}
-              >
-                {m.deleted ? (
-                  <em style={{ opacity: 0.5, fontStyle: 'italic' }}>Message deleted</em>
-                ) : editingMsgId === m.id ? (
-                  /* Inline edit mode */
-                  <div className="msg-edit-inline">
-                    <textarea className="msg-edit-input" value={editText}
-                      onChange={e => setEditText(e.target.value)}
-                      onKeyDown={async (e) => {
-                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                          e.preventDefault();
-                          await handleEditMessage(m.id, editText);
-                          setEditingMsgId(null);
-                        }
-                        if (e.key === "Escape") setEditingMsgId(null);
-                      }}
-                      autoFocus
-                      rows={2}
-                    />
-                    <div className="msg-edit-actions">
-                      <Button size="xs" onClick={async () => { await handleEditMessage(m.id, editText); setEditingMsgId(null); }}>Save</Button>
-                      <Button variant="secondary" size="xs" onClick={() => setEditingMsgId(null)}>Cancel</Button>
-                    </div>
-                  </div>
-                ) : (
-                  /* Normal message rendering with markdown */
-                  <div>
-                    {/* Sender label for group messages */}
-                    {m.sender_peer_key_hex && (m.sender_peer_key_hex.length > 0) && (
-                      <div className="msg-sender-label">
-                        {m.sender_peer_key_hex.substring(0, 8)}…
-                      </div>
-                    )}
-                    <div className="msg-content">{renderMarkdown(m.content)}</div>
-                  </div>
-                )}
-                <span className="msg-footer-row">
-                  <span className="msg-time">{new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                  {/* Message status for sent messages */}
-                  {m.direction === "sent" && !m.deleted && msgStatus[m.id] && (
-                    <span className={`msg-status msg-status--${msgStatus[m.id]}`}>
-                      {msgStatus[m.id] === "sending" && <ClockIcon size={10} />}
-                      {msgStatus[m.id] === "sent" && "✓"}
-                      {msgStatus[m.id] === "delivered" && <CheckDoubleIcon size={12} />}
-                      {msgStatus[m.id] === "read" && <CheckDoubleIcon size={12} />}
-                    </span>
-                  )}
-                  {/* Edited badge */}
-                  {m.edited_at !== null && !m.deleted && (
-                    <span className="msg-edited-badge" title={`Edited ${new Date(m.edited_at * 1000).toLocaleString()}`}>edited</span>
-                  )}
-                  {/* Self-destruct timer */}
-                  {m.expires_at !== null && !m.deleted && !m.direction.startsWith("sent") && (
-                    <SelfDestructTimer expiresAt={m.expires_at} />
-                  )}
-                  {/* Read receipt for received messages */}
-                  {m.direction === "received" && m.read_at !== null && (
-                    <span className="msg-read-badge" title={`Read ${new Date(m.read_at * 1000).toLocaleString()}`}>
-                      ✓✓
-                    </span>
-                  )}
-                </span>
-                {/* Reactions */}
-                {Object.keys(m.reactions || {}).length > 0 && !m.deleted && (
-                  <div className="msg-reactions">
-                    {Object.entries(m.reactions).map(([emoji, reactors]) => (
-                      <button
-                        key={emoji}
-                        className={`msg-reaction ${reactors.includes("self") ? "msg-reaction--self" : ""}`}
-                        onClick={() => {
-                          if (reactors.includes("self")) {
-                            handleRemoveReaction(m.id, emoji);
-                          } else {
-                            handleSendReaction(m.id, emoji);
-                          }
-                        }}
-                        title={reactors.join(", ")}
-                      >
-                        {emoji} {reactors.length}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* Reaction picker on hover */}
-                {pickerMsgId === m.id && !m.deleted && (
-                  <div className="reaction-picker">
-                    {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                      <button
-                        key={emoji}
-                        className={`reaction-picker__btn ${(m.reactions?.[emoji] || []).includes("self") ? "reaction-picker__btn--active" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const reactors = m.reactions?.[emoji] || [];
-                          if (reactors.includes("self")) {
-                            handleRemoveReaction(m.id, emoji);
-                          } else {
-                            handleSendReaction(m.id, emoji);
-                          }
-                          setPickerMsgId(null);
-                        }}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* Context menu */}
-                {contextMsgId === m.id && !m.deleted && (
-                  <div className="msg-context-menu" onClick={(e) => e.stopPropagation()}>
-                    <button className="msg-context-item" onClick={() => { setEditingMsgId(m.id); setEditText(m.content); setContextMsgId(null); }}>
-                      Edit
-                    </button>
-                    <button className="msg-context-item msg-context-item--danger" onClick={async () => { await handleDeleteMessage(m.id); setContextMsgId(null); }}>
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+              <MessageBubble
+                key={m.id}
+                message={m}
+                index={i}
+                msgStatus={msgStatus[m.id]}
+                onReact={handleSendReaction}
+                onRemoveReaction={handleRemoveReaction}
+                onEditSave={handleEditMessage}
+                onDelete={handleDeleteMessage}
+              />
             ))}
           </div>
         ))}
