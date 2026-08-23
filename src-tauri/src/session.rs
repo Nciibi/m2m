@@ -1325,6 +1325,74 @@ mod session_tests {
         }
     }
 
+    /// H4 regression: a legacy SessionKeys session must work BIDIRECTIONALLY
+    /// with no manual counter adjustment. Pre-fix, each side started its
+    /// tx counter AND rx watermark at an independently generated random u64
+    /// that was never exchanged, so the first message in either direction
+    /// was rejected as a replay ~50% of the time. Every pre-fix test had to
+    /// force `alice.tx_counter = 100; bob.rx_high_water_mark = 0` to pass.
+    #[tokio::test]
+    async fn test_legacy_session_bidirectional_without_counter_fiddling() {
+        init_crypto();
+        let eph = EphemeralKeypair::generate();
+        let eph2 = EphemeralKeypair::generate();
+
+        let alice_keys = eph.client_session_keys(&eph2.public_key_bytes()).unwrap();
+        let bob_keys = eph2.server_session_keys(&eph.public_key_bytes()).unwrap();
+
+        let mut alice = Session::new();
+        let mut bob = Session::new();
+        // NO counter adjustments here — that is the point of this test.
+        alice.session_keys = Some(alice_keys);
+        alice.state = ConnectionState::Established;
+        alice.established_at = now_unix_secs();
+        assert_eq!(alice.tx_counter, 0);
+        assert_eq!(alice.rx_high_water_mark, 0);
+
+        bob.session_keys = Some(bob_keys);
+        bob.state = ConnectionState::Established;
+        bob.established_at = now_unix_secs();
+        assert_eq!(bob.tx_counter, 0);
+        assert_eq!(bob.rx_high_water_mark, 0);
+
+        // ── Direction 1: Alice → Bob (first frame must NOT be rejected) ──
+        let (mut a2b_w, mut a2b_r) = tokio::io::duplex(65536);
+        let msg_id = alice.send_text(&mut a2b_w, "hello bob").await.unwrap();
+        let frame = crate::network::read_frame_impl(&mut a2b_r).await.unwrap();
+        let body = bob.decrypt_message(&frame).unwrap();
+        match &body {
+            crate::protocol::MessageBody::Text { id, content, .. } => {
+                assert_eq!(content, "hello bob");
+                assert_eq!(id, &msg_id);
+            }
+            other => panic!("expected Text body, got {:?}", other),
+        }
+
+        // ── Direction 2: Bob → Alice (his independent counter starts at 0) ──
+        let (mut b2a_w, mut b2a_r) = tokio::io::duplex(65536);
+        let reply_id = bob.send_text(&mut b2a_w, "hi alice").await.unwrap();
+        let frame = crate::network::read_frame_impl(&mut b2a_r).await.unwrap();
+        let body = alice.decrypt_message(&frame).unwrap();
+        match &body {
+            crate::protocol::MessageBody::Text { id, content, .. } => {
+                assert_eq!(content, "hi alice");
+                assert_eq!(id, &reply_id);
+            }
+            other => panic!("expected Text body, got {:?}", other),
+        }
+
+        // ── Replay protection still works within the session: re-sending
+        // an already-seen counter must be rejected. ──
+        let stale = crate::network::read_frame_impl(&mut a2b_r).await;
+        // No more frames pending — instead craft one by re-sending with a
+        // rewound counter is impossible from the API; verify watermark moved.
+        assert!(stale.is_err());
+        assert_eq!(bob.rx_high_water_mark, 1);
+        assert_eq!(bob.tx_counter, 1);
+        assert_eq!(alice.rx_high_water_mark, 1);
+        assert_eq!(alice.tx_counter, 1);
+    }
+
     #[tokio::test]
     async fn test_file_transfer_request_roundtrip() {
         init_crypto();
