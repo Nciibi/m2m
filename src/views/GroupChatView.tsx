@@ -6,6 +6,7 @@ import {
   ArrowLeftIcon, PlusIcon, GroupsIcon, MessageIcon, SendIcon, LockIcon,
 } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
+import MessageBubble from "../components/chat/MessageBubble";
 import { useApp } from "../context/AppContext";
 import type { GroupInfo, GroupDetail, ChatMessage } from "../types";
 
