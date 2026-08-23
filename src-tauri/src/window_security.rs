@@ -127,14 +127,20 @@ mod mac_ffi {
     }
 
     /// objc_msgSend casts, matched exactly to the signatures we use.
-    /// This is the documented way to call ObjC methods without variadics:
-    /// each call site must use the variant matching its argument/return
-    /// types (arm64/x86_64 ABI).
+    /// Objective-C runtime entry points.
+    ///
+    /// `objc_msgSend` is declared once per EXACT argument/return signature
+    /// we need (the documented non-variadic pattern; matches arm64/x86_64
+    /// ObjC ABI for these types). `setSharingType:` takes a NSUInteger,
+    /// `window` returns id.
     #[link(name = "objc", kind = "dylib")]
     extern "C" {
-        /// `[receiver sel] -> id`
+        pub fn sel_registerName(name: *const i8) -> *const c_void;
+
+        #[link_name = "objc_msgSend"]
         pub fn msg_send_id(receiver: *mut c_void, sel: *const c_void) -> *mut c_void;
-        /// `[receiver sel arg:NSUInteger] -> void`
+
+        #[link_name = "objc_msgSend"]
         pub fn msg_send_ulong(receiver: *mut c_void, sel: *const c_void, arg: usize);
     }
 
