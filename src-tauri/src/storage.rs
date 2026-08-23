@@ -120,6 +120,14 @@ impl KeyStore {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                public_key BLOB NOT NULL UNIQUE,
+                encrypted_private_key BLOB NOT NULL,
+                private_key_nonce BLOB NOT NULL,
+                label TEXT,
+                created_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS family (
                 public_key BLOB NOT NULL PRIMARY KEY,
                 nickname TEXT NOT NULL,
