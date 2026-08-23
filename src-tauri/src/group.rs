@@ -388,8 +388,11 @@ impl GroupManager {
         Ok((group_id, bundles))
     }
 
-    /// Add a new member to an existing group.
-    /// Returns bundles to send over the new member's 1:1 DR session.
+    /// Add a new member to an existing group (admin side).
+    ///
+    /// Trust model v2: the admin generates NOTHING on behalf of the new
+    /// member. The new member generates their own keys when they receive the
+    /// invite. Returns our own bundle to send to them (caller signs it).
     pub fn add_member(
         &mut self,
         group_id: &str,
@@ -409,47 +412,9 @@ impl GroupManager {
             return Err("group size exceeds maximum (32 members)".to_string());
         }
 
-        // Generate a sender key for the new member
-        let (_, member_initial_key) = generate_sender_key_pair();
-        let (member_signing_key, member_verification_key) = generate_sender_signing_keypair();
-
-        // Store their receiver chain for us
-        group.store_receiver_key(new_member_key_hex, &member_initial_key, &member_verification_key);
-
-        // The new member needs:
-        // 1. Their own sender key (with signing key)
-        // 2. Our sender key (without signing key, for receiving our messages)
-
-        let our_init_key = group
-            .our_initial_chain_key
-            .as_ref()
-            .copied()
-            .ok_or("no our initial key")?;
-        let our_verify_key = group
-            .our_verification_key
-            .as_ref()
-            .copied()
-            .ok_or("no our verification key")?;
-
-        let their_own_bundle = GroupSenderKeyData {
-            group_id: group_id.to_string(),
-            sender_peer_key_hex: new_member_key_hex.to_string(),
-            chain_key: member_initial_key,
-            message_number: 0,
-            signing_key: Some(member_signing_key.to_vec()),
-            verification_key: member_verification_key,
-            signature: Vec::new(),
-        };
-
-        let our_bundle = GroupSenderKeyData {
-            group_id: group_id.to_string(),
-            sender_peer_key_hex: our_peer_key_hex.to_string(),
-            chain_key: our_init_key,
-            message_number: 0,
-            signing_key: None,
-            verification_key: our_verify_key,
-            signature: Vec::new(),
-        };
+        let our_bundle = group.own_sender_bundle()?;
+        // Address the bundle to its recipient so they can route/verify it.
+        let mut addressed = our_bundle;
 
         // Add member
         group.members.push(GroupMember {
@@ -459,16 +424,66 @@ impl GroupManager {
             added_at,
         });
 
-        // For each existing member (excluding us and the new member):
-        // We need to send THEIR sender key to the new member too,
-        // but only the receiver chain (no signing key).
-        // NOTE: The new member needs each existing member's receiver chain,
-        // but we don't store the initial chain key for existing members (only
-        // the current receiver chain state). Phase 3 v2 should store initial
-        // keys alongside receiver chains to support this.
-        let bundles = vec![their_own_bundle, our_bundle];
+        Ok(vec![addressed])
+    }
 
-        Ok(bundles)
+    /// Join a group from the receiving side (GroupCreate / GroupInvite).
+    ///
+    /// Creates local state with OUR OWN freshly-generated sending chain and
+    /// signing key — we never accept key material generated for us by
+    /// someone else. Roster members are recorded so messages can be routed.
+    ///
+    /// Returns our unsigned bundle; caller signs with the long-term identity
+    /// key and fans it out to roster members.
+    pub fn join_group(
+        &mut self,
+        group_id: String,
+        name: String,
+        created_at: u64,
+        our_peer_key_hex: String,
+        is_admin: bool,
+        roster: &[String],
+    ) -> Result<GroupSenderKeyData, String> {
+        if let Some(existing) = self.groups.get_mut(&group_id) {
+            // Already joined — just make sure the roster includes everyone.
+            for peer in roster {
+                if !existing.is_member(peer) && peer != &our_peer_key_hex {
+                    existing.members.push(GroupMember {
+                        peer_key_hex: peer.clone(),
+                        display_name: None,
+                        role: GroupRole::Member,
+                        added_at: created_at,
+                    });
+                }
+            }
+            return existing.own_sender_bundle();
+        }
+
+        if roster.len() > 31 {
+            return Err("group size exceeds maximum (32 members)".to_string());
+        }
+
+        // Generate OUR OWN keys locally.
+        let mut group = Group::new(group_id.clone(), name, created_at, our_peer_key_hex.clone());
+        if is_admin {
+            group.members[0].role = GroupRole::Admin;
+        }
+
+        for peer in roster {
+            if peer == &our_peer_key_hex || group.is_member(peer) {
+                continue;
+            }
+            group.members.push(GroupMember {
+                peer_key_hex: peer.clone(),
+                display_name: None,
+                role: GroupRole::Member,
+                added_at: created_at,
+            });
+        }
+
+        let bundle = group.own_sender_bundle()?;
+        self.groups.insert(group_id, group);
+        Ok(bundle)
     }
 
     /// Remove a member from a group. Rotates keys for all remaining members.
