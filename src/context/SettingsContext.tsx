@@ -262,6 +262,40 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [securityConfig, addToast]);
 
+  const handleCaptureDetectionToggle = useCallback(async () => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
+    };
+    const newConfig: SecurityConfig = { ...current, capture_process_detection: !current.capture_process_detection };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+      addToast(
+        result.capture_process_detection
+          ? "Capture software detection enabled"
+          : "Capture software detection disabled",
+        "info",
+      );
+    } catch (e) {
+      addToast("Failed to toggle capture detection: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleBlurOnFocusLossToggle = useCallback(async () => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
+    };
+    const newConfig: SecurityConfig = { ...current, blur_on_focus_loss: !current.blur_on_focus_loss };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+    } catch (e) {
+      addToast("Failed to toggle focus blur: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
   const handleClipboardClearSecsChange = useCallback(async (secs: number) => {
     const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false };
     const newConfig: SecurityConfig = { ...current, clipboard_clear_secs: secs };
@@ -336,7 +370,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       handleLanToggle, handleDhtToggle,
       handleConnectDiscoveredPeer, handleRefreshDiscovery,
       securityConfig,
-      handleScreenCaptureToggle, handleClipboardClearSecsChange,
+      captureCapability,
+      handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
+      handleClipboardClearSecsChange,
       handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
       scheduleClipboardClear,
     }}>
