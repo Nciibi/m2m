@@ -622,11 +622,17 @@ impl KeyStore {
         added_at: i64,
         expires_at: Option<i64>,
         last_address: Option<&str>,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<(), StorageError> {
+        let nickname_stored = seal_meta_value(key, nickname, AAD_FAMILY)?;
+        let address_stored = match last_address {
+            Some(addr) => Some(seal_meta_value(key, addr, AAD_FAMILY)?),
+            None => None,
+        };
         self.conn.execute(
             "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![public_key, nickname, added_at, expires_at, last_address],
+            rusqlite::params![public_key, nickname_stored, added_at, expires_at, address_stored],
         )?;
         Ok(())
     }
