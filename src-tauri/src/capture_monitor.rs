@@ -116,7 +116,7 @@ fn scan_live() -> Vec<String> {
     let names = sys
         .processes()
         .values()
-        .map(|p| p.name().to_string_lossy().to_lowercase());
+        .map(|p| p.name().to_string_lossy().to_string());
     detect_capture_tools(names)
 }
 
