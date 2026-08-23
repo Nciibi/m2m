@@ -37,21 +37,24 @@
   --color-border-accent: rgba(192, 193, 255, 0.15);
   --color-border-card: rgba(255, 255, 255, 0.04);
 
-  /* ─── Colors: Accent (Indigo / Periwinkle) ─── */
+  /* ─── Colors: Accent ──────────────────────────────────────────────────────
+     All derived tints/glow/gradients stem from --color-accent via color-mix,
+     so the runtime accent picker (ThemeContext) re-skins the entire system
+     from a single variable. */
   --color-accent: #6366f1;
-  --color-accent-bright: #c0c1ff;
-  --color-accent-dim: #4f46e5;
-  --color-accent-glow: rgba(99, 102, 241, 0.25);
-  --color-accent-glow-strong: rgba(99, 102, 241, 0.4);
-  --color-accent-glow-subtle: rgba(99, 102, 241, 0.08);
-  --color-accent-gradient: linear-gradient(135deg, #6366f1, #4f46e5);
-  --color-accent-gradient-warm: linear-gradient(135deg, #8083ff, #6366f1);
-  --color-accent-gradient-rich: linear-gradient(135deg, #c0c1ff, #6366f1, #4f46e5);
+  --color-accent-bright: color-mix(in srgb, var(--color-accent) 55%, white);
+  --color-accent-dim: color-mix(in srgb, var(--color-accent) 78%, black);
+  --color-accent-glow: color-mix(in srgb, var(--color-accent) 25%, transparent);
+  --color-accent-glow-strong: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --color-accent-glow-subtle: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  --color-accent-gradient: linear-gradient(135deg, var(--color-accent), var(--color-accent-dim));
+  --color-accent-gradient-warm: linear-gradient(135deg, var(--color-accent-bright), var(--color-accent));
+  --color-accent-gradient-rich: linear-gradient(135deg, var(--color-accent-bright), var(--color-accent), var(--color-accent-dim));
 
-  /* ─── Colors: Primary (Periwinkle from Obsidian Prism) ─── */
-  --color-primary: #c0c1ff;
-  --color-primary-container: #8083ff;
-  --color-primary-glow: rgba(192, 193, 255, 0.15);
+  /* ─── Colors: Primary (alias of accent family) ─── */
+  --color-primary: var(--color-accent-bright);
+  --color-primary-container: color-mix(in srgb, var(--color-accent) 65%, var(--color-accent-bright));
+  --color-primary-glow: color-mix(in srgb, var(--color-accent-bright) 15%, transparent);
 
   /* ─── Colors: Text ─── */
   --color-text-primary: #d4e4fa;
