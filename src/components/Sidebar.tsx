@@ -1,4 +1,5 @@
-import { MessageIcon, GearIcon, LockIcon, HomeIcon } from "../components/ui/Icons";
+import { useNavigate } from "react-router-dom";
+import { MessageIcon, GearIcon, LockIcon, HomeIcon, GroupsIcon } from "../components/ui/Icons";
 
 type View = import("../context/AppContext").ViewName;
 
@@ -9,10 +10,22 @@ interface SidebarProps {
 
 const items: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: "hub", label: "Chats", icon: <MessageIcon size={18} /> },
+  { id: "groups", label: "Groups", icon: <GroupsIcon size={18} /> },
   { id: "settings", label: "Settings", icon: <GearIcon size={18} /> },
 ];
 
 export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
+  const navigate = useNavigate();
+
+  const handleLockVault = async () => {
+    try {
+      await invoke("lock_vault");
+      navigate("/vault");
+    } catch (error) {
+      console.error("Failed to lock vault:", error);
+    }
+  };
+
   return (
     <aside className="app-sidebar">
       <div className="app-sidebar__brand">
@@ -24,7 +37,7 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
           <div className="app-sidebar__subtitle">Secure</div>
         </div>
       </div>
-      <nav className="app-sidebar__nav">
+      <nav className="app-sidebar__nav" aria-label="Main navigation">
         {items.map((item) => (
           <button
             key={item.id}
@@ -37,6 +50,13 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
         ))}
       </nav>
       <div className="app-sidebar__bottom">
+        <button
+          className="app-sidebar__item app-sidebar__item--lock"
+          onClick={handleLockVault}
+        >
+          <LockIcon size={18} />
+          Lock Vault
+        </button>
         <button className="app-sidebar__item" onClick={() => onNavigate("setup")}>
           <HomeIcon size={18} />
           About
