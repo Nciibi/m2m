@@ -20,7 +20,9 @@ export default function SettingsView() {
     discoveryConfig, discoveredPeers,
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
     securityConfig,
-    handleScreenCaptureToggle, handleClipboardClearSecsChange,
+    captureCapability,
+    handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
+    handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
     scheduleClipboardClear,
   } = useSettings();
