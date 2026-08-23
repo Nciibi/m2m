@@ -331,8 +331,7 @@ impl KeyStore {
                     label: row.get(4)?,
                 })
             })?;
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(StorageError::Database)?
+            rows.collect::<Result<Vec<AccountRow>, _>>()?
         }
 
         pub fn count_accounts(&self) -> Result<i64, StorageError> {
