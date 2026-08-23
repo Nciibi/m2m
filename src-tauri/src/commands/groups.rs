@@ -77,7 +77,9 @@ pub async fn create_group(
 
     // Distribute sender key bundles over existing DR sessions
     for (peer_key_hex, bundle_data) in &bundles {
-        let serialized = protocol::serialize(bundle_data)
+        let mut signed = bundle_data.clone();
+        finalize_bundle(identity, &our_peer_key_hex, &mut signed);
+        let serialized = protocol::serialize(&signed)
             .map_err(|e| format!("serialization failed: {e}"))?;
 
         let conns = state.connections.read().await;
@@ -329,7 +331,9 @@ pub async fn invite_to_group(
         let mut conn = conn_arc.lock().await;
         let PeerConnection { session, write_half, .. } = &mut *conn;
         for bundle in &bundles {
-            let serialized = protocol::serialize(bundle)
+            let mut signed = bundle.clone();
+            finalize_bundle(identity, &our_peer_key_hex, &mut signed);
+            let serialized = protocol::serialize(&signed)
                 .map_err(|e| format!("serialization failed: {e}"))?;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
