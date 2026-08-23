@@ -80,6 +80,9 @@ fn sync_capture_monitor(state: &Arc<AppState>, app_handle: &AppHandle, enabled: 
 
 /// Apply every platform-side effect implied by `config`.
 pub fn apply_side_effects(state: &Arc<AppState>, app_handle: &AppHandle, config: &SecurityConfig) {
+    // Traffic-analysis knobs are process-global; cheap to (re)set always.
+    crate::session::set_send_jitter_ms(config.send_batching_ms);
+
     if config.screen_capture_protection {
         if let Err(e) = window_security::apply_screen_protection(app_handle, true) {
             // Surface loudly: user believes they are protected but we failed.
