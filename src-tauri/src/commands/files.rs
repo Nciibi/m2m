@@ -449,9 +449,10 @@ pub(super) fn try_start_outgoing_transfer(
             }
         }
         {
+            let sk = state.storage_key.read().await;
             let ts = state.transfer_store.lock().await;
             if let Some(ref store) = *ts {
-                let _ = store.update_state(&transfer_id, "transferring", None, None);
+                let _ = store.update_state(&transfer_id, "transferring", None, None, sk.as_ref());
             }
         }
 
