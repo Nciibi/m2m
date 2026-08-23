@@ -1397,12 +1397,45 @@ impl MessageStore {
 
     // ─── Message Editing ──────────────────────────────
 
-    /// Update a message's content (edit). Stores the edit timestamp.
+    /// Update a message's content (edit) under a FRESH per-message content
+    /// key (H7). The previous wrapped key is overwritten in the same UPDATE,
+    /// so the pre-edit ciphertext becomes undecryptable immediately.
     ///
     /// Scoped to a conversation AND direction: peer-initiated edits may only
     /// touch `received` messages in the sender's own conversation; user
     /// edits target their own `sent` messages. Returns false if no
     /// matching row was found (foreign or unknown message).
+    pub fn edit_message_secure(
+        &self,
+        message_id: &str,
+        conversation_id: &str,
+        expected_direction: &str,
+        new_plaintext: &[u8],
+        storage_key: &crate::secure_key::StorageKey,
+    ) -> Result<bool, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        let mut cek = Self::generate_cek();
+        let result = (|| {
+            let wrapped = Self::wrap_cek(&cek, storage_key)?;
+            let (nonce, ciphertext) = seal_msg(&cek, new_plaintext, AAD_MSG_STORE)?;
+            use zeroize::Zeroize;
+            cek.zeroize();
+            let changed = self.conn.execute(
+                "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2,
+                        content_key_wrapped = ?3, edited_at = ?4
+                 WHERE id = ?5 AND conversation_id = ?6 AND direction = ?7",
+                rusqlite::params![ciphertext, nonce, wrapped, now, message_id, conversation_id, expected_direction],
+            )?;
+            Ok(changed > 0)
+        })();
+        use zeroize::Zeroize;
+        cek.zeroize();
+        result
+    }
+
+    /// Legacy test-only edit path — content stored exactly as provided and
+    /// NOT crypto-shreddable. Production code MUST use [`edit_message_secure`].
+    #[cfg(test)]
     pub fn edit_message(
         &self,
         message_id: &str,
@@ -1422,9 +1455,12 @@ impl MessageStore {
 
     // ─── Message Deletion ─────────────────────────────
 
-    /// Soft-delete a message (mark as deleted so peers see a placeholder).
+    /// Soft-delete a message (mark as deleted so peers see a placeholder)
+    /// AND crypto-shred its content (H7): the wrapped per-message key is
+    /// zeroed in the same statement, so the retained tombstone row carries
+    /// undecryptable ciphertext.
     ///
-    /// Scoped like [`edit_message`]: returns false if the message does not
+    /// Scoped like [`edit_message_secure`]: returns false if the message does not
     /// exist in the given conversation with the expected direction.
     pub fn delete_message(
         &self,
@@ -1432,8 +1468,9 @@ impl MessageStore {
         conversation_id: &str,
         expected_direction: &str,
     ) -> Result<bool, StorageError> {
+        self.conn.pragma_update(None, "secure_delete", "ON")?;
         let changed = self.conn.execute(
-            "UPDATE messages SET deleted = 1
+            "UPDATE messages SET deleted = 1, content_key_wrapped = NULL
              WHERE id = ?1 AND conversation_id = ?2 AND direction = ?3",
             rusqlite::params![message_id, conversation_id, expected_direction],
         )?;
@@ -1442,13 +1479,23 @@ impl MessageStore {
 
     // ─── Self-Destruct (Expired Messages) ─────────────
 
-    /// Permanently delete expired messages from the database.
+    /// Permanently delete expired messages from the database, with
+    /// crypto-shredding (H7): shred wrapped keys first, truncate the WAL,
+    /// then delete the rows.
     pub fn delete_expired_messages(&self) -> Result<u32, StorageError> {
         let now = chrono::Utc::now().timestamp();
+        self.conn.pragma_update(None, "secure_delete", "ON")?;
+        self.conn.execute(
+            "UPDATE messages SET content_key_wrapped = ?2
+             WHERE expires_at IS NOT NULL AND expires_at <= ?1 AND content_key_wrapped IS NOT NULL",
+            rusqlite::params![now, vec![0u8; WRAPPED_CEK_LEN]],
+        )?;
+        self.wal_checkpoint_truncate()?;
         let count = self.conn.execute(
             "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
             rusqlite::params![now],
         )?;
+        self.wal_checkpoint_truncate()?;
         Ok(count as u32)
     }
 
