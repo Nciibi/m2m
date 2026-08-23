@@ -164,6 +164,31 @@ impl KeyStore {
         Ok(result.map(|v| v == "true").unwrap_or(false))
     }
 
+    /// Store a vault metadata value (duress hash, capability flags, …).
+    pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StorageError> {
+        if key.contains('\'') || key.contains('\0') {
+            return Err(StorageError::PathError("invalid meta key".into()));
+        }
+        self.conn.execute(
+            &format!("INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('{}', ?1)", key),
+            params![value],
+        )?;
+        Ok(())
+    }
+
+    /// Read a vault metadata value. `None` when absent.
+    pub fn get_meta(&self, key: &str) -> Result<Option<String>, StorageError> {
+        if key.contains('\'') || key.contains('\0') {
+            return Err(StorageError::PathError("invalid meta key".into()));
+        }
+        let result: Result<String, _> = self.conn.query_row(
+            &format!("SELECT value FROM vault_meta WHERE key = '{}'", key),
+            [],
+            |row| row.get(0),
+        );
+        Ok(result.ok())
+    }
+
     /// Store the X25519 identity keypair (encrypted with storage key).
     pub fn store_x25519_key(
         &self,
