@@ -1117,6 +1117,7 @@ pub fn spawn_receive_loop(
                                             tracing::warn!("no temp file available for transfer - skipping chunk");
                                         }
                                         }
+                                        }
                                     }
                                 }
                             }
