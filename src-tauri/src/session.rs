@@ -381,6 +381,7 @@ impl Session {
         sign_data.extend_from_slice(&ek_a.public_key_bytes());
         sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
         sign_data.extend_from_slice(&now.to_be_bytes());
+        append_candidates_to_sign_data(&mut sign_data, &local_candidates);
         let signature = identity.sign(&sign_data);
 
         let init = HandshakeInit {
@@ -417,6 +418,7 @@ impl Session {
         peer_sign_data.extend_from_slice(&response.ephemeral_pub);
         peer_sign_data.extend_from_slice(&response.x25519_identity_pub);
         peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes());
+        append_candidates_to_sign_data(&mut peer_sign_data, &response.candidates);
         crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
             .map_err(|_| SessionError::HandshakeFailed("peer signature invalid".to_string()))?;
 
