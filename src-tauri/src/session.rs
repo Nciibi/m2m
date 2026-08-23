@@ -1303,7 +1303,6 @@ mod session_tests {
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
-        bob.rx_high_water_mark = 0;
 
         // Duplex for communication
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
@@ -1342,7 +1341,6 @@ mod session_tests {
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
-        bob.rx_high_water_mark = 0;
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
@@ -1385,7 +1383,6 @@ mod session_tests {
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
-        bob.rx_high_water_mark = 0;
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
@@ -1430,7 +1427,6 @@ mod session_tests {
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
-        bob.rx_high_water_mark = 0;
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
@@ -1458,7 +1454,6 @@ mod session_tests {
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
-        bob.rx_high_water_mark = 0;
 
         // Save initial keys
         let initial_tx = alice.session_keys.as_ref().unwrap().tx_key;
