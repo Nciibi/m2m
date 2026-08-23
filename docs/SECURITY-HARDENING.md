@@ -24,7 +24,7 @@
 - ~~Heartbeat timeout documented but never implemented~~ **✅ FIXED** — heartbeat worker polls at half the ack timeout, tracks `last_hb_sent`/`last_hb_ack` per connection (`state.rs::PeerConnection`); an unanswered probe tears the connection down within one timeout window (reconnect info saved + disconnect event emitted); acks recorded in the receive loop
 - ~~Handshake signatures don't cover `candidates`~~ **✅ FIXED** — all four handshake paths (legacy + X3DH × initiator + responder) fold a canonical length-prefixed encoding of the candidate list into the signed data via `append_candidates_to_sign_data`; candidate tampering (reconnect-target poisoning) now invalidates the signature; regression-tested
 - ~~DHT `parse_node_response` hardcodes IPv4 while announce supports IPv6~~ **✅ FIXED** — NODE_RESPONSE entries now carry an af_tag (4/6) mirroring the announce body format, parsed sequentially so mixed v4/v6 bodies work; legacy fixed-38-byte all-IPv4 responses fall back cleanly; tested (tagged, IPv6, mixed-AF, legacy fallback)
-- Split ~1,400-line `spawn_receive_loop`; de-duplicate ChatMessage construction sites
+- ~~Split ~1,400-line `spawn_receive_loop`~~ **✅ DONE** — loop is now a ~235-line dispatcher; packet domains extracted verbatim into dedicated handlers (`handle_incoming_text`, `handle_file_transfer_packet`, `handle_heartbeat_frame`, `handle_conversation_meta`, `handle_message_update_frame`, `handle_sync_frame`, `handle_group_frame`). ~~De-duplicate ChatMessage construction sites~~ **✅ DONE** — all 6 construction sites use `ChatMessage::new(...)` + builder setters, so adding a field touches only the constructor
 
 ---
 
