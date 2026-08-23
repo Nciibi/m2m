@@ -397,21 +397,10 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
     Ok(stream)
 }
 
-/// Send a heartbeat packet (works with any AsyncWrite).
-pub async fn send_heartbeat<W: AsyncWrite + Unpin>(
-    writer: &mut W,
-) -> Result<(), NetworkError> {
-    write_frame(writer, PacketType::Heartbeat, &[]).await
-}
-
-/// Send a heartbeat acknowledgment (works with any AsyncWrite).
-pub async fn send_heartbeat_ack<W: AsyncWrite + Unpin>(
-    writer: &mut W,
-) -> Result<(), NetworkError> {
-    write_frame(writer, PacketType::HeartbeatAck, &[]).await
-}
-
 /// Send a disconnect packet with reason (works with any AsyncWrite).
+/// NOTE: heartbeats are NOT sent here — they are encrypted at the session
+/// layer (`Session::send_heartbeat`) so observers can't use them as a
+/// plaintext liveness oracle.
 pub async fn send_disconnect<W: AsyncWrite + Unpin>(
     writer: &mut W,
     reason: protocol::DisconnectReason,
