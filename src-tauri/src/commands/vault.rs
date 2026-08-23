@@ -325,12 +325,18 @@ pub async fn unlock_vault(
     if needs_store_x25519 || legacy_store_data.is_some() {
         let ks_guard4 = state.key_store.lock().await;
         if let Some(store) = ks_guard4.as_ref() {
+            // Migration persistence must NOT fail silently: a half-migrated
+            // profile would stay in legacy mode while the user believes the
+            // passphrase was set (H1).
             if let Some((_lnonce, lenc, _lsk)) = &legacy_store_data {
-                let _ = store.update_encrypted_private_key(lenc, _lnonce);
-                let _ = store.set_vault_initialized();
+                store.update_encrypted_private_key(lenc, _lnonce)
+                    .map_err(|e| format!("failed to persist migrated identity: {e}"))?;
+                store.set_vault_initialized()
+                    .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
             }
             if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_store_data {
-                let _ = store.store_x25519_key(x_pub, x_enc, x_nonce);
+                store.store_x25519_key(x_pub, x_enc, x_nonce)
+                    .map_err(|e| format!("failed to persist X25519 key: {e}"))?;
             }
         }
         drop(ks_guard4);
