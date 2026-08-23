@@ -46,3 +46,5 @@ export { CheckCircleIcon } from "./icons/CheckCircleIcon";
 export { TimerIcon } from "./icons/TimerIcon";
 export { SyncIcon } from "./icons/SyncIcon";
 export { RocketIcon } from "./icons/RocketIcon";
+export { BellIcon } from "./icons/BellIcon";
+export { FolderIcon } from "./icons/FolderIcon";
