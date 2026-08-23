@@ -360,6 +360,21 @@ impl KeyStore {
             Ok(self.conn.last_insert_rowid())
         }
 
+        /// Refresh an existing account's wrapped secret key (e.g. after re-encryption).
+        pub fn update_account_private_key(
+            &self,
+            public_key: &[u8],
+            encrypted_private_key: &[u8],
+            nonce: &[u8],
+        ) -> Result<(), StorageError> {
+            self.conn.execute(
+                "UPDATE accounts SET encrypted_private_key = ?2, private_key_nonce = ?3
+                 WHERE public_key = ?1",
+                params![public_key, encrypted_private_key, nonce],
+            )?;
+            Ok(())
+        }
+
     /// Add or update a known peer.
     pub fn upsert_peer(
         &self,
