@@ -291,9 +291,10 @@ pub async fn pause_file_transfer(
 
     // Persist
     {
+        let sk = state.storage_key.read().await;
         let ts = state.transfer_store.lock().await;
         if let Some(ref store) = *ts {
-            let _ = store.update_state(&transfer_id, "paused", None, None);
+            let _ = store.update_state(&transfer_id, "paused", None, None, sk.as_ref());
         }
     }
 
@@ -331,7 +332,7 @@ pub async fn resume_file_transfer(
     {
         let ts = state.transfer_store.lock().await;
         if let Some(ref store) = *ts {
-            let _ = store.update_state(&transfer_id, "transferring", None, None);
+            let _ = store.update_state(&transfer_id, "transferring", None, None, None);
         }
     }
 
