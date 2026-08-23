@@ -186,8 +186,8 @@
   /* ─── Scrollbar ─── */
   --scrollbar-width: 3px;
   --scrollbar-track: transparent;
-  --scrollbar-thumb: rgba(192, 193, 255, 0.15);
-  --scrollbar-thumb-hover: rgba(192, 193, 255, 0.3);
+  --scrollbar-thumb: color-mix(in srgb, var(--color-accent-bright) 15%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--color-accent-bright) 30%, transparent);
 
   /* ─── Sidebar ─── */
   --sidebar-width: 200px;
