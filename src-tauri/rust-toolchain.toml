@@ -5,6 +5,6 @@
 # (same rustc → same codegen). Do not bump casually; bumping invalidates all
 # previous build attestations.
 [toolchain]
-channel = "1.83.0"
+channel = "1.89.0"
 profile = "minimal"
 components = ["clippy", "rustfmt"]
