@@ -613,6 +613,12 @@ pub struct MessageStore {
 const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
 /// AAD domain for wrapped content keys — distinct from every other domain.
 const AAD_MSG_CEK: &[u8] = b"m2m-msg-cek-v1";
+/// AAD domain for reaction text (messages.db reactions table).
+const AAD_REACTION: &[u8] = b"m2m-reaction-v1";
+/// AAD domain for family-contact metadata (keys.db family table).
+const AAD_FAMILY: &[u8] = b"m2m-family-v1";
+/// AAD domain for transfer metadata (transfers.db).
+const AAD_TRANSFER: &[u8] = b"m2m-transfer-v1";
 
 /// Length of a wrapped CEK blob: 24-byte XChaCha nonce || 32-byte CEK || 16-byte Poly1305 tag.
 pub const WRAPPED_CEK_LEN: usize = 24 + 32 + 16;
@@ -632,6 +638,47 @@ fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Resu
     let nonce = aead::Nonce::from_slice(nonce).ok_or(())?;
     let aead_key = aead::Key::from_slice(key).ok_or(())?;
     aead::open(ciphertext, Some(aad), &nonce, &aead_key)
+}
+
+// ─── Metadata-at-rest encryption (H-secondary) ─────────────────────────────
+//
+// Reaction text, family nicknames/addresses, and transfer filenames/paths
+// used to be stored as plaintext — revealing social graph and file activity
+// to anyone with the database files. Sensitive TEXT values are now stored in
+// an authenticated envelope: "enc1:<nonce_hex>:<ciphertext_hex>".
+//
+// Rows written before this change (or by no-key paths) keep their plaintext
+// value; readers accept both forms, so no destructive migration is needed.
+
+/// Prefix marking an encrypted envelope value.
+const ENC_PREFIX: &str = "enc1:";
+
+/// Encrypt a UTF-8 metadata value into its storage envelope.
+fn seal_meta_value(key: Option<&crate::secure_key::StorageKey>, plaintext: &str, aad: &[u8])
+    -> Result<String, StorageError>
+{
+    let Some(k) = key else { return Ok(plaintext.to_string()) };
+    let (nonce, ct) = seal_msg(k.as_bytes(), plaintext.as_bytes(), aad)?;
+    Ok(format!("{}{}:{}", ENC_PREFIX, hex::encode(nonce), hex::encode(ct)))
+}
+
+/// Decrypt a metadata value written by [`seal_meta_value`].
+/// Plaintext (legacy) values pass through unchanged.
+fn open_meta_value(key: Option<&crate::secure_key::StorageKey>, stored: &str, aad: &[u8])
+    -> Result<String, StorageError>
+{
+    let Some(rest) = stored.strip_prefix(ENC_PREFIX) else {
+        return Ok(stored.to_string());
+    };
+    let k = key.ok_or(StorageError::KeyNotFound)?;
+    let mut parts = rest.splitn(2, ':');
+    let nonce = parts.next().unwrap_or_default();
+    let ct = parts.next().unwrap_or_default();
+    let nonce = hex::decode(nonce).map_err(|_| StorageError::DecryptionFailed)?;
+    let ct = hex::decode(ct).map_err(|_| StorageError::DecryptionFailed)?;
+    let pt = open_msg(k.as_bytes(), &nonce, &ct, aad)
+        .map_err(|_| StorageError::DecryptionFailed)?;
+    String::from_utf8(pt).map_err(|_| StorageError::DecryptionFailed)
 }
 
 impl MessageStore {
