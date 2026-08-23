@@ -430,9 +430,9 @@ impl Session {
     /// in the invite's prekey bundle (H6). Whether it participates in DH4 is
     /// decided by the initiator's `used_opk` signal, so both sides always
     /// agree on the SK inputs:
-    /// - initiator signals an OPK we don't have â†’ handshake fails cleanly
+    /// - initiator signals an OPK we don't have → handshake fails cleanly
     ///   (SK would mismatch otherwise)
-    /// - initiator signals none â†’ responder must NOT apply its OPK either
+    /// - initiator signals none → responder must NOT apply its OPK either
     pub async fn handshake_as_responder_x3dh<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         stream: &mut S,
@@ -1387,7 +1387,7 @@ mod session_tests {
         assert_eq!(bob.tx_counter, 0);
         assert_eq!(bob.rx_high_water_mark, 0);
 
-        // â”€â”€ Direction 1: Alice â†’ Bob (first frame must NOT be rejected) â”€â”€
+        // â”€â”€ Direction 1: Alice → Bob (first frame must NOT be rejected) â”€â”€
         let (mut a2b_w, mut a2b_r) = tokio::io::duplex(65536);
         let msg_id = alice.send_text(&mut a2b_w, "hello bob").await.unwrap();
         let frame = crate::network::read_frame_impl(&mut a2b_r).await.unwrap();
@@ -1400,7 +1400,7 @@ mod session_tests {
             other => panic!("expected Text body, got {:?}", other),
         }
 
-        // â”€â”€ Direction 2: Bob â†’ Alice (his independent counter starts at 0) â”€â”€
+        // â”€â”€ Direction 2: Bob → Alice (his independent counter starts at 0) â”€â”€
         let (mut b2a_w, mut b2a_r) = tokio::io::duplex(65536);
         let reply_id = bob.send_text(&mut b2a_w, "hi alice").await.unwrap();
         let frame = crate::network::read_frame_impl(&mut b2a_r).await.unwrap();
