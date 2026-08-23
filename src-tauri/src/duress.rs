@@ -50,8 +50,10 @@ pub fn is_set(key_store: &KeyStore) -> bool {
 pub fn register(key_store: &KeyStore, passphrase: &str) -> Result<(), String> {
     let mut salt = [0u8; 16];
     {
-        use rand::RngCore;
-        rand::rngs::OsRng.fill_bytes(&mut salt);
+        // libsodium CSPRNG — same randomness source as every key in M2M.
+        use sodiumoxide::randombytes;
+        let bytes = randombytes::randombytes(16);
+        salt.copy_from_slice(&bytes);
     }
     let key = derive_storage_key_from_passphrase(passphrase, &salt)
         .map_err(|e| format!("duress hash derivation failed: {e}"))?;
