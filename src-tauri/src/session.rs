@@ -363,6 +363,10 @@ impl Session {
             signature,
             candidates: local_candidates,
         };
+        let init_bytes = protocol::serialize(&init)?;
+        network::write_frame(stream, PacketType::X3DHHandshakeInit, &init_bytes).await?;
+
+        let resp_frame = network::read_frame(stream).await?;
         if resp_frame.packet_type != PacketType::X3DHHandshakeResponse {
             return Err(SessionError::HandshakeFailed(format!(
                 "expected X3DHHandshakeResponse, got {:?}", resp_frame.packet_type
