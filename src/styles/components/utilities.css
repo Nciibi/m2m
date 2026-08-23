@@ -104,24 +104,33 @@
 .vault-icon--idle { animation: pulseRing 3s ease infinite; }
 
 .vault-form {
-  display: flex; flex-direction: column; gap: var(--space-sm);
-  width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; gap: var(--space-md);
+  width: 100%; max-width: 400px;
+  margin-top: var(--space-lg);
 }
 .vault-form--shake { animation: shake 0.4s var(--ease-out-expo); }
 .vault-error {
   color: var(--color-danger); font-size: var(--text-sm);
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
   background: var(--color-danger-bg);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: var(--radius-sm);
   animation: shake 0.4s var(--ease-out-expo);
 }
-.vault-input-group { display: flex; flex-direction: column; gap: var(--space-sm); width: 100%; }
+.vault-title { font-size: var(--text-2xl) !important; font-weight: var(--font-weight-bold) !important; }
+.vault-desc { font-size: var(--text-base) !important; line-height: 1.6 !important; max-width: 340px; }
+.vault-field { display: flex; flex-direction: column; gap: var(--space-xs); }
+.vault-field__label {
+  font-size: var(--text-sm); font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+.vault-input-group { display: flex; flex-direction: column; gap: var(--space-md); width: 100%; }
 .vault-input-wrap { position: relative; width: 100%; }
-.vault-input-wrap .input-wrap > input { padding-right: 100px; }
+/* Only inputs that carry inline actions (paste/eye) need the wide right pad. */
+.vault-input-wrap:has(.vault-input-actions) .input-wrap > input { padding-right: 104px; }
 .vault-input-actions {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  display: flex; align-items: center; gap: 4px; z-index: 2;
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: var(--space-xxs); z-index: 2;
 }
 .vault-paste-btn {
   padding: 4px 8px; font-size: 0.65rem; font-weight: 500;
