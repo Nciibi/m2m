@@ -1719,60 +1719,68 @@ pub fn spawn_receive_loop(
                     }
                 }
                 PacketType::MessageEdit => {
-                    let conns = state.connections.read().await;
-                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
-                        let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
-                            Ok(plaintext) => {
-                                if let Ok(edit) = crate::protocol::deserialize::<crate::protocol::MessageEditData>(&plaintext) {
-                                    // Mirror the send-side size cap on receive (H4).
-                                    if edit.new_content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
-                                        tracing::warn!(peer = %peer_key_hex, "rejected oversized message edit");
-                                        continue;
-                                    }
-                                    // Validate + update storage with a fresh per-message
-                                    // content key (crypto-shredding, H7), scoped to the
-                                    // sender's conversation and 'received' messages only
-                                    // (H4) — a peer can never rewrite our own sent messages
-                                    // or rows in unrelated conversations.
-                                    let mut accepted = false;
-                                    {
-                                        let sk = state.storage_key.read().await;
-                                        if let Some(key) = sk.as_ref() {
-                                            let ms = state.message_store.lock().await;
-                                            if let Some(ref store) = *ms {
-                                                match store.edit_message_secure(&edit.message_id, &peer_key_hex, "received", edit.new_content.as_bytes(), key) {
-                                                    Ok(true) => accepted = true,
-                                                    Ok(false) => {
-                                                        tracing::warn!(
-                                                            peer = %peer_key_hex,
-                                                            "edit for message outside sender conversation — rejected"
-                                                        );
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::warn!(error = %e, "failed to persist edit");
-                                                    }
+                    // Decrypt under the per-peer lock only (head-of-line fix).
+                    let decrypted = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(conn_arc) => {
+                                let mut conn = conn_arc.lock().await;
+                                Some(conn.session.decrypt_typed_frame(&frame))
+                            }
+                            None => None,
+                        }
+                    };
+                    match decrypted {
+                        Some(Ok(plaintext)) => {
+                            if let Ok(edit) = crate::protocol::deserialize::<crate::protocol::MessageEditData>(&plaintext) {
+                                // Mirror the send-side size cap on receive (H4).
+                                if edit.new_content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
+                                    tracing::warn!(peer = %peer_key_hex, "rejected oversized message edit");
+                                    continue;
+                                }
+                                // Validate + update storage with a fresh per-message
+                                // content key (crypto-shredding, H7), scoped to the
+                                // sender's conversation and 'received' messages only
+                                // (H4) — a peer can never rewrite our own sent messages
+                                // or rows in unrelated conversations.
+                                let mut accepted = false;
+                                {
+                                    let sk = state.storage_key.read().await;
+                                    if let Some(key) = sk.as_ref() {
+                                        let ms = state.message_store.lock().await;
+                                        if let Some(ref store) = *ms {
+                                            match store.edit_message_secure(&edit.message_id, &peer_key_hex, "received", edit.new_content.as_bytes(), key) {
+                                                Ok(true) => accepted = true,
+                                                Ok(false) => {
+                                                    tracing::warn!(
+                                                        peer = %peer_key_hex,
+                                                        "edit for message outside sender conversation — rejected"
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, "failed to persist edit");
                                                 }
                                             }
                                         }
                                     }
-                                    if !accepted {
-                                        continue;
-                                    }
-
-                                    // Notify frontend
-                                    let _ = app_handle.emit("m2m://edit", serde_json::json!({
-                                        "message_id": edit.message_id,
-                                        "new_content": edit.new_content,
-                                        "edited_at": edit.edited_at,
-                                        "peer_key_hex": peer_key_hex,
-                                    }));
                                 }
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, "failed to decrypt message edit");
+                                if !accepted {
+                                    continue;
+                                }
+
+                                // Notify frontend
+                                let _ = app_handle.emit("m2m://edit", serde_json::json!({
+                                    "message_id": edit.message_id,
+                                    "new_content": edit.new_content,
+                                    "edited_at": edit.edited_at,
+                                    "peer_key_hex": peer_key_hex,
+                                }));
                             }
                         }
+                        Some(Err(e)) => {
+                            tracing::warn!(error = %e, "failed to decrypt message edit");
+                        }
+                        None => {}
                     }
                 }
                 PacketType::MessageDelete => {
