@@ -167,15 +167,18 @@ impl Session {
             ));
         }
 
-        // Verify peer's signature on their ephemeral key
-        let mut peer_sign_data = Vec::new();
-        peer_sign_data.extend_from_slice(&response.ephemeral_pub);
-        peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes());
+    // Verify peer's signature on their ephemeral key
+    let mut peer_sign_data = Vec::new();
+    peer_sign_data.extend_from_slice(&response.ephemeral_pub);
+    peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes());   // timestamp used ONLY here
 
-        crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
-            .map_err(|_| {
-                SessionError::HandshakeFailed("peer signature invalid".to_string())
-            })?;
+    crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
+        .map_err(|_| {
+            SessionError::HandshakeFailed("peer signature invalid".to_string())
+        })?;
+
+    // Replay protection (M1): reject stale/future timestamps.
+    validate_handshake_timestamp(response.timestamp)?;
 
         // Derive session keys (we are the client/initiator)
         let session_keys = ephemeral
