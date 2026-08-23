@@ -16,6 +16,19 @@ use zeroize::Zeroize;
 use super::util;
 use super::{ConnectionEvent, ConnectionInfo, FamilyMember, IdentityInfo, VaultStatus};
 
+/// Run Argon2id key derivation on the blocking thread pool so the ~100ms+
+/// of CPU work never stalls the async runtime (M5).
+async fn derive_key_blocking(
+    passphrase: String,
+    salt: Vec<u8>,
+) -> Result<crate::secure_key::StorageKey, String> {
+    tokio::task::spawn_blocking(move || {
+        util::derive_storage_key_from_passphrase(&passphrase, &salt)
+    })
+    .await
+    .map_err(|e| format!("key derivation task failed: {e}"))?
+}
+
 /// Initialize the crypto library and check for existing identity.
 /// Does NOT decrypt the private key — that is deferred to `unlock_vault`.
 #[tauri::command]
