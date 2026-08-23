@@ -2199,7 +2199,11 @@ impl TransferStore {
 
     /// Get a single transfer by ID.
     #[cfg(test)]
-    pub fn get_transfer(&self, transfer_id: &str) -> Result<Option<StoredTransfer>, StorageError> {
+    pub fn get_transfer(
+        &self,
+        transfer_id: &str,
+        key: Option<&crate::secure_key::StorageKey>,
+    ) -> Result<Option<StoredTransfer>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, peer_key_hex, filename, total_size, direction, state,
                     chunks_completed, chunks_total, created_at, completed_at,
@@ -2223,7 +2227,16 @@ impl TransferStore {
             })
         });
         match result {
-            Ok(t) => Ok(Some(t)),
+            Ok(mut t) => {
+                t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER)?;
+                if let Some(p) = &t.local_path {
+                    t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER)?);
+                }
+                if let Some(e) = &t.error {
+                    t.error = Some(open_meta_value(key, e, AAD_TRANSFER)?);
+                }
+                Ok(Some(t))
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(StorageError::Database(e)),
         }
