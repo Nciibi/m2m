@@ -940,11 +940,11 @@ pub(crate) async fn send_own_bundle(    state: Arc<AppState>,
 async fn handle_incoming_text(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
-    peer_key_hex: &String,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 PacketType::EncryptedMessage => {
                     // Decrypt under the per-peer connection lock ONLY; both
@@ -956,7 +956,7 @@ async fn handle_incoming_text(
                         match conns.get(&peer_key_hex) {
                             Some(conn_arc) => {
                                 let mut conn = conn_arc.lock().await;
-                                Some(conn.session.decrypt_message(&frame))
+                                Some(conn.session.decrypt_message(frame))
                             }
                             None => None,
                         }
@@ -1035,17 +1035,17 @@ async fn handle_incoming_text(
 async fn handle_file_transfer_packet(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
-    peer_key_hex: &String,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 PacketType::FileTransferRequest => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(req) = protocol::deserialize::<FileTransferRequestData>(&plaintext) {
                                     let total_chunks = req.total_chunks;
@@ -1155,7 +1155,7 @@ async fn handle_file_transfer_packet(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(chunk) = protocol::deserialize::<protocol::FileTransferChunkData>(&plaintext) {
                                     let mut transfers = state.incoming_transfers.write().await;
@@ -1241,7 +1241,7 @@ async fn handle_file_transfer_packet(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(complete) = protocol::deserialize::<protocol::FileTransferCompleteData>(&plaintext) {
                                     let mut transfers = state.incoming_transfers.write().await;
@@ -1349,7 +1349,7 @@ async fn handle_file_transfer_packet(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
                                     if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
@@ -1381,7 +1381,7 @@ async fn handle_file_transfer_packet(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        if let Ok(plaintext) = conn.session.decrypt_typed_frame(&frame) {
+                        if let Ok(plaintext) = conn.session.decrypt_typed_frame(frame) {
                             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
                                 if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
                                     state.outgoing_transfers.write().await.remove(tid);
@@ -1396,7 +1396,7 @@ async fn handle_file_transfer_packet(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(ack) = protocol::deserialize::<protocol::FileTransferChunkAckData>(&plaintext) {
                                     let mut outgoing = state.outgoing_transfers.write().await;
@@ -1430,7 +1430,7 @@ async fn handle_file_transfer_packet(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(cancel) = protocol::deserialize::<protocol::FileTransferCancelData>(&plaintext) {
                                     let tid = cancel.transfer_id;
@@ -1482,12 +1482,12 @@ async fn handle_file_transfer_packet(
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 async fn handle_heartbeat_frame(
     state: &Arc<AppState>,
-    app_handle: &AppHandle,
-    peer_key_hex: &String,
+    _app_handle: &AppHandle,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 PacketType::Heartbeat => {
                     // Encrypted heartbeat: decrypt first (forged/garbage
@@ -1496,7 +1496,7 @@ async fn handle_heartbeat_frame(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(_) => {
                                 let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
                                 if let Err(e) = session.send_heartbeat_ack(write_half).await {
@@ -1518,7 +1518,7 @@ async fn handle_heartbeat_frame(
                         match conns.get(&peer_key_hex) {
                             Some(conn_arc) => {
                                 let mut conn = conn_arc.lock().await;
-                                Some(conn.session.decrypt_typed_frame(&frame))
+                                Some(conn.session.decrypt_typed_frame(frame))
                             }
                             None => None,
                         }
@@ -1545,11 +1545,11 @@ async fn handle_heartbeat_frame(
 async fn handle_conversation_meta(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
-    peer_key_hex: &String,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 PacketType::ConversationMeta => {
                     // Decrypt under the per-peer lock only; SQLite writes run
@@ -1559,7 +1559,7 @@ async fn handle_conversation_meta(
                         match conns.get(&peer_key_hex) {
                             Some(conn_arc) => {
                                 let mut conn = conn_arc.lock().await;
-                                Some(conn.session.decrypt_typed_frame(&frame))
+                                Some(conn.session.decrypt_typed_frame(frame))
                             }
                             None => None,
                         }
@@ -1605,11 +1605,11 @@ async fn handle_conversation_meta(
 async fn handle_message_update_frame(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
-    peer_key_hex: &String,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 PacketType::MessageReaction => {
                     // Decrypt under the per-peer lock only (head-of-line fix).
@@ -1618,7 +1618,7 @@ async fn handle_message_update_frame(
                         match conns.get(&peer_key_hex) {
                             Some(conn_arc) => {
                                 let mut conn = conn_arc.lock().await;
-                                Some(conn.session.decrypt_typed_frame(&frame))
+                                Some(conn.session.decrypt_typed_frame(frame))
                             }
                             None => None,
                         }
@@ -1681,7 +1681,7 @@ async fn handle_message_update_frame(
                         match conns.get(&peer_key_hex) {
                             Some(conn_arc) => {
                                 let mut conn = conn_arc.lock().await;
-                                Some(conn.session.decrypt_typed_frame(&frame))
+                                Some(conn.session.decrypt_typed_frame(frame))
                             }
                             None => None,
                         }
@@ -1746,7 +1746,7 @@ async fn handle_message_update_frame(
                         match conns.get(&peer_key_hex) {
                             Some(conn_arc) => {
                                 let mut conn = conn_arc.lock().await;
-                                Some(conn.session.decrypt_typed_frame(&frame))
+                                Some(conn.session.decrypt_typed_frame(frame))
                             }
                             None => None,
                         }
@@ -1797,18 +1797,18 @@ async fn handle_message_update_frame(
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 async fn handle_sync_frame(
     state: &Arc<AppState>,
-    app_handle: &AppHandle,
-    peer_key_hex: &String,
+    _app_handle: &AppHandle,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 PacketType::SyncRequest => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(sync) = crate::protocol::deserialize::<crate::protocol::SyncRequestData>(&plaintext) {
                                     // Load sent messages for this peer since the given timestamp,
@@ -1863,7 +1863,7 @@ async fn handle_sync_frame(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(info) = crate::protocol::deserialize::<crate::protocol::SyncDeviceInfo>(&plaintext) {
                                     // Drop conn lock before calling sync handler which may re-acquire it
@@ -1888,7 +1888,7 @@ async fn handle_sync_frame(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(payload) = crate::protocol::deserialize::<crate::protocol::SyncPayload>(&plaintext) {
                                     drop(conn);
@@ -1915,18 +1915,18 @@ async fn handle_sync_frame(
 async fn handle_group_frame(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
-    peer_key_hex: &String,
+    peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
-    let peer_key_hex = peer_key_hex.clone();
+    let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
                 // ─── Group Chat (Phase 3) ───
                 PacketType::GroupCreate => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(create) = protocol::deserialize::<protocol::GroupCreateData>(&plaintext) {
                                     tracing::info!(group = %create.group_id, "received group create");
@@ -2002,7 +2002,7 @@ async fn handle_group_frame(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(invite) = protocol::deserialize::<protocol::GroupInviteData>(&plaintext) {
                                     tracing::info!(group = %invite.group_id, "received group invite");
@@ -2089,7 +2089,7 @@ async fn handle_group_frame(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(sk_data) = protocol::deserialize::<protocol::GroupSenderKeyData>(&plaintext) {
                                     // Capture the transport peer's long-term identity key
@@ -2134,7 +2134,7 @@ async fn handle_group_frame(
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(group_msg) = protocol::deserialize::<protocol::GroupEncryptedMessageData>(&plaintext) {
                                     let gid = group_msg.group_id.clone();
@@ -2204,7 +2204,7 @@ drop(conns);
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(info) = protocol::deserialize::<protocol::GroupInfoData>(&plaintext) {
                                     let new_name = info.new_name.clone();
@@ -2257,7 +2257,7 @@ drop(conns);
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(remove) = protocol::deserialize::<protocol::GroupRemoveData>(&plaintext) {
                                     let removed = remove.removed_peer_key_hex.clone();
@@ -2343,7 +2343,7 @@ drop(conns);
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
                         let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
+                        match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(leave) = protocol::deserialize::<protocol::GroupLeaveData>(&plaintext) {
                                     let leaving = leave.leaving_peer_key_hex.clone();
