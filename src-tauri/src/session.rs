@@ -461,8 +461,28 @@ impl Session {
         // Replay protection (M1): reject stale/future timestamps.
         validate_handshake_timestamp(init.timestamp)?;
 
+        // ── Resolve DH4 participation deterministically (H6) ──
+        let opk_for_handshake: Option<&EphemeralKeypair> = match (&init.used_opk, one_time_prekey)
+        {
+            (Some(signaled_pub), Some(opk)) => {
+                if signaled_pub != &opk.public_key_bytes() {
+                    return Err(SessionError::HandshakeFailed(
+                        "initiator used a different one-time prekey than advertised".to_string(),
+                    ));
+                }
+                Some(opk)
+            }
+            (Some(_), None) => {
+                return Err(SessionError::HandshakeFailed(
+                    "initiator used a one-time prekey we do not hold — invite may be stale"
+                        .to_string(),
+                ));
+            }
+            (None, _) => None,
+        };
+
         let x3dh_out = crate::crypto::x3dh_respond(
-            x25519_identity, signed_prekey, None,
+            x25519_identity, signed_prekey, opk_for_handshake,
             &init.ephemeral_pub, &init.x25519_identity_pub,
         ).map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
 
