@@ -245,6 +245,49 @@ export default function SettingsView() {
               </label>
               <span className="settings-hint">Prevent window from appearing in screenshots</span>
             </div>
+            {captureCapability && (
+              <div className="settings-row">
+                <span
+                  className="settings-hint"
+                  style={{
+                    color: captureCapability.level === "unsupported" ? "var(--color-danger)" : "var(--color-text-muted)",
+                    maxWidth: "100%",
+                  }}
+                  role="note"
+                >
+                  {captureCapability.level === "full" ? "✔ Full protection on this platform — " : captureCapability.level === "partial" ? "△ Partial protection on this platform — " : "✖ Not effective on this platform — "}
+                  {captureCapability.note}
+                </span>
+              </div>
+            )}
+
+            <div className="settings-row">
+              <span className="settings-label">Capture Software Detection</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.capture_process_detection ?? false}
+                  onChange={handleCaptureDetectionToggle}
+                  aria-label="Toggle capture software detection"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">Warn while OBS, Snipping Tool, and other recorders are running (stops nothing — detection only)</span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Blur When Unfocused</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.blur_on_focus_loss ?? false}
+                  onChange={handleBlurOnFocusLossToggle}
+                  aria-label="Toggle blur when window loses focus"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">Blur all content whenever the window loses focus or is hidden</span>
+            </div>
 
             <div className="settings-row">
               <span className="settings-label">Clipboard Auto-Clear</span>
