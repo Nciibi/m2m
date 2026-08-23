@@ -2066,7 +2066,7 @@ mod session_tests {
 
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
         ).await.unwrap();
         assert_eq!(bob_session.state, ConnectionState::Established);
         assert!(bob_session.ratchet.is_some(), "Bob should have DR after X3DH");
@@ -2109,7 +2109,7 @@ mod session_tests {
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
         ).await.unwrap();
 
         // Bob reads the file request — typed frame via DR path
@@ -2148,7 +2148,7 @@ mod session_tests {
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
         ).await.unwrap();
 
         let meta_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
@@ -2188,7 +2188,7 @@ mod session_tests {
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
         ).await.unwrap();
 
         // Verify all 105 messages decrypt correctly (including across DH ratchet)
@@ -2229,7 +2229,7 @@ mod session_tests {
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
         bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, &init_frame, vec![],
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
         ).await.unwrap();
 
         // Read both messages
