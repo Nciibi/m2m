@@ -72,6 +72,28 @@ pub fn clear(key_store: &KeyStore) -> Result<(), String> {
     Ok(())
 }
 
+/// Read the stored verifier: (hash hex, salt bytes).
+/// `None` when no valid registration exists.
+pub fn read_verifier(key_store: &KeyStore) -> Option<(String, Vec<u8>)> {
+    let hash = key_store.get_meta(META_DURESS_HASH).ok()??;
+    if hash.len() != 64 {
+        return None;
+    }
+    let salt_hex = key_store.get_meta(META_DURESS_SALT).ok()??;
+    let salt = match hex::decode(&salt_hex) {
+        Ok(s) if s.len() == 16 => s,
+        _ => return None,
+    };
+    Some((hash, salt))
+}
+
+/// Derive the verifier hex for an entered passphrase against a salt.
+/// Runs full Argon2id — call from a blocking thread.
+pub fn derive_verifier_hex(entered: &str, salt: &[u8]) -> Option<String> {
+    let key = derive_storage_key_from_passphrase(entered, salt).ok()?;
+    Some(hex::encode(key.as_bytes()))
+}
+
 /// Constant-time equality for equal-length byte slices.
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
@@ -84,32 +106,19 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Check whether `entered` IS the registered duress passphrase.
-///
-/// Runs Argon2id (expensive) — call only after the cheap `is_set` check.
-/// Returns false on any malformed state; NEVER errors, so a probing
-/// attacker learns nothing from error shapes.
+/// Convenience check for NON-async contexts (tests): reads the verifier,
+/// derives, compares in constant time. Returns false on any malformed
+/// state; NEVER errors, so a probing attacker learns nothing from error
+/// shapes. The unlock command composes [`read_verifier`] +
+/// [`derive_verifier_hex`] itself to avoid blocking under a held guard.
 pub fn verify(key_store: &KeyStore, entered: &str) -> bool {
-    let stored_hash_hex = match key_store.get_meta(META_DURESS_HASH) {
-        Ok(Some(h)) if h.len() == 64 => h,
-        _ => return false,
+    let Some((stored_hash_hex, salt)) = read_verifier(key_store) else {
+        return false;
     };
-    let salt = match key_store.get_meta(META_DURESS_SALT) {
-        Ok(Some(s)) => match hex::decode(&s) {
-            Ok(bytes) if bytes.len() == 16 => bytes,
-            _ => return false,
-        },
-        _ => return false,
+    let Some(computed) = derive_verifier_hex(entered, &salt) else {
+        return false;
     };
-    let computed = match derive_storage_key_from_passphrase(entered, &salt) {
-        Ok(k) => *k.as_bytes(),
-        Err(_) => return false,
-    };
-    let stored = match hex::decode(&stored_hash_hex) {
-        Ok(h) => h,
-        Err(_) => return false,
-    };
-    ct_eq(&computed, &stored)
+    ct_eq(computed.as_bytes(), stored_hash_hex.as_bytes())
 }
 
 #[cfg(test)]
