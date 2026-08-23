@@ -240,7 +240,7 @@ pub async fn unlock_vault(
             sk_bytes.zeroize();
 
             // Derive new key and re-encrypt
-            let new_key = derive_key_blocking(passphrase.clone(), pub_bytes.clone()).await?;
+            let new_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
             let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
             let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
