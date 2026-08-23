@@ -475,6 +475,18 @@ impl AppState {
         }
     }
 
+    /// Air-gap enforcement: refuse internet-facing operations when
+    /// air-gap mode is enabled. LAN-only listening/connecting still works;
+    /// what's blocked is anything that reveals your address to, or derives
+    /// it from, the wider internet (STUN, UPnP/NAT-PMP, relay registration,
+    /// DHT announce, Tor/portal checks).
+    pub async fn ensure_not_air_gapped(&self) -> Result<(), String> {
+        if *self.security_config.read().await.air_gap_mode {
+            return Err("air-gap mode is enabled — this internet-facing operation is blocked".to_string());
+        }
+        Ok(())
+    }
+
     /// Ensure the message store is opened (lazy init).
     /// Called on first message load/send, not during vault unlock.
     pub async fn ensure_message_store(&self, data_dir: &str) -> Result<(), String> {
