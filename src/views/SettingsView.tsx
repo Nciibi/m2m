@@ -21,7 +21,7 @@ export default function SettingsView() {
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
     securityConfig,
     handleScreenCaptureToggle, handleClipboardClearSecsChange,
-    handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
+    handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
     scheduleClipboardClear,
   } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
