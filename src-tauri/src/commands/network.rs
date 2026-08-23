@@ -459,6 +459,54 @@ async fn handle_incoming_connection(
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();
 
+    // ── Contact allowlist gate (H5) ──
+    // Runs AFTER the handshake (peer_identity_pub is now signature-authenticated)
+    // and BEFORE any persistence: a stranger must not be upserted into the
+    // key store merely by connecting, and must not reach the message
+    // dispatcher when the allowlist is enabled.
+    {
+        let require_known = state.security_config.read().await.require_known_contact;
+        if !contact_gate_allows(require_known, false, false) {
+            // Only consult the store when the gate can actually reject.
+            let peer_key_bytes = match util::decode_peer_key(&peer_key_hex) {
+                Ok(k) => k,
+                Err(_) => {
+                    tracing::warn!(peer = %peer_key_hex, "gate check skipped: malformed peer key");
+                    let _ = network::send_error(
+                        &mut stream,
+                        protocol::ErrorCode::HandshakeFailed,
+                        "connection rejected",
+                    ).await;
+                    return;
+                }
+            };
+            let known = {
+                let ks = state.key_store.lock().await;
+                match ks.as_ref() {
+                    Some(store) => {
+                        let family = store.is_family_member(&peer_key_bytes).unwrap_or(false);
+                        let known_peer = store.is_known_peer(&peer_key_bytes).unwrap_or(false);
+                        (family, known_peer)
+                    }
+                    None => (false, false),
+                }
+            };
+            if !contact_gate_allows(require_known, known.0, known.1) {
+                tracing::warn!(
+                    peer = %peer_key_hex,
+                    fingerprint = %peer_fingerprint,
+                    "incoming connection rejected: unknown contact (allowlist enabled)"
+                );
+                let _ = network::send_error(
+                    &mut stream,
+                    protocol::ErrorCode::HandshakeFailed,
+                    "unknown contact — connection rejected",
+                ).await;
+                return;
+            }
+        }
+    }
+
     // Split the stream for the receive loop
     let (read_half, write_half) = stream.into_split();
 
