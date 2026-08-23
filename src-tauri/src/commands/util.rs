@@ -503,10 +503,12 @@ mod truncate_tests {
     /// Emoji are 4-byte codepoints: byte 80 lands mid-codepoint.
     #[test]
     fn test_emoji_boundary_does_not_panic() {
-        let emoji = "🔒".repeat(50); // 200 bytes
+        let emoji = "🔒".repeat(100); // 400 bytes, 100 chars
         let out = truncate_utf8(&emoji, 80, "...");
         assert_eq!(out.chars().count(), 80);
         assert!(out.ends_with("..."));
+        // No split codepoints: every char except the ASCII dots is the emoji.
+        assert_eq!(out.chars().filter(|c| *c != '.').count(), 77);
     }
 
     /// Short input passes through untouched, no suffix appended.
