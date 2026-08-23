@@ -1717,12 +1717,14 @@ pub fn spawn_receive_loop(
                                 }
                                 // Store locally, scoped to the sender's conversation (H4):
                                 // reactions to messages in other conversations are dropped.
+                                let sk = state.storage_key.read().await;
                                 let ms = state.message_store.lock().await;
                                 let mut accepted = false;
                                 if let Some(ref store) = *ms {
                                     match store.upsert_reaction(
                                         &rxn.message_id, &rxn.reaction,
                                         &peer_key_hex, rxn.remove, &peer_key_hex,
+                                        sk.as_ref(),
                                     ) {
                                         Ok(true) => accepted = true,
                                         Ok(false) => {
