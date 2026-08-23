@@ -2092,6 +2092,7 @@ drop(conns);
                                             })
                                             .unwrap_or(false)
                                     };
+                                    let peer_identity_pub = conn.session.peer_identity_pub;
                                     drop(conn);
         drop(conns);
 
@@ -2125,15 +2126,21 @@ drop(conns);
                                             let _ = store.remove_group_member(&gid, &removed);
                                         }
 
-                                        // Install the remover's rotated key if present AND valid.
+                                        // Install the remover's rotated key if present AND validly
+                                        // signed by the remover's identity key (H2).
                                         if let (Some(sk_data), Some(our)) = (&remove.new_sender_key, &our_peer_key_hex) {
-                                            if let Err(e) = gm.handle_sender_key(sk_data, our, &{
-                                                // The embedded bundle was signed by the REMOVER
-                                                // (transport peer), verified below with their pub key.
-                                                [0u8; 32] // placeholder replaced below
-                                            }) {
-                                                tracing::warn!(error = %e, "failed to install rotated sender key");
+                                            match gm.handle_sender_key(sk_data, our, &peer_identity_pub) {
+                                                Ok(_) => {}
+                                                Err(e) => tracing::warn!(error = %e, "rejected rotated sender key"),
                                             }
+                                        }
+                                        drop(gm);
+
+                                        // Forward secrecy: the removed member still knows our OLD
+                                        // chain key, so rotate OUR OWN sending chain too and
+                                        // announce the new one to remaining members.
+                                        if let Some(our) = our_peer_key_hex {
+                                            rotate_and_announce(state.clone(), &gid, &our).await.ok();
                                         }
                                     }
 
