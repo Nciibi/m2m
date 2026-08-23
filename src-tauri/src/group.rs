@@ -346,8 +346,12 @@ impl GroupManager {
     }
 
     /// Create a new group.
-    /// Returns the Group and a list of GroupSenderKeyData bundles to distribute
-    /// to each initial member (excluding self).
+    ///
+    /// Trust model v2: the admin generates ONLY their own sending chain and
+    /// signing key. Each member generates their own keys locally when they
+    /// receive the GroupCreate roster — the admin never holds or ships
+    /// member private keys. Returns one bundle per initial member (our own,
+    /// unsigned — caller signs with the long-term identity key).
     pub fn create_group(
         &mut self,
         group_id: String,
@@ -365,52 +369,11 @@ impl GroupManager {
 
         let mut group = Group::new(group_id.clone(), name, created_at, our_peer_key_hex.clone());
 
-        // For each initial member: add them and prepare their sender key bundle
         let mut bundles = Vec::with_capacity(initial_members.len());
+        let our_bundle = group.own_sender_bundle()?;
 
         for member_key_hex in initial_members {
-            // This member gets OUR sender key (so they can decrypt our messages)
-            let (_, their_initial_key) = generate_sender_key_pair();
-            let (their_signing_key, their_verification_key) = generate_sender_signing_keypair();
-
-            // Store THEIR receiver chain (so WE can decrypt THEIR messages)
-            group.store_receiver_key(member_key_hex, &their_initial_key, &their_verification_key);
-
-            // Build the bundle for THEM:
-            // - They get THEIR OWN signing key (so they can send)
-            // - They get OUR initial chain key + verification key (so they can decrypt our messages)
-            let our_init_key = group.our_initial_chain_key.as_ref().copied().ok_or("no our initial key")?;
-            let our_verify_key = group.our_verification_key.as_ref().copied().ok_or("no our verification key")?;
-
-            // Their own sender key bundle (signing key included — only for the recipient)
-            let their_own_bundle = GroupSenderKeyData {
-                group_id: group_id.clone(),
-                sender_peer_key_hex: member_key_hex.clone(),
-                chain_key: their_initial_key,
-                message_number: 0,
-                signing_key: Some(their_signing_key.to_vec()),
-                verification_key: their_verification_key,
-                signature: Vec::new(), // Filled in by the caller with identity key
-            };
-
-            // Our sender key bundle (no signing key — just receiver info for them)
-            let our_bundle = GroupSenderKeyData {
-                group_id: group_id.clone(),
-                sender_peer_key_hex: our_peer_key_hex.clone(),
-                chain_key: our_init_key,
-                message_number: 0,
-                signing_key: None,
-                verification_key: our_verify_key,
-                signature: Vec::new(),
-            };
-
-            // Actually: we send them TWO key bundles, but they go in the same
-            // GroupSenderKey packet. We'll use the sender_peer_key_hex pattern:
-            // The member receives their own sender key AND our sender key separately.
-            // For simplicity in the protocol, we send them as two separate 0x53 packets.
-
-            bundles.push((member_key_hex.clone(), their_own_bundle));
-            bundles.push((member_key_hex.clone(), our_bundle));
+            bundles.push((member_key_hex.clone(), our_bundle.clone()));
 
             // Add member
             group.members.push(GroupMember {
