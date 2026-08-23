@@ -2076,28 +2076,37 @@ impl TransferStore {
         direction: &str,
         state: &str,
         chunks_total: u32,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<(), StorageError> {
         let now = chrono::Utc::now().timestamp();
+        let filename_stored = seal_meta_value(key, filename, AAD_TRANSFER)?;
         self.conn.execute(
             "INSERT INTO transfers (id, peer_key_hex, filename, total_size, direction, state, chunks_total, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET
                 state = excluded.state,
                 chunks_total = excluded.chunks_total",
-            params![id, peer_key_hex, filename, total_size, direction, state, chunks_total, now],
+            params![id, peer_key_hex, filename_stored, total_size, direction, state, chunks_total, now],
         )?;
         Ok(())
     }
 
     /// Update the transfer state.
+    ///
+    /// `error` text is encrypted at rest when `key` is provided.
     pub fn update_state(
         &self,
         transfer_id: &str,
         state: &str,
         completed_at: Option<i64>,
         error: Option<&str>,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<(), StorageError> {
-        match (completed_at, error) {
+        let error_stored = match error {
+            Some(e) => Some(seal_meta_value(key, e, AAD_TRANSFER)?),
+            None => None,
+        };
+        match (completed_at, error_stored) {
             (Some(at), Some(e)) => {
                 self.conn.execute(
                     "UPDATE transfers SET state = ?1, completed_at = ?2, error = ?3 WHERE id = ?4",
