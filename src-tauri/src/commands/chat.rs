@@ -111,7 +111,7 @@ pub async fn load_messages(
     let msg_ids: Vec<String> = stored.iter().map(|m| m.id.clone()).collect();
 
     // Load reactions for all messages at once
-    let all_reactions = store.get_reactions(&msg_ids)
+    let all_reactions = store.get_reactions(&msg_ids, Some(key))
         .unwrap_or_default();
 
     for m in stored {
