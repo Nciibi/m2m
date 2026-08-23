@@ -1381,12 +1381,25 @@ mod session_tests {
             other => panic!("expected Text body, got {:?}", other),
         }
 
-        // ── Replay protection still works within the session: re-sending
-        // an already-seen counter must be rejected. ──
-        let stale = crate::network::read_frame_impl(&mut a2b_r).await;
-        // No more frames pending — instead craft one by re-sending with a
-        // rewound counter is impossible from the API; verify watermark moved.
-        assert!(stale.is_err());
+        // ── Replay protection still works within the session: a frame with
+        // an already-seen counter must be rejected as a replay. ──
+        let stale_envelope = crate::protocol::EncryptedEnvelope {
+            nonce: vec![0u8; 24],
+            counter: 1, // already consumed by Bob's watermark
+            ciphertext: b"garbage".to_vec(),
+            dr_header: None,
+        };
+        let stale_bytes = protocol::serialize(&stale_envelope).unwrap();
+        let stale_frame = crate::network::RawFrame {
+            packet_type: PacketType::EncryptedMessage,
+            body: stale_bytes,
+        };
+        let err = bob.decrypt_message(&stale_frame).unwrap_err();
+        assert!(
+            matches!(err, SessionError::ReplayDetected { received: 1, expected: 2 }),
+            "expected ReplayDetected, got {err:?}"
+        );
+
         assert_eq!(bob.rx_high_water_mark, 1);
         assert_eq!(bob.tx_counter, 1);
         assert_eq!(alice.rx_high_water_mark, 1);
