@@ -1989,7 +1989,18 @@ drop(conns);
                                     // Decrypt inner group message
                                     let mut gm = state.group_manager.write().await;
                                     let decrypted = if let Some(group) = gm.get_group_mut(&gid) {
-                                        group.decrypt_message(&group_msg).ok()
+                                        match group.decrypt_message(&group_msg) {
+                                            Ok(content) => Some(content),
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    group = %gid,
+                                                    sender = %sender,
+                                                    error = %e,
+                                                    "group message rejected"
+                                                );
+                                                None
+                                            }
+                                        }
                                     } else {
                                         None
                                     };
