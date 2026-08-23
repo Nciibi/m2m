@@ -1267,14 +1267,22 @@ impl MessageStore {
         }
     }
 
-    /// Delete a conversation and all its messages.
+    /// Delete a conversation and all its messages, with crypto-shredding (H7).
     ///
-    /// Uses `secure_delete` to overwrite deleted data on disk.
-    /// Does NOT run `VACUUM` — that rebuilds the entire database file (O(db_size))
-    /// and should only be done as a periodic maintenance task, not per-deletion.
-    /// SQLite automatically marks freed pages for reuse.
+    /// Step 1 overwrites every per-message wrapped content key with zeros:
+    /// after this, any ciphertext remnants (WAL frames, freed pages, disk
+    /// slack) are undecryptable even with full knowledge of the vault key.
+    /// Step 2 truncates the WAL so shredded key cells cannot survive in
+    /// `messages.db-wal`. Step 3 deletes the rows (`secure_delete` ON makes
+    /// SQLite zero freed in-page content). A final checkpoint flushes the
+    /// second round of changes.
     pub fn delete_conversation(&self, conversation_id: &str) -> Result<(), StorageError> {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
+        self.conn.execute(
+            "UPDATE messages SET content_key_wrapped = ?2 WHERE conversation_id = ?1 AND content_key_wrapped IS NOT NULL",
+            params![conversation_id, vec![0u8; WRAPPED_CEK_LEN]],
+        )?;
+        self.wal_checkpoint_truncate()?;
         self.conn.execute(
             "DELETE FROM messages WHERE conversation_id = ?1",
             params![conversation_id],
@@ -1283,6 +1291,16 @@ impl MessageStore {
             "DELETE FROM conversations WHERE id = ?1",
             params![conversation_id],
         )?;
+        self.wal_checkpoint_truncate()?;
+        Ok(())
+    }
+
+    /// Flush and truncate the write-ahead log so previously-modified pages
+    /// cannot linger in `messages.db-wal` (H7 companion to secure_delete).
+    fn wal_checkpoint_truncate(&self) -> Result<(), StorageError> {
+        self.conn
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get::<_, i64>(0))
+            .map_err(StorageError::Database)?;
         Ok(())
     }
 
