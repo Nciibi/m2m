@@ -786,8 +786,7 @@ pub async fn get_listen_address(
 /// and emits Tauri events for the React frontend.
 /// Build, sign, and send OUR OWN sender-key bundle for `group_id` to
 /// `target_peer` over its pairwise session (H2 trust model v2).
-pub(crate) async fn send_own_bundle(
-    state: Arc<AppState>,
+pub(crate) async fn send_own_bundle(    state: Arc<AppState>,
     group_id: &str,
     target_peer: &str,
     our_peer_key_hex: &str,
