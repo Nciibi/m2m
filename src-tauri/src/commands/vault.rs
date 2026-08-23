@@ -196,7 +196,40 @@ pub async fn unlock_vault(
     } else {
         None
     };
+
+    // ─── Duress passphrase check (coercion resistance) ───
+    // Read the verifier BEFORE dropping the store; the expensive Argon2id
+    // runs afterwards without holding the !Send guard.
+    let duress_verifier: Option<(String, Vec<u8>)> =
+        match (
+            key_store.get_meta(crate::duress::META_DURESS_HASH).ok().flatten(),
+            key_store.get_meta(crate::duress::META_DURESS_SALT).ok().flatten(),
+        ) {
+            (Some(h), Some(s)) if h.len() == 64 => match hex::decode(&s) {
+                Ok(salt) if salt.len() == 16 => Some((h, salt)),
+                _ => None,
+            },
+            _ => None,
+        };
     drop(ks_guard); // key_store is dead — .await is safe now
+
+    if let Some((stored_hash_hex, salt)) = duress_verifier {
+        let entered = passphrase.clone();
+        let derived_hex = tauri::async_runtime::spawn_blocking(move || {
+            util::derive_storage_key_from_passphrase(&entered, &salt)
+                .map(|k| hex::encode(k.as_bytes()))
+                .ok()
+        })
+        .await
+        .unwrap_or(None);
+        if derived_hex.as_deref() == Some(stored_hash_hex.as_str()) {
+            // Duress confirmed: destroy everything, then answer EXACTLY like
+            // a wrong passphrase ("No account matches this passphrase.").
+            tracing::warn!("DURESS passphrase entered — wiping vault");
+            execute_duress_wipe(&state).await;
+            return Err("No account matches this passphrase.".to_string());
+        }
+    }
 
     // ─── Phase 2: Async crypto + per-branch logic (no key_store held) ───
     let (keypair, x25519_kp, needs_store_x25519, legacy_store_data): (
