@@ -1797,7 +1797,7 @@ async fn handle_message_update_frame(
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 async fn handle_sync_frame(
     state: &Arc<AppState>,
-    _app_handle: &AppHandle,
+    app_handle: &AppHandle,
     peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
