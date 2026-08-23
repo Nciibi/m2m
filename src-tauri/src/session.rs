@@ -442,6 +442,9 @@ impl Session {
         crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature)
             .map_err(|_| SessionError::HandshakeFailed("initiator signature invalid".to_string()))?;
 
+        // Replay protection (M1): reject stale/future timestamps.
+        validate_handshake_timestamp(init.timestamp)?;
+
         let x3dh_out = crate::crypto::x3dh_respond(
             x25519_identity, signed_prekey, None,
             &init.ephemeral_pub, &init.x25519_identity_pub,
