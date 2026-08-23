@@ -79,6 +79,10 @@ libloading = "0.8"
 # Raw window handle for platform-specific window operations
 raw-window-handle = "0.6"
 
+# Process enumeration for capture-software detection (minimal feature set:
+# "system" covers the process list; everything else stays disabled)
+sysinfo = { version = "=0.33.1", default-features = false, features = ["system"] }
+
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
