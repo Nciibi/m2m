@@ -278,6 +278,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [securityConfig, addToast]);
 
+  const handleRequireKnownContactToggle = useCallback(async () => {
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false };
+    const newConfig: SecurityConfig = {
+      ...current,
+      require_known_contact: !current.require_known_contact,
+    };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+      addToast(
+        result.require_known_contact
+          ? "Known contacts only — strangers can no longer connect"
+          : "Known contacts only disabled — anyone may connect",
+        "info",
+      );
+    } catch (e) {
+      addToast("Failed to toggle known contacts only: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
   const handleLockVault = useCallback(async () => {
     try {
       await invoke("lock_vault");
