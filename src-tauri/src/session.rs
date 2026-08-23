@@ -1843,6 +1843,49 @@ mod session_tests {
             "expected HandshakeFailed for bad verification, got: {:?}", result);
     }
 
+    #[tokio::test]
+    async fn test_responder_rejects_stale_timestamp() {
+        init_crypto();
+        let (bob_identity, bob_x25519) = make_identities();
+        let (alice_identity, _alice_x25519) = make_identities();
+
+        // Replay simulation: signature is VALID but the timestamp is ancient.
+        let eph = EphemeralKeypair::generate();
+        let stale_ts = now_unix_secs().saturating_sub(HANDSHAKE_FRESHNESS_WINDOW_SECS * 10);
+        let mut sign_data = Vec::new();
+        sign_data.extend_from_slice(&eph.public_key_bytes());
+        sign_data.extend_from_slice(&stale_ts.to_be_bytes());
+        let signature = alice_identity.sign(&sign_data);
+
+        let init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: eph.public_key_bytes(),
+            identity_pub: alice_identity.public_key_bytes(),
+            x25519_identity_pub: [0u8; 32],
+            used_opk: None,
+            timestamp: stale_ts,
+            signature,
+            candidates: vec![],
+        };
+        let body = protocol::serialize(&init).unwrap();
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::HandshakeInit,
+            body,
+        };
+
+        let bob_xp = bob_x25519.public_key_bytes();
+        let mut session = Session::new();
+        let result = session.handshake_as_responder(
+            &mut tokio::io::sink(), &bob_identity, &frame, vec![], bob_xp,
+        ).await;
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(e)) if e.contains("timestamp")),
+            "expected stale-timestamp rejection, got: {:?}",
+            result
+        );
+    }
+
     // ═══════════════════════════════════════════════════════════
     // State machine edge cases
     // ═══════════════════════════════════════════════════════════
