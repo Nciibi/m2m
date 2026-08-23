@@ -55,13 +55,11 @@ jobs:
       working-directory: src-tauri
 
     - name: Cargo Audit (Rust dependency vulnerabilities)
-      continue-on-error: true
       uses: rustsec/audit-check@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Pnpm Audit (JS dependency vulnerabilities)
-      continue-on-error: true
       run: pnpm audit --audit-level=high
 
     - name: Run Frontend Tests
