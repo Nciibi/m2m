@@ -2167,7 +2167,11 @@ impl TransferStore {
 
     /// List all stored transfers, most recent first.
     #[cfg(test)]
-    pub fn list_transfers(&self, limit: i64) -> Result<Vec<StoredTransfer>, StorageError> {
+    pub fn list_transfers(
+        &self,
+        limit: i64,
+        key: Option<&crate::secure_key::StorageKey>,
+    ) -> Result<Vec<StoredTransfer>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, peer_key_hex, filename, total_size, direction, state,
                     chunks_completed, chunks_total, created_at, completed_at,
