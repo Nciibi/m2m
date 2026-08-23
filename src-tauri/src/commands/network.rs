@@ -1579,7 +1579,13 @@ pub fn spawn_receive_loop(
                     }
                 }
                 PacketType::HeartbeatAck => {
-                    // Heartbeat acknowledged — connection alive
+                    // Peer answered our probe — mark the connection live so
+                    // the heartbeat worker does not tear it down.
+                    let conns = state.connections.read().await;
+                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                        let mut conn = conn_arc.lock().await;
+                        conn.last_hb_ack = Some(std::time::Instant::now());
+                    }
                 }
                 PacketType::ConversationMeta => {
                     let conns = state.connections.read().await;
