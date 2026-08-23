@@ -2746,9 +2746,6 @@ mod session_tests {
         // 3. Bob's encrypted ack round-trips back through Alice's ratchet.
         bob_session.send_heartbeat_ack(&mut bob_io).await.unwrap();
 
-        let ack_frame = network::read_frame_impl(&mut alice_io).await.unwrap();
-        let mut alice_session = alice.await.unwrap().unwrap();
-        assert_eq!(ack_frame.packet_type, PacketType::HeartbeatAck);
-        assert!(alice_session.decrypt_typed_frame(&ack_frame).is_ok());
+        assert!(alice.await.unwrap().unwrap(), "encrypted ack must decrypt on initiator");
     }
 }
