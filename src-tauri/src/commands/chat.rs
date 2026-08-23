@@ -184,11 +184,7 @@ pub async fn list_conversations(
                         .ok()
                         .map(|bytes| {
                             let text = String::from_utf8_lossy(&bytes).to_string();
-                            if text.len() > 80 {
-                                format!("{}…", &text[..77])
-                            } else {
-                                text
-                            }
+                            util::truncate_utf8(&text, 80, "…")
                         })
                 })
         } else {
