@@ -209,10 +209,21 @@ pub async fn unlock_vault(
             // Case 2: Legacy migration
             tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
             let legacy_key = util::derive_storage_key(&pub_bytes);
-            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"")
-                .map_err(|e| format!("failed to decrypt legacy identity: {e}"))?;
+            // Historic writers used two different AADs: very old profiles
+            // were sealed with an empty AAD, while import_identity seals
+            // with AAD_KEY_STORE. Try both so every legacy profile and all
+            // imported identities can migrate (H1).
+            let sk_bytes = match util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"") {
+                Ok(sk) => sk,
+                Err(_) => util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, util::AAD_KEY_STORE)
+                    .map_err(|_| {
+                        "failed to decrypt legacy identity — data may be corrupted".to_string()
+                    })?,
+            };
             let mut sk_arr = [0u8; 64];
             sk_arr.copy_from_slice(&sk_bytes);
+            let mut sk_bytes = sk_bytes;
+            sk_bytes.zeroize();
 
             // Derive new key and re-encrypt
             let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
