@@ -32,7 +32,7 @@ export function useFocusBlur(enabled: boolean): boolean {
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
 
-    // Initial state: if the app starts hidden/背景, blur immediately.
+    // Initial state: if the app starts hidden, blur immediately.
     onVisibility();
 
     return () => {
