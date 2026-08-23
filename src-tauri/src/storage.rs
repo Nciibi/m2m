@@ -1447,8 +1447,37 @@ impl MessageStore {
             )?;
         } else {
             let now = chrono::Utc::now().timestamp();
+            // Deduplicate: each envelope uses a fresh random nonce, so
+            // identical reactions produce different stored forms and a SQL
+            // UNIQUE constraint cannot see them as equal. Remove prior rows
+            // from this peer on this message whose DECRYPTED reaction
+            // matches, then insert fresh.
+            let dup_rowids: Vec<i64> = {
+                let mut stmt = self.conn.prepare(
+                    "SELECT rowid, reaction FROM reactions
+                     WHERE message_id = ?1 AND peer_key_hex = ?2",
+                )?;
+                let rows = stmt.query_map(
+                    rusqlite::params![message_id, peer_key_hex],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )?;
+                rows.filter_map(|r| r.ok())
+                    .filter(|(_, stored)| {
+                        open_meta_value(key, stored, AAD_REACTION)
+                            .map(|plain| plain == reaction)
+                            .unwrap_or(false)
+                    })
+                    .map(|(rowid, _)| rowid)
+                    .collect()
+            };
+            for rowid in dup_rowids {
+                self.conn.execute(
+                    "DELETE FROM reactions WHERE rowid = ?1",
+                    rusqlite::params![rowid],
+                )?;
+            }
             self.conn.execute(
-                "INSERT OR IGNORE INTO reactions (message_id, reaction, peer_key_hex, created_at)
+                "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
                  VALUES (?1, ?2, ?3, ?4)",
                 rusqlite::params![message_id, stored, peer_key_hex, now],
             )?;
