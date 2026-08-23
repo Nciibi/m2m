@@ -18,12 +18,12 @@
 | 6 | ~~One-time prekeys (OPKs) fully implemented but never used; SPK never rotates~~ **✅ FIXED** — `create_invite` now generates an OPK alongside the SPK (both rotate together per invite); OPK public key embedded in the signed invite payload; initiator includes DH4 and signals `used_opk`; responder applies its OPK secret deterministically (mismatch/stale invites fail cleanly); covered by 3 H6 integration tests | `commands/network.rs:238`, `session.rs:451-454` | Weakened forward secrecy for first messages |
 
 ### Secondary fixes
-- Pre-auth STUN/candidate gathering in `handle_incoming_connection` = self-inflicted DoS amplification (`commands/network.rs:379-404`) — move post-handshake or cache
-- Release per-peer connection mutex before SQLite writes in receive loop (`network.rs:930-1008`) — head-of-line blocking
+- ~~Pre-auth STUN/candidate gathering in `handle_incoming_connection` = self-inflicted DoS amplification~~ **✅ FIXED** — responder now answers the handshake from the CACHED candidate set; a full STUN refresh only runs post-authentication and only when the cache is empty (`commands/network.rs::handle_incoming_connection`)
+- ~~Release per-peer connection mutex before SQLite writes in receive loop~~ **✅ FIXED** — `EncryptedMessage`, `ConversationMeta`, `MessageReaction`, `MessageEdit`, `MessageDelete` arms now decrypt under the per-peer lock only and drop both guards before persistence; slow disk I/O can no longer head-of-line block outbound sends to that peer
 - Encrypt transfers.db / family contacts / reactions metadata, or document as intentionally plaintext
-- Heartbeat timeout documented but never implemented (`HeartbeatAck` is a no-op arm, `network.rs:1451-1453`)
-- Handshake signatures don't cover `candidates` (`session.rs:127-129`) — MITM can poison reconnect targets
-- DHT `parse_node_response` hardcodes IPv4 while announce supports IPv6 (`dht.rs:315 vs 265`)
+- ~~Heartbeat timeout documented but never implemented~~ **✅ FIXED** — heartbeat worker polls at half the ack timeout, tracks `last_hb_sent`/`last_hb_ack` per connection (`state.rs::PeerConnection`); an unanswered probe tears the connection down within one timeout window (reconnect info saved + disconnect event emitted); acks recorded in the receive loop
+- ~~Handshake signatures don't cover `candidates`~~ **✅ FIXED** — all four handshake paths (legacy + X3DH × initiator + responder) fold a canonical length-prefixed encoding of the candidate list into the signed data via `append_candidates_to_sign_data`; candidate tampering (reconnect-target poisoning) now invalidates the signature; regression-tested
+- ~~DHT `parse_node_response` hardcodes IPv4 while announce supports IPv6~~ **✅ FIXED** — NODE_RESPONSE entries now carry an af_tag (4/6) mirroring the announce body format, parsed sequentially so mixed v4/v6 bodies work; legacy fixed-38-byte all-IPv4 responses fall back cleanly; tested (tagged, IPv6, mixed-AF, legacy fallback)
 - Split ~1,400-line `spawn_receive_loop`; de-duplicate ChatMessage construction sites
 
 ---
