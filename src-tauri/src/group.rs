@@ -294,6 +294,42 @@ impl Group {
         self.our_verification_key = Some(verification_key);
         Ok((initial_chain_key, verification_key))
     }
+
+    /// Build OUR OWN unsigned sender-key bundle for distribution.
+    ///
+    /// The caller MUST sign it with our long-term Ed25519 identity key
+    /// (`signature` field) before sending — receivers verify that signature
+    /// against the transport peer's identity key (H2 trust model v2).
+    pub fn own_sender_bundle(&self) -> Result<GroupSenderKeyData, String> {
+        let chain_key = self.our_initial_chain_key.ok_or("no our initial key")?;
+        let verification_key = self.our_verification_key.ok_or("no our verification key")?;
+        Ok(GroupSenderKeyData {
+            group_id: self.group_id.clone(),
+            sender_peer_key_hex: String::new(), // filled by caller (our hex)
+            chain_key,
+            message_number: 0,
+            signing_key: None, // private keys are NEVER distributed (H2)
+            verification_key,
+            signature: Vec::new(),
+        })
+    }
+}
+
+/// Canonical bytes covered by a GroupSenderKeyData signature (trust model v2).
+///
+/// Binds the chain key and verification key to the owning member's long-term
+/// Ed25519 identity within a specific group. The private `signing_key` field
+/// is deliberately excluded — it must always be None under model v2.
+pub fn sender_key_bundle_sign_bytes(data: &GroupSenderKeyData) -> Vec<u8> {
+    let mut b = Vec::with_capacity(
+        8 + data.group_id.len() + data.sender_peer_key_hex.len() + 64,
+    );
+    b.extend_from_slice(b"M2M-GSK2");
+    b.extend_from_slice(data.group_id.as_bytes());
+    b.extend_from_slice(data.sender_peer_key_hex.as_bytes());
+    b.extend_from_slice(&data.chain_key);
+    b.extend_from_slice(&data.verification_key);
+    b
 }
 
 /// Manager for all groups the local user belongs to.
