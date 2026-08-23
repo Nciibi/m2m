@@ -24,7 +24,7 @@
 //! Matching runs against the LOWERCASED process name. The pure function
 //! [`detect_capture_tools`] is unit-testable without a live system.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
@@ -86,11 +86,14 @@ where
     I: IntoIterator,
     I::Item: AsRef<str>,
 {
-    let names: Vec<&str> = lowercased_process_names.into_iter().map(|s| s.as_ref()).collect();
+    let names: Vec<String> = lowercased_process_names
+        .into_iter()
+        .map(|s| s.as_ref().to_string())
+        .collect();
     let mut hits: Vec<&'static str> = Vec::new();
     'tools: for tool in KNOWN_CAPTURE_TOOLS {
         for name in &names {
-            let exact_hit = tool.match_exact.iter().any(|m| *name == *m);
+            let exact_hit = tool.match_exact.iter().any(|m| name == m);
             let contains_hit = tool.match_contains.iter().any(|m| name.contains(m));
             if exact_hit || contains_hit {
                 hits.push(tool.display);
