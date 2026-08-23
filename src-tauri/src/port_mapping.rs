@@ -1318,11 +1318,16 @@ fn extract_host(url: &str) -> Option<&str> {
 }
 
 /// Safely truncate a string for error messages.
+/// Char-boundary safe: never panics on multi-byte UTF-8 input (H2).
 fn truncate_safe(s: &str, max: usize) -> &str {
     if s.len() <= max {
         s
     } else {
-        &s[..max]
+        let mut end = max;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        &s[..end]
     }
 }
 
