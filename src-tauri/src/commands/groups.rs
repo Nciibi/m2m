@@ -410,7 +410,9 @@ pub async fn remove_from_group(
     // Send new sender key bundles to remaining members
     let conns = state.connections.read().await;
     for (member_key, bundle_data) in &bundles {
-        let serialized = protocol::serialize(bundle_data)
+        let mut signed = bundle_data.clone();
+        finalize_bundle(identity, &our_peer_key_hex, &mut signed);
+        let serialized = protocol::serialize(&signed)
             .map_err(|e| format!("serialization failed: {e}"))?;
 
         if let Some(conn_arc) = conns.get(member_key) {
@@ -421,12 +423,13 @@ pub async fn remove_from_group(
                 .await;
         }
 
-        // Send GroupRemove notification
+        // Send GroupRemove notification (embeds the signed new sender key so
+        // remaining members can rotate atomically)
         let remove_msg = GroupRemoveData {
             group_id: group_id.clone(),
             removed_peer_key_hex: peer_key_hex.clone(),
             removed_by_peer_key_hex: our_peer_key_hex.clone(),
-            new_sender_key: Some(bundle_data.clone()),
+            new_sender_key: Some(signed),
         };
         let remove_bytes = protocol::serialize(&remove_msg)
             .map_err(|e| format!("serialization failed: {e}"))?;
