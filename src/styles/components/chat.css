@@ -44,7 +44,7 @@
 }
 
 .sent-bubble {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    background: var(--color-accent-gradient);
     border-radius: 18px;
     border-bottom-right-radius: 4px;
 }

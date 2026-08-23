@@ -32,9 +32,9 @@
 
   /* ─── Colors: Borders ─── */
   --color-border-default: rgba(255, 255, 255, 0.07);
-  --color-border-active: rgba(192, 193, 255, 0.5);
+  --color-border-active: color-mix(in srgb, var(--color-accent-bright) 50%, transparent);
   --color-border-strong: rgba(255, 255, 255, 0.1);
-  --color-border-accent: rgba(192, 193, 255, 0.15);
+  --color-border-accent: color-mix(in srgb, var(--color-accent-bright) 15%, transparent);
   --color-border-card: rgba(255, 255, 255, 0.04);
 
   /* ─── Colors: Accent ──────────────────────────────────────────────────────

@@ -181,7 +181,7 @@
 }
 
 .app-sidebar__item--active {
-  background: rgba(99, 102, 241, 0.12);
+  background: var(--color-accent-glow-subtle);
   color: var(--color-accent-bright);
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
