@@ -80,18 +80,20 @@ export default function VaultView() {
         </div>
 
         <h2 className="centered-view__title centered-view__title--spaced vault-title">
-          {isFirstTime ? "Set Up Your Vault" : "Unlock Your Vault"}
+          {createMode ? "Create Another Account" : isFirstTime ? "Set Up Your Vault" : "Unlock Your Vault"}
         </h2>
 
         <p className="centered-view__desc vault-desc">
-          {isFirstTime
+          {createMode
+            ? "Choose a strong passphrase for the new account — it selects this account on unlock."
+            : isFirstTime
             ? "Choose a strong passphrase to encrypt your identity keys and message history."
             : "Enter your passphrase to decrypt your local data."}
         </p>
 
         <p className="vault-crypto-hint">Minimum 12 chars · Argon2id</p>
 
-        {!isFirstTime && identity?.fingerprint && (
+        {!isFirstTime && !createMode && identity?.fingerprint && (
           <div className="fp-hint">
             This vault belongs to {identity.fingerprint.substring(0, 16)}…
           </div>
