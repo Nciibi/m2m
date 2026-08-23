@@ -407,7 +407,7 @@ impl GroupManager {
         &mut self,
         group_id: &str,
         new_member_key_hex: &str,
-        our_peer_key_hex: &str,
+        _our_peer_key_hex: &str,
         added_at: u64,
     ) -> Result<Vec<GroupSenderKeyData>, String> {
         let group = self
