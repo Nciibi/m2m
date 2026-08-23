@@ -1300,7 +1300,6 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
-        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
@@ -1340,7 +1339,6 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
-        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
@@ -1384,7 +1382,6 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
-        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
@@ -1430,7 +1427,6 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
-        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
@@ -1459,7 +1455,6 @@ mod session_tests {
         alice.session_keys = Some(alice_keys);
         alice.state = ConnectionState::Established;
         alice.established_at = now_unix_secs();
-        alice.tx_counter = 100;
         bob.session_keys = Some(bob_keys);
         bob.state = ConnectionState::Established;
         bob.established_at = now_unix_secs();
