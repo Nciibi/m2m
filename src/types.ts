@@ -129,6 +129,14 @@ export interface SecurityConfig {
   clipboard_clear_secs: number;
   idle_lock_secs: number;
   require_known_contact: boolean;
+  capture_process_detection: boolean;
+  blur_on_focus_loss: boolean;
+}
+
+/** Honest per-platform capability report for screen-capture protection. */
+export interface CaptureCapability {
+  level: "full" | "partial" | "unsupported";
+  note: string;
 }
 
 export interface TransferProgress {
