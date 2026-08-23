@@ -35,14 +35,16 @@
 | Technique | Status | Stops | Can't stop |
 |-----------|--------|-------|------------|
 | `WDA_EXCLUDEFROMCAPTURE` (Windows) | ✅ implemented (`window_security.rs:57`) | OBS, Zoom-share, most recorders | Kernel capture, HDMI capture cards, phone camera |
-| macOS `NSWindow.sharingType = .none` | ❌ stub (`window_security.rs:70`) | — | Implement via objc FFI |
-| Linux X11 privacy hint / Wayland isolation | ❌ stub | — | X11 clients can always read other windows |
-| Re-apply affinity after window recreation | ❌ missing | Silent protection drop on webview recreate | — |
-| On-screen keyboard for passphrase entry | ❌ TODO | Hook-based keyloggers (for the highest-value secret) | Screen recorders watching clicks |
-| Blur content when window loses focus | ❌ TODO | Background capture tools | Focused capture |
-| Detect known capture processes (OBS etc.) + warn | ❌ TODO | Nothing — but honest detection/warning UX | Determined malware |
+| macOS `NSWindow.sharingType = .none` | ✅ implemented — libobjc FFI (`objc_msgSend` typed casts), `setSharingType:NSWindowSharingNone`, restore to readWrite on disable (`window_security.rs::apply_to_window`) | ScreenCaptureKit streams, screenshots, window sharing | Kernel capture, HDMI capture cards, phone camera |
+| Linux X11 privacy hint / Wayland isolation | ✅ honest capability reporting — Wayland: best-effort with explicit caveat; X11: enabling returns an ERROR instead of pretending (any X client can read other windows) | (Wayland) unmapped-window isolation by default | X11 clients can always read other windows |
+| Re-apply affinity after window recreation | ✅ implemented — config persisted to `<data_dir>/security.json` (corrupt files quarantined); re-applied at startup, on every window focus (idempotent FFI), and on frontend mount via `reapply_security_config` command | Silent protection drop on webview recreate / restart | — |
+| On-screen keyboard for passphrase entry | ✅ implemented (`OnScreenKeyboard.tsx`) — Fisher–Yates reshuffle per open AND per keystroke (click positions leak no frequency data); `preventDefault` keeps input focus; integrated into both vault passphrase fields | Hook-based keyloggers (for the highest-value secret) | Screen recorders watching clicks, kernel loggers |
+| Blur content when window loses focus | ✅ implemented (`useFocusBlur` + `.security-blur`) — watches `blur`/`focus`/`visibilitychange`; gated by `blur_on_focus_loss` (OFF by default) | Background capture tools, shoulder surfing | Focused capture |
+| Detect known capture processes (OBS etc.) + warn | ✅ implemented (`capture_monitor.rs`, sysinfo minimal-features) — 10s scan, emits `m2m://capture-warning` only when the detected set changes; exact-vs-substring matching discipline unit-tested; banner in UI. Detection is warning UX only | Nothing — but honest detection/warning UX | Determined malware |
 | Clipboard auto-clear | ✅ implemented | Clipboard sniffers | Reads before clear fires |
 | Idle vault auto-lock | ✅ implemented | Unattended access | Active-session compromise |
+
+**New in this pass:** `SecurityConfig.capture_process_detection` + `SecurityConfig.blur_on_focus_loss` toggles (both OFF by default); `get_capture_capability` command surfaces an honest per-platform capability report ("full" Windows / "partial" macOS+Wayland / "unsupported" X11) directly in Settings; `m2m://security-error` event is emitted loudly if protection fails to apply so the user is never silently unprotected.
 
 **Rule:** a VM window on an infected host is NOT isolated — host keyloggers see keystrokes passing through the host input stack; host recorders capture the VM window. True isolation requires replacing the host environment (Qubes/Tails) or raw hardware input (IOMMU/VT-d USB passthrough).
 
