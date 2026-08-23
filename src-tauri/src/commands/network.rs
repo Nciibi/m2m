@@ -1141,10 +1141,10 @@ pub fn spawn_receive_loop(
                                     tracing::debug!(msg_id = %id, "received ack");
                                 }
                             },
-                            Err(e) => {
-                                tracing::warn!(error = %e, "failed to decrypt message");
-                            }
+                        Some(Err(e)) => {
+                            tracing::warn!(error = %e, "failed to decrypt message");
                         }
+                        None => {}
                     }
                 }
                 PacketType::FileTransferRequest => {
