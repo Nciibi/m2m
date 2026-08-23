@@ -609,7 +609,7 @@ pub async fn connect_family_member(
         if !store.is_family_member(&pk_bytes).map_err(|e| format!("family check: {e}"))? {
             return Err("peer is not a family member".to_string());
         }
-        let members = store.list_family().map_err(|e| format!("list family: {e}"))?;
+        let members = store.list_family(sk.as_ref()).map_err(|e| format!("list family: {e}"))?;
         members.into_iter()
             .find(|m| m.public_key_hex == peer_key_hex)
             .and_then(|m| m.last_address)
