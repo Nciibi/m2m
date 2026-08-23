@@ -319,7 +319,13 @@ pub fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Resu
 }
 
 /// Legacy fallback: derive a storage encryption key from the public key.
-/// Used when no vault passphrase has been set (migration / first-run).
+///
+/// ⚠️ DEPRECATED for new data: the resulting key is publicly computable from
+/// the (public) Ed25519 identity key, so data sealed under it is NOT protected
+/// at rest. This exists ONLY so that pre-vault profiles and imported identities
+/// can be decrypted once and migrated to a passphrase-derived key
+/// (`derive_storage_key_from_passphrase`) on the next unlock. Do NOT call this
+/// from any code path that writes new secrets to disk.
 pub fn derive_storage_key(public_key: &[u8]) -> crate::secure_key::StorageKey {
     use sodiumoxide::crypto::hash::sha256;
     let context = b"m2m-storage-key-v1";
