@@ -21,6 +21,31 @@ use crate::protocol::{
 
 use thiserror::Error;
 
+// ─── Traffic-analysis cover: random send jitter ────────────────────────────
+//
+// When enabled (SecurityConfig.send_batching_ms > 0), every outgoing MESSAGE
+// frame is delayed by a random 0..N ms before hitting the wire. Send-time
+// correlations (who talks when, burst patterns) become far less precise.
+// Handshake/keepalive frames are NOT delayed. 0 = disabled (default).
+static SEND_JITTER_MAX_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Configure the maximum pre-send jitter for message frames. Called from
+/// the security-config command layer. `0` disables jitter entirely.
+pub fn set_send_jitter_ms(max_ms: u64) {
+    SEND_JITTER_MAX_MS.store(max_ms.min(60_000), std::sync::atomic::Ordering::Relaxed);
+}
+
+async fn apply_send_jitter() {
+    let max = SEND_JITTER_MAX_MS.load(std::sync::atomic::Ordering::Relaxed);
+    if max == 0 {
+        return;
+    }
+    let jitter = rand::random::<u64>() % max;
+    if jitter > 0 {
+        tokio::time::sleep(std::time::Duration::from_millis(jitter)).await;
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SessionError {
     #[error("crypto error: {0}")]
