@@ -343,7 +343,6 @@ impl KeyStore {
             )?;
             Ok(self.conn.last_insert_rowid())
         }
-    }
 
     /// Add or update a known peer.
     pub fn upsert_peer(
