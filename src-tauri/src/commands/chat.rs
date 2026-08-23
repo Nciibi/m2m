@@ -550,8 +550,9 @@ pub async fn edit_message(
 
     // Validate + persist locally BEFORE sending, so edits to messages we
     // don't own (wrong conversation or not our own sent message) are
-    // rejected outright (H4).
-    let history = *state.history_enabled.read().await;
+    // rejected outright (H4). Ephemeral mode: skip persistence.
+    let history = *state.history_enabled.read().await
+        && !state.security_config.read().await.ephemeral_mode;
     if history {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
@@ -597,13 +598,14 @@ pub async fn delete_message(
 ) -> Result<(), String> {
     // Validate ownership locally BEFORE sending: the message must exist in
     // this conversation and be one of our sent messages (H4).
+    // Ephemeral mode: no local tombstone is written.
     {
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
             let owned = store
-                .delete_message(&message_id, &peer_key_hex, "sent")
+                .message_in_conversation(&message_id, &peer_key_hex, "sent")
                 .map_err(|e| format!("delete failed: {e}"))?;
-            if !owned {
+            if !owned && !state.security_config.read().await.ephemeral_mode {
                 return Err("message not found in this conversation".to_string());
             }
         }
