@@ -6,6 +6,7 @@ use tauri::State;
 
 use crate::protocol::{self, PacketType};
 use crate::state::{AppState, PeerConnection};
+use crate::storage::MessageStore;
 
 use super::util;
 use super::{ChatMessage, ConversationListItem};
