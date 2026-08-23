@@ -144,11 +144,13 @@ pub async fn send_file(
 
             // Persist initial transfer record
             {
+                let sk = state.storage_key.read().await;
                 let ts = state.transfer_store.lock().await;
                 if let Some(ref store) = *ts {
                     let _ = store.store_transfer(
                         &transfer_id, &peer_key_hex, &filename,
                         total_size, "sent", "pending", total_chunks,
+                        sk.as_ref(),
                     );
                 }
             }
