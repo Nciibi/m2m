@@ -81,10 +81,15 @@ static KNOWN_CAPTURE_TOOLS: &[CaptureTool] = &[
 /// Pure matcher: given lowercased process names, return the deduplicated
 /// display names of known capture tools among them (sorted for stable
 /// comparisons/events).
-fn detect_capture_tools<I: IntoIterator<Item = String>>(lowercased_process_names: I) -> Vec<String> {
+fn detect_capture_tools<I>(lowercased_process_names: I) -> Vec<String>
+where
+    I: IntoIterator,
+    I::Item: AsRef<str>,
+{
+    let names: Vec<&str> = lowercased_process_names.into_iter().map(|s| s.as_ref()).collect();
     let mut hits: Vec<&'static str> = Vec::new();
     'tools: for tool in KNOWN_CAPTURE_TOOLS {
-        for name in lowercased_process_names.iter() {
+        for name in &names {
             let exact_hit = tool.match_exact.iter().any(|m| *name == *m);
             let contains_hit = tool.match_contains.iter().any(|m| name.contains(m));
             if exact_hit || contains_hit {
