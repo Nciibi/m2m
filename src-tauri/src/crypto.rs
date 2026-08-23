@@ -637,6 +637,13 @@ impl DoubleRatchet {
     /// If `do_ratchet` is true, generates a new DH ratchet keypair, advances
     /// the root key, and embeds the new public key in the returned header.
     ///
+    /// A ratchet is ALSO forced when we have no send chain yet: the Double
+    /// Ratchet responder starts with `send_chain_key = None` and could never
+    /// satisfy the interval condition (`send_message_number > 0`), making
+    /// its first outbound message impossible ("no send chain key"). The
+    /// forced DH ratchet establishes a send chain deterministically — the
+    /// peer derives the matching chains from the embedded ratchet public.
+    ///
     /// Returns (ratchet_key_pub_opt, message_number, nonce, ciphertext).
     pub fn encrypt(
         &mut self,
@@ -645,6 +652,7 @@ impl DoubleRatchet {
         do_ratchet: bool,
     ) -> Result<EncryptOutput, CryptoError> {
         let mut ratchet_pub = None;
+        let do_ratchet = do_ratchet || self.send_chain_key.is_none();
         if do_ratchet {
             // Generate a NEW DH ratchet keypair for break-in recovery
             let new_kp = EphemeralKeypair::generate();
