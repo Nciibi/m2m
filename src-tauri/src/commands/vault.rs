@@ -875,17 +875,15 @@ pub async fn import_identity(
     };
 
     let export_key = derive_key_blocking(passphrase, pub_arr.to_vec()).await?;
-    let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &export_key, crate::commands::util::AAD_EXPORT_V2)
+    let mut sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &export_key, crate::commands::util::AAD_EXPORT_V2)
         .map_err(|_| "wrong export passphrase or corrupted backup file".to_string())?;
 
-    let sk_arr = {
-        let mut arr = [0u8; 64];
-        if sk_bytes.len() != 64 {
-            return Err("invalid secret key length in backup".to_string());
-        }
-        arr.copy_from_slice(&sk_bytes);
-        arr
-    };
+    let mut sk_arr = [0u8; 64];
+    if sk_bytes.len() != 64 {
+        return Err("invalid secret key length in backup".to_string());
+    }
+    sk_arr.copy_from_slice(&sk_bytes);
+    sk_bytes.zeroize();
 
     // Reconstruct keypair
     let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
@@ -901,16 +899,34 @@ pub async fn import_identity(
     let key_store = KeyStore::open(&keys_db_path)
         .map_err(|e| format!("key store error: {e}"))?;
 
-    // Encrypt the private key with a storage key derived from the public key.
-    // The user will set a vault passphrase on next unlock.
-    let storage_key = util::derive_storage_key(&pub_bytes);
+    // Seal the private key under Argon2id(passphrase, salt = public key) —
+    // the exact derivation unlock_vault uses for account lookup — so the
+    // imported identity is protected at rest and unlocks normally on the
+    // next unlock screen. NEVER seal under derive_storage_key(&pub_bytes):
+    // that key is SHA-256 of a public value and anyone with keys.db can
+    // compute it (H1).
+    //
+    // The export file was sealed with AAD_EXPORT_V2 and keys.db uses
+    // AAD_KEY_STORE, so reusing the derived key material for both domains
+    // stays cryptographically domain-separated.
+    let storage_key = export_key;
 
-    let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
+    let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_arr, &storage_key, util::AAD_KEY_STORE)
         .map_err(|e| format!("encryption failed: {e}"))?;
+    sk_arr.zeroize();
 
     let now = chrono::Utc::now().timestamp();
     key_store.store_identity(&pub_bytes, &new_enc_sk, &new_nonce, now)
         .map_err(|e| format!("failed to store identity: {e}"))?;
+    key_store.set_vault_initialized()
+        .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
+    // Register as a vault account so multi-account unlock can select it by
+    // passphrase. If this identity is already an account row (UNIQUE pubkey),
+    // refresh its wrapped secret key instead.
+    if key_store.insert_account(&pub_bytes, &new_enc_sk, &new_nonce, Some("Imported"), now).is_err() {
+        key_store.update_account_private_key(&pub_bytes, &new_enc_sk, &new_nonce)
+            .map_err(|e| format!("failed to persist imported account: {e}"))?;
+    }
 
     // Import family members
     if let Some(family_arr) = payload.get("family").and_then(|v| v.as_array()) {
