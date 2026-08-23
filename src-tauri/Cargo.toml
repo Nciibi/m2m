@@ -16,6 +16,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+# Signed update channel (security roadmap §4). INERT until configured:
+# `plugins.updater.endpoints` in tauri.conf.json must be non-empty and the
+# release pubkey filled in — see docs/SIGNED-UPDATES.md.
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
