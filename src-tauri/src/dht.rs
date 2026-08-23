@@ -642,7 +642,7 @@ mod dht_tests {
         body.extend_from_slice(&1000u16.to_be_bytes());
         body.extend_from_slice(&[0x22u8; 32]);
         body.push(6);
-        body.extend_from_slice(&[0xfd00u16.to_be_bytes(), 0, 0, 0, 0, 0, 0, 1].repeat(1));
+        body.extend_from_slice(&[0xfd, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
         body.extend_from_slice(&2000u16.to_be_bytes());
 
         let peers = parse_node_response(&body).unwrap();
