@@ -979,36 +979,30 @@ impl Session {
         Ok(())
     }
 
-    /// Send a heartbeat to keep the connection alive.
-    /// Heartbeats are unencrypted protocol-level keepalives.
-    #[expect(dead_code, reason = "Reserved; network-level send_heartbeat used instead")]
+    /// Send an encrypted, authenticated heartbeat keepalive.
+    ///
+    /// Heartbeats used to be plaintext frames — a passive observer could
+    /// read session liveness/duration for free, and any active attacker
+    /// could forge or replay them. They now travel through the same AEAD
+    /// path (Double Ratchet or legacy SessionKeys) as every other frame,
+    /// so they are confidential, integrity-protected, and replay-checked.
     pub async fn send_heartbeat<W: AsyncWrite + Unpin>(
-        &self,
+        &mut self,
         stream: &mut W,
     ) -> Result<(), SessionError> {
-        network::write_frame(stream, PacketType::Heartbeat, &[])
+        self.send_encrypted_typed(stream, PacketType::Heartbeat, &[])
             .await
-            .map_err(SessionError::Network)
     }
 
-    /// Send a heartbeat acknowledgement.
-    #[expect(dead_code, reason = "Reserved; network-level send_heartbeat_ack used instead")]
+    /// Send an encrypted heartbeat acknowledgement.
     pub async fn send_heartbeat_ack<W: AsyncWrite + Unpin>(
-        &self,
+        &mut self,
         stream: &mut W,
     ) -> Result<(), SessionError> {
-        network::write_frame(stream, PacketType::HeartbeatAck, &[])
+        self.send_encrypted_typed(stream, PacketType::HeartbeatAck, &[])
             .await
-            .map_err(SessionError::Network)
     }
 
-    /// Check if a received frame is a heartbeat and handle it.
-    /// Returns true if the frame was a heartbeat (caller should not process further).
-    #[expect(dead_code, reason = "Reserved for session-level heartbeat handling")]
-    pub fn handle_heartbeat(&self, frame: &network::RawFrame) -> bool {
-        frame.packet_type == PacketType::Heartbeat
-            || frame.packet_type == PacketType::HeartbeatAck
-    }
     /// Decrypt a typed frame (file transfers, conversation metadata, etc.).
     ///
     /// Automatically detects whether the envelope uses the Double Ratchet (DR header present)
