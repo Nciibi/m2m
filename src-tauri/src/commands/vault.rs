@@ -502,7 +502,8 @@ pub async fn list_family(
 ) -> Result<Vec<FamilyMember>, String> {
     let ks = state.key_store.lock().await;
     let store = ks.as_ref().ok_or("key store not initialized")?;
-    store.list_family().map_err(|e| format!("failed to list family: {e}"))
+    let sk = state.storage_key.read().await;
+    store.list_family(sk.as_ref()).map_err(|e| format!("failed to list family: {e}"))
 }
 
 /// Add a peer to the family list.
@@ -534,9 +535,10 @@ pub async fn add_family_member(
 
     // Add to family (no .await while holding key_store lock)
     let member = {
+        let sk = state.storage_key.read().await;
         let ks = state.key_store.lock().await;
         let store = ks.as_ref().ok_or("key store not initialized")?;
-        store.add_family_member(&pk_bytes, &nickname, expires_in_days, None)
+        store.add_family_member(&pk_bytes, &nickname, expires_in_days, None, sk.as_ref())
             .map_err(|e| format!("failed to add family member: {e}"))?
     };
 
