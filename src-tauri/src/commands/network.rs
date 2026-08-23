@@ -531,6 +531,18 @@ async fn handle_incoming_connection(
         peer_verified: false, // Incoming connections start unverified
     });
 
+    // Post-authentication candidate refresh: only when the cached set is
+    // empty (see pre-handshake comment). Now that the peer is
+    // signature-authenticated, spending STUN round-trips is safe.
+    if state.candidates.read().await.is_empty() {
+        let st = state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = st.refresh_stun().await {
+                tracing::debug!(error = %e, "post-handshake STUN refresh failed");
+            }
+        });
+    }
+
     tracing::info!(peer = %peer_key_hex, "peer connected and authenticated");
 
     // Upsert peer in key store (skip if peer key hex is malformed)
