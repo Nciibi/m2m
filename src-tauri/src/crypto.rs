@@ -94,6 +94,14 @@ impl IdentityKeypair {
         })
     }
 
+    /// Deterministically derive a keypair from a 32-byte Ed25519 seed.
+    pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
+        let (pk, sk) = sign::keypair_from_seed(sign::Seed::from_slice(seed)
+            .ok_or(CryptoError::InvalidKeyLength)?)
+            .map_err(|_| CryptoError::InvalidKeyLength)?;
+        Ok(Self { public_key: pk, secret_key: sk })
+    }
+
     /// Sign a message with this identity key.
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
         let sig = sign::sign_detached(message, &self.secret_key);
@@ -1852,7 +1860,7 @@ mod crypto_tests {
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
     // RustCrypto swap) ---
     // These constants were captured from the ORIGINAL libsodium implementation.
-    // After swapping to RustCrypto, the computed values MUST equal them —
+    // After swapping to RustCrypto, the computed values MUST equal them ï¿½
     // proving wire format, DB ciphertext, and signatures stay identical.
 
     /// Fixed-input AEAD ciphertext captured from libsodium XChaCha20-Poly1305-IETF.
@@ -1861,7 +1869,7 @@ mod crypto_tests {
     const GOLDEN_ED_PUB: [u8; 32] = GOLDEN_ED_PUB_PLACEHOLDER;
     /// Ed25519 detached signature over b"m2m golden message" with GOLDEN_SEED key.
     const GOLDEN_ED_SIG: [u8; 64] = GOLDEN_ED_SIG_PLACEHOLDER;
-    /// X25519 shared secret for GOLDEN_X_SCALAR × GOLDEN_X_POINT (libsodium).
+    /// X25519 shared secret for GOLDEN_X_SCALAR ï¿½ GOLDEN_X_POINT (libsodium).
     const GOLDEN_X25519_SHARED: [u8; 32] = GOLDEN_X25519_SHARED_PLACEHOLDER;
 
     const GOLDEN_SEED: [u8; 32] = core::array::from_fn(|i| i as u8);
@@ -1881,7 +1889,7 @@ mod crypto_tests {
         println!("ED_PUB  = {:?}", kp.public_key_bytes());
         println!("ED_SIG  = {:?}", kp.sign(b"m2m golden message"));
 
-        // X25519: raw scalar × raw point (no clamping surprises — both impls clamp)
+        // X25519: raw scalar ï¿½ raw point (no clamping surprises ï¿½ both impls clamp)
         let scalar: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0xA5);
         let point: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0x5A);
         let shared = golden_x25519_raw(&scalar, &point);
@@ -1891,7 +1899,7 @@ mod crypto_tests {
         let ct = golden_aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
         println!("AEAD_CT = {:?}", ct);
 
-        panic!("capture run — read values above");
+        panic!("capture run ï¿½ read values above");
     }
 
     #[test]
