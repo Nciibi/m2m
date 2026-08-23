@@ -1750,16 +1750,36 @@ drop(conns);
                         match conn.session.decrypt_typed_frame(&frame) {
                             Ok(plaintext) => {
                                 if let Ok(sk_data) = protocol::deserialize::<protocol::GroupSenderKeyData>(&plaintext) {
+                                    // Capture the transport peer's long-term identity key
+                                    // BEFORE releasing the connection: bundle signatures are
+                                    // verified against it (H2 trust model v2).
+                                    let peer_identity_pub = conn.session.peer_identity_pub;
+                                    drop(conn);
+        drop(conns);
                                     let our_peer_key_hex = {
                                         let id = state.identity.read().await;
                                         id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
                                     };
-                                    drop(conn);
-drop(conns);
-                                    let mut gm = state.group_manager.write().await;
-                                    if let Some(our) = our_peer_key_hex {
-                                        if let Err(e) = gm.handle_sender_key(&sk_data, &our) {
-                                            tracing::warn!(error = %e, "failed to handle sender key");
+                                    let receipt = {
+                                        let mut gm = state.group_manager.write().await;
+                                        our_peer_key_hex.as_ref().and_then(|our| {
+                                            gm.handle_sender_key(&sk_data, our, &peer_identity_pub)
+                                                .map_err(|e| {
+                                                    tracing::warn!(error = %e, peer = %peer_key_hex, "rejected group sender key");
+                                                    e
+                                                })
+                                                .ok()
+                                        })
+                                    };
+
+                                    // Mutual key exchange: when a NEW member announces itself,
+                                    // reply with our own signed bundle so they can decrypt our
+                                    // traffic (also how late joiners get existing chain keys).
+                                    if receipt == Some(crate::group::SenderKeyReceipt::NewMember) {
+                                        if let Some(our) = &our_peer_key_hex {
+                                            if let Err(e) = send_own_bundle(state, app_handle.clone(), &sk_data.group_id, &peer_key_hex, our).await {
+                                                tracing::warn!(error = %e, peer = %peer_key_hex, "failed to reply with own sender key");
+                                            }
                                         }
                                     }
                                 }
