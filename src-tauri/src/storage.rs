@@ -511,13 +511,18 @@ impl KeyStore {
         old_public_key: &[u8; 32],
         new_public_key: &[u8; 32],
         new_address: Option<&str>,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<FamilyMember, StorageError> {
         let _now = chrono::Utc::now().timestamp();
+        let address_stored = match new_address {
+            Some(addr) => Some(seal_meta_value(key, addr, AAD_FAMILY)?),
+            None => None,
+        };
 
         // Update the existing row's key and address
         self.conn.execute(
             "UPDATE family SET public_key = ?1, last_address = ?2 WHERE public_key = ?3",
-            params![new_public_key.as_slice(), new_address, old_public_key.as_slice()],
+            params![new_public_key.as_slice(), address_stored, old_public_key.as_slice()],
         )?;
 
         // Read back the updated row
@@ -536,7 +541,13 @@ impl KeyStore {
             })
         });
         match result {
-            Ok(m) => Ok(m),
+            Ok(mut m) => {
+                m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)?;
+                if let Some(addr) = &m.last_address {
+                    m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY)?);
+                }
+                Ok(m)
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 Err(StorageError::Database(rusqlite::Error::QueryReturnedNoRows))
             }
