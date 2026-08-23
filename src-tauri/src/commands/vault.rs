@@ -1128,6 +1128,11 @@ async fn execute_duress_wipe(state: &Arc<AppState>) {
     tracing::warn!(files_removed = removed, "duress wipe complete");
 }
 
+/// Lock the vault — zeroizes keys in memory and marks vault as locked.
+///
+/// After calling this, the user must unlock the vault again to perform
+/// sensitive operations. Active connections remain open.
+#[tauri::command]
 pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     // Zeroize storage key
     let mut sk = state.storage_key.write().await;
