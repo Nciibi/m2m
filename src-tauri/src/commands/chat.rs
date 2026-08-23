@@ -503,18 +503,13 @@ pub async fn send_message_with_timer(
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-            match util::crypto_encrypt_storage(content.as_bytes(), key, util::AAD_MSG_STORE) {
-                Ok((nonce, encrypted)) => {
-                    if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
-                        let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
-                        let _ = store.store_message_with_expiry(
-                            &msg_id, &peer_key_hex, "sent",
-                            &encrypted, &nonce, now as i64, expires_at, delivered,
-                        );
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to encrypt message for storage");
+            if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
+                let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
+                if let Err(e) = store.store_message_secure(
+                    &msg_id, &peer_key_hex, "sent",
+                    content.as_bytes(), now as i64, expires_at, delivered, key,
+                ) {
+                    tracing::error!(error = %e, "failed to persist message");
                 }
             }
         }
