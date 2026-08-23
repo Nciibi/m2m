@@ -2325,3 +2325,33 @@ drop(conns);
         }
     });
 }
+
+#[cfg(test)]
+mod contact_gate_tests {
+    use super::contact_gate_allows;
+
+    /// H5: gate disabled (default) — everyone passes, first-time invite
+    /// connections keep working.
+    #[test]
+    fn test_gate_disabled_lets_everyone_through() {
+        assert!(contact_gate_allows(false, false, false));
+        assert!(contact_gate_allows(false, true, false));
+        assert!(contact_gate_allows(false, false, true));
+    }
+
+    /// H5: gate enabled — a validly-signed STRANGER must be rejected.
+    /// Pre-fix there was no gate at all: any signed identity could open a
+    /// session, get persisted into the key store, and deliver messages.
+    #[test]
+    fn test_gate_enabled_rejects_stranger() {
+        assert!(!contact_gate_allows(true, false, false));
+    }
+
+    /// H5: gate enabled — known peers and family pass.
+    #[test]
+    fn test_gate_enabled_accepts_known_and_family() {
+        assert!(contact_gate_allows(true, true, false));
+        assert!(contact_gate_allows(true, false, true));
+        assert!(contact_gate_allows(true, true, true));
+    }
+}
