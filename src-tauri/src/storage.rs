@@ -637,7 +637,7 @@ fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Resu
 impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
     fn generate_cek() -> [u8; 32] {
-        sodiumoxide::crypto::aead::gen_key()
+        sodiumoxide::crypto::aead::xchacha20poly1305_ietf::gen_key().0
     }
 
     /// Wrap a CEK under the vault storage key → single BLOB (nonce || ciphertext).
