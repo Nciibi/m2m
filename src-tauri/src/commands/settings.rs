@@ -62,6 +62,7 @@ pub async fn set_theme_preference(
 pub async fn discover_public_ip(
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
+    state.ensure_not_air_gapped().await?;
     let result = state.refresh_stun()
         .await
         .map_err(|e| format!("STUN discovery failed: {e}"))?;
@@ -138,6 +139,7 @@ pub async fn set_private_mode(
 pub async fn check_connectivity(
     state: State<'_, Arc<AppState>>,
 ) -> Result<stun::ConnectivityStatus, String> {
+    state.ensure_not_air_gapped().await?;
     let config = state.stun_config.read().await;
     let multi_result = stun::discover_public_addrs(&config)
         .await
