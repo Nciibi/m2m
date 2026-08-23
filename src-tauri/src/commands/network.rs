@@ -998,7 +998,11 @@ pub fn spawn_receive_loop(
                                 )
                         });
                     if probe_due {
-                        match crate::network::send_heartbeat(&mut conn.write_half).await {
+                        // Encrypted heartbeat — sent through the session's
+                        // AEAD path (plaintext heartbeats were a liveness
+                        // oracle and forgeable by any active attacker).
+                        let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
+                        match session.send_heartbeat(write_half).await {
                             Ok(_) => {
                                 conn.last_hb_sent = Some(std::time::Instant::now());
                                 tracing::trace!(peer = %hb_peer, "heartbeat sent");
