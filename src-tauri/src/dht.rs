@@ -309,30 +309,88 @@ fn build_find_node_body(peer_id: &[u8; 32]) -> Vec<u8> {
 
 /// Parse a NODE_RESPONSE body into a list of DHT peers.
 ///
-/// Wire format per entry: [ephemeral_id(32B) ip(4B) port(2B)]
+/// Current wire format per entry: [ephemeral_id(32B) af_tag(1B) ip(4/16B) port(2B)]
+/// where `af_tag` is 4 for IPv4 and 6 for IPv6 (mirrors the announce body format,
+/// so both directions of the protocol handle either address family).
+///
+/// Legacy compatibility: bootstrap nodes built before the af_tag existed emit
+/// fixed-size all-IPv4 entries of [ephemeral_id(32B) ip(4B) port(2B)] (38 bytes).
+/// If the tagged walk fails validation AND the body is an exact multiple of the
+/// legacy entry size, it is parsed as legacy.
+///
 /// Note: NO permanent identity key is transmitted.
 fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
-    let entry_size = 32usize + 4 + 2;
-    let count = body.len() / entry_size;
-    if !body.len().is_multiple_of(entry_size) {
+    if let Some(peers) = parse_node_response_tagged(body) {
+        return Ok(peers);
+    }
+
+    // Legacy fallback: fixed 38-byte all-IPv4 entries.
+    const LEGACY_ENTRY_SIZE: usize = 32 + 4 + 2;
+    if body.len() % LEGACY_ENTRY_SIZE != 0 {
         return Err(DhtError::BadResponse("malformed node response".into()));
     }
 
-    let mut peers = Vec::with_capacity(count);
-    for i in 0..count {
-        let offset = i * entry_size;
+    let mut peers = Vec::with_capacity(body.len() / LEGACY_ENTRY_SIZE);
+    for chunk in body.chunks_exact(LEGACY_ENTRY_SIZE) {
+        let mut peer_id = [0u8; 32];
+        peer_id.copy_from_slice(&chunk[..32]);
+        let port = u16::from_be_bytes([chunk[36], chunk[37]]);
+        let ip = std::net::Ipv4Addr::new(chunk[32], chunk[33], chunk[34], chunk[35]);
+        peers.push(DhtPeer {
+            peer_id,
+            connect_addr: Some(SocketAddr::new(std::net::IpAddr::V4(ip), port)),
+            protocol_version: 1,
+            last_seen: now_unix_secs(),
+        });
+    }
+    Ok(peers)
+}
+
+/// Walk tagged entries sequentially. Returns `None` if any entry has an
+/// invalid af_tag or the body ends mid-entry (caller may try legacy parsing).
+fn parse_node_response_tagged(body: &[u8]) -> Option<Vec<DhtPeer>> {
+    let mut peers = Vec::new();
+    let mut offset = 0usize;
+
+    while offset < body.len() {
+        // ephemeral_id(32) + af_tag(1)
+        if body.len() - offset < 33 {
+            return None;
+        }
         let mut peer_id = [0u8; 32];
         peer_id.copy_from_slice(&body[offset..offset + 32]);
-        // No identity_pub transmitted — ephemeral IDs are unlinkable
-        let ip_offset = offset + 32;
-        let ip_bytes: [u8; 4] = [
-            body[ip_offset], body[ip_offset + 1],
-            body[ip_offset + 2], body[ip_offset + 3],
-        ];
-        let port_offset = offset + 32 + 4;
-        let port = u16::from_be_bytes([body[port_offset], body[port_offset + 1]]);
+        let af_tag = body[offset + 32];
+        offset += 33;
 
-        let addr = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(ip_bytes)), port);
+        let ip_len = match af_tag {
+            4 => 4usize,
+            6 => 16usize,
+            _ => return None,
+        };
+        // ip(ip_len) + port(2)
+        if body.len() - offset < ip_len + 2 {
+            return None;
+        }
+        let addr = match af_tag {
+            4 => SocketAddr::new(
+                std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+                    body[offset],
+                    body[offset + 1],
+                    body[offset + 2],
+                    body[offset + 3],
+                )),
+                port_at(body, offset + ip_len),
+            ),
+            _ => {
+                let mut octets = [0u8; 16];
+                octets.copy_from_slice(&body[offset..offset + 16]);
+                SocketAddr::new(
+                    std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)),
+                    port_at(body, offset + ip_len),
+                )
+            }
+        };
+        offset += ip_len + 2;
 
         peers.push(DhtPeer {
             peer_id,
@@ -342,7 +400,11 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
         });
     }
 
-    Ok(peers)
+    Some(peers)
+}
+
+fn port_at(body: &[u8], offset: usize) -> u16 {
+    u16::from_be_bytes([body[offset], body[offset + 1]])
 }
 
 /// Look up a peer by their public key hash.
