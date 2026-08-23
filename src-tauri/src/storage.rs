@@ -494,10 +494,12 @@ impl KeyStore {
         &self,
         public_key: &[u8; 32],
         nickname: &str,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<(), StorageError> {
+        let stored = seal_meta_value(key, nickname, AAD_FAMILY)?;
         self.conn.execute(
             "UPDATE family SET nickname = ?1 WHERE public_key = ?2",
-            params![nickname, public_key.as_slice()],
+            params![stored, public_key.as_slice()],
         )?;
         Ok(())
     }
