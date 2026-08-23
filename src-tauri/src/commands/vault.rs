@@ -1086,6 +1086,49 @@ fn seal_imported_identity(
 /// After calling this, the user must unlock the vault again to perform
 /// sensitive operations. Active connections remain open.
 #[tauri::command]
+/// Duress wipe: zeroize every in-memory secret, close all stores, and
+/// delete every local database + persisted config. Called ONLY from the
+/// duress path in `unlock_vault`. Deleting keys.db destroys every wrapped
+/// per-message content key (H7), so message ciphertext on disk becomes
+/// unrecoverable regardless of remnants.
+async fn execute_duress_wipe(state: &Arc<AppState>) {
+    // 1. Drop store handles first so SQLite releases file locks.
+    {
+        state.key_store.lock().await.take();
+        state.message_store.lock().await.take();
+        state.transfer_store.lock().await.take();
+    }
+
+    // 2. Zeroize all in-memory secrets (Drop impls zeroize).
+    state.identity.write().await.take();
+    state.x25519_identity.write().await.take();
+    state.active_signed_prekey.write().await.take();
+    state.active_one_time_prekey.write().await.take();
+    state.storage_key.write().await.take();
+
+    // 3. Mark locked/initialized so a subsequent launch is a clean first-run.
+    *state.vault_unlocked.write().await = false;
+    *state.vault_initialized.write().await = false;
+
+    // 4. Delete databases (+ WAL/SHM sidecars) and the security config.
+    let dir = std::path::Path::new(&state.data_dir);
+    const FILES: &[&str] = &[
+        "keys.db", "keys.db-wal", "keys.db-shm",
+        "messages.db", "messages.db-wal", "messages.db-shm",
+        "transfers.db", "transfers.db-wal", "transfers.db-shm",
+        "security.json",
+    ];
+    let mut removed = 0;
+    for name in FILES {
+        match std::fs::remove_file(dir.join(name)) {
+            Ok(()) => removed += 1,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => tracing::error!(file = name, error = %e, "duress wipe: failed to remove file"),
+        }
+    }
+    tracing::warn!(files_removed = removed, "duress wipe complete");
+}
+
 pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     // Zeroize storage key
     let mut sk = state.storage_key.write().await;
