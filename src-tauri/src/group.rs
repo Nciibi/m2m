@@ -589,7 +589,7 @@ impl GroupManager {
     pub fn handle_sender_key(
         &mut self,
         data: &GroupSenderKeyData,
-        our_peer_key_hex: &str,
+        _our_peer_key_hex: &str,
         peer_identity_pub: &[u8; 32],
     ) -> Result<SenderKeyReceipt, String> {
         let _ = our_peer_key_hex;
