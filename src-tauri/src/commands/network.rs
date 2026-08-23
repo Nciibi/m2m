@@ -25,6 +25,17 @@ use crate::stun;
 use super::util;
 use super::{ConnectionEvent, ConnectionInfo, FileRequestEvent, InviteInfo, MessageEvent, ChatMessage, GroupEvent, GroupMessageEvent};
 
+/// Contact allowlist decision for incoming connections (H5).
+///
+/// Pure function so the policy is unit-testable. `require_known_contact`
+/// comes from the user's security config; when set, only peers that are
+/// already known (previously connected → `peers` table) or family members
+/// may establish a session. When unset, everyone passes (first-time
+/// invite connections must work out of the box).
+fn contact_gate_allows(require_known_contact: bool, is_family: bool, is_known_peer: bool) -> bool {
+    !require_known_contact || is_family || is_known_peer
+}
+
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
 /// so the invite works across the internet.
