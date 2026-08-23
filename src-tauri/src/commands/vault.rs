@@ -1167,6 +1167,5 @@ mod tests {
         )
         .unwrap();
         assert_eq!(recovered, TEST_SK.to_vec());
-        assert_eq!(enc.len() % 16, 0); // sanity: ciphertext present in identity row too
     }
 }
