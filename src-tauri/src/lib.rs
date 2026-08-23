@@ -156,6 +156,7 @@ pub fn run() {
             commands::vault::init_identity,
             commands::vault::get_identity,
             commands::vault::unlock_vault,
+            commands::vault::create_vault_account,
             commands::vault::get_vault_status,
             commands::network::create_invite,
             commands::network::validate_invite,
