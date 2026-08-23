@@ -10,6 +10,12 @@
   (self-generated member keys, identity-signed bundles, admin checks on receive,
   rotation+fan-out on membership change), conversation-scoped edits/deletes/reactions,
   chunk state/peer gating
+- ✅ **Phase 5** done — `cargo audit`/`pnpm audit` now blocking, pnpm store cache on
+  setup-node, ESLint (flat config, react-hooks rules; advisory rules as warnings with
+  a `--max-warnings` budget), vitest coverage gates (45/55/30/45) wired into CI,
+  +28 frontend tests (`utils.ts` entropy/formatting, `useIdleDetection`, `ErrorBoundary`).
+  Remaining: component tests for GroupChatView/SetupView/FamilyTab, Playwright e2e,
+  cargo llvm-cov gate.
 - ✅ **Phase 3 (M1–M6)** done — handshake ±5min freshness window (+test), gap-derivation
   cap (MAX_GAP_DERIVATION=1000) + pre-check of skipped-key cache, HKDF RFC 5869 bound
   assert, `attempt_reconnect` now performs a real authenticated handshake before emitting
