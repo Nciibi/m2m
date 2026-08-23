@@ -375,8 +375,6 @@ impl Session {
         let x3dh_out = crate::crypto::x3dh_initiate(x25519_identity, &ek_a, peer_bundle)
             .map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
 
-        let dh_ratchet = EphemeralKeypair::generate();
-
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&ek_a.public_key_bytes());
         sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
