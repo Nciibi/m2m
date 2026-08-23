@@ -392,11 +392,15 @@ pub async fn unlock_vault(
             // Migration persistence must NOT fail silently: a half-migrated
             // profile would stay in legacy mode while the user believes the
             // passphrase was set (H1).
-            if let Some((_lnonce, lenc, _lsk)) = &legacy_store_data {
-                store.update_encrypted_private_key(lenc, _lnonce)
+            if let Some((lnonce, lenc, _lsk, lpub)) = &legacy_store_data {
+                store.update_encrypted_private_key(lenc, lnonce)
                     .map_err(|e| format!("failed to persist migrated identity: {e}"))?;
                 store.set_vault_initialized()
                     .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
+                if store.insert_account(lpub, lenc, lnonce, Some("Main"), chrono::Utc::now().timestamp()).is_err() {
+                    store.update_account_private_key(lpub, lenc, lnonce)
+                        .map_err(|e| format!("failed to persist migrated account: {e}"))?;
+                }
             }
             if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_store_data {
                 store.store_x25519_key(x_pub, x_enc, x_nonce)
