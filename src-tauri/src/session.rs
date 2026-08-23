@@ -433,6 +433,7 @@ impl Session {
     /// - initiator signals an OPK we don't have → handshake fails cleanly
     ///   (SK would mismatch otherwise)
     /// - initiator signals none → responder must NOT apply its OPK either
+    #[allow(clippy::too_many_arguments)] // parameters mirror the X3DH responder inputs
     pub async fn handshake_as_responder_x3dh<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         stream: &mut S,
