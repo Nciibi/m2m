@@ -927,7 +927,7 @@ impl MessageStore {
     ) -> Result<Vec<StoredMessage>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
-                    edited_at, deleted, expires_at
+                    edited_at, deleted, expires_at, content_key_wrapped
              FROM messages WHERE conversation_id = ?1
              AND direction = 'sent' AND delivered = 0
              ORDER BY timestamp ASC",
@@ -943,6 +943,7 @@ impl MessageStore {
                 edited_at: row.get(6)?,
                 deleted: row.get::<_, i64>(7)? != 0,
                 expires_at: row.get(8)?,
+                content_key_wrapped: row.get(9)?,
             })
         })?;
         let mut messages = Vec::new();
@@ -970,7 +971,7 @@ impl MessageStore {
     ) -> Result<Vec<StoredMessage>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
-                    edited_at, deleted, expires_at
+                    edited_at, deleted, expires_at, content_key_wrapped
              FROM messages WHERE conversation_id = ?1
              AND direction = 'sent' AND timestamp > ?2
              ORDER BY timestamp ASC",
@@ -986,6 +987,7 @@ impl MessageStore {
                 edited_at: row.get(6)?,
                 deleted: row.get::<_, i64>(7)? != 0,
                 expires_at: row.get(8)?,
+                content_key_wrapped: row.get(9)?,
             })
         })?;
         let mut messages = Vec::new();
@@ -1034,7 +1036,7 @@ impl MessageStore {
         let now = chrono::Utc::now().timestamp();
         let mut stmt = self.conn.prepare(
             "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
-                    edited_at, deleted, expires_at
+                    edited_at, deleted, expires_at, content_key_wrapped
              FROM messages WHERE conversation_id = ?1
              AND (expires_at IS NULL OR expires_at > ?2)
              ORDER BY timestamp DESC LIMIT ?3",
@@ -1050,6 +1052,7 @@ impl MessageStore {
                 edited_at: row.get(6)?,
                 deleted: row.get::<_, i64>(7)? != 0,
                 expires_at: row.get(8)?,
+                content_key_wrapped: row.get(9)?,
             })
         })?;
         let mut messages = Vec::new();
@@ -1072,7 +1075,7 @@ impl MessageStore {
         let now = chrono::Utc::now().timestamp();
         let mut stmt = self.conn.prepare(
             "SELECT id, direction, content_encrypted, content_nonce, timestamp, read_at,
-                    edited_at, deleted, expires_at
+                    edited_at, deleted, expires_at, content_key_wrapped
              FROM messages WHERE conversation_id = ?1
              AND (expires_at IS NULL OR expires_at > ?2)
              AND timestamp < ?3
@@ -1089,6 +1092,7 @@ impl MessageStore {
                 edited_at: row.get(6)?,
                 deleted: row.get::<_, i64>(7)? != 0,
                 expires_at: row.get(8)?,
+                content_key_wrapped: row.get(9)?,
             })
         })?;
         let mut messages = Vec::new();
