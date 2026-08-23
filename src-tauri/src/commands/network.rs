@@ -937,6 +937,7 @@ pub(crate) async fn send_own_bundle(    state: Arc<AppState>,
 }
 
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
+#[allow(clippy::single_match)] // uniform handler signature across packet domains
 async fn handle_incoming_text(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
@@ -1542,6 +1543,7 @@ async fn handle_heartbeat_frame(
 }
 
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
+#[allow(clippy::single_match)] // uniform handler signature across packet domains
 async fn handle_conversation_meta(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
@@ -1871,8 +1873,8 @@ async fn handle_sync_frame(
                                     let _ = conn_arc;
                                     drop(conns);
                                     let _ = crate::sync::handle_sync_device_info(
-                                        &app_handle,
-                                        &state,
+                                        app_handle,
+                                        state,
                                         &peer_key_hex,
                                         &info,
                                     ).await;
