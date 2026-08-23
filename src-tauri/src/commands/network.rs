@@ -936,134 +936,14 @@ pub(crate) async fn send_own_bundle(    state: Arc<AppState>,
         .map_err(|e| format!("send sender key failed: {e}"))
 }
 
-pub fn spawn_receive_loop(
-    app_handle: AppHandle,
-    state: Arc<AppState>,
-    mut read_half: tokio::net::tcp::OwnedReadHalf,
-    peer_key_hex: String,
-    reconnect_info: Option<crate::reconnect::ReconnectInfo>,
-) {    let hb_peer = peer_key_hex.clone();
-    let hb_state = state.clone();
-    let hb_app = app_handle.clone();
-    let hb_reconnect = reconnect_info.clone();
-    // Spawn a heartbeat worker: probes the peer with a Heartbeat every
-    // HEARTBEAT_INTERVAL_SECS and requires a HeartbeatAck within
-    // HEARTBEAT_TIMEOUT_SECS of each probe; otherwise the connection is
-    // torn down as dead (half-open TCP would otherwise linger forever).
-    // The worker polls at half the timeout so a dead peer is detected
-    // within one timeout window of its missed ack instead of waiting for
-    // the next full probe interval.
-    tokio::spawn(async move {
-        let poll_secs = crate::protocol::HEARTBEAT_TIMEOUT_SECS
-            .min(crate::protocol::HEARTBEAT_INTERVAL_SECS)
-            / 2;
-        let mut interval = tokio::time::interval(
-            std::time::Duration::from_secs(poll_secs.max(1)),
-        );
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            interval.tick().await;
-
-            let mut dead_reason: Option<String> = None;
-            {
-                let conns = hb_state.connections.read().await;
-                let Some(conn_arc) = conns.get(&hb_peer) else {
-                    // Connection removed — stop heartbeat
-                    break;
-                };
-                let mut conn = conn_arc.lock().await;
-
-                // Liveness check: was the most recent probe answered in time?
-                if let Some(sent_at) = conn.last_hb_sent {
-                    let acked =
-                        matches!(conn.last_hb_ack, Some(ack_at) if ack_at >= sent_at);
-                    if !acked
-                        && sent_at.elapsed()
-                            >= std::time::Duration::from_secs(
-                                crate::protocol::HEARTBEAT_TIMEOUT_SECS,
-                            )
-                    {
-                        dead_reason = Some("heartbeat ack timeout".to_string());
-                    }
-                }
-
-                // Send the periodic probe (also acts as keep-alive traffic).
-                if dead_reason.is_none() {
-                    let probe_due = conn
-                        .last_hb_sent
-                        .is_none_or(|sent_at| {
-                            sent_at.elapsed()
-                                >= std::time::Duration::from_secs(
-                                    crate::protocol::HEARTBEAT_INTERVAL_SECS,
-                                )
-                        });
-                    if probe_due {
-                        // Encrypted heartbeat — sent through the session's
-                        // AEAD path (plaintext heartbeats were a liveness
-                        // oracle and forgeable by any active attacker).
-                        let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
-                        match session.send_heartbeat(write_half).await {
-                            Ok(_) => {
-                                conn.last_hb_sent = Some(std::time::Instant::now());
-                                tracing::trace!(peer = %hb_peer, "heartbeat sent");
-                            }
-                            Err(e) => {
-                                dead_reason = Some(format!("heartbeat send failed: {e}"));
-                            }
-                        }
-                    }
-                }
-            } // guards dropped before teardown writes
-
-            if let Some(reason) = dead_reason {
-                tracing::info!(peer = %hb_peer, reason = %reason, "connection dead — cleaning up");
-                if let Some(ri) = hb_reconnect.clone() {
-                    let mut pr = hb_state.pending_reconnects.write().await;
-                    pr.insert(hb_peer.clone(), ri);
-                }
-                let was_verified = hb_reconnect.as_ref()
-                    .map(|ri| ri.peer_verified).unwrap_or(false);
-                let _ = hb_app.emit("m2m://connection", ConnectionEvent {
-                    peer_key_hex: hb_peer.clone(),
-                    state: "disconnected".to_string(),
-                    peer_fingerprint: None,
-                    peer_verified: was_verified,
-                });
-                hb_state.connections.write().await.remove(&hb_peer);
-                break;
-            }
-        }
-    });
-
-    tokio::spawn(async move {
-        loop {
-            // Read a frame from the peer's read half
-            let frame = match network::read_frame_from_read_half(&mut read_half).await {
-                Ok(f) => f,
-                Err(e) => {
-                    tracing::info!(peer = %peer_key_hex, error = %e, "peer connection closed");
-                    // Store reconnect info for the frontend (if available)
-                    if let Some(ri) = reconnect_info.clone() {
-                        let mut pr = state.pending_reconnects.write().await;
-                        pr.insert(peer_key_hex.clone(), ri);
-                    }
-                    // Notify frontend about disconnection
-                    let was_verified = reconnect_info.as_ref()
-                        .map(|ri| ri.peer_verified).unwrap_or(false);
-                    let _ = app_handle.emit("m2m://connection", ConnectionEvent {
-                        peer_key_hex: peer_key_hex.clone(),
-                        state: "disconnected".to_string(),
-                        peer_fingerprint: None,
-                        peer_verified: was_verified,
-                    });
-                    // Remove connection
-                    let mut conns = state.connections.write().await;
-                    conns.remove(&peer_key_hex);
-                    break;
-                }
-            };
-
-            match frame.packet_type {
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_incoming_text(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 PacketType::EncryptedMessage => {
                     // Decrypt under the per-peer connection lock ONLY; both
                     // guards are released before the SQLite writes below so
@@ -1145,6 +1025,18 @@ pub fn spawn_receive_loop(
                         None => {}
                     }
                 }
+        _ => {}
+    }
+}
+
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_file_transfer_packet(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 PacketType::FileTransferRequest => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
@@ -1579,6 +1471,18 @@ pub fn spawn_receive_loop(
                         }
                     }
                 }
+        _ => {}
+    }
+}
+
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_heartbeat_frame(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 PacketType::Heartbeat => {
                     // Encrypted heartbeat: decrypt first (forged/garbage
                     // frames are dropped, never acked), then answer with an
@@ -1627,6 +1531,18 @@ pub fn spawn_receive_loop(
                         None => {}
                     }
                 }
+        _ => {}
+    }
+}
+
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_conversation_meta(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 PacketType::ConversationMeta => {
                     // Decrypt under the per-peer lock only; SQLite writes run
                     // after both guards are released (head-of-line blocking fix).
@@ -1673,20 +1589,18 @@ pub fn spawn_receive_loop(
                         None => {}
                     }
                 }
-                PacketType::Disconnect => {
-                    tracing::info!(peer = %peer_key_hex, "peer sent disconnect");
-                    let was_verified = reconnect_info.as_ref()
-                        .map(|ri| ri.peer_verified).unwrap_or(false);
-                    let _ = app_handle.emit("m2m://connection", ConnectionEvent {
-                        peer_key_hex: peer_key_hex.clone(),
-                        state: "disconnected".to_string(),
-                        peer_fingerprint: None,
-                        peer_verified: was_verified,
-                    });
-                    let mut conns = state.connections.write().await;
-                    conns.remove(&peer_key_hex);
-                    break;
-                }
+        _ => {}
+    }
+}
+
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_message_update_frame(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 PacketType::MessageReaction => {
                     // Decrypt under the per-peer lock only (head-of-line fix).
                     let decrypted = {
@@ -1705,7 +1619,7 @@ pub fn spawn_receive_loop(
                                 // Mirror the send-side cap on receive (H4).
                                 if rxn.reaction.chars().count() > 10 {
                                     tracing::warn!(peer = %peer_key_hex, "rejected oversized reaction");
-                                    continue;
+                                    return;
                                 }
                                 // Store locally, scoped to the sender's conversation (H4):
                                 // reactions to messages in other conversations are dropped.
@@ -1732,7 +1646,7 @@ pub fn spawn_receive_loop(
                                 }
                                 drop(ms);
                                 if !accepted {
-                                    continue;
+                                    return;
                                 }
 
                                 // Notify frontend
@@ -1768,7 +1682,7 @@ pub fn spawn_receive_loop(
                                 // Mirror the send-side size cap on receive (H4).
                                 if edit.new_content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
                                     tracing::warn!(peer = %peer_key_hex, "rejected oversized message edit");
-                                    continue;
+                                    return;
                                 }
                                 // Validate + update storage with a fresh per-message
                                 // content key (crypto-shredding, H7), scoped to the
@@ -1797,7 +1711,7 @@ pub fn spawn_receive_loop(
                                     }
                                 }
                                 if !accepted {
-                                    continue;
+                                    return;
                                 }
 
                                 // Notify frontend
@@ -1850,7 +1764,7 @@ pub fn spawn_receive_loop(
                                 }
                                 drop(ms);
                                 if !accepted {
-                                    continue;
+                                    return;
                                 }
 
                                 // Notify frontend
@@ -1866,6 +1780,18 @@ pub fn spawn_receive_loop(
                         None => {}
                     }
                 }
+        _ => {}
+    }
+}
+
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_sync_frame(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 PacketType::SyncRequest => {
                     let conns = state.connections.read().await;
                     if let Some(conn_arc) = conns.get(&peer_key_hex) {
@@ -1904,7 +1830,7 @@ pub fn spawn_receive_loop(
                                             if remaining > 0 {
                                                 session.send_text_with_timer(write_half, text, Some(remaining as u64)).await
                                             } else {
-                                                continue;
+                                                return;
                                             }
                                         } else {
                                             session.send_text(write_half, text).await
@@ -1969,9 +1895,18 @@ pub fn spawn_receive_loop(
                         }
                     }
                 }
-                PacketType::Error => {
-                    tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
-                }
+        _ => {}
+    }
+}
+
+/// Packet handler extracted from spawn_receive_loop (receive-loop split).
+async fn handle_group_frame(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    peer_key_hex: &String,
+    frame: &crate::network::RawFrame,
+) {
+    match frame.packet_type {
                 // ─── Group Chat (Phase 3) ───
                 PacketType::GroupCreate => {
                     let conns = state.connections.read().await;
@@ -2076,7 +2011,7 @@ pub fn spawn_receive_loop(
 
                                     if !inviter_pub_ok {
                                         tracing::warn!(group = %gid, peer = %peer_key_hex, "group invite signature invalid — ignoring");
-                                        continue;
+                                        return;
                                     }
 
                                     // Join locally with OUR OWN keys and announce them to
@@ -2280,7 +2215,7 @@ drop(conns);
                                             group = %gid,
                                             "unauthorized group rename attempt — ignored"
                                         );
-                                        continue;
+                                        return;
                                     }
 
                                     if let Some(ref name) = new_name {
@@ -2337,7 +2272,7 @@ drop(conns);
                                             group = %gid,
                                             "unauthorized group removal claim — ignored"
                                         );
-                                        continue;
+                                        return;
                                     }
 
                                     if is_us {
@@ -2409,7 +2344,7 @@ drop(conns);
                                             group = %gid,
                                             "forged group leave claim — ignored"
                                         );
-                                        continue;
+                                        return;
                                     }
                                     drop(conn);
         drop(conns);
@@ -2446,7 +2381,213 @@ drop(conns);
                         }
                     }
                 }
-                // ─── Typing Indicators ───
+        _ => {}
+    }
+}
+
+
+
+pub fn spawn_receive_loop(
+    app_handle: AppHandle,
+    state: Arc<AppState>,
+    mut read_half: tokio::net::tcp::OwnedReadHalf,
+    peer_key_hex: String,
+    reconnect_info: Option<crate::reconnect::ReconnectInfo>,
+) {    let hb_peer = peer_key_hex.clone();
+    let hb_state = state.clone();
+    let hb_app = app_handle.clone();
+    let hb_reconnect = reconnect_info.clone();
+    // Spawn a heartbeat worker: probes the peer with a Heartbeat every
+    // HEARTBEAT_INTERVAL_SECS and requires a HeartbeatAck within
+    // HEARTBEAT_TIMEOUT_SECS of each probe; otherwise the connection is
+    // torn down as dead (half-open TCP would otherwise linger forever).
+    // The worker polls at half the timeout so a dead peer is detected
+    // within one timeout window of its missed ack instead of waiting for
+    // the next full probe interval.
+    tokio::spawn(async move {
+        let poll_secs = crate::protocol::HEARTBEAT_TIMEOUT_SECS
+            .min(crate::protocol::HEARTBEAT_INTERVAL_SECS)
+            / 2;
+        let mut interval = tokio::time::interval(
+            std::time::Duration::from_secs(poll_secs.max(1)),
+        );
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+
+            let mut dead_reason: Option<String> = None;
+            {
+                let conns = hb_state.connections.read().await;
+                let Some(conn_arc) = conns.get(&hb_peer) else {
+                    // Connection removed — stop heartbeat
+                    break;
+                };
+                let mut conn = conn_arc.lock().await;
+
+                // Liveness check: was the most recent probe answered in time?
+                if let Some(sent_at) = conn.last_hb_sent {
+                    let acked =
+                        matches!(conn.last_hb_ack, Some(ack_at) if ack_at >= sent_at);
+                    if !acked
+                        && sent_at.elapsed()
+                            >= std::time::Duration::from_secs(
+                                crate::protocol::HEARTBEAT_TIMEOUT_SECS,
+                            )
+                    {
+                        dead_reason = Some("heartbeat ack timeout".to_string());
+                    }
+                }
+
+                // Send the periodic probe (also acts as keep-alive traffic).
+                if dead_reason.is_none() {
+                    let probe_due = conn
+                        .last_hb_sent
+                        .is_none_or(|sent_at| {
+                            sent_at.elapsed()
+                                >= std::time::Duration::from_secs(
+                                    crate::protocol::HEARTBEAT_INTERVAL_SECS,
+                                )
+                        });
+                    if probe_due {
+                        // Encrypted heartbeat — sent through the session's
+                        // AEAD path (plaintext heartbeats were a liveness
+                        // oracle and forgeable by any active attacker).
+                        let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
+                        match session.send_heartbeat(write_half).await {
+                            Ok(_) => {
+                                conn.last_hb_sent = Some(std::time::Instant::now());
+                                tracing::trace!(peer = %hb_peer, "heartbeat sent");
+                            }
+                            Err(e) => {
+                                dead_reason = Some(format!("heartbeat send failed: {e}"));
+                            }
+                        }
+                    }
+                }
+            } // guards dropped before teardown writes
+
+            if let Some(reason) = dead_reason {
+                tracing::info!(peer = %hb_peer, reason = %reason, "connection dead — cleaning up");
+                if let Some(ri) = hb_reconnect.clone() {
+                    let mut pr = hb_state.pending_reconnects.write().await;
+                    pr.insert(hb_peer.clone(), ri);
+                }
+                let was_verified = hb_reconnect.as_ref()
+                    .map(|ri| ri.peer_verified).unwrap_or(false);
+                let _ = hb_app.emit("m2m://connection", ConnectionEvent {
+                    peer_key_hex: hb_peer.clone(),
+                    state: "disconnected".to_string(),
+                    peer_fingerprint: None,
+                    peer_verified: was_verified,
+                });
+                hb_state.connections.write().await.remove(&hb_peer);
+                break;
+            }
+        }
+    });
+
+    tokio::spawn(async move {
+        loop {
+            // Read a frame from the peer's read half
+            let frame = match network::read_frame_from_read_half(&mut read_half).await {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::info!(peer = %peer_key_hex, error = %e, "peer connection closed");
+                    // Store reconnect info for the frontend (if available)
+                    if let Some(ri) = reconnect_info.clone() {
+                        let mut pr = state.pending_reconnects.write().await;
+                        pr.insert(peer_key_hex.clone(), ri);
+                    }
+                    // Notify frontend about disconnection
+                    let was_verified = reconnect_info.as_ref()
+                        .map(|ri| ri.peer_verified).unwrap_or(false);
+                    let _ = app_handle.emit("m2m://connection", ConnectionEvent {
+                        peer_key_hex: peer_key_hex.clone(),
+                        state: "disconnected".to_string(),
+                        peer_fingerprint: None,
+                        peer_verified: was_verified,
+                    });
+                    // Remove connection
+                    let mut conns = state.connections.write().await;
+                    conns.remove(&peer_key_hex);
+                    break;
+                }
+            };
+
+            // -- Domain dispatch: packet groups are handled in dedicated
+            // functions below (receive-loop split). Each returns having
+            // fully consumed the frame.
+            if matches!(frame.packet_type, PacketType::EncryptedMessage) {
+                handle_incoming_text(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+            if matches!(
+                frame.packet_type,
+                PacketType::FileTransferRequest
+                    | PacketType::FileTransferChunk
+                    | PacketType::FileTransferComplete
+                    | PacketType::FileTransferAccept
+                    | PacketType::FileTransferReject
+                    | PacketType::FileTransferChunkAck
+                    | PacketType::FileTransferCancel
+            ) {
+                handle_file_transfer_packet(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+            if matches!(frame.packet_type, PacketType::Heartbeat | PacketType::HeartbeatAck) {
+                handle_heartbeat_frame(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+            if matches!(frame.packet_type, PacketType::ConversationMeta) {
+                handle_conversation_meta(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+            if matches!(
+                frame.packet_type,
+                PacketType::MessageReaction | PacketType::MessageEdit | PacketType::MessageDelete
+            ) {
+                handle_message_update_frame(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+            if matches!(
+                frame.packet_type,
+                PacketType::SyncRequest | PacketType::SyncDeviceInfo | PacketType::SyncPayload
+            ) {
+                handle_sync_frame(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+            if matches!(
+                frame.packet_type,
+                PacketType::GroupCreate
+                    | PacketType::GroupInvite
+                    | PacketType::GroupSenderKey
+                    | PacketType::GroupEncryptedMessage
+                    | PacketType::GroupInfo
+                    | PacketType::GroupRemove
+                    | PacketType::GroupLeave
+            ) {
+                handle_group_frame(&state, &app_handle, &peer_key_hex, &frame).await;
+                continue;
+            }
+
+            match frame.packet_type {
+                PacketType::Disconnect => {
+                    tracing::info!(peer = %peer_key_hex, "peer sent disconnect");
+                    let was_verified = reconnect_info.as_ref()
+                        .map(|ri| ri.peer_verified).unwrap_or(false);
+                    let _ = app_handle.emit("m2m://connection", ConnectionEvent {
+                        peer_key_hex: peer_key_hex.clone(),
+                        state: "disconnected".to_string(),
+                        peer_fingerprint: None,
+                        peer_verified: was_verified,
+                    });
+                    let mut conns = state.connections.write().await;
+                    conns.remove(&peer_key_hex);
+                    break;
+                }
+                PacketType::Error => {
+                    tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
+                }
                 PacketType::TypingIndicator => {
                     let _ = app_handle.emit("m2m://typing", serde_json::json!({
                         "peer_key_hex": peer_key_hex,
