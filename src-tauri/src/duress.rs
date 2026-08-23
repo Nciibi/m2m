@@ -95,6 +95,7 @@ pub fn derive_verifier_hex(entered: &str, salt: &[u8]) -> Option<String> {
 }
 
 /// Constant-time equality for equal-length byte slices.
+#[cfg(test)]
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
