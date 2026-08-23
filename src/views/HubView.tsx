@@ -4,7 +4,7 @@ import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
   GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon, ClockIcon,
-  StarIcon, BellIcon, FolderIcon,
+  StarIcon, BellIcon, FolderIcon, AlertTriangleIcon,
 } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
@@ -264,7 +264,7 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
           )}
           {networkSettings?.tor_enabled && !privateMode && generatedInvite && (
             <div className="tor-warning">
-              <span>⚠️</span>
+              <AlertTriangleIcon size={18} />
               <div><strong className="tor-warning__title">Tor Inbound Warning</strong><p className="tor-warning__text">Tor is enabled for outbound connections, but this invite contains your real IP address.</p></div>
             </div>
           )}
