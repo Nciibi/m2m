@@ -123,10 +123,11 @@ pub async fn get_vault_status(
 /// Unlock (or initialise) the vault with a passphrase.
 ///
 /// Three cases:
-/// 1. **First run** (no identity): generates a new keypair, encrypts with Argon2id key, stores it.
+/// 1. **Multi-account unlock** (vault initialized, accounts exist): tries the passphrase
+///    against every account's wrapped secret key — AEAD success selects the account.
 /// 2. **Legacy migration** (identity exists, vault not yet initialized): decrypts with legacy
 ///    fallback key, re-encrypts with Argon2id key, marks vault as initialized.
-/// 3. **Normal unlock** (identity exists, vault initialized): decrypts with Argon2id key.
+/// 3. **First run** (no identity): generates a new keypair, encrypts with Argon2id key, stores it.
 ///
 /// In all cases, the full `IdentityKeypair` and `MessageStore` are loaded into state.
 #[tauri::command]
