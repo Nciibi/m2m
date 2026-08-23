@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, Input, ToastContainer } from "../components/ui";
+import { Button, Input, ToastContainer, OnScreenKeyboard } from "../components/ui";
 import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon, CheckIcon } from "../components/ui/Icons";
 import { estimateEntropy } from "../utils";
 import { useApp } from "../context/AppContext";
@@ -18,6 +18,11 @@ export default function VaultView() {
   const [shaking, setShaking] = useState(false);
   const [strength, setStrength] = useState({ percent: 0, bits: 0, label: "", cls: "" });
   const [createMode, setCreateMode] = useState(false);
+  // On-screen keyboard state + which field it targets ("main" | "confirm").
+  const [oskOpen, setOskOpen] = useState(false);
+  const [oskTarget, setOskTarget] = useState<"main" | "confirm">("main");
+  const mainInputRef = useRef<HTMLInputElement | null>(null);
+  const confirmInputRef = useRef<HTMLInputElement | null>(null);
 
   const isFirstTime = !vaultInitialized;
   const showConfirm = isFirstTime || createMode;
