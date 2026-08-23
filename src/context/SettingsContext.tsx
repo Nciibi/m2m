@@ -277,6 +277,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const current = securityConfig ?? {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
+      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false,
     };
     const newConfig: SecurityConfig = { ...current, capture_process_detection: !current.capture_process_detection };
     try {
