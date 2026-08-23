@@ -1531,6 +1531,23 @@ impl MessageStore {
         Ok(true)
     }
 
+    /// Check whether `message_id` exists in `conversation_id` with the
+    /// given direction — read-only ownership check (no tombstone write),
+    /// used by delete in ephemeral mode where no local state may change.
+    pub fn message_in_conversation(
+        &self,
+        message_id: &str,
+        conversation_id: &str,
+        expected_direction: &str,
+    ) -> Result<bool, StorageError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1 AND conversation_id = ?2 AND direction = ?3",
+            rusqlite::params![message_id, conversation_id, expected_direction],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     /// Get all reactions for a list of message IDs.
     /// Returns a map of message_id → Vec<(reaction, peer_key_hex, created_at)>.
     ///
