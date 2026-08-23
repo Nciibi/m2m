@@ -67,6 +67,18 @@ pub async fn create_invite(
         *active_spk = Some(spk);
     }
 
+    // Generate a one-time prekey for this invite (H6). Its public key goes
+    // into the invite's prekey bundle so initiators include DH4 = DH(EK_A,
+    // OPK_B) in the X3DH shared secret; the secret key is kept here for the
+    // responder. Rotated together with the signed prekey on every new
+    // invite — replacing the slot drops (zeroizes) the previous key pair.
+    let opk = crate::crypto::EphemeralKeypair::generate();
+    let opk_pub = opk.public_key_bytes();
+    {
+        let mut active_opk = state.active_one_time_prekey.write().await;
+        *active_opk = Some(opk);
+    }
+
     let listen_addr: SocketAddr = address
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
