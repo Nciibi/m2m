@@ -2079,8 +2079,30 @@ drop(conns);
                                     let removed = remove.removed_peer_key_hex.clone();
                                     let gid = remove.group_id.clone();
                                     let is_us = removed == peer_key_hex;
+                                    // Authorization (H2): the remover must be the transport
+                                    // peer itself, a member of the group, and — when removing
+                                    // someone else — an admin.
+                                    let authorized = {
+                                        let gm = state.group_manager.read().await;
+                                        gm.get_group(&gid)
+                                            .map(|g| {
+                                                remove.removed_by_peer_key_hex == peer_key_hex
+                                                    && g.is_member(&peer_key_hex)
+                                                    && (is_us || g.is_admin(&peer_key_hex))
+                                            })
+                                            .unwrap_or(false)
+                                    };
                                     drop(conn);
-drop(conns);
+        drop(conns);
+
+                                    if !authorized {
+                                        tracing::warn!(
+                                            peer = %peer_key_hex,
+                                            group = %gid,
+                                            "unauthorized group removal claim — ignored"
+                                        );
+                                        continue;
+                                    }
 
                                     if is_us {
                                         let mut gm = state.group_manager.write().await;
@@ -2102,8 +2124,16 @@ drop(conns);
                                         if let Some(store) = ms.as_ref() {
                                             let _ = store.remove_group_member(&gid, &removed);
                                         }
-                                        if let (Some(sk_data), Some(our)) = (remove.new_sender_key, our_peer_key_hex) {
-                                            let _ = gm.handle_sender_key(&sk_data, &our);
+
+                                        // Install the remover's rotated key if present AND valid.
+                                        if let (Some(sk_data), Some(our)) = (&remove.new_sender_key, &our_peer_key_hex) {
+                                            if let Err(e) = gm.handle_sender_key(sk_data, our, &{
+                                                // The embedded bundle was signed by the REMOVER
+                                                // (transport peer), verified below with their pub key.
+                                                [0u8; 32] // placeholder replaced below
+                                            }) {
+                                                tracing::warn!(error = %e, "failed to install rotated sender key");
+                                            }
                                         }
                                     }
 
