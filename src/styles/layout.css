@@ -422,3 +422,19 @@
   .app-header { padding: var(--space-sm) var(--space-md); }
   .tab-bar { padding: 0 var(--space-sm); }
 }
+
+/* -- Security: blur-on-focus-loss --
+   Applied to the whole app view when the window loses focus or is hidden.
+   Covers background capture tools and shoulder surfing; does NOT cover a
+   FOCUSED capture by malware on the same host. */
+
+.security-blur {
+  filter: blur(18px) saturate(0.6);
+  pointer-events: none;
+  transition: filter 120ms ease;
+}
+
+/* Keep the transition smooth when un-blurring too. */
+.view-fade {
+  transition: filter 120ms ease;
+}
