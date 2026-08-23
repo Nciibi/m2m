@@ -2196,7 +2196,15 @@ impl TransferStore {
         })?;
         let mut transfers = Vec::new();
         for row in rows {
-            transfers.push(row?);
+            let mut t = row?;
+            t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER)?;
+            if let Some(p) = &t.local_path {
+                t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER)?);
+            }
+            if let Some(e) = &t.error {
+                t.error = Some(open_meta_value(key, e, AAD_TRANSFER)?);
+            }
+            transfers.push(t);
         }
         Ok(transfers)
     }
