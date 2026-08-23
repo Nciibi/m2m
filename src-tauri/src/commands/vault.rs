@@ -416,6 +416,81 @@ pub async fn unlock_vault(
     })
 }
 
+/// Create an additional vault account wrapped under its own passphrase.
+/// The passphrase selects the account on subsequent unlocks.
+#[tauri::command]
+pub async fn create_vault_account(
+    state: State<'_, Arc<AppState>>,
+    passphrase: String,
+) -> Result<IdentityInfo, String> {
+    // ─── Passphrase Strength Check ───
+    if passphrase.len() < 12 {
+        return Err(
+            "passphrase must be at least 12 characters — longer is more secure".to_string(),
+        );
+    }
+    let entropy = util::estimate_passphrase_entropy(&passphrase);
+    if entropy < 40.0 {
+        return Err(format!(
+            "passphrase too weak: ~{:.0} bits of entropy. \
+             Use a longer passphrase (aim for 60+ bits). \
+             Try a diceware phrase with 5+ random words.",
+            entropy
+        ));
+    }
+
+    let kp = IdentityKeypair::generate()
+        .map_err(|e| format!("keypair generation failed: {e}"))?;
+    let fingerprint = kp.fingerprint();
+    let pub_bytes = kp.public_key_bytes();
+    let sk_bytes = kp.secret_key_bytes();
+
+    let xkp = crate::crypto::X25519IdentityKeypair::generate();
+
+    let storage_key = derive_key_blocking(passphrase, pub_bytes.to_vec()).await?;
+    let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
+        .map_err(|e| format!("failed to encrypt identity: {e}"))?;
+
+    let now = chrono::Utc::now().timestamp();
+    {
+        let ks_guard = state.key_store.lock().await;
+        let key_store = ks_guard
+            .as_ref()
+            .ok_or("key store not initialized — call init_identity first")?;
+        key_store.set_vault_initialized()
+            .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
+        key_store.insert_account(&pub_bytes, &encrypted_sk, &nonce, None, now)
+            .map_err(|e| format!("failed to create account: {e}"))?;
+    }
+
+    {
+        let mut id_lock = state.identity.write().await;
+        *id_lock = Some(kp);
+    }
+    {
+        let mut x_lock = state.x25519_identity.write().await;
+        *x_lock = Some(xkp);
+    }
+    {
+        let mut sk_lock = state.storage_key.write().await;
+        *sk_lock = Some(storage_key);
+    }
+    {
+        let mut vi = state.vault_initialized.write().await;
+        *vi = true;
+    }
+    {
+        let mut vu = state.vault_unlocked.write().await;
+        *vu = true;
+    }
+
+    Ok(IdentityInfo {
+        fingerprint,
+        public_key_hex: hex::encode(&pub_bytes),
+        has_identity: true,
+    })
+}
+
 // ─── Family Commands ───────────────────────────────────────────────────────
 
 /// List all non-expired family members.
