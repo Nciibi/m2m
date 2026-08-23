@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::crypto::{self, IdentityKeypair};
 use crate::state::AppState;
 use crate::storage::{self, KeyStore};
+use zeroize::Zeroize;
 
 use super::util;
 use super::{ConnectionEvent, ConnectionInfo, FamilyMember, IdentityInfo, VaultStatus};
