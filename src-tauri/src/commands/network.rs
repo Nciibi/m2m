@@ -535,9 +535,10 @@ async fn handle_incoming_connection(
     });
 
     // Post-authentication candidate refresh: only when the cached set is
-    // empty (see pre-handshake comment). Now that the peer is
-    // signature-authenticated, spending STUN round-trips is safe.
-    if state.candidates.read().await.is_empty() {
+    // empty (see pre-handshake comment) AND air-gap mode allows STUN.
+    if state.candidates.read().await.is_empty()
+        && !*state.security_config.read().await.air_gap_mode
+    {
         let st = state.clone();
         tokio::spawn(async move {
             if let Err(e) = st.refresh_stun().await {
