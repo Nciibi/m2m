@@ -1703,8 +1703,11 @@ async fn handle_message_update_frame(
                                 // sender's conversation and 'received' messages only
                                 // (H4) — a peer can never rewrite our own sent messages
                                 // or rows in unrelated conversations.
+                                // Ephemeral mode: accept the edit for the live UI
+                                // without touching SQLite.
                                 let mut accepted = false;
-                                {
+                                let ephemeral = state.security_config.read().await.ephemeral_mode;
+                                if !ephemeral {
                                     let sk = state.storage_key.read().await;
                                     if let Some(key) = sk.as_ref() {
                                         let ms = state.message_store.lock().await;
