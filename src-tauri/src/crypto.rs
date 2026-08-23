@@ -1883,13 +1883,13 @@ mod crypto_tests {
     // proving wire format, DB ciphertext, and signatures stay identical.
 
     /// Fixed-input AEAD ciphertext captured from libsodium XChaCha20-Poly1305-IETF.
-    const GOLDEN_AEAD_CT: [u8; 53] = GOLDEN_AEAD_CT_PLACEHOLDER;
+    const GOLDEN_AEAD_CT: [u8; 53] = [0u8; 53]; // CAPTURE
     /// Ed25519 public key derived from GOLDEN_SEED (libsodium).
-    const GOLDEN_ED_PUB: [u8; 32] = GOLDEN_ED_PUB_PLACEHOLDER;
+    const GOLDEN_ED_PUB: [u8; 32] = [0u8; 32]; // CAPTURE
     /// Ed25519 detached signature over b"m2m golden message" with GOLDEN_SEED key.
-    const GOLDEN_ED_SIG: [u8; 64] = GOLDEN_ED_SIG_PLACEHOLDER;
+    const GOLDEN_ED_SIG: [u8; 64] = [0u8; 64]; // CAPTURE
     /// X25519 shared secret for GOLDEN_X_SCALAR � GOLDEN_X_POINT (libsodium).
-    const GOLDEN_X25519_SHARED: [u8; 32] = GOLDEN_X25519_SHARED_PLACEHOLDER;
+    const GOLDEN_X25519_SHARED: [u8; 32] = [0u8; 32]; // CAPTURE
 
     const GOLDEN_SEED: [u8; 32] = core::array::from_fn(|i| i as u8);
     const GOLDEN_AEAD_KEY: [u8; 32] = [0x42u8; 32];
