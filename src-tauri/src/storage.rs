@@ -399,22 +399,33 @@ impl KeyStore {
     // ─── Family (Persistent Contact List) ───────────────────────
 
     /// Add a peer to the family list. Fails if already present.
+    ///
+    /// `nickname` and `last_address` are encrypted at rest when `key` is
+    /// provided (they reveal the social graph and contact locations);
+    /// `key = None` stores them as plaintext (legacy/no-vault profiles).
     pub fn add_family_member(
         &self,
         public_key: &[u8; 32],
         nickname: &str,
         expires_in_days: Option<u64>,
         last_address: Option<&str>,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<FamilyMember, StorageError> {
         use rusqlite::Error::SqliteFailure;
 
         let now = chrono::Utc::now().timestamp();
         let expires_at = expires_in_days.map(|days| now + (days as i64) * 86400);
 
+        let nickname_stored = seal_meta_value(key, nickname, AAD_FAMILY)?;
+        let address_stored = match last_address {
+            Some(addr) => Some(seal_meta_value(key, addr, AAD_FAMILY)?),
+            None => None,
+        };
+
         let result = self.conn.execute(
             "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![public_key.as_slice(), nickname, now, expires_at, last_address],
+            params![public_key.as_slice(), nickname_stored, now, expires_at, address_stored],
         );
 
         match result {
@@ -433,7 +444,10 @@ impl KeyStore {
     }
 
     /// List all non-expired family members.
-    pub fn list_family(&self) -> Result<Vec<FamilyMember>, StorageError> {
+    pub fn list_family(
+        &self,
+        key: Option<&crate::secure_key::StorageKey>,
+    ) -> Result<Vec<FamilyMember>, StorageError> {
         let now = chrono::Utc::now().timestamp();
         let mut stmt = self.conn.prepare(
             "SELECT public_key, nickname, added_at, expires_at, last_address
@@ -456,7 +470,12 @@ impl KeyStore {
         })?;
         let mut members = Vec::new();
         for row in rows {
-            members.push(row?);
+            let mut m = row?;
+            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)?;
+            if let Some(addr) = &m.last_address {
+                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY)?);
+            }
+            members.push(m);
         }
         Ok(members)
     }
