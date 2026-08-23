@@ -405,9 +405,10 @@ pub async fn remove_reaction(
 ) -> Result<(), String> {
     // Remove locally (scoped to this conversation — H4)
     {
+        let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
-            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, true, &peer_key_hex)
+            store.upsert_reaction(&message_id, &reaction, &peer_key_hex, true, &peer_key_hex, sk.as_ref())
                 .map_err(|e| format!("failed to remove reaction: {e}"))?;
         }
     }
