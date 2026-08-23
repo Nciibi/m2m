@@ -565,56 +565,63 @@ impl GroupManager {
 
     /// Handle receiving a GroupSenderKey bundle from another member.
     ///
-    /// The bundle ID scheme:
-    /// - If `signing_key` is `Some(...)`, then this bundle contains OUR OWN signing key
-    ///   (i.e., the recipient should set up their sending chain). The `sender_peer_key_hex`
-    ///   identifies whose chain this is — if it's the recipient's own key, it's the
-    ///   sending chain. Callers should verify the sender_peer_key_hex matches locally.
-    /// - If `signing_key` is `None`, then this bundle contains another member's sender
-    ///   key info and should be stored as a receiver chain to decrypt their messages.
+    /// Trust model v2 — every bundle MUST be:
+    /// 1. Free of private key material (`signing_key` must be None — signing
+    ///    keys are generated locally by their owner and never distributed).
+    /// 2. Sent by its owner: `data.sender_peer_key_hex` must equal the hex of
+    ///    the long-term identity key of the DIRECT transport peer.
+    /// 3. Signed by that identity key over
+    ///    [`sender_key_bundle_sign_bytes`](`self::sender_key_bundle_sign_bytes`).
     ///
-    /// The `our_peer_key_hex` parameter tells us who WE are, so we can determine
-    /// whether a bundle with a signing key is ours.
+    /// Returns [`SenderKeyReceipt::NewMember`] when the sender was previously
+    /// unknown, so the caller can reply with our own bundle (mutual exchange;
+    /// also how late joiners receive existing members' chain keys).
     pub fn handle_sender_key(
         &mut self,
         data: &GroupSenderKeyData,
         our_peer_key_hex: &str,
-    ) -> Result<(), String> {
+        peer_identity_pub: &[u8; 32],
+    ) -> Result<SenderKeyReceipt, String> {
+        let _ = our_peer_key_hex;
+
+        if data.signing_key.is_some() {
+            return Err(
+                "rejected sender key bundle: contains private signing key material".to_string(),
+            );
+        }
+
+        // The bundle must be owned by the direct transport peer.
+        let peer_hex = hex::encode(peer_identity_pub);
+        if data.sender_peer_key_hex != peer_hex {
+            return Err(format!(
+                "rejected sender key bundle: claimed sender is not the transport peer"
+            ));
+        }
+
+        // Signature must verify under the transport peer's identity key.
+        let sign_bytes = sender_key_bundle_sign_bytes(data);
+        crypto::verify_signature(peer_identity_pub, &sign_bytes, &data.signature)
+            .map_err(|_| "rejected sender key bundle: invalid signature".to_string())?;
+
         let group = self
             .groups
             .get_mut(&data.group_id)
             .ok_or("group not found")?;
 
-        // If this bundle contains a signing key, it's OUR sending chain
-        // (the bundle was generated specifically for us).
-        if let Some(sk_bytes) = &data.signing_key {
-            // Only set up our sending chain if the bundle is addressed to us.
-            // The sender_peer_key_hex tells us which peer this chain represents —
-            // if it matches our own key, it's our sender chain.
-            if data.sender_peer_key_hex == our_peer_key_hex {
-                let mut sk = [0u8; 64];
-                if sk_bytes.len() == 64 {
-                    sk.copy_from_slice(&sk_bytes[..64]);
-                }
-                group.our_signing_key = Some(sk);
-                group.our_verification_key = Some(data.verification_key);
-                group.our_initial_chain_key = Some(data.chain_key);
-                group.our_sending_chain = Some(crate::crypto::SenderKeyChain::new(data.chain_key));
-                return Ok(());
-            }
-            // If the signing key is present but sender is NOT us, something is wrong
-            // (signing keys should only be sent to the key's owner). Treat as error.
-            return Err("received a sender key bundle with signing key for a different peer".to_string());
-        }
+        let is_new = !group.verification_keys.contains_key(&data.sender_peer_key_hex)
+            && !group.is_member(&data.sender_peer_key_hex);
 
-        // Otherwise, store as a receiver chain for this sender
         group.store_receiver_key(
             &data.sender_peer_key_hex,
             &data.chain_key,
             &data.verification_key,
         );
 
-        Ok(())
+        Ok(if is_new {
+            SenderKeyReceipt::NewMember
+        } else {
+            SenderKeyReceipt::Known
+        })
     }
 
     /// Get a group by ID.
