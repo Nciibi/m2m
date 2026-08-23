@@ -1,0 +1,127 @@
+# M2M — Security Hardening Roadmap
+
+> Compiled from a full deep-scan audit (backend, crypto core, frontend, relay server).
+> Ratings at time of scan: overall **7.5/10** — strong design, immature implementation.
+> All items are actionable; none require redesigning the architecture.
+
+---
+
+## 1. Critical Fixes (fix first — highest ROI)
+
+| # | Issue | Location | Impact |
+|---|-------|----------|--------|
+| 1 | `import_identity` re-seals the private key under `derive_storage_key(&pub_bytes)` — a SHA-256 of a **public** value anyone can compute | `commands/vault.rs:758-767` | Imported identity is plaintext-equivalent at rest, permanently |
+| 2 | Byte-index string slicing panics on multi-byte UTF-8 boundaries (`&text[..77]`, `&content_str[..80]`) | `chat.rs:188`, `network.rs:2024` | Remote crash bug reachable from crafted network input |
+| 3 | Double Ratchet advances root/recv chain **before** AEAD verification; garbage frame with fake ratchet key permanently desyncs session | `crypto.rs:677-679, 585-599` | Irreversible session DoS by active attacker |
+| 4 | Legacy session path: random initial counters never exchanged → sessions fail (or path is dead code kept alive as weak fallback) | `session.rs:79-95, 642-647` | Broken functionality + unnecessary attack surface |
+| 5 | Responder accepts any validly-signed stranger, auto-upserts into KeyStore — no contact allowlist gate | `commands/network.rs:424-485` | Anyone who finds the port can open sessions/deliver messages |
+| 6 | One-time prekeys (OPKs) fully implemented but never used; SPK never rotates | `commands/network.rs:238`, `session.rs:451-454` | Weakened forward secrecy for first messages |
+
+### Secondary fixes
+- Pre-auth STUN/candidate gathering in `handle_incoming_connection` = self-inflicted DoS amplification (`commands/network.rs:379-404`) — move post-handshake or cache
+- Release per-peer connection mutex before SQLite writes in receive loop (`network.rs:930-1008`) — head-of-line blocking
+- Encrypt transfers.db / family contacts / reactions metadata, or document as intentionally plaintext
+- Heartbeat timeout documented but never implemented (`HeartbeatAck` is a no-op arm, `network.rs:1451-1453`)
+- Handshake signatures don't cover `candidates` (`session.rs:127-129`) — MITM can poison reconnect targets
+- DHT `parse_node_response` hardcodes IPv4 while announce supports IPv6 (`dht.rs:315 vs 265`)
+- Split ~1,400-line `spawn_receive_loop`; de-duplicate ChatMessage construction sites
+
+---
+
+## 2. Anti-Surveillance Features (screen recording / keyloggers)
+
+**Honest threat model:** an app can defeat casual/opportunistic spying; nothing user-space defeats kernel-level malware on the same machine.
+
+| Technique | Status | Stops | Can't stop |
+|-----------|--------|-------|------------|
+| `WDA_EXCLUDEFROMCAPTURE` (Windows) | ✅ implemented (`window_security.rs:57`) | OBS, Zoom-share, most recorders | Kernel capture, HDMI capture cards, phone camera |
+| macOS `NSWindow.sharingType = .none` | ❌ stub (`window_security.rs:70`) | — | Implement via objc FFI |
+| Linux X11 privacy hint / Wayland isolation | ❌ stub | — | X11 clients can always read other windows |
+| Re-apply affinity after window recreation | ❌ missing | Silent protection drop on webview recreate | — |
+| On-screen keyboard for passphrase entry | ❌ TODO | Hook-based keyloggers (for the highest-value secret) | Screen recorders watching clicks |
+| Blur content when window loses focus | ❌ TODO | Background capture tools | Focused capture |
+| Detect known capture processes (OBS etc.) + warn | ❌ TODO | Nothing — but honest detection/warning UX | Determined malware |
+| Clipboard auto-clear | ✅ implemented | Clipboard sniffers | Reads before clear fires |
+| Idle vault auto-lock | ✅ implemented | Unattended access | Active-session compromise |
+
+**Rule:** a VM window on an infected host is NOT isolated — host keyloggers see keystrokes passing through the host input stack; host recorders capture the VM window. True isolation requires replacing the host environment (Qubes/Tails) or raw hardware input (IOMMU/VT-d USB passthrough).
+
+---
+
+## 3. Kernel Driver Option (Windows hardened mode)
+
+The only in-app path that meaningfully beats kernel-level keyloggers. This is how commercial anti-keyloggers (KeyScrambler) work.
+
+| Driver type | Capability |
+|---|-----------|
+| Keyboard filter driver (below `kbdclass`) | Sits lower than most keyloggers — encrypt/scramble keystrokes so anything hooked above reads garbage |
+| Process-protect callbacks (`ObRegisterCallbacks`) | Block memory readers, injection, debuggers from opening the process |
+| Display/capture minifilter | Deny screen-capture APIs for the app window even to admin processes |
+| Registry/callback monitoring | Detect persistence attempts by surveillance tools |
+
+**Costs / constraints:**
+- Windows loads only signed drivers: EV code-signing cert + Microsoft attestation/WHQL signing (~hundreds $/yr, review cycles per update)
+- Driver bugs = BSOD, possibly on boot
+- Each Windows major update can break filter internals; PatchGuard blocks some techniques
+- Still not absolute: rootkit drivers or hypervisor implants outrank/coexist with yours
+- **Windows-only** — macOS third-party kexts are effectively dead (DriverKit too limited)
+- Trust paradox: a privacy app requesting ring-0 looks suspicious itself
+
+**Recommended sequencing:** finish app-layer wins → external crypto audit → only if project gains revenue base, ship as paid "Hardened Mode".
+
+---
+
+## 4. Military-Grade Checklist
+
+### Deniability & coercion resistance
+- [ ] **Hidden volume** — decoy vault under fake passphrase opens boring data; indistinguishable ciphertext (TrueCrypt-style)
+- [ ] **Duress passphrase** — special password silently unlocks decoy and/or triggers wipe instead of revealing real vault
+- [ ] No usernames/identifiers anywhere — keep absolute
+
+### Data at rest
+- [ ] **Crypto-shredding for deletion** — destroy per-message keys instead of deleting rows; ciphertext becomes unrecoverable regardless of WAL/disk remnants (current `secure_delete` + skip-VACUUM leaves remnants, `storage.rs:1039-1054`)
+- [ ] Disable crash dumps (minidumps contain decrypted message buffers)
+- [ ] Full `VirtualLock`/mlock coverage on all plaintext secrets
+
+### Traffic analysis resistance
+- [ ] **Fixed-size / bucketed frame padding** — message sizes currently reveal content type (64 KiB text vs chunks vs reactions)
+- [ ] Optional batching delay for sends — send-time reveals nothing
+- [ ] Encrypted+authenticated heartbeats or remove them (currently plaintext oracle, `protocol.rs:130`)
+- [ ] Consider cover traffic for typing indicators / read receipts timing metadata
+
+### Supply chain & build integrity
+- [ ] **Reproducible builds** — released binaries verifiably match source; without this every other claim is unverifiable
+- [ ] Migrate archived sodiumoxide → RustCrypto (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`)
+- [ ] **Signed updates** via Tauri updater signatures — unsigned update channel is the kill-chain
+- [ ] Dependency pinning + periodic `cargo audit` (CI already runs this)
+
+### Assurance (what makes "military-grade" a fact, not marketing)
+- [ ] **External crypto audit** — non-negotiable; the entire difference between claims and reality
+- [ ] Fuzzing with cargo-fuzz on `protocol.rs` parsing (internet-facing packet parser)
+- [ ] Formal verification of ratchet/HKDF protocol logic (ProVerif/hax)
+- [ ] Bug bounty program
+
+### Operational features for high-risk users
+- [ ] **Emergency panic wipe** — hotkey zeroizes vault keys + deletes storage mid-session
+- [ ] **Air-gap mode** — LAN-only operation, no internet-facing listener
+- [ ] **Ephemeral RAM-only sessions** — conversation never touches SQLite
+- [ ] Hardware-backed key sealing (TPM 2.0 / Secure Enclave) — disk theft alone yields nothing
+
+### Documentation for high-risk users
+- [ ] Official guides: run M2M in **Tails**, **Whonix**, or **Qubes OS**
+- [ ] Ship hardened VM image (Debian + M2M + Tor preconfigured)
+
+---
+
+## 5. Recommended Priority Order
+
+1. Critical fixes table §1 (≈1 week focused work)
+2. Crypto-shredding deletion
+3. Frame padding
+4. Reproducible builds
+5. Signed updates
+6. macOS capture protection + on-screen passphrase keyboard + focus blur
+7. Fuzzing
+8. External audit ← *this flips "promising" into "verified"*
+9. Deniability layer (hidden vault, duress passphrase)
+10. Kernel driver as optional Windows "Hardened Mode" (only after audit + sustainable funding)
