@@ -773,23 +773,23 @@ impl DoubleRatchet {
         ratchet_key: Option<&[u8; 32]>,
     ) -> Result<TentativeReceive, CryptoError> {
         let mut tent_root = dr.root_key;
-        let mut tent_chain = match dr.recv_chain_key {
-            Some(c) => c,
-            None => {
-                return Err(CryptoError::DoubleRatchetError(
-                    "no recv chain key".into(),
-                ));
-            }
-        };
+        // A pure sender starts with NO receive chain. That is fine as long
+        // as the frame carries a ratchet public (below): its DH step derives
+        // a fresh chain. Only frames WITHOUT a ratchet key require an
+        // existing chain. (Pre-fix, the early "no recv chain key" error made
+        // the initiator unable to ever decrypt the responder's first —
+        // necessarily ratcheted — message.)
+        let mut tent_chain_opt = dr.recv_chain_key;
         let mut tent_their_pub = dr.their_ratchet_pub;
         let mut tent_recv_num = dr.recv_message_number;
         let mut staged_skips: Vec<(u64, [u8; 32])> = Vec::new();
 
         // Scrub all tentative secrets (helper for the error exits below).
+        // Note: zeroizing an Option<[u8; 32]> clears the bytes when present.
         macro_rules! scrub_and {
             ($err:expr) => {{
                 tent_root.zeroize();
-                tent_chain.zeroize();
+                tent_chain_opt.zeroize();
                 for (_, k) in staged_skips.iter_mut() {
                     k.zeroize();
                 }
@@ -810,11 +810,18 @@ impl DoubleRatchet {
             new_chain.copy_from_slice(&out[32..]);
             tent_root.zeroize();
             tent_root = new_root;
-            tent_chain.zeroize();
-            tent_chain = new_chain;
+            tent_chain_opt.zeroize();
+            tent_chain_opt = Some(new_chain);
             tent_their_pub = *new_pub;
             tent_recv_num = 0;
         }
+
+        let mut tent_chain = match tent_chain_opt {
+            Some(c) => c,
+            None => scrub_and!(CryptoError::DoubleRatchetError(
+                "no recv chain key".into(),
+            )),
+        };
 
         // ── Cap gap size: reject absurd message numbers before burning CPU ──
         let gap = (message_number - tent_recv_num) as usize;
