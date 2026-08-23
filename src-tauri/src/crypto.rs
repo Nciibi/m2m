@@ -734,7 +734,8 @@ impl DoubleRatchet {
             if result.is_ok() {
                 self.skipped_keys.remove(&message_number);
             } else {
-                saved_key.zeroize();
+                let mut discard = saved_key;
+                discard.zeroize();
             }
             return result;
         }
@@ -842,7 +843,8 @@ impl DoubleRatchet {
             }),
             Err(e) => {
                 drop(msg_key); // MessageKey zeroizes its bytes
-                next_chain.zeroize();
+                let mut discard = next_chain;
+                discard.zeroize();
                 scrub_and!(e)
             }
         }
