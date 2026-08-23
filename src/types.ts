@@ -131,6 +131,10 @@ export interface SecurityConfig {
   require_known_contact: boolean;
   capture_process_detection: boolean;
   blur_on_focus_loss: boolean;
+  air_gap_mode: boolean;
+  ephemeral_mode: boolean;
+  send_batching_ms: number;
+  cover_typing_traffic: boolean;
 }
 
 /** Honest per-platform capability report for screen-capture protection. */
