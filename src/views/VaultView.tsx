@@ -145,6 +145,20 @@ export default function VaultView() {
                   ⌨
                 </button>
                 <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      setPassphrase(text);
+                      setVaultError("");
+                    } catch { /* clipboard unavailable */ }
+                  }}
+                  className="vault-paste-btn"
+                  title="Paste from clipboard"
+                  aria-label="Paste passphrase"
+                >
+                  Paste
+                </button>
+                <button
                   onClick={() => setShowPassphrase(!showPassphrase)}
                   aria-label={showPassphrase ? "Hide passphrase" : "Show passphrase"}
                   aria-pressed={showPassphrase}
