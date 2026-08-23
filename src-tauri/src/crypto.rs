@@ -217,11 +217,20 @@ pub(crate) fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
 }
 
 /// HKDF-Expand: output key material from PRK, info, and desired length.
+///
+/// Per RFC 5869 the output is limited to 255 * HashLen = 8160 bytes for
+/// SHA-256; larger requests panic (they are a programming error — all
+/// internal callers request ≤ 64 bytes).
 pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8> {
     use hmac::Mac;
+    let n = length.div_ceil(32);
+    assert!(
+        n <= 255,
+        "hkdf_expand: length {length} exceeds RFC 5869 maximum (255*32 bytes)"
+    );
     let mut result = Vec::with_capacity(length);
     let mut t: Vec<u8> = Vec::new();
-    for i in 1u8..=length.div_ceil(32) as u8 {
+    for i in 1..=n as u8 {
         let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(prk)
             .expect("HMAC accepts any key length");
         mac.update(&t);
@@ -230,6 +239,9 @@ pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8>
         t = mac.finalize().into_bytes().to_vec();
         result.extend_from_slice(&t);
     }
+    result.truncate(length);
+    result
+}
     result.truncate(length);
     result
 }
