@@ -622,6 +622,7 @@ impl MessageStore {
                 content_nonce BLOB NOT NULL,
                 timestamp INTEGER NOT NULL,
                 delivered INTEGER NOT NULL DEFAULT 0,
+                content_key_wrapped BLOB,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id)
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conversation
