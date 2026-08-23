@@ -326,7 +326,7 @@ fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
 
     // Legacy fallback: fixed 38-byte all-IPv4 entries.
     const LEGACY_ENTRY_SIZE: usize = 32 + 4 + 2;
-    if body.len() % LEGACY_ENTRY_SIZE != 0 {
+    if !body.len().is_multiple_of(LEGACY_ENTRY_SIZE) {
         return Err(DhtError::BadResponse("malformed node response".into()));
     }
 
