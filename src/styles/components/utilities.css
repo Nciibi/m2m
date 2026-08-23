@@ -162,6 +162,11 @@
   margin-top: var(--space-xs);
 }
 .vault-submit-wrap { margin-top: var(--space-sm); }
+.vault-divider {
+  height: 1px; width: 100%;
+  background: var(--color-border-default);
+  opacity: 0.5;
+}
 .fp-hint {
   font-size: var(--text-xs); color: var(--color-text-muted);
   text-align: center; margin-top: var(--space-xs);
