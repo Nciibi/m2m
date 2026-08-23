@@ -129,18 +129,14 @@ pub async fn load_messages(
             }
         }
 
-        messages.push(ChatMessage {
-            id: m.id,
-            content,
-            direction: m.direction,
-            timestamp: m.timestamp as u64,
-            read_at: m.read_at,
-            edited_at: m.edited_at,
-            deleted: m.deleted,
-            expires_at: m.expires_at,
-            reactions,
-            sender_peer_key_hex: String::new(),
-        });
+        messages.push(
+            ChatMessage::new(m.id, content, m.direction, m.timestamp as u64)
+                .with_read_at(m.read_at)
+                .with_edited_at(m.edited_at)
+                .with_deleted(m.deleted)
+                .with_expires_at(m.expires_at)
+                .with_reactions(reactions),
+        );
     }
     Ok(messages)
 }
@@ -518,18 +514,8 @@ pub async fn send_message_with_timer(
         }
     }
 
-    Ok(ChatMessage {
-        id: msg_id,
-        content,
-        direction: "sent".to_string(),
-        timestamp: now,
-        read_at: None,
-        edited_at: None,
-        deleted: false,
-        expires_at,
-        reactions: std::collections::HashMap::new(),
-        sender_peer_key_hex: String::new(),
-    })
+    Ok(ChatMessage::new(msg_id, content, "sent".to_string(), now)
+        .with_expires_at(expires_at))
 }
 
 /// Edit a previously-sent message.
