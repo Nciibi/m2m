@@ -748,6 +748,8 @@ pub async fn connect_to_peer(
         session,
         remote_addr,
         strategy_name: strategy_name.to_string(),
+        last_hb_sent: None,
+        last_hb_ack: None,
     };
 
     let mut conns = state.connections.write().await;

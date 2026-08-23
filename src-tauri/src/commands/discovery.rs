@@ -300,6 +300,8 @@ pub async fn connect_discovered_peer(
         session,
         remote_addr: peer_addr,
         strategy_name: format!("discovery-{}", "tcp"),
+        last_hb_sent: None,
+        last_hb_ack: None,
     };
 
     {
