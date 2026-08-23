@@ -35,6 +35,7 @@ interface SettingsContextValue {
   handleScreenCaptureToggle: () => Promise<void>;
   handleClipboardClearSecsChange: (secs: number) => Promise<void>;
   handleIdleLockSecsChange: (secs: number) => Promise<void>;
+  handleRequireKnownContactToggle: () => Promise<void>;
   handleLockVault: () => Promise<void>;
   handleClearClipboard: () => Promise<void>;
   scheduleClipboardClear: (secs: number) => void;
