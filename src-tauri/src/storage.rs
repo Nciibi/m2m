@@ -1997,6 +1997,20 @@ mod tests {
         store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Bob")).unwrap();
     }
 
+    /// H5: is_known_peer must reflect the peers table — unknown keys are
+    /// rejected by the contact allowlist gate, previously-connected peers pass.
+    #[test]
+    fn test_is_known_peer() {
+        let store = mem_keystore();
+        assert!(!store.is_known_peer(&[0x42; 32]).unwrap(), "empty store: peer must be unknown");
+
+        store.upsert_peer(&[0x42; 32], "AAAA:BBBB", None).unwrap();
+        assert!(store.is_known_peer(&[0x42; 32]).unwrap(), "upserted peer must be known");
+
+        // A different key stays unknown.
+        assert!(!store.is_known_peer(&[0x43; 32]).unwrap());
+    }
+
     #[test]
     fn test_update_encrypted_private_key() {
         let store = mem_keystore();
