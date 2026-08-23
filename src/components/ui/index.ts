@@ -8,5 +8,6 @@ export { default as Select } from "./Select";
 export { default as LoadingSpinner } from "./LoadingSpinner";
 export { default as ProgressBar } from "./ProgressBar";
 export { default as Modal } from "./Modal";
+export { default as OnScreenKeyboard } from "./OnScreenKeyboard";
 export { NoChatsIllustration, RadarIllustration, FamilyIllustration } from "./EmptyStates";
 export * from "./icons/index";
