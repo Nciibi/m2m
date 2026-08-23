@@ -259,6 +259,8 @@ pub fn run() {
             // Security
             commands::security::get_security_config,
             commands::security::set_security_config,
+            commands::security::reapply_security_config,
+            commands::security::get_capture_capability,
             commands::security::clear_clipboard,
             commands::vault::lock_vault,
             commands::vault::is_first_run,
