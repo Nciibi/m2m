@@ -258,7 +258,7 @@ pub async fn create_invite(
             identity_key: x25519_kp.public_key_bytes(),
             signed_prekey: spk_pub,
             signed_prekey_sig: spk_sig,
-            one_time_prekey: None,
+            one_time_prekey: Some(opk_pub),
         }),
     )
     .map_err(|e| format!("invite creation failed: {e}"))
