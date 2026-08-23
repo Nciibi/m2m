@@ -226,9 +226,9 @@ mod tests {
     }
 
     #[test]
-    fn test_case_insensitivity_is_handled_by_caller_lowercasing() {
-        // Contract: caller lowercases. Feed pre-lowercased input.
-        let procs = vec!["obs64.exe".to_lowercase()];
+    fn test_case_insensitive_matching_is_internal() {
+        // Mixed-case input must still match (normalization is internal).
+        let procs = vec!["OBS64.exe".to_string()];
         assert_eq!(detect_capture_tools(procs), vec!["OBS Studio"]);
     }
 }
