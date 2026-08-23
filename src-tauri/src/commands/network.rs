@@ -1129,18 +1129,10 @@ pub fn spawn_receive_loop(
 
                                     let _ = app_handle.emit("m2m://message", MessageEvent {
                                         peer_key_hex: peer_key_hex.clone(),
-                                        message: ChatMessage {
-                                            id: id.clone(),
-                                            content: content.clone(),
-                                            direction: "received".to_string(),
-                                            timestamp: now,
-                                            read_at: None,
-                                            edited_at: None,
-                                            deleted: false,
-                                            expires_at: None,
-                                            reactions: std::collections::HashMap::new(),
-                                            sender_peer_key_hex: String::new(),
-                                        },
+                                        message: ChatMessage::new(
+                                            id.clone(), content.clone(),
+                                            "received".to_string(), now,
+                                        ),
                                     });
                                 }
                                 MessageBody::Ack { id } => {
@@ -2247,18 +2239,10 @@ drop(conns);
 
                                         let _ = app_handle.emit("m2m://group-message", GroupMessageEvent {
                                             group_id: gid,
-                                            message: ChatMessage {
-                                                id: msg_id,
-                                                content: content_str,
-                                                direction: "received".to_string(),
-                                                timestamp: now,
-                                                read_at: None,
-                                                edited_at: None,
-                                                deleted: false,
-                                                expires_at: None,
-                                                reactions: std::collections::HashMap::new(),
-                                                sender_peer_key_hex: sender,
-                                            },
+                                            message: ChatMessage::new(
+                                                msg_id, content_str,
+                                                "received".to_string(), now,
+                                            ).with_sender(sender),
                                         });
                                     }
                                 }
