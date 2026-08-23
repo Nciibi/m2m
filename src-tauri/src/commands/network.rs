@@ -943,6 +943,8 @@ async fn handle_incoming_text(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 PacketType::EncryptedMessage => {
                     // Decrypt under the per-peer connection lock ONLY; both
@@ -1036,6 +1038,8 @@ async fn handle_file_transfer_packet(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 PacketType::FileTransferRequest => {
                     let conns = state.connections.read().await;
@@ -1482,6 +1486,8 @@ async fn handle_heartbeat_frame(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 PacketType::Heartbeat => {
                     // Encrypted heartbeat: decrypt first (forged/garbage
@@ -1542,6 +1548,8 @@ async fn handle_conversation_meta(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 PacketType::ConversationMeta => {
                     // Decrypt under the per-peer lock only; SQLite writes run
@@ -1600,6 +1608,8 @@ async fn handle_message_update_frame(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 PacketType::MessageReaction => {
                     // Decrypt under the per-peer lock only (head-of-line fix).
@@ -1791,6 +1801,8 @@ async fn handle_sync_frame(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 PacketType::SyncRequest => {
                     let conns = state.connections.read().await;
@@ -1906,6 +1918,8 @@ async fn handle_group_frame(
     peer_key_hex: &String,
     frame: &crate::network::RawFrame,
 ) {
+    // Owned copy: handlers were extracted verbatim and rely on String semantics.
+    let peer_key_hex = peer_key_hex.clone();
     match frame.packet_type {
                 // ─── Group Chat (Phase 3) ───
                 PacketType::GroupCreate => {
