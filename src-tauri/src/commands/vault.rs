@@ -1079,3 +1079,96 @@ pub async fn set_first_run_complete(state: State<'_, Arc<AppState>>) -> Result<(
     *fr = false;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    const TEST_PASSPHRASE: &str = "correct-horse-battery-staple-clock";
+    const TEST_PUB: [u8; 32] = [0x42; 32];
+    const TEST_SK: [u8; 64] = [0x77; 64];
+
+    fn passphrase_key() -> crate::secure_key::StorageKey {
+        util::derive_storage_key_from_passphrase(TEST_PASSPHRASE, &TEST_PUB).unwrap()
+    }
+
+    /// H1 regression: the imported identity must NOT be decryptable with the
+    /// publicly-computable legacy key (SHA-256 of context + public key).
+    /// An attacker who steals keys.db can compute that key from the public
+    /// `identity.public_key` column alone.
+    #[test]
+    fn test_imported_identity_not_recoverable_with_legacy_key() {
+        let key_store = KeyStore::open(Path::new(":memory:")).unwrap();
+        let storage_key = passphrase_key();
+
+        seal_imported_identity(&key_store, &TEST_PUB, &TEST_SK, &storage_key).unwrap();
+
+        let (_pub_loaded, enc, nonce) = key_store.load_identity().unwrap();
+
+        let legacy_key = util::derive_storage_key(&TEST_PUB);
+        assert!(
+            util::crypto_decrypt_storage(&enc, &nonce, &legacy_key, util::AAD_KEY_STORE).is_err(),
+            "imported secret key was sealed under the publicly-computable legacy key"
+        );
+    }
+
+    /// H1 regression: the passphrase-derived key (the same derivation
+    /// unlock_vault uses for account lookup) must recover the exact
+    /// secret-key bytes — round-trip integrity.
+    #[test]
+    fn test_imported_identity_roundtrips_with_passphrase_key() {
+        let key_store = KeyStore::open(Path::new(":memory:")).unwrap();
+        let storage_key = passphrase_key();
+
+        seal_imported_identity(&key_store, &TEST_PUB, &TEST_SK, &storage_key).unwrap();
+
+        let (_pub_loaded, enc, nonce) = key_store.load_identity().unwrap();
+        let recovered =
+            util::crypto_decrypt_storage(&enc, &nonce, &storage_key, util::AAD_KEY_STORE).unwrap();
+        assert_eq!(recovered, TEST_SK.to_vec());
+    }
+
+    /// Sealing an import must mark the vault initialized and register an
+    /// account row so multi-account unlock can select it by passphrase.
+    #[test]
+    fn test_import_registers_account_and_marks_vault_initialized() {
+        let key_store = KeyStore::open(Path::new(":memory:")).unwrap();
+        let storage_key = passphrase_key();
+
+        seal_imported_identity(&key_store, &TEST_PUB, &TEST_SK, &storage_key).unwrap();
+
+        assert!(key_store.is_vault_initialized().unwrap());
+        let accounts = key_store.list_accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].public_key, TEST_PUB.to_vec());
+        assert_eq!(accounts[0].label.as_deref(), Some("Imported"));
+    }
+
+    /// Re-importing the same identity must not duplicate the account row —
+    /// the existing row's wrapped key is refreshed instead.
+    #[test]
+    fn test_reimport_refreshes_existing_account_row() {
+        let key_store = KeyStore::open(Path::new(":memory:")).unwrap();
+        let storage_key = passphrase_key();
+
+        seal_imported_identity(&key_store, &TEST_PUB, &TEST_SK, &storage_key).unwrap();
+        // Second import with a different wrapping (fresh encryption) — same pubkey.
+        seal_imported_identity(&key_store, &TEST_PUB, &TEST_SK, &passphrase_key()).unwrap();
+
+        let accounts = key_store.list_accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+
+        // The refreshed account blob must still decrypt under the new wrap.
+        let (_, enc, nonce) = key_store.load_identity().unwrap();
+        let recovered = util::crypto_decrypt_storage(
+            &accounts[0].encrypted_private_key,
+            &accounts[0].private_key_nonce,
+            &storage_key,
+            util::AAD_KEY_STORE,
+        )
+        .unwrap();
+        assert_eq!(recovered, TEST_SK.to_vec());
+        assert_eq!(enc.len() % 16, 0); // sanity: ciphertext present in identity row too
+    }
+}
