@@ -696,6 +696,12 @@ impl MessageStore {
         if !existing_columns.contains(&"expires_at".to_string()) {
             conn.execute("ALTER TABLE messages ADD COLUMN expires_at INTEGER", [])?;
         }
+        if !existing_columns.contains(&"content_key_wrapped".to_string()) {
+            // Crypto-shredding (H7): per-message content key, wrapped under
+            // the vault storage key. Nullable — legacy rows are encrypted
+            // directly under the vault key and decrypt via fallback.
+            conn.execute("ALTER TABLE messages ADD COLUMN content_key_wrapped BLOB", [])?;
+        }
         // Create indexes that depend on the columns above (expires_at, read_at).
         // These are CREATE INDEX IF NOT EXISTS so they're idempotent on re-run.
         conn.execute_batch(
