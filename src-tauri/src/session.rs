@@ -425,12 +425,21 @@ impl Session {
     }
 
     /// Execute the X3DH + Double Ratchet handshake as the responder.
+    ///
+    /// `one_time_prekey` is OUR one-time prekey whose public key was embedded
+    /// in the invite's prekey bundle (H6). Whether it participates in DH4 is
+    /// decided by the initiator's `used_opk` signal, so both sides always
+    /// agree on the SK inputs:
+    /// - initiator signals an OPK we don't have → handshake fails cleanly
+    ///   (SK would mismatch otherwise)
+    /// - initiator signals none → responder must NOT apply its OPK either
     pub async fn handshake_as_responder_x3dh<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         stream: &mut S,
         identity: &IdentityKeypair,
         x25519_identity: &X25519IdentityKeypair,
         signed_prekey: &EphemeralKeypair,
+        one_time_prekey: Option<&EphemeralKeypair>,
         init_frame: &RawFrame,
         local_candidates: Vec<WireCandidate>,
     ) -> Result<(), SessionError> {
