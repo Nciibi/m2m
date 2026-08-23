@@ -1036,11 +1036,36 @@ fn session_dr_aad(
     aad
 }
 
+/// Maximum allowed deviation between a peer's handshake timestamp and our
+/// clock. Covers normal latency plus reasonable clock skew. Handshakes with
+/// timestamps outside this window are rejected as potential replays (M1).
+pub const HANDSHAKE_FRESHNESS_WINDOW_SECS: u64 = 300;
+
+/// Validate a peer-supplied handshake timestamp for freshness.
+///
+/// The timestamp is already covered by the peer's signature; checking its
+/// age additionally bounds how long a captured handshake frame can be
+/// replayed by a network attacker.
+fn validate_handshake_timestamp(timestamp: u64) -> Result<(), SessionError> {
+    let now = now_unix_secs();
+    if timestamp.abs_diff(now) > HANDSHAKE_FRESHNESS_WINDOW_SECS {
+        return Err(SessionError::HandshakeFailed(format!(
+            "handshake timestamp stale or from the future (skew {}s > window {}s)",
+            timestamp.abs_diff(now),
+            HANDSHAKE_FRESHNESS_WINDOW_SECS
+        )));
+    }
+    Ok(())
+}
+
 fn now_unix_secs() -> u64 {
+    // A clock before the Unix epoch is an environment problem, not a reason
+    // to crash: fall back to 0 (which also fails the freshness check above,
+    // failing safe rather than panicking — M6).
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("system clock before Unix epoch")
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
