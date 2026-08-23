@@ -882,14 +882,20 @@ pub async fn import_identity(
 
     let mut sk_arr = [0u8; 64];
     if sk_bytes.len() != 64 {
+        sk_bytes.zeroize();
         return Err("invalid secret key length in backup".to_string());
     }
     sk_arr.copy_from_slice(&sk_bytes);
     sk_bytes.zeroize();
 
     // Reconstruct keypair
-    let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
-        .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
+    let kp = match IdentityKeypair::from_bytes(&pub_arr, &sk_arr) {
+        Ok(kp) => kp,
+        Err(e) => {
+            sk_arr.zeroize();
+            return Err(format!("failed to reconstruct identity: {e}"));
+        }
+    };
 
     let fingerprint = kp.fingerprint();
     let pub_hex = hex::encode(&pub_bytes);
