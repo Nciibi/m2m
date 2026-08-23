@@ -413,8 +413,6 @@ impl GroupManager {
         }
 
         let our_bundle = group.own_sender_bundle()?;
-        // Address the bundle to its recipient so they can route/verify it.
-        let mut addressed = our_bundle;
 
         // Add member
         group.members.push(GroupMember {
@@ -424,7 +422,7 @@ impl GroupManager {
             added_at,
         });
 
-        Ok(vec![addressed])
+        Ok(vec![our_bundle])
     }
 
     /// Join a group from the receiving side (GroupCreate / GroupInvite).
