@@ -1754,4 +1754,84 @@ mod crypto_tests {
         let result = dr.decrypt(b"ciphertext", b"nonce", &aad, 0, None);
         assert!(result.is_err());
     }
+
+    /// H3 regression: an in-chain garbage frame must NOT advance the receive
+    /// chain. Pre-fix, the chain advanced before AEAD verification, so one
+    /// injected garbage message permanently desynced the session.
+    #[test]
+    fn test_dr_garbage_frame_does_not_desync() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        let (_, num0, n0, c0) = alice.encrypt(b"real msg 0", &aad, false).unwrap();
+        bob.decrypt(&c0, &n0, &aad, num0, None).unwrap();
+
+        // Forged garbage frame at the next expected number.
+        let (_, num1, n1, c1) = alice.encrypt(b"real msg 1", &aad, false).unwrap();
+        let mut garbage = c1.clone();
+        garbage[0] ^= 0xFF;
+        assert!(bob.decrypt(&garbage, &n1, &aad, num1, None).is_err());
+
+        // The genuine frame must still decrypt — state was not corrupted.
+        let decrypted = bob.decrypt(&c1, &n1, &aad, num1, None).unwrap();
+        assert_eq!(&decrypted, b"real msg 1");
+    }
+
+    /// H3 regression (the audit's headline case): a forged frame carrying a
+    /// FAKE ratchet key used to overwrite the root key + recv chain and wipe
+    /// skipped keys before AEAD ran — an irreversible session kill by an
+    /// active attacker. Now nothing commits on authentication failure.
+    #[test]
+    fn test_dr_forged_ratchet_key_does_not_desync() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+        let fake_ratchet_pub = [0xDEu8; 32];
+
+        let (_, num0, n0, c0) = alice.encrypt(b"before attack", &aad, false).unwrap();
+        bob.decrypt(&c0, &n0, &aad, num0, None).unwrap();
+
+        // Attacker-injected frame: bogus DH key, claims to start a new chain.
+        let nonce = vec![0x11u8; 24];
+        assert!(
+            bob.decrypt(b"forged ciphertext", &nonce, &aad, 0, Some(&fake_ratchet_pub))
+                .is_err()
+        );
+
+        // Genuine ratcheted message from Alice must still decrypt fine.
+        let (rk, num1, n1, c1) = alice.encrypt(b"after attack", &aad, true).unwrap();
+        let decrypted = bob.decrypt(&c1, &n1, &aad, num1, rk.as_ref()).unwrap();
+        assert_eq!(&decrypted, b"after attack");
+
+        // And the session keeps working across further exchanges.
+        let (rk2, num2, n2, c2) = alice.encrypt(b"still alive", &aad, true).unwrap();
+        let decrypted = bob.decrypt(&c2, &n2, &aad, num2, rk2.as_ref()).unwrap();
+        assert_eq!(&decrypted, b"still alive");
+    }
+
+    /// H3 regression: a cached skipped-message key must only be consumed
+    /// when its decryption SUCCEEDS. Pre-fix the cache entry was removed
+    /// before AEAD, so a single corrupted retransmission destroyed the key
+    /// needed by the genuine delayed frame.
+    #[test]
+    fn test_dr_failed_cached_decrypt_keeps_key() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        let sent: Vec<_> = (0..3)
+            .map(|i| alice.encrypt(format!("delayed {}", i).as_bytes(), &aad, false).unwrap())
+            .collect();
+
+        // Deliver 0 and 2 — message 1's key is now cached.
+        bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref()).unwrap();
+        bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref()).unwrap();
+
+        // Corrupted attempt for the delayed message 1 must fail...
+        let mut corrupt = sent[1].3.clone();
+        corrupt[0] ^= 0xFF;
+        assert!(bob.decrypt(&corrupt, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).is_err());
+
+        // ...and the cached key must survive for the genuine frame.
+        let decrypted = bob.decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).unwrap();
+        assert_eq!(&decrypted, b"delayed 1");
+    }
 }
