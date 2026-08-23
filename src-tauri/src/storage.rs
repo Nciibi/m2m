@@ -289,6 +289,73 @@ impl KeyStore {
         Ok(count > 0)
     }
 
+    // ─── Multi-Account Vault ─────────────────────────────────────────────────
+    // Each account is an identity whose secret key is wrapped under its OWN
+    // passphrase. On the unlock screen, the entered passphrase is tried against
+    // every account blob; AEAD decryption success selects the account.
+
+    /// One stored account (secret material still encrypted).
+    #[derive(Debug, Clone)]
+    pub struct AccountRow {
+        pub id: i64,
+        pub public_key: Vec<u8>,
+        pub encrypted_private_key: Vec<u8>,
+        pub private_key_nonce: Vec<u8>,
+        pub label: Option<String>,
+    }
+
+    impl KeyStore {
+        /// Migrate a legacy single-identity row into `accounts` (idempotent).
+        pub fn migrate_legacy_identity_to_account(&self) -> Result<(), StorageError> {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO accounts (public_key, encrypted_private_key, private_key_nonce, label, created_at)
+                 SELECT public_key, encrypted_private_key, private_key_nonce, 'Main', created_at
+                 FROM identity WHERE id = 1",
+                [],
+            )?;
+            Ok(())
+        }
+
+        pub fn list_accounts(&self) -> Result<Vec<AccountRow>, StorageError> {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, public_key, encrypted_private_key, private_key_nonce, label
+                 FROM accounts ORDER BY created_at ASC",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok(AccountRow {
+                    id: row.get(0)?,
+                    public_key: row.get(1)?,
+                    encrypted_private_key: row.get(2)?,
+                    private_key_nonce: row.get(3)?,
+                    label: row.get(4)?,
+                })
+            })?;
+            rows.collect()
+        }
+
+        pub fn count_accounts(&self) -> Result<i64, StorageError> {
+            let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM accounts", [], |r| r.get(0))?;
+            Ok(n)
+        }
+
+        /// Insert a brand-new account (fresh identity wrapped under its own passphrase).
+        pub fn insert_account(
+            &self,
+            public_key: &[u8],
+            encrypted_private_key: &[u8],
+            nonce: &[u8],
+            label: Option<&str>,
+            created_at: i64,
+        ) -> Result<i64, StorageError> {
+            self.conn.execute(
+                "INSERT INTO accounts (public_key, encrypted_private_key, private_key_nonce, label, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![public_key, encrypted_private_key, nonce, label, created_at],
+            )?;
+            Ok(self.conn.last_insert_rowid())
+        }
+    }
+
     /// Add or update a known peer.
     pub fn upsert_peer(
         &self,
