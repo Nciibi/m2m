@@ -992,6 +992,26 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
     randombytes::randombytes(len)
 }
 
+// ─── Migration golden-vector helpers (test-only) ───────────────────────────
+#[cfg(test)]
+pub(crate) mod golden {
+    pub fn x25519_raw(scalar: &[u8; 32], point: &[u8; 32]) -> [u8; 32] {
+        let n = sodiumoxide::crypto::scalarmult::curve25519::Scalar::from_slice(scalar).unwrap();
+        let p = sodiumoxide::crypto::scalarmult::curve25519::GroupElement::from_slice(point).unwrap();
+        sodiumoxide::crypto::scalarmult::curve25519::scalarmult(&n, &p).unwrap().0
+    }
+
+    pub fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], pt: &[u8], aad: &[u8]) -> Vec<u8> {
+        use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as a;
+        a::seal(pt, Some(aad), &a::Nonce::from_slice(nonce).unwrap(), &a::Key::from_slice(key).unwrap())
+    }
+
+    pub fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ct: &[u8], aad: &[u8]) -> Result<Vec<u8>, ()> {
+        use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as a;
+        a::open(ct, Some(aad), &a::Nonce::from_slice(nonce).unwrap(), &a::Key::from_slice(key).unwrap())
+    }
+}
+
 // ─── Sender Key Chain (Signal-style Group E2EE) ──────────────────────────
 
 /// A single sender's chain state for group E2EE.
