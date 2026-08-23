@@ -69,7 +69,9 @@ function AppInner() {
   return (
     <>
       <ErrorBoundary name={view}>
-        {viewComponent}
+        <div key={view} className="view-fade">
+          {viewComponent}
+        </div>
       </ErrorBoundary>
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
