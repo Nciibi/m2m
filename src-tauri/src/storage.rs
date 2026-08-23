@@ -578,7 +578,10 @@ impl KeyStore {
     }
 
     /// Get all family members including expired ones (for export).
-    pub fn list_family_all(&self) -> Result<Vec<FamilyMember>, StorageError> {
+    pub fn list_family_all(
+        &self,
+        key: Option<&crate::secure_key::StorageKey>,
+    ) -> Result<Vec<FamilyMember>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT public_key, nickname, added_at, expires_at, last_address
              FROM family ORDER BY nickname ASC",
@@ -595,7 +598,12 @@ impl KeyStore {
         })?;
         let mut members = Vec::new();
         for row in rows {
-            members.push(row?);
+            let mut m = row?;
+            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)?;
+            if let Some(addr) = &m.last_address {
+                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY)?);
+            }
+            members.push(m);
         }
         Ok(members)
     }
