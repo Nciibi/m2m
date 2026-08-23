@@ -1637,28 +1637,31 @@ async fn handle_message_update_frame(
                                 }
                                 // Store locally, scoped to the sender's conversation (H4):
                                 // reactions to messages in other conversations are dropped.
-                                let sk = state.storage_key.read().await;
-                                let ms = state.message_store.lock().await;
-                                let mut accepted = false;
-                                if let Some(ref store) = *ms {
-                                    match store.upsert_reaction(
-                                        &rxn.message_id, &rxn.reaction,
-                                        &peer_key_hex, rxn.remove, &peer_key_hex,
-                                        sk.as_ref(),
-                                    ) {
-                                        Ok(true) => accepted = true,
-                                        Ok(false) => {
-                                            tracing::warn!(
-                                                peer = %peer_key_hex,
-                                                "reaction for message outside sender conversation — rejected"
-                                            );
-                                        }
-                                        Err(e) => {
-                                            tracing::warn!(error = %e, "failed to store reaction");
+                                // Ephemeral mode: accept for the live UI without SQLite.
+                                let ephemeral = state.security_config.read().await.ephemeral_mode;
+                                let mut accepted = ephemeral;
+                                if !ephemeral {
+                                    let sk = state.storage_key.read().await;
+                                    let ms = state.message_store.lock().await;
+                                    if let Some(ref store) = *ms {
+                                        match store.upsert_reaction(
+                                            &rxn.message_id, &rxn.reaction,
+                                            &peer_key_hex, rxn.remove, &peer_key_hex,
+                                            sk.as_ref(),
+                                        ) {
+                                            Ok(true) => accepted = true,
+                                            Ok(false) => {
+                                                tracing::warn!(
+                                                    peer = %peer_key_hex,
+                                                    "reaction for message outside sender conversation — rejected"
+                                                );
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "failed to store reaction");
+                                            }
                                         }
                                     }
                                 }
-                                drop(ms);
                                 if !accepted {
                                     return;
                                 }
