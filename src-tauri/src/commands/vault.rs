@@ -1117,8 +1117,7 @@ pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 
 /// Check if this is the first launch (onboarding not yet shown).
 #[tauri::command]
-pub async fn is_first_run(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
-    let fr = state.first_run.read().await;
+pub async fn is_first_run(state: State<'_, Arc<AppState>>) -> Result<bool, String> {    let fr = state.first_run.read().await;
     Ok(*fr)
 }
 
