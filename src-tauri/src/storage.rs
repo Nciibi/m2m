@@ -68,12 +68,13 @@ pub fn ensure_data_dir() -> Result<PathBuf, StorageError> {
 #[derive(Debug, Clone)]
 pub struct AccountRow {
     pub id: i64,
-    public_key: Vec<u8>,
+    pub public_key: Vec<u8>,
     pub encrypted_private_key: Vec<u8>,
     pub private_key_nonce: Vec<u8>,
     pub label: Option<String>,
 }
 
+/// A family member - a peer the user has explicitly saved as a persistent contact.
 /// Stored in the `family` table, separate from the ephemeral `peers` table.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FamilyMember {
