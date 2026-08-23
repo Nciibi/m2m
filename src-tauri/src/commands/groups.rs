@@ -16,7 +16,7 @@ use super::{ChatMessage, GroupEvent, GroupMessageEvent};
 /// Fill in the sender identity and sign a sender-key bundle with our
 /// long-term Ed25519 identity key (trust model v2 — H2). Receivers verify
 /// this signature against the transport peer's identity key before storing.
-fn finalize_bundle(
+pub(crate) fn finalize_bundle(
     identity: &crate::crypto::IdentityKeypair,
     our_peer_key_hex: &str,
     bundle: &mut crate::protocol::GroupSenderKeyData,
