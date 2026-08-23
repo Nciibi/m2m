@@ -106,11 +106,10 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Convenience check for NON-async contexts (tests): reads the verifier,
-/// derives, compares in constant time. Returns false on any malformed
-/// state; NEVER errors, so a probing attacker learns nothing from error
-/// shapes. The unlock command composes [`read_verifier`] +
-/// [`derive_verifier_hex`] itself to avoid blocking under a held guard.
+/// Convenience check composing read + derive + compare. Test-only: the
+/// unlock command composes [`read_verifier`] + [`derive_verifier_hex`]
+/// itself to run Argon2id off the async runtime without holding a guard.
+#[cfg(test)]
 pub fn verify(key_store: &KeyStore, entered: &str) -> bool {
     let Some((stored_hash_hex, salt)) = read_verifier(key_store) else {
         return false;
