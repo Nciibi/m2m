@@ -989,12 +989,14 @@ pub fn spawn_receive_loop(
 
                 // Send the periodic probe (also acts as keep-alive traffic).
                 if dead_reason.is_none() {
-                    let probe_due = conn.last_hb_sent.map_or(true, |sent_at| {
-                        sent_at.elapsed()
-                            >= std::time::Duration::from_secs(
-                                crate::protocol::HEARTBEAT_INTERVAL_SECS,
-                            )
-                    });
+                    let probe_due = conn
+                        .last_hb_sent
+                        .is_none_or(|sent_at| {
+                            sent_at.elapsed()
+                                >= std::time::Duration::from_secs(
+                                    crate::protocol::HEARTBEAT_INTERVAL_SECS,
+                                )
+                        });
                     if probe_due {
                         match crate::network::send_heartbeat(&mut conn.write_half).await {
                             Ok(_) => {
