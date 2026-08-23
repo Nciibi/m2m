@@ -60,6 +60,10 @@ pub async fn set_discovery_config(
     state: State<'_, Arc<AppState>>,
     config: DiscoveryConfig,
 ) -> Result<DiscoveryConfig, String> {
+    // Air-gap mode: both LAN multicast and DHT announce leak presence.
+    if (config.lan_enabled || config.dht_enabled) && *state.security_config.read().await.air_gap_mode {
+        return Err("air-gap mode is enabled — peer discovery is blocked".to_string());
+    }
     // ── LAN Discovery ──
     if config.lan_enabled && !state.lan_cancel.read().await.is_some() {
         // Start LAN discovery
