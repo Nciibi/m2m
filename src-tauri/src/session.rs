@@ -955,6 +955,8 @@ impl Session {
         packet_type: PacketType,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
+        // Traffic-analysis cover: random pre-send delay (no-op when off).
+        apply_send_jitter().await;
         // ── Double Ratchet path (X3DH+DR sessions) ──
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
