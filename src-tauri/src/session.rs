@@ -1124,22 +1124,22 @@ mod session_tests {
         assert!(s.peer_candidates.is_empty());
         assert!(s.our_candidates.is_empty());
         // Random initial counters should be non-zero (extremely unlikely to be zero)
-        assert!(s.tx_counter > 0 || s.rx_high_water_mark > 0,
-            "counters should be random, got tx={} rx={}", s.tx_counter, s.rx_high_water_mark);
+        assert_eq!(s.tx_counter, 0, "tx counter must start at zero (H4)");
+        assert_eq!(s.rx_high_water_mark, 0, "rx watermark must start at zero (H4)");
     }
 
     #[test]
-    fn test_session_initial_counters_random() {
+    fn test_session_initial_counters_deterministic() {
         init_crypto();
-        // Generate multiple sessions and verify counters aren't all the same
-        let sessions: Vec<Session> = (0..5).map(|_| Session::new()).collect();
-        let tx_vals: Vec<u64> = sessions.iter().map(|s| s.tx_counter).collect();
-        let rx_vals: Vec<u64> = sessions.iter().map(|s| s.rx_high_water_mark).collect();
-        // At most one session may have the same tx_counter (collision extremely unlikely)
-        let unique_tx: std::collections::HashSet<&u64> = tx_vals.iter().collect();
-        let unique_rx: std::collections::HashSet<&u64> = rx_vals.iter().collect();
-        assert!(unique_tx.len() >= 4, "tx counters not random enough: {:?}", tx_vals);
-        assert!(unique_rx.len() >= 4, "rx counters not random enough: {:?}", rx_vals);
+        // H4 regression: counters must start at a deterministic zero on BOTH
+        // peers. The previous random initialization was never exchanged in
+        // the handshake, so legacy sessions failed whenever one side's
+        // random receive watermark exceeded the other's transmit counter.
+        for _ in 0..5 {
+            let s = Session::new();
+            assert_eq!(s.tx_counter, 0);
+            assert_eq!(s.rx_high_water_mark, 0);
+        }
     }
 
     #[test]
