@@ -575,9 +575,10 @@ pub async fn set_family_nickname(
     let pk_bytes = util::decode_peer_key(&peer_key_hex)
         .map_err(|e| format!("invalid peer key: {e}"))?;
     {
+        let sk = state.storage_key.read().await;
         let ks = state.key_store.lock().await;
         let store = ks.as_ref().ok_or("key store not initialized")?;
-        store.set_family_nickname(&pk_bytes, &nickname)
+        store.set_family_nickname(&pk_bytes, &nickname, sk.as_ref())
             .map_err(|e| format!("failed to set nickname: {e}"))?
     }
     Ok(())
