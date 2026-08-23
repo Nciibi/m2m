@@ -1030,6 +1030,8 @@ fn seal_imported_identity(
     }
     Ok(())
 }
+
+/// Lock the vault — zeroizes keys in memory and marks vault as locked.
 ///
 /// After calling this, the user must unlock the vault again to perform
 /// sensitive operations. Active connections remain open.
