@@ -784,6 +784,43 @@ pub async fn get_listen_address(
 
 /// Spawn an async task that reads incoming frames from a peer
 /// and emits Tauri events for the React frontend.
+/// Build, sign, and send OUR OWN sender-key bundle for `group_id` to
+/// `target_peer` over its pairwise session (H2 trust model v2).
+pub(crate) async fn send_own_bundle(
+    state: Arc<AppState>,
+    app_handle: AppHandle,
+    group_id: &str,
+    target_peer: &str,
+    our_peer_key_hex: &str,
+) -> Result<(), String> {
+    let _ = &app_handle;
+    let mut bundle = {
+        let gm = state.group_manager.read().await;
+        let group = gm.get_group(group_id).ok_or("group not found")?;
+        group.own_sender_bundle()?
+    };
+    {
+        let id = state.identity.read().await;
+        let identity = id.as_ref().ok_or("identity not initialized")?;
+        super::groups::finalize_bundle(identity, our_peer_key_hex, &mut bundle);
+    }
+    drop(bundle.sender_peer_key_hex.clone()); // no-op, keeps clone semantics clear
+
+    let serialized = protocol::serialize(&bundle)
+        .map_err(|e| format!("serialize sender key: {e}"))?;
+
+    let conns = state.connections.read().await;
+    let conn_arc = conns.get(target_peer)
+        .ok_or_else(|| "no connection to peer".to_string())?
+        .clone();
+    drop(conns);
+    let mut conn = conn_arc.lock().await;
+    let crate::state::PeerConnection { session, write_half, .. } = &mut *conn;
+    session.send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
+        .await
+        .map_err(|e| format!("send sender key failed: {e}"))
+}
+
 pub fn spawn_receive_loop(
     app_handle: AppHandle,
     state: Arc<AppState>,
