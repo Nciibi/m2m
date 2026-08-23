@@ -202,9 +202,27 @@ export default function VaultView() {
 
           <div className="vault-submit-wrap">
             <Button id="vault-unlock-btn" onClick={handleUnlock} loading={loading} fullWidth>
-              {isFirstTime ? "Create Vault" : "Unlock"}
+              {createMode ? "Create Account" : isFirstTime ? "Create Vault" : "Unlock"}
             </Button>
           </div>
+
+          {!isFirstTime && (
+            <>
+              <div className="vault-divider" role="separator" />
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setCreateMode(!createMode);
+                  setVaultError("");
+                  setPassphrase("");
+                  setPassphraseConfirm("");
+                }}
+                fullWidth
+              >
+                {createMode ? "Back to unlock" : "Create another account"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
