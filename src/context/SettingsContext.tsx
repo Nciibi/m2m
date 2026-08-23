@@ -3,7 +3,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
-import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer, SecurityConfig } from "../types";
+import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer, SecurityConfig, CaptureCapability } from "../types";
 
 interface SettingsContextValue {
   networkSettings: NetworkSettings | null;
@@ -32,7 +32,10 @@ interface SettingsContextValue {
   handleRefreshDiscovery: () => Promise<void>;
   // Security
   securityConfig: SecurityConfig | null;
+  captureCapability: CaptureCapability | null;
   handleScreenCaptureToggle: () => Promise<void>;
+  handleCaptureDetectionToggle: () => Promise<void>;
+  handleBlurOnFocusLossToggle: () => Promise<void>;
   handleClipboardClearSecsChange: (secs: number) => Promise<void>;
   handleIdleLockSecsChange: (secs: number) => Promise<void>;
   handleRequireKnownContactToggle: () => Promise<void>;
@@ -65,6 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
   // Security state
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig | null>(null);
+  const [captureCapability, setCaptureCapability] = useState<CaptureCapability | null>(null);
   // Clipboard clear timer ref
   const clipboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
