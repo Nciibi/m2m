@@ -157,8 +157,8 @@ export default function VaultView() {
             )}
           </div>
 
-          {/* ── Confirm field (first time only) ── */}
-          {isFirstTime && (
+          {/* ── Confirm field (first time or create mode) ── */}
+          {showConfirm && (
             <div className="vault-field">
               <label className="vault-field__label" htmlFor="vault-passphrase-confirm">Confirm</label>
               <div className="vault-input-wrap">
