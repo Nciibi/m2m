@@ -261,6 +261,25 @@ pub struct SecurityConfig {
     /// hidden (background capture tools, shoulder surfing). OFF by default.
     #[serde(default)]
     pub blur_on_focus_loss: bool,
+    /// Air-gap mode: refuse every internet-facing operation (STUN discovery,
+    /// port forwarding, relay registration, DHT/LAN announce). LAN-only
+    /// listening still works. OFF by default.
+    #[serde(default)]
+    pub air_gap_mode: bool,
+    /// RAM-only ephemeral conversations: NO message/reaction/edit/delete
+    /// content is ever written to SQLite. Nothing to seize on disk.
+    /// OFF by default.
+    #[serde(default)]
+    pub ephemeral_mode: bool,
+    /// Random send jitter in milliseconds (0 = off). Each outgoing message
+    /// frame is delayed by a random 0..N before hitting the wire so send-time
+    /// correlations leak less. Recommended: 250–1500 when enabled.
+    #[serde(default)]
+    pub send_batching_ms: u64,
+    /// Randomize typing-indicator timing so keystroke cadence leaks less.
+    /// OFF by default.
+    #[serde(default)]
+    pub cover_typing_traffic: bool,
 }
 
 /// Peer discovery method configuration.
