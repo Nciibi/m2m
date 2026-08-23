@@ -36,6 +36,11 @@ const SESSION_KEY_CONTEXT: &[u8] = b"m2m-v1-session-key";
 /// memory exhaustion attacks.
 const MAX_SKIP: usize = 2000;
 
+/// Maximum number of message keys that may be derived in a single decrypt
+/// call to bridge a gap in message numbers. Bounds the worst-case CPU cost
+/// of one incoming message (each derivation is an HKDF evaluation).
+const MAX_GAP_DERIVATION: usize = 1000;
+
 #[derive(Debug, Error)]
 pub enum CryptoError {
     #[error("sodiumoxide initialization failed")]
