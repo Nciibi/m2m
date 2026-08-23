@@ -850,6 +850,10 @@ impl MessageStore {
     }
 
     /// Store a message (idempotent — duplicate message IDs are silently ignored).
+    ///
+    /// ⚠️ TEST-ONLY legacy path: content is stored exactly as provided and is
+    /// NOT crypto-shreddable. Production code MUST use [`store_message_secure`].
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub fn store_message(
         &self,
@@ -873,28 +877,46 @@ impl MessageStore {
         Ok(())
     }
 
-    /// Store a message with an optional self-destruct timer (idempotent).
+    /// Store a message encrypted under a FRESH random per-message content key
+    /// (CEK), which is itself wrapped under the vault storage key (H7).
+    ///
+    /// Takes PLAINTEXT — encryption happens here, not at the call site, so the
+    /// CEK never leaves this module unwrapped. Deleting the message shreds the
+    /// wrapped CEK, rendering every copy of the ciphertext (including WAL and
+    /// freed-page remnants) undecryptable.
+    ///
+    /// Idempotent: duplicate message IDs are silently ignored.
     #[allow(clippy::too_many_arguments)]
-    pub fn store_message_with_expiry(
+    pub fn store_message_secure(
         &self,
         id: &str,
         conversation_id: &str,
         direction: &str,
-        content_encrypted: &[u8],
-        content_nonce: &[u8],
+        plaintext: &[u8],
         timestamp: i64,
         expires_at: Option<i64>,
         delivered: bool,
+        storage_key: &crate::secure_key::StorageKey,
     ) -> Result<(), StorageError> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO messages (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at, delivered) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            rusqlite::params![id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at, delivered as i32],
-        )?;
-        self.conn.execute(
-            "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
-            params![timestamp, conversation_id],
-        )?;
-        Ok(())
+        let mut cek = Self::generate_cek();
+        let result = (|| {
+            let wrapped = Self::wrap_cek(&cek, storage_key)?;
+            let (nonce, ciphertext) = seal_msg(&cek, plaintext, AAD_MSG_STORE)?;
+            self.conn.execute(
+                "INSERT OR IGNORE INTO messages
+                    (id, conversation_id, direction, content_encrypted, content_nonce, timestamp, expires_at, delivered, content_key_wrapped)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![id, conversation_id, direction, ciphertext, nonce, timestamp, expires_at, delivered as i32, wrapped],
+            )?;
+            self.conn.execute(
+                "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
+                params![timestamp, conversation_id],
+            )?;
+            Ok(())
+        })();
+        use zeroize::Zeroize;
+        cek.zeroize();
+        result
     }
 
     /// Load undelivered (queued) sent messages for a conversation.
