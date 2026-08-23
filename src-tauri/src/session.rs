@@ -661,6 +661,8 @@ impl Session {
         stream: &mut W,
         plaintext: &[u8],
     ) -> Result<(), SessionError> {
+        // Traffic-analysis cover: random pre-send delay (no-op when off).
+        apply_send_jitter().await;
         // ── Double Ratchet path (if active) ──
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
