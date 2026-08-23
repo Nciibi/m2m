@@ -12,7 +12,7 @@ const STEPS = [
 ];
 
 export default function SetupView() {
-  const { toasts, removeToast } = useApp();
+  const { toasts, removeToast, addToast } = useApp();
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
   const [isFirstRun, setIsFirstRun] = useState(false);
