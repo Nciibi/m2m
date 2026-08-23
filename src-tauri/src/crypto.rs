@@ -96,9 +96,8 @@ impl IdentityKeypair {
 
     /// Deterministically derive a keypair from a 32-byte Ed25519 seed.
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
-        let (pk, sk) = sign::keypair_from_seed(sign::Seed::from_slice(seed)
-            .ok_or(CryptoError::InvalidKeyLength)?)
-            .map_err(|_| CryptoError::InvalidKeyLength)?;
+        let s = sign::Seed::from_slice(seed).ok_or(CryptoError::InvalidKeyLength)?;
+        let (pk, sk) = sign::keypair_from_seed(&s);
         Ok(Self { public_key: pk, secret_key: sk })
     }
 
