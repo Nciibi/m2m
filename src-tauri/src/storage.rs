@@ -2733,7 +2733,7 @@ mod tests {
         let key = test_key();
         let peer = [0x33u8; 32];
         store.ensure_conversation("conv-r", &peer).unwrap();
-        store.store_message("m-1", "conv-r", "sent", b"hello", 1000, true).unwrap();
+        store.store_message("m-1", "conv-r", "sent", &[0u8; 24], b"hello", 1000, true).unwrap();
 
         // Keyed insert → envelope on disk.
         store.upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
