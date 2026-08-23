@@ -331,7 +331,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       handleConnectDiscoveredPeer, handleRefreshDiscovery,
       securityConfig,
       handleScreenCaptureToggle, handleClipboardClearSecsChange,
-      handleIdleLockSecsChange, handleLockVault, handleClearClipboard,
+      handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
       scheduleClipboardClear,
     }}>
       {children}
