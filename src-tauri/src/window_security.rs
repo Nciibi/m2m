@@ -163,27 +163,22 @@ fn apply_to_window(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), S
     }
 
     unsafe {
-        // NSWindowSharingNone = 0 in NSWindowSharing enum (NSUInteger).
+        // NSWindowSharing enum (NSUInteger): none = 0, readOnly = 1,
+        // readWrite = 2 (the default sharing mode).
         const NS_WINDOW_SHARING_NONE: usize = 0;
+        const NS_WINDOW_SHARING_READ_WRITE: usize = 2;
 
         // [nsView window] -> NSWindow*
-        let get_window = sel("window");
-        let msg_get: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
-            std::mem::transmute(msg_send_id as *const ());
-        let ns_window = msg_get(ns_view, get_window);
+        let ns_window = msg_send_id(ns_view, sel("window"));
         if ns_window.is_null() {
             return Err("NSView is not attached to an NSWindow yet".into());
         }
 
         // [window setSharingType:NSWindowSharingNone]
-        let set_sharing = sel("setSharingType:");
-        let msg_set: unsafe extern "C" fn(*mut c_void, *const c_void, usize) =
-            std::mem::transmute(msg_send_ulong as *const ());
         if enabled {
-            msg_set(ns_window, set_sharing, NS_WINDOW_SHARING_NONE);
+            msg_send_ulong(ns_window, sel("setSharingType:"), NS_WINDOW_SHARING_NONE);
         } else {
-            // NSWindowSharingReadWrite = 2 — the default sharing mode.
-            msg_set(ns_window, set_sharing, 2);
+            msg_send_ulong(ns_window, sel("setSharingType:"), NS_WINDOW_SHARING_READ_WRITE);
         }
     }
 
