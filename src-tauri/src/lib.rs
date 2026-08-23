@@ -46,8 +46,61 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::{Emitter, Manager};
 
+/// Disable crash dumps for this process (military-grade checklist: minidumps
+/// contain DECRYPTED message buffers and key material).
+///
+/// - Windows: `SetErrorMode` suppresses Windows Error Reporting crash UI and
+///   fault boxes. WER *local* dump collection is governed by registry keys
+///   (HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps);
+///   we additionally opt OUT per-process via the loader flag below.
+/// - Unix: `setrlimit(RLIMIT_CORE, 0)` so the kernel never writes core files.
+fn disable_crash_dumps() {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        // SEM_FAILCRITICALERRORS (0x0001) | SEM_NOGPFAULTERRORBOX (0x0002)
+        // | SEM_NOOPENFILEERRORBOX (0x8000)
+        const SEM_MASK: u32 = 0x0001 | 0x0002 | 0x8000;
+        let kernel32 = match libloading::Library::new("kernel32.dll") {
+            Ok(k) => k,
+            Err(_) => return,
+        };
+        if let Ok(set_err) =
+            kernel32.get::<unsafe extern "system" fn(u32) -> u32>(b"SetErrorMode\0")
+        {
+            let _ = set_err(SEM_MASK);
+        }
+        tracing::debug!("crash dumps: Windows error mode hardened");
+    }
+
+    #[cfg(unix)]
+    {
+        // setrlimit(RLIMIT_CORE, {0, 0}) — no core dumps, any signal.
+        #[repr(C)]
+        struct RLimit {
+            rlim_cur: u64,
+            rlim_max: u64,
+        }
+        extern "C" {
+            fn setrlimit(resource: i32, rlim: *const RLimit) -> i32;
+        }
+        const RLIMIT_CORE: i32 = 4; // Linux & macOS value
+        let limit = RLimit { rlim_cur: 0, rlim_max: 0 };
+        let ret = unsafe { setrlimit(RLIMIT_CORE, &limit) };
+        if ret != 0 {
+            tracing::warn!("failed to set RLIMIT_CORE=0 — core dumps may still be written");
+        } else {
+            tracing::debug!("crash dumps: RLIMIT_CORE set to 0");
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // FIRST, before any key material exists in memory: crash dumps are a
+    // plaintext-mining vector (minidumps capture heap pages holding decrypted
+    // messages and session keys).
+    disable_crash_dumps();
+
     // Initialize structured logging — no secrets in output
     tracing_subscriber::fmt()
         .with_env_filter(
