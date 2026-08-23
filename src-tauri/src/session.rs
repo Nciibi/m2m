@@ -2441,4 +2441,155 @@ mod session_tests {
         assert!(matches!(result, Err(SessionError::InvalidState)),
             "expected InvalidState without ratchet, got {:?}", result);
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // H6: One-time prekey (OPK) integration tests
+    // ═══════════════════════════════════════════════════════════
+
+    /// H6 regression: when the invite's prekey bundle carries a one-time
+    /// prekey, the initiator must include DH4 in the X3DH shared secret and
+    /// signal it via used_opk; the responder must apply its OPK secret.
+    /// Both sides must independently derive identical ratchet state.
+    #[tokio::test]
+    async fn test_x3dh_handshake_with_one_time_prekey() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+
+        // Bob generates SPK + OPK (as create_invite does).
+        let bob_spk = crate::crypto::EphemeralKeypair::generate();
+        let sig = bob_id.sign(&bob_spk.public_key_bytes());
+        let bob_opk = crate::crypto::EphemeralKeypair::generate();
+        let bundle = crate::crypto::PrekeyBundle {
+            identity_key: bob_x25519.public_key_bytes(),
+            signed_prekey: bob_spk.public_key_bytes(),
+            signed_prekey_sig: sig,
+            one_time_prekey: Some(bob_opk.public_key_bytes()),
+        };
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
+            ).await?;
+            session.send_text(&mut alice_io, "hello with DH4").await?;
+            Ok::<_, SessionError>(())
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, Some(&bob_opk), &init_frame, vec![],
+        ).await.unwrap();
+        assert_eq!(bob_session.state, ConnectionState::Established,
+            "handshake with OPK must succeed - DH4 must be applied on both sides");
+
+        let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let body = bob_session.decrypt_message(&msg_frame).unwrap();
+        match body {
+            MessageBody::Text { ref content, .. } => assert_eq!(content, "hello with DH4"),
+            ref other => panic!("expected Text, got {:?}", other),
+        }
+
+        alice.await.unwrap().unwrap();
+    }
+
+    /// H6 regression: an initiator signaling a one-time prekey the responder
+    /// does not hold (stale invite / attacker-crafted bundle) must fail with
+    /// a CLEAN error - never silently derive a mismatched SK or desync.
+    #[tokio::test]
+    async fn test_x3dh_responder_rejects_unknown_used_opk() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+
+        let bob_spk = crate::crypto::EphemeralKeypair::generate();
+        let sig = bob_id.sign(&bob_spk.public_key_bytes());
+        // OPK pub that Bob does NOT hold the secret for.
+        let stranger_opk = crate::crypto::EphemeralKeypair::generate();
+        let bundle = crate::crypto::PrekeyBundle {
+            identity_key: bob_x25519.public_key_bytes(),
+            signed_prekey: bob_spk.public_key_bytes(),
+            signed_prekey_sig: sig,
+            one_time_prekey: Some(stranger_opk.public_key_bytes()),
+        };
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            let _ = session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
+            ).await;
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        let result = bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
+        ).await;
+
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("one-time prekey")),
+            "expected clean one-time-prekey rejection, got: {:?}",
+            result
+        );
+        assert_ne!(bob_session.state, ConnectionState::Established);
+        drop(alice);
+    }
+
+    /// H6 regression: responder must NOT apply its OPK when the initiator
+    /// did not use one - otherwise SK inputs mismatch and every message
+    /// fails. (No-OPK invite connecting to a responder that happens to hold
+    /// an OPK from a newer invite.)
+    #[tokio::test]
+    async fn test_x3dh_no_opk_initiator_with_opk_holding_responder() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+
+        let bob_spk = crate::crypto::EphemeralKeypair::generate();
+        let sig = bob_id.sign(&bob_spk.public_key_bytes());
+        // Bundle WITHOUT OPK (e.g. older invite format), but Bob holds an
+        // active OPK from a newer invite.
+        let bundle = crate::crypto::PrekeyBundle {
+            identity_key: bob_x25519.public_key_bytes(),
+            signed_prekey: bob_spk.public_key_bytes(),
+            signed_prekey_sig: sig,
+            one_time_prekey: None,
+        };
+        let bob_opk = crate::crypto::EphemeralKeypair::generate();
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
+            ).await?;
+            session.send_text(&mut alice_io, "no opk path").await?;
+            Ok::<_, SessionError>(())
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, Some(&bob_opk), &init_frame, vec![],
+        ).await.unwrap();
+
+        let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let body = bob_session.decrypt_message(&msg_frame).unwrap();
+        match body {
+            MessageBody::Text { ref content, .. } => assert_eq!(content, "no opk path"),
+            ref other => panic!("expected Text, got {:?}", other),
+        }
+
+        alice.await.unwrap().unwrap();
+    }
 }
