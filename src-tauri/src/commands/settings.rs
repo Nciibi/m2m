@@ -238,8 +238,13 @@ pub async fn get_network_settings(
 /// Enable or disable Tor routing.
 #[tauri::command]
 pub async fn set_tor_enabled(
+    state: State<'_, Arc<AppState>>,
     enabled: bool,
 ) -> Result<(), String> {
+    // Air-gap mode: Tor traffic is internet-facing by definition.
+    if enabled {
+        state.ensure_not_air_gapped().await?;
+    }
     tor::set_enabled(enabled);
     Ok(())
 }
