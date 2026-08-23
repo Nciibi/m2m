@@ -90,7 +90,7 @@ export default function SetupView() {
           {step < STEPS.length - 1 ? (
             <Button onClick={goNext}>{step === 0 ? "Get Started" : "Next"}</Button>
           ) : (
-            <Button onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err: any) { alert(typeof err === "string" ? err : "Failed to finalize setup"); } }}>
+            <Button onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err: any) { addToast(typeof err === "string" ? err : "Failed to finalize setup", "error"); } }}>>
               Start Messaging
             </Button>
           )}
