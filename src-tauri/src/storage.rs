@@ -2483,4 +2483,175 @@ mod tests {
         let result = store.get_transfer("nonexistent").unwrap();
         assert!(result.is_none());
     }
+
+    // ─── Crypto-shredding tests (H7) ──────────────────────────
+
+    use crate::secure_key::StorageKey;
+
+    fn test_key() -> StorageKey {
+        StorageKey::new([0x5A; 32])
+    }
+
+    #[test]
+    fn test_secure_message_roundtrip() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-sec", &[0xAA; 32]).unwrap();
+        store.store_message_secure(
+            "m1", "conv-sec", "sent", b"shreddable secret", 1000, None, true, &test_key(),
+        ).unwrap();
+
+        let msgs = store.load_messages("conv-sec", 10).unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert!(msgs[0].content_key_wrapped.is_some(), "secure rows must carry a wrapped CEK");
+
+        let pt = MessageStore::decrypt_stored_content(
+            &msgs[0].content_encrypted, &msgs[0].content_nonce,
+            msgs[0].content_key_wrapped.as_deref(), &test_key(),
+        ).unwrap();
+        assert_eq!(pt, b"shreddable secret");
+
+        // Content must NOT be decryptable directly under the vault key —
+        // it is sealed under the per-message CEK only.
+        assert!(crate::commands::util::crypto_decrypt_storage(
+            &msgs[0].content_encrypted, &msgs[0].content_nonce, &test_key(),
+            crate::commands::util::AAD_MSG_STORE,
+        ).is_err(), "content must not be encrypted under the vault storage key");
+    }
+
+    /// Legacy rows (pre-crypto-shredding) have no wrapped key and were
+    /// encrypted directly under the vault key — they must still decrypt.
+    #[test]
+    fn test_legacy_row_fallback_decrypt() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-old", &[0xBB; 32]).unwrap();
+
+        // Old-style: caller encrypted under the vault key; no wrapped CEK.
+        let (nonce, ct) = crate::commands::util::crypto_encrypt_storage(
+            b"legacy plaintext", &test_key(), crate::commands::util::AAD_MSG_STORE,
+        ).unwrap();
+        store.store_message("m1", "conv-old", "received", &ct, &nonce, 1000, true).unwrap();
+
+        let msgs = store.load_messages("conv-old", 10).unwrap();
+        assert!(msgs[0].content_key_wrapped.is_none());
+
+        let pt = MessageStore::decrypt_stored_content(
+            &msgs[0].content_encrypted, &msgs[0].content_nonce, None, &test_key(),
+        ).unwrap();
+        assert_eq!(pt, b"legacy plaintext");
+    }
+
+    /// THE core H7 assertion: after a soft-delete shred, the tombstone row's
+    /// ciphertext is UNRECOVERABLE even with the correct vault storage key,
+    /// because its wrapped content key was destroyed.
+    #[test]
+    fn test_soft_delete_shreds_content_key() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-shred", &[0xCC; 32]).unwrap();
+        store.store_message_secure(
+            "m1", "conv-shred", "sent", b"doomed message", 1000, None, true, &test_key(),
+        ).unwrap();
+
+        // Capture the ciphertext remnants an attacker might recover from disk.
+        let msgs = store.load_messages("conv-shred", 10).unwrap();
+        let remnant_ct = msgs[0].content_encrypted.clone();
+        let remnant_nonce = msgs[0].content_nonce.clone();
+
+        assert!(store.delete_message("m1", "conv-shred", "sent").unwrap());
+
+        // Tombstone remains but carries a zeroed wrapped key.
+        let after = store.load_messages("conv-shred", 10).unwrap();
+        assert_eq!(after.len(), 1);
+        assert!(after[0].deleted);
+        let wrapped = after[0].content_key_wrapped.as_deref().expect("wrapped cell present");
+        assert_eq!(wrapped.len(), WRAPPED_CEK_LEN);
+        assert!(wrapped.iter().all(|&b| b == 0), "wrapped CEK must be zeroed");
+
+        // Simulated remnant attack: original ciphertext + nonce recovered
+        // from disk + the CURRENT vault key → decryption MUST fail.
+        assert!(MessageStore::decrypt_stored_content(
+            &remnant_ct, &remnant_nonce, Some(wrapped), &test_key(),
+        ).is_err());
+    }
+
+    #[test]
+    fn test_edit_message_secure_rekeys_and_shreds_old() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-edit", &[0xDD; 32]).unwrap();
+        store.store_message_secure(
+            "m1", "conv-edit", "sent", b"original text", 1000, None, true, &test_key(),
+        ).unwrap();
+        let old_ct = store.load_messages("conv-edit", 10).unwrap()[0].content_encrypted.clone();
+
+        assert!(store.edit_message_secure(
+            "m1", "conv-edit", "sent", b"edited text", &test_key(),
+        ).unwrap());
+
+        let msgs = store.load_messages("conv-edit", 10).unwrap();
+        assert_ne!(msgs[0].content_encrypted, old_ct, "edit must re-encrypt content");
+        let pt = MessageStore::decrypt_stored_content(
+            &msgs[0].content_encrypted, &msgs[0].content_nonce,
+            msgs[0].content_key_wrapped.as_deref(), &test_key(),
+        ).unwrap();
+        assert_eq!(pt, b"edited text");
+    }
+
+    #[test]
+    fn test_expired_delete_removes_only_expired() {
+        let store = mem_messagestore();
+        store.ensure_conversation("conv-exp", &[0xEE; 32]).unwrap();
+        let past = 1000i64;
+        let future = chrono::Utc::now().timestamp() + 3600;
+        store.store_message_secure("m-expired", "conv-exp", "sent", b"gone", past, Some(past), true, &test_key()).unwrap();
+        store.store_message_secure("m-live", "conv-exp", "sent", b"kept", past, Some(future), true, &test_key()).unwrap();
+
+        let deleted = store.delete_expired_messages().unwrap();
+        assert_eq!(deleted, 1);
+
+        let remaining = store.load_messages("conv-exp", 10).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, "m-live");
+        let pt = MessageStore::decrypt_stored_content(
+            &remaining[0].content_encrypted, &remaining[0].content_nonce,
+            remaining[0].content_key_wrapped.as_deref(), &test_key(),
+        ).unwrap();
+        assert_eq!(pt, b"kept");
+    }
+
+    /// Migration: a pre-crypto-shredding database (messages table without
+    /// content_key_wrapped) must open cleanly and accept new secure writes.
+    #[test]
+    fn test_migration_adds_content_key_column() {
+        let dir = std::env::temp_dir().join(format!("m2m_h7_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("messages.db");
+
+        // Build an OLD-schema database manually.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE conversations (
+                    id TEXT PRIMARY KEY, peer_id BLOB NOT NULL, created_at INTEGER NOT NULL);
+                 CREATE TABLE messages (
+                    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL,
+                    direction TEXT NOT NULL, content_encrypted BLOB NOT NULL,
+                    content_nonce BLOB NOT NULL, timestamp INTEGER NOT NULL);",
+            ).unwrap();
+        }
+
+        let store = MessageStore::open(&db_path).unwrap();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        store.store_message_secure(
+            "m1", "c1", "sent", b"post-migration write", 1000, None, true, &test_key(),
+        ).unwrap();
+        let msgs = store.load_messages("c1", 10).unwrap();
+        assert_eq!(
+            MessageStore::decrypt_stored_content(
+                &msgs[0].content_encrypted, &msgs[0].content_nonce,
+                msgs[0].content_key_wrapped.as_deref(), &test_key(),
+            ).unwrap(),
+            b"post-migration write"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
