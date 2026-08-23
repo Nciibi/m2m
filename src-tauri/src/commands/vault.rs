@@ -1156,11 +1156,9 @@ mod tests {
         // Second import with a different wrapping (fresh encryption) — same pubkey.
         seal_imported_identity(&key_store, &TEST_PUB, &TEST_SK, &passphrase_key()).unwrap();
 
+        // The refreshed account blob must still decrypt under the new wrap.
         let accounts = key_store.list_accounts().unwrap();
         assert_eq!(accounts.len(), 1);
-
-        // The refreshed account blob must still decrypt under the new wrap.
-        let (_, enc, nonce) = key_store.load_identity().unwrap();
         let recovered = util::crypto_decrypt_storage(
             &accounts[0].encrypted_private_key,
             &accounts[0].private_key_nonce,
