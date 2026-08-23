@@ -1021,34 +1021,29 @@ pub fn spawn_receive_loop(
                                         let sk = state.storage_key.read().await;
                                         let ms = state.message_store.lock().await;
                                         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-                                            match util::crypto_encrypt_storage(content.as_bytes(), key, util::AAD_MSG_STORE) {
-                                                Ok((nonce, encrypted)) => {
-                                                    if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
-                                                        let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
-                                                        let _ = store.store_message(
-                                                            id, &peer_key_hex, "received",
-                                                            &encrypted, &nonce, now as i64, true,
-                                                        );
-                                                    }
-                                                    // Drop store lock before PRAGMA optimize to avoid
-                                                    // holding RefCell-backed connection across .await
-                                                    drop(ms);
-                                                    drop(sk);
-                                                    // Periodic PRAGMA optimize (at most once per minute)
-                                                    let now_ts = Utc::now().timestamp();
-                                                    let mut last_opt = state.last_optimize_at.write().await;
-                                                    if now_ts - *last_opt > 60 {
-                                                        // Re-acquire store lock just for the optimize call
-                                                        let ms2 = state.message_store.lock().await;
-                                                        if let Some(store2) = ms2.as_ref() {
-                                                            let _ = store2.optimize();
-                                                        }
-                                                        *last_opt = now_ts;
-                                                    }
+                                            if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
+                                                let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
+                                                if let Err(e) = store.store_message_secure(
+                                                    id, &peer_key_hex, "received",
+                                                    content.as_bytes(), now as i64, None, true, key,
+                                                ) {
+                                                    tracing::error!(error = %e, "failed to persist received message");
                                                 }
-                                                Err(e) => {
-                                                    tracing::error!(error = %e, "failed to encrypt received message for storage");
+                                            }
+                                            // Drop store lock before PRAGMA optimize to avoid
+                                            // holding RefCell-backed connection across .await
+                                            drop(ms);
+                                            drop(sk);
+                                            // Periodic PRAGMA optimize (at most once per minute)
+                                            let now_ts = Utc::now().timestamp();
+                                            let mut last_opt = state.last_optimize_at.write().await;
+                                            if now_ts - *last_opt > 60 {
+                                                // Re-acquire store lock just for the optimize call
+                                                let ms2 = state.message_store.lock().await;
+                                                if let Some(store2) = ms2.as_ref() {
+                                                    let _ = store2.optimize();
                                                 }
+                                                *last_opt = now_ts;
                                             }
                                         }
                                     }
