@@ -362,8 +362,9 @@ pub async fn send_reaction(
         return Err("reaction too long".to_string());
     }
 
-    // Store locally first (scoped to this conversation — H4)
-    {
+    // Store locally first (scoped to this conversation — H4).
+    // Ephemeral mode: reactions live in RAM only.
+    if !state.security_config.read().await.ephemeral_mode {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
