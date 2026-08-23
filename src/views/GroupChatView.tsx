@@ -190,19 +190,7 @@ export default function GroupChatView() {
               </div>
             ) : (
               messages.map((m, i) => (
-                <div key={m.id} className={`msg-bubble msg-bubble--${m.direction}`} style={{ animationDelay: `${i * 0.05}s` }}>
-                  {m.direction === "received" && m.sender_peer_key_hex && (
-                    <div className="msg-sender-label">{m.sender_peer_key_hex.substring(0, 8)}…</div>
-                  )}
-                  <div className="msg-content">
-                    {m.deleted ? <em style={{ opacity: 0.5, fontStyle: 'italic' }}>Deleted</em> : m.content}
-                  </div>
-                  <span className="msg-footer-row">
-                    <span className="msg-time">
-                      {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </span>
-                </div>
+                <MessageBubble key={m.id} message={m} index={i} plain />
               ))
             )}
           </div>
