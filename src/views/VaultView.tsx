@@ -17,8 +17,10 @@ export default function VaultView() {
   const [showTips, setShowTips] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [strength, setStrength] = useState({ percent: 0, bits: 0, label: "", cls: "" });
+  const [createMode, setCreateMode] = useState(false);
 
   const isFirstTime = !vaultInitialized;
+  const showConfirm = isFirstTime || createMode;
 
   useEffect(() => {
     const entropy = estimateEntropy(passphrase);
