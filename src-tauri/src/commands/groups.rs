@@ -13,6 +13,19 @@ use crate::protocol::{self, GroupCreateData, GroupInviteData,
 
 use super::{ChatMessage, GroupEvent, GroupMessageEvent};
 
+/// Fill in the sender identity and sign a sender-key bundle with our
+/// long-term Ed25519 identity key (trust model v2 — H2). Receivers verify
+/// this signature against the transport peer's identity key before storing.
+fn finalize_bundle(
+    identity: &crate::crypto::IdentityKeypair,
+    our_peer_key_hex: &str,
+    bundle: &mut crate::protocol::GroupSenderKeyData,
+) {
+    bundle.sender_peer_key_hex = our_peer_key_hex.to_string();
+    let sign_bytes = crate::group::sender_key_bundle_sign_bytes(bundle);
+    bundle.signature = identity.sign(&sign_bytes);
+}
+
 /// Create a new group.
 /// Generates Sender Keys for all members and distributes them over pairwise DR sessions.
 #[tauri::command]
