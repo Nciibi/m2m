@@ -2184,22 +2184,24 @@ drop(conns);
                                             .as_secs();
                                         let msg_id = uuid::Uuid::new_v4().to_string();
 
-                                        state.ensure_message_store(&state.data_dir).await.ok();
-                                        let sk = state.storage_key.read().await;
-                                        let ms = state.message_store.lock().await;
-                                        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-                                            match super::util::crypto_encrypt_storage(content_str.as_bytes(), key, super::util::AAD_MSG_STORE) {
-                                                Ok((nonce, encrypted)) => {
-                                                    let _ = store.store_group_message(&msg_id, &gid, &sender, &encrypted, &nonce, now as i64, true);
-                                                    let preview = super::util::truncate_utf8(&content_str, 80, "...");
-                                                    let _ = store.update_group_last_message(&gid, now as i64, &preview);
+                                        // Ephemeral mode: group content stays in RAM.
+                                        if !state.security_config.read().await.ephemeral_mode {
+                                            state.ensure_message_store(&state.data_dir).await.ok();
+                                            let sk = state.storage_key.read().await;
+                                            let ms = state.message_store.lock().await;
+                                            if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                                match super::util::crypto_encrypt_storage(content_str.as_bytes(), key, super::util::AAD_MSG_STORE) {
+                                                    Ok((nonce, encrypted)) => {
+                                                        let _ = store.store_group_message(&msg_id, &gid, &sender, &encrypted, &nonce, now as i64, true);
+                                                        let preview = super::util::truncate_utf8(&content_str, 80, "...");
+                                                        let _ = store.update_group_last_message(&gid, now as i64, &preview);
+                                                    }
+                                                    Err(e) => tracing::warn!(error = %e, "failed to encrypt group message for storage"),
                                                 }
-                                                Err(e) => tracing::warn!(error = %e, "failed to encrypt group message for storage"),
                                             }
+                                            drop(ms);
+                                            drop(sk);
                                         }
-                                        drop(ms);
-                                        drop(sk);
-
                                         let _ = app_handle.emit("m2m://group-message", GroupMessageEvent {
                                             group_id: gid,
                                             message: ChatMessage::new(
