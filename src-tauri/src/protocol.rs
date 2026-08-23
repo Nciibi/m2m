@@ -46,7 +46,9 @@ pub const LENGTH_PREFIX_SIZE: usize = 4;
 
 /// Heartbeat interval in seconds.
 /// A heartbeat is sent every interval to keep the connection alive
-/// and detect silent disconnections.
+/// and detect silent disconnections. Heartbeats are ENCRYPTED at the
+/// session layer (AEAD via `Session::send_heartbeat`) — plaintext
+/// keepalives were a free liveness oracle for observers.
 pub const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 /// Heartbeat timeout in seconds.
