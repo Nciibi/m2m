@@ -317,6 +317,9 @@ pub fn run() {
             commands::security::get_capture_capability,
             commands::security::clear_clipboard,
             commands::vault::lock_vault,
+            commands::vault::set_duress_passphrase,
+            commands::vault::clear_duress_passphrase,
+            commands::vault::is_duress_configured,
             commands::vault::is_first_run,
             commands::vault::set_first_run_complete,
             // Family
