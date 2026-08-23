@@ -9,7 +9,7 @@
 //!   unlocked (`set_duress_passphrase`). Only an Argon2id HASH is stored.
 //! - If the duress passphrase is entered at unlock, M2M:
 //!   1. zeroizes every in-memory secret,
-//!   2. deletes ALL local databases (crypto-shredded content keys make the
+//!   2. deletes ALL local databases (crypto-shredded per-message keys make
 //!      message ciphertext unrecoverable regardless of disk remnants),
 //!   3. returns the SAME generic error a wrong passphrase produces.
 //!
@@ -18,17 +18,18 @@
 //!
 //! ## Honest limits
 //!
-//! - Irreversible by design. There is no confirmation prompt AT UNLOCK
-//!   (that would defeat the purpose); the confirmation exists only when
-//!   registering the duress passphrase.
-//! - Backups/export files are NOT touched (they live outside the data dir).
+//! - Irreversible by design. There is deliberately NO confirmation prompt at
+//!   unlock (that would defeat the purpose); confirmation exists only when
+//!   registering.
+//! - Export/backup files outside the data directory are NOT touched.
 //!
 //! ## Decoy accounts
 //!
-//! Multi-account support already provides the "hidden volume"-adjacent
+//! Multi-account support already provides the hidden-volume-adjacent
 //! property: each account is selected solely by its own passphrase, so a
 //! plausible low-sensitivity decoy account can coexist with the real one.
 
+use crate::commands::util::derive_storage_key_from_passphrase;
 use crate::storage::KeyStore;
 
 /// vault_meta keys for the stored verifier.
@@ -40,36 +41,32 @@ pub const META_DURESS_SET_AT: &str = "duress_set_at";
 pub fn is_set(key_store: &KeyStore) -> bool {
     matches!(
         key_store.get_meta(META_DURESS_HASH),
-        Ok(Some(h)) if !h.is_empty()
+        Ok(Some(h)) if h.len() == 64
     )
 }
 
-/// Register (or replace) the duress passphrase. Stores ONLY a hash.
-pub fn register(
-    key_store: &KeyStore,
-    passphrase: &str,
-    verify: impl Fn(&str, &[u8]) -> Result<Vec<u8>, String>,
-) -> Result<(), String> {
-    let salt: [u8; 16] = {
-        let mut s = [0u8; 16];
-        // rand is already a workspace dependency.
+/// Register (or replace) the duress passphrase. Stores ONLY a hash:
+/// Argon2id(passphrase, fresh random salt).
+pub fn register(key_store: &KeyStore, passphrase: &str) -> Result<(), String> {
+    let mut salt = [0u8; 16];
+    {
         use rand::RngCore;
-        rand::rngs::OsRng.fill_bytes(&mut s);
-        s
-    };
-    let hash = verify(passphrase, &salt)?;
+        rand::rngs::OsRng.fill_bytes(&mut salt);
+    }
+    let key = derive_storage_key_from_passphrase(passphrase, &salt)
+        .map_err(|e| format!("duress hash derivation failed: {e}"))?;
     let now = chrono::Utc::now().timestamp().to_string();
-    key_store.set_meta(META_DURESS_SALT, &hex::encode(salt))?;
-    key_store.set_meta(META_DURESS_HASH, &hex::encode(&hash))?;
-    key_store.set_meta(META_DURESS_SET_AT, &now)?;
+    key_store.set_meta(META_DURESS_SALT, &hex::encode(salt)).map_err(|e| e.to_string())?;
+    key_store.set_meta(META_DURESS_HASH, &hex::encode(key.as_bytes())).map_err(|e| e.to_string())?;
+    key_store.set_meta(META_DURESS_SET_AT, &now).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 /// Remove the duress registration.
 pub fn clear(key_store: &KeyStore) -> Result<(), String> {
-    key_store.set_meta(META_DURESS_HASH, "")?;
-    key_store.set_meta(META_DURESS_SALT, "")?;
-    key_store.set_meta(META_DURESS_SET_AT, "")?;
+    key_store.set_meta(META_DURESS_HASH, "").map_err(|e| e.to_string())?;
+    key_store.set_meta(META_DURESS_SALT, "").map_err(|e| e.to_string())?;
+    key_store.set_meta(META_DURESS_SET_AT, "").map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -85,30 +82,68 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Check whether the ENTERED passphrase is the duress passphrase.
+/// Check whether `entered` IS the registered duress passphrase.
 ///
-/// Returns false when no duress is registered or inputs are malformed —
-/// never errors (a probing attacker must learn nothing from error shapes).
-pub fn matches(key_store: &KeyStore, entered: &str, hash_input: &str, salt_hex: &str) -> bool {
-    let stored_hash = match key_store.get_meta(META_DURESS_HASH) {
+/// Runs Argon2id (expensive) — call only after the cheap `is_set` check.
+/// Returns false on any malformed state; NEVER errors, so a probing
+/// attacker learns nothing from error shapes.
+pub fn verify(key_store: &KeyStore, entered: &str) -> bool {
+    let stored_hash_hex = match key_store.get_meta(META_DURESS_HASH) {
         Ok(Some(h)) if h.len() == 64 => h,
         _ => return false,
     };
-    let salt = match hex::decode(salt_hex) {
-        Ok(s) if s.len() == 16 => s,
+    let salt = match key_store.get_meta(META_DURESS_SALT) {
+        Ok(Some(s)) => match hex::decode(&s) {
+            Ok(bytes) if bytes.len() == 16 => bytes,
+            _ => return false,
+        },
         _ => return false,
     };
-    let computed = match hash_input_fn(hash_input, &salt) {
-        Some(c) => c,
-        None => return false,
+    let computed = match derive_storage_key_from_passphrase(entered, &salt) {
+        Ok(k) => *k.as_bytes(),
+        Err(_) => return false,
     };
-    let _ = entered;
-    ct_eq(&computed, &stored_hash)
+    let stored = match hex::decode(&stored_hash_hex) {
+        Ok(h) => h,
+        Err(_) => return false,
+    };
+    ct_eq(&computed, &stored)
 }
 
-// Indirection so the Argon2 call stays injectable for tests without
-// pulling hashing into this module's unit tests (it is exercised through
-// the command layer with the real derive function).
-fn hash_input_fn(_input: &str, _salt: &[u8]) -> Option<Vec<u8>> {
-    None
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn mem_keystore() -> KeyStore {
+        KeyStore::open(Path::new(":memory:")).unwrap()
+    }
+
+    #[test]
+    fn test_not_set_by_default() {
+        let ks = mem_keystore();
+        assert!(!is_set(&ks));
+        assert!(!verify(&ks, "anything-at-least-twelve"));
+    }
+
+    #[test]
+    fn test_register_verify_clear_roundtrip() {
+        let ks = mem_keystore();
+        register(&ks, "under-duress-passphrase-123").unwrap();
+        assert!(is_set(&ks));
+        assert!(verify(&ks, "under-duress-passphrase-123"));
+        assert!(!verify(&ks, "wrong-passphrase-987654"));
+        clear(&ks).unwrap();
+        assert!(!is_set(&ks));
+        assert!(!verify(&ks, "under-duress-passphrase-123"));
+    }
+
+    #[test]
+    fn test_stored_value_is_a_hash_not_the_passphrase() {
+        let ks = mem_keystore();
+        register(&ks, "top-secret-duress-value").unwrap();
+        let raw = ks.get_meta(META_DURESS_HASH).unwrap().unwrap();
+        assert_eq!(raw.len(), 64); // 32-byte hash hex
+        assert!(!raw.contains("top-secret"));
+    }
 }
