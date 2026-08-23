@@ -537,7 +537,7 @@ async fn handle_incoming_connection(
     // Post-authentication candidate refresh: only when the cached set is
     // empty (see pre-handshake comment) AND air-gap mode allows STUN.
     if state.candidates.read().await.is_empty()
-        && !*state.security_config.read().await.air_gap_mode
+        && !state.security_config.read().await.air_gap_mode
     {
         let st = state.clone();
         tokio::spawn(async move {

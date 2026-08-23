@@ -481,7 +481,7 @@ impl AppState {
     /// it from, the wider internet (STUN, UPnP/NAT-PMP, relay registration,
     /// DHT announce, Tor/portal checks).
     pub async fn ensure_not_air_gapped(&self) -> Result<(), String> {
-        if *self.security_config.read().await.air_gap_mode {
+        if self.security_config.read().await.air_gap_mode {
             return Err("air-gap mode is enabled — this internet-facing operation is blocked".to_string());
         }
         Ok(())
