@@ -2155,10 +2155,12 @@ impl TransferStore {
         &self,
         transfer_id: &str,
         local_path: &str,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<(), StorageError> {
+        let stored = seal_meta_value(key, local_path, AAD_TRANSFER)?;
         self.conn.execute(
             "UPDATE transfers SET local_path = ?1 WHERE id = ?2",
-            params![local_path, transfer_id],
+            params![stored, transfer_id],
         )?;
         Ok(())
     }
