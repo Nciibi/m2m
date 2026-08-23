@@ -272,6 +272,11 @@ pub struct AppState {
     pub x25519_identity: RwLock<Option<crate::crypto::X25519IdentityKeypair>>,
     /// Active signed prekey for the current invite (consumed by X3DH handshake).
     pub active_signed_prekey: RwLock<Option<crate::crypto::EphemeralKeypair>>,
+    /// Active one-time prekey for the current invite (H6). Its public key is
+    /// embedded in the invite's prekey bundle; its secret key is used by the
+    /// X3DH responder to compute DH4. Rotated together with the signed prekey
+    /// on every `create_invite`, zeroized when replaced or dropped.
+    pub active_one_time_prekey: RwLock<Option<crate::crypto::EphemeralKeypair>>,
     /// Active peer connections, keyed by peer public key hex.
     pub connections: RwLock<HashMap<String, Arc<Mutex<PeerConnection>>>>,
     /// TCP listener address (if listening).
