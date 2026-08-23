@@ -2625,7 +2625,8 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let db_path = dir.join("messages.db");
 
-        // Build an OLD-schema database manually.
+        // Build an OLD-schema database manually (as shipped before
+        // crypto-shredding: no content_key_wrapped column).
         {
             let conn = Connection::open(&db_path).unwrap();
             conn.execute_batch(
@@ -2634,7 +2635,8 @@ mod tests {
                  CREATE TABLE messages (
                     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL,
                     direction TEXT NOT NULL, content_encrypted BLOB NOT NULL,
-                    content_nonce BLOB NOT NULL, timestamp INTEGER NOT NULL);",
+                    content_nonce BLOB NOT NULL, timestamp INTEGER NOT NULL,
+                    delivered INTEGER NOT NULL DEFAULT 0);",
             ).unwrap();
         }
 
