@@ -594,12 +594,13 @@ mod dht_tests {
     fn test_parse_node_response() {
         let mut peer_id = [0u8; 32];
         peer_id[0] = 0xAA;
-        // New wire format: no identity_pub — just ephemeral_id(32) + ip(4) + port(2)
+        // Tagged wire format: ephemeral_id(32) + af_tag(1) + ip(4) + port(2)
         let ip = [10u8, 0, 0, 1];
         let port = 9876u16.to_be_bytes();
 
         let mut body = Vec::new();
         body.extend_from_slice(&peer_id);
+        body.push(4);
         body.extend_from_slice(&ip);
         body.extend_from_slice(&port);
 
@@ -611,8 +612,75 @@ mod dht_tests {
     }
 
     #[test]
+    fn test_parse_node_response_ipv6() {
+        let mut peer_id = [0u8; 32];
+        peer_id[31] = 0xBB;
+        // Tagged IPv6 entry: 32 + 1 + 16 + 2 = 51 bytes
+        let mut body = Vec::new();
+        body.extend_from_slice(&peer_id);
+        body.push(6);
+        body.extend_from_slice(&[0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        body.extend_from_slice(&4096u16.to_be_bytes());
+
+        let peers = parse_node_response(&body).unwrap();
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].peer_id[31], 0xBB);
+        assert_eq!(
+            peers[0].connect_addr.unwrap().ip().to_string(),
+            "2001:db8::1"
+        );
+        assert_eq!(peers[0].connect_addr.unwrap().port(), 4096);
+    }
+
+    #[test]
+    fn test_parse_node_response_mixed_af() {
+        // One IPv4 entry followed by one IPv6 entry in the same body
+        let mut body = Vec::new();
+        body.extend_from_slice(&[0x11u8; 32]);
+        body.push(4);
+        body.extend_from_slice(&[192, 168, 1, 2]);
+        body.extend_from_slice(&1000u16.to_be_bytes());
+        body.extend_from_slice(&[0x22u8; 32]);
+        body.push(6);
+        body.extend_from_slice(&[0xfd00u16.to_be_bytes(), 0, 0, 0, 0, 0, 0, 1].repeat(1));
+        body.extend_from_slice(&2000u16.to_be_bytes());
+
+        let peers = parse_node_response(&body).unwrap();
+        assert_eq!(peers.len(), 2);
+        assert_eq!(peers[0].connect_addr.unwrap().ip().to_string(), "192.168.1.2");
+        assert_eq!(peers[1].connect_addr.unwrap().ip().to_string(), "fd00::1");
+    }
+
+    #[test]
+    fn test_parse_node_response_legacy_fallback() {
+        // Pre-af_tag format: fixed 38-byte all-IPv4 entries (32+4+2)
+        let mut body = Vec::new();
+        body.extend_from_slice(&[0x33u8; 32]);
+        body.extend_from_slice(&[172, 16, 0, 9]);
+        body.extend_from_slice(&7777u16.to_be_bytes());
+
+        let peers = parse_node_response(&body).unwrap();
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].peer_id[0], 0x33);
+        assert_eq!(peers[0].connect_addr.unwrap().ip().to_string(), "172.16.0.9");
+        assert_eq!(peers[0].connect_addr.unwrap().port(), 7777);
+    }
+
+    #[test]
+    fn test_parse_node_response_bad_af_tag_is_legacy_or_error() {
+        // af_tag=5 is invalid; body is NOT a multiple of 38 → hard error
+        let mut body = Vec::new();
+        body.extend_from_slice(&[0x44u8; 32]);
+        body.push(5);
+        body.extend_from_slice(&[10, 0, 0, 1]);
+        body.extend_from_slice(&1234u16.to_be_bytes());
+        body.extend_from_slice(&[0u8; 3]); // trailing junk breaks legacy alignment too
+        assert!(parse_node_response(&body).is_err());
+    }
+
+    #[test]
     fn test_parse_node_response_malformed() {
-        // Old 70-byte entry size (32+32+4+2) should fail new wire format (32+4+2=38)
+        // Old 70-byte entry size matches no known format
         let body = vec![0u8; 70];
         assert!(parse_node_response(&body).is_err());
     }
