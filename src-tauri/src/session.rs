@@ -1794,9 +1794,10 @@ mod session_tests {
         let (alice_identity, _alice_x25519) = make_identities();
 
         let eph = EphemeralKeypair::generate();
+        let timestamp = now_unix_secs(); // fresh — this test targets bad HandshakeComplete
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
-        sign_data.extend_from_slice(&12345u64.to_be_bytes());
+        sign_data.extend_from_slice(&timestamp.to_be_bytes());
         let signature = alice_identity.sign(&sign_data);
 
         let init = HandshakeInit {
@@ -1805,7 +1806,7 @@ mod session_tests {
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             used_opk: None,
-            timestamp: 12345,
+            timestamp,
             signature,
             candidates: vec![],
         };
