@@ -1059,11 +1059,22 @@ pub fn spawn_receive_loop(
 
             match frame.packet_type {
                 PacketType::EncryptedMessage => {
-                    let conns = state.connections.read().await;
-                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
-                        let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_message(&frame) {
-                            Ok(body) => match &body {
+                    // Decrypt under the per-peer connection lock ONLY; both
+                    // guards are released before the SQLite writes below so
+                    // slow disk I/O cannot head-of-line block concurrent
+                    // sends to this peer (audit secondary fix).
+                    let decrypted = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(conn_arc) => {
+                                let mut conn = conn_arc.lock().await;
+                                Some(conn.session.decrypt_message(&frame))
+                            }
+                            None => None,
+                        }
+                    };
+                    match decrypted {
+                        Some(Ok(body)) => match &body {
                                 MessageBody::Text { id, content, timestamp, .. } => {
                                     // Use sender's timestamp for consistent ordering.
                                     // Fall back to receiver's clock if timestamp is 0
