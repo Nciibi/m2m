@@ -1438,7 +1438,6 @@ impl MessageStore {
         if !owns {
             return Ok(false);
         }
-        let stored = seal_meta_value(key, reaction, AAD_REACTION)?;
         if remove {
             // Match by DECRYPTED text: envelopes carry fresh random nonces,
             // so re-encrypting the probe would never equal the stored form.
