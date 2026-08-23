@@ -2685,4 +2685,66 @@ mod session_tests {
 
         alice.await.unwrap().unwrap();
     }
+
+    /// Encrypted heartbeats: a Heartbeat sent via the session AEAD path must
+    /// decrypt on the peer, and an injected PLAINTEXT heartbeat frame must be
+    /// rejected (the old plaintext keepalive was a liveness oracle).
+    #[tokio::test]
+    async fn test_heartbeat_encrypted_roundtrip_and_plaintext_rejected() {
+        init_crypto();
+        let (alice_id, alice_x25519) = make_identities();
+        let (bob_id, bob_x25519) = make_identities();
+        let bob_pub = bob_id.public_key_bytes();
+
+        let bob_spk = crate::crypto::EphemeralKeypair::generate();
+        let sig = bob_id.sign(&bob_spk.public_key_bytes());
+        let bundle = crate::crypto::PrekeyBundle {
+            identity_key: bob_x25519.public_key_bytes(),
+            signed_prekey: bob_spk.public_key_bytes(),
+            signed_prekey_sig: sig,
+            one_time_prekey: None,
+        };
+
+        let (mut alice_io, mut bob_io) = tokio::io::duplex(65536);
+
+        let alice = tokio::spawn(async move {
+            let mut session = Session::new();
+            session.handshake_as_initiator_x3dh(
+                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
+            ).await?;
+            session.send_heartbeat(&mut alice_io).await?;
+            // Injected plaintext heartbeat from an attacker.
+            network::write_frame(&mut alice_io, PacketType::HeartbeatAck, &[]).await?;
+            Ok::<_, SessionError>(())
+        });
+
+        let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        let mut bob_session = Session::new();
+        bob_session.handshake_as_responder_x3dh(
+            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
+        ).await.unwrap();
+
+        // 1. Encrypted heartbeat decrypts cleanly to empty payload.
+        let hb_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(hb_frame.packet_type, PacketType::Heartbeat);
+        let pt = bob_session.decrypt_typed_frame(&hb_frame).unwrap();
+        assert!(pt.is_empty(), "heartbeat payload should be empty");
+
+        // 2. Plaintext (non-envelope) heartbeat ack must FAIL decryption —
+        //    it is not a valid AEAD envelope.
+        let forged = network::read_frame_impl(&mut bob_io).await.unwrap();
+        assert_eq!(forged.packet_type, PacketType::HeartbeatAck);
+        assert!(
+            bob_session.decrypt_typed_frame(&forged).is_err(),
+            "plaintext/injected heartbeat ack must not decrypt"
+        );
+
+        // 3. Bob's encrypted ack round-trips back through Alice's ratchet.
+        bob_session.send_heartbeat_ack(&mut bob_io).await.unwrap();
+
+        let ack_frame = network::read_frame_impl(&mut alice_io).await.unwrap();
+        let mut alice_session = alice.await.unwrap().unwrap();
+        assert_eq!(ack_frame.packet_type, PacketType::HeartbeatAck);
+        assert!(alice_session.decrypt_typed_frame(&ack_frame).is_ok());
+    }
 }
