@@ -6,9 +6,11 @@ import { Button, Badge, Modal, ToastContainer, ProgressBar } from "../components
 import {
   ArrowLeftIcon, ShieldIcon, VerifiedIcon, LockIcon,
   SendIcon, AttachIcon, FileIcon, ArrowDownIcon,
-  SmileyIcon, CheckDoubleIcon, ClockIcon,
+  SmileyIcon,
 } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
+import MessageBubble from "../components/chat/MessageBubble";
+import { renderMarkdown, groupByDate } from "../components/chat/messageRender";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import type { ChatMessage } from "../types";
@@ -29,10 +31,6 @@ export default function ChatView() {
   const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [sending, setSending] = useState(false);
-  const [pickerMsgId, setPickerMsgId] = useState<string | null>(null);
-  const [contextMsgId, setContextMsgId] = useState<string | null>(null);
-  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
   const [timerSecs, setTimerSecs] = useState<number>(0);
   // Search
   const [searchQuery, setSearchQuery] = useState("");
