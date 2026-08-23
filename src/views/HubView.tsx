@@ -4,6 +4,7 @@ import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
   GearIcon, PlusIcon, LinkIcon, CopyIcon, CheckIcon,
   SearchIcon, MessageIcon, TrashIcon, OnlineDot, OfflineDot, HomeIcon, WifiIcon, ClockIcon,
+  StarIcon, BellIcon, FolderIcon,
 } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
@@ -383,7 +384,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
             </div>
             <div className="conv-body">
               <div className="conv-top">
-                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <span className="mute-indicator">🔇</span> : null}</span>
+                <span className="conv-name">{c.display_name || c.peer_display_name || "Unknown Peer"}{isMuted ? <BellIcon size={12} off className="mute-indicator" /> : null}</span>
                 {c.last_message_at && <span className="relative-time">{formatTime(c.last_message_at)}</span>}
               </div>
               <span className="conv-preview">{c.last_message_preview || "No messages yet."}</span>
