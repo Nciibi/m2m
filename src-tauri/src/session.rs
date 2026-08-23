@@ -242,10 +242,13 @@ impl Session {
         peer_sign_data.extend_from_slice(&init.ephemeral_pub);
         peer_sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
 
-        crypto::verify_signature(&init.identity_pub, &peer_sign_data, &init.signature)
-            .map_err(|_| {
-                SessionError::HandshakeFailed("initiator signature invalid".to_string())
-            })?;
+    crypto::verify_signature(&init.identity_pub, &peer_sign_data, &init.signature)
+        .map_err(|_| {
+            SessionError::HandshakeFailed("initiator signature invalid".to_string())
+        })?;
+
+    // Replay protection (M1): reject stale/future timestamps.
+    validate_handshake_timestamp(init.timestamp)?;
 
         // Generate our ephemeral keypair
         let ephemeral = EphemeralKeypair::generate();
