@@ -1878,7 +1878,7 @@ mod session_tests {
         let mut session = Session::new();
         // Freshness check fires after parsing the init but before any
         // further I/O, so a duplex stream suffices.
-        let (_mut _io_tx, mut io_rx) = tokio::io::duplex(65536);
+        let (_io_tx, mut io_rx) = tokio::io::duplex(65536);
         let result = session.handshake_as_responder(
             &mut io_rx, &bob_identity, &frame, vec![], bob_xp,
         ).await;
