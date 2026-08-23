@@ -338,6 +338,16 @@ pub struct GroupManager {
     pub groups: HashMap<String, Group>,
 }
 
+/// Outcome of processing an incoming sender-key bundle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SenderKeyReceipt {
+    /// Sender was already known (key rotated or re-sent).
+    Known,
+    /// Sender was previously unknown — caller should reply with our own
+    /// bundle to complete mutual key exchange.
+    NewMember,
+}
+
 impl GroupManager {
     pub fn new() -> Self {
         Self {
@@ -600,7 +610,7 @@ impl GroupManager {
 
         // Signature must verify under the transport peer's identity key.
         let sign_bytes = sender_key_bundle_sign_bytes(data);
-        crypto::verify_signature(peer_identity_pub, &sign_bytes, &data.signature)
+        crate::crypto::verify_signature(peer_identity_pub, &sign_bytes, &data.signature)
             .map_err(|_| "rejected sender key bundle: invalid signature".to_string())?;
 
         let group = self
