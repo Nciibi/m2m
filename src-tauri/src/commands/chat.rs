@@ -782,12 +782,22 @@ pub async fn toggle_archive(
 }
 
 /// Send typing indicator to a peer (fire-and-forget).
+///
+/// Cover traffic (roadmap §4): when enabled, indicator timing is randomized
+/// (0–600 ms) so keystroke cadence — typing speed, pauses between words —
+/// is not observable in frame arrival times.
 #[tauri::command]
 pub async fn send_typing_indicator(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     typing: bool,
 ) -> Result<(), String> {
+    if state.security_config.read().await.cover_typing_traffic {
+        let jitter = rand::random::<u64>() % 600;
+        if jitter > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(jitter)).await;
+        }
+    }
     let conns = state.connections.read().await;
     if let Some(conn_arc) = conns.get(&peer_key_hex) {
         let mut conn = conn_arc.lock().await;
