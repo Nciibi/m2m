@@ -266,9 +266,11 @@ pub async fn unlock_vault(
         pub_arr.copy_from_slice(&pub_bytes);
         let legacy_key = util::derive_storage_key(&pub_bytes);
         // Historic writers used two different AADs: very old profiles
-        // were sealed with an empty AAD, while import_identity seals
-        // with AAD_KEY_STORE. Try both so every legacy profile and all
-        // imported identities can migrate (H1).
+        // were sealed with an empty AAD, while older versions of
+        // import_identity sealed with AAD_KEY_STORE. Try both so every
+        // legacy profile and all previously-imported identities can
+        // migrate (H1). Current import_identity seals under a
+        // passphrase-derived key and never reaches this path.
         let sk_bytes = match util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"") {
             Ok(sk) => sk,
             Err(_) => util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, util::AAD_KEY_STORE)
