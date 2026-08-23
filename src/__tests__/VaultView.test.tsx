@@ -46,14 +46,14 @@ describe("VaultView", () => {
 
   it("renders a passphrase input field", () => {
     render(<VaultView />);
-    const input = screen.getByPlaceholderText("Passphrase");
+    const input = screen.getByPlaceholderText("Enter your passphrase");
     expect(input).toBeInTheDocument();
     expect(input).toHaveAttribute("type", "password");
   });
 
   it("renders a confirm passphrase input for first-time users", () => {
     render(<VaultView />);
-    expect(screen.getByPlaceholderText("Confirm passphrase")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Repeat your passphrase")).toBeInTheDocument();
   });
 
   it("renders unlock/create button", () => {
@@ -70,7 +70,7 @@ describe("VaultView", () => {
   it("does not show confirm input for returning users", () => {
     appState.vaultInitialized = true;
     render(<VaultView />);
-    expect(screen.queryByPlaceholderText("Confirm passphrase")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Repeat your passphrase")).not.toBeInTheDocument();
   });
 
   it("shows passphrase tips when toggled", async () => {
@@ -84,7 +84,7 @@ describe("VaultView", () => {
   it("shows strength meter as user types", async () => {
     const user = userEvent.setup();
     render(<VaultView />);
-    const input = screen.getByPlaceholderText("Passphrase");
+    const input = screen.getByPlaceholderText("Enter your passphrase");
     await user.type(input, "correct-horse-battery-staple");
     // Shows "28 chars" in the strength section
     expect(screen.getByText(/28 chars/)).toBeInTheDocument();
