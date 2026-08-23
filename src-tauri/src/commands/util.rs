@@ -43,6 +43,34 @@ pub fn decode_peer_key_logged(hex_str: &str) -> Option<[u8; 32]> {
     }
 }
 
+/// Truncate a string for display so the result is at most `max_total`
+/// characters, appending `suffix` when truncation occurs.
+///
+/// Operates on Unicode scalar values (`char`s), never raw byte indices, so
+/// multi-byte UTF-8 input (CJK, emoji, accented text) cannot panic on a
+/// non-boundary index or split a codepoint (H2). The audit found remote-
+/// reachable panics where peer-supplied messages were sliced at fixed byte
+/// offsets (`&content_str[..80]`).
+///
+/// If `suffix` alone would fill `max_total`, the result is just the first
+/// `max_total` characters of `s` without a suffix.
+pub fn truncate_utf8(s: &str, max_total: usize, suffix: &str) -> String {
+    if s.chars().count() <= max_total {
+        return s.to_string();
+    }
+    let suffix_len = suffix.chars().count();
+    let body_len = if suffix_len < max_total {
+        max_total - suffix_len
+    } else {
+        max_total
+    };
+    let mut out: String = s.chars().take(body_len).collect();
+    if suffix_len < max_total {
+        out.push_str(suffix);
+    }
+    out
+}
+
 /// Resolve the local (non-loopback) IP address used for internet connectivity.
 ///
 /// Uses dual-stack bind: tries IPv4 first, falls back to IPv6 for IPv6-only
