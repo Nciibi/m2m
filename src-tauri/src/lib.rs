@@ -17,6 +17,7 @@
 mod candidate;
 mod capture_monitor;
 mod commands;
+mod duress;
 pub mod crypto;
 mod dht;
 mod ephemeral_id;
