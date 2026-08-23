@@ -529,6 +529,59 @@ impl Drop for DoubleRatchet {
     }
 }
 
+/// Tentatively derived receive state, ready to commit.
+///
+/// All fields are produced by [`DoubleRatchet::receive_tentative`] AFTER
+/// the AEAD tag has verified, so a successful return means the frame is
+/// authentic. Secrets are zeroized on drop, so an uncommitted tentative
+/// (or one whose fields were moved out via `mem::take`) never leaves key
+/// material in freed memory (H3).
+struct TentativeReceive {
+    root_key: [u8; 32],
+    /// Successor chain key for the receiving chain.
+    recv_chain_key: [u8; 32],
+    their_ratchet_pub: [u8; 32],
+    /// Receive counter already advanced past this message.
+    recv_message_number: u64,
+    /// True when the frame carried a new DH ratchet key: the previous
+    /// receiving chain is superseded, so cached skipped keys must go.
+    skipped_clear: bool,
+    /// Skipped-message keys derived while filling the gap to this frame.
+    staged_skips: Vec<(u64, [u8; 32])>,
+    plaintext: Vec<u8>,
+}
+
+impl Drop for TentativeReceive {
+    fn drop(&mut self) {
+        self.root_key.zeroize();
+        self.recv_chain_key.zeroize();
+        self.their_ratchet_pub.zeroize();
+        for (_, k) in self.staged_skips.iter_mut() {
+            k.zeroize();
+        }
+    }
+}
+
+impl TentativeReceive {
+    /// Commit this verified receive state into the ratchet atomically.
+    fn commit(mut self, dr: &mut DoubleRatchet) -> Vec<u8> {
+        use std::mem::take;
+        dr.root_key = take(&mut self.root_key);
+        dr.recv_chain_key = Some(take(&mut self.recv_chain_key));
+        dr.their_ratchet_pub = take(&mut self.their_ratchet_pub);
+        dr.recv_message_number = self.recv_message_number;
+        if self.skipped_clear {
+            // Cached keys belong to the superseded receiving chain.
+            dr.skipped_keys.clear();
+        }
+        let staged = take(&mut self.staged_skips);
+        for (num, key) in staged {
+            dr.skipped_keys.insert(num, key);
+        }
+        take(&mut self.plaintext)
+    }
+}
+
 impl DoubleRatchet {
     /// Initialize the Double Ratchet from X3DH output.
     ///
