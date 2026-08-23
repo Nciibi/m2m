@@ -1784,46 +1784,54 @@ pub fn spawn_receive_loop(
                     }
                 }
                 PacketType::MessageDelete => {
-                    let conns = state.connections.read().await;
-                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
-                        let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
-                            Ok(plaintext) => {
-                                if let Ok(del) = crate::protocol::deserialize::<crate::protocol::MessageDeleteData>(&plaintext) {
-                                    // Soft-delete locally, scoped to the sender's conversation
-                                    // and 'received' messages only (H4).
-                                    let ms = state.message_store.lock().await;
-                                    let mut accepted = false;
-                                    if let Some(ref store) = *ms {
-                                        match store.delete_message(&del.message_id, &peer_key_hex, "received") {
-                                            Ok(true) => accepted = true,
-                                            Ok(false) => {
-                                                tracing::warn!(
-                                                    peer = %peer_key_hex,
-                                                    "delete for message outside sender conversation — rejected"
-                                                );
-                                            }
-                                            Err(e) => {
-                                                tracing::warn!(error = %e, "failed to persist delete");
-                                            }
+                    // Decrypt under the per-peer lock only (head-of-line fix).
+                    let decrypted = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(conn_arc) => {
+                                let mut conn = conn_arc.lock().await;
+                                Some(conn.session.decrypt_typed_frame(&frame))
+                            }
+                            None => None,
+                        }
+                    };
+                    match decrypted {
+                        Some(Ok(plaintext)) => {
+                            if let Ok(del) = crate::protocol::deserialize::<crate::protocol::MessageDeleteData>(&plaintext) {
+                                // Soft-delete locally, scoped to the sender's conversation
+                                // and 'received' messages only (H4).
+                                let ms = state.message_store.lock().await;
+                                let mut accepted = false;
+                                if let Some(ref store) = *ms {
+                                    match store.delete_message(&del.message_id, &peer_key_hex, "received") {
+                                        Ok(true) => accepted = true,
+                                        Ok(false) => {
+                                            tracing::warn!(
+                                                peer = %peer_key_hex,
+                                                "delete for message outside sender conversation — rejected"
+                                            );
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(error = %e, "failed to persist delete");
                                         }
                                     }
-                                    drop(ms);
-                                    if !accepted {
-                                        continue;
-                                    }
-
-                                    // Notify frontend
-                                    let _ = app_handle.emit("m2m://delete", serde_json::json!({
-                                        "message_id": del.message_id,
-                                        "peer_key_hex": peer_key_hex,
-                                    }));
                                 }
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, "failed to decrypt message delete");
+                                drop(ms);
+                                if !accepted {
+                                    continue;
+                                }
+
+                                // Notify frontend
+                                let _ = app_handle.emit("m2m://delete", serde_json::json!({
+                                    "message_id": del.message_id,
+                                    "peer_key_hex": peer_key_hex,
+                                }));
                             }
                         }
+                        Some(Err(e)) => {
+                            tracing::warn!(error = %e, "failed to decrypt message delete");
+                        }
+                        None => {}
                     }
                 }
                 PacketType::SyncRequest => {
