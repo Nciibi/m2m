@@ -682,7 +682,9 @@ pub async fn flush_offline_queue(
 
         let mut decrypted = Vec::with_capacity(stored.len());
         for msg in &stored {
-            if let Ok(bytes) = util::crypto_decrypt_storage(&msg.content_encrypted, &msg.content_nonce, key, util::AAD_MSG_STORE) {
+            if let Ok(bytes) = MessageStore::decrypt_stored_content(
+                &msg.content_encrypted, &msg.content_nonce, msg.content_key_wrapped.as_deref(), key,
+            ) {
                 if let Ok(text) = String::from_utf8(bytes) {
                     decrypted.push((msg.id.clone(), text, msg.expires_at));
                 }
