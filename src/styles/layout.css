@@ -316,8 +316,32 @@
   font-family: inherit;
 }
 
+.tab-bar__tab { position: relative; }
 .tab-bar__tab:hover { color: var(--color-text-secondary); }
-.tab-bar__tab--active { color: var(--color-text-accent); border-bottom-color: var(--color-accent); }
+
+/* Animated accent underline — scales in from the tab's leading edge */
+.tab-bar__tab::after {
+  content: "";
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent-glow);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--duration-base) var(--ease-ios);
+}
+
+.tab-bar__tab--active {
+  color: var(--color-text-accent);
+}
+
+.tab-bar__tab--active::after {
+  transform: scaleX(1);
+}
 
 /* ─── Right Panel ─── */
 .app-right-panel {
