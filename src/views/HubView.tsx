@@ -404,7 +404,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
               </button>
               <button className="btn btn--icon btn--icon-sm"
                 title={isMuted ? "Unmute conversation" : "Mute conversation"}
-                onClick={e => { e.stopPropagation(); isMuted ? onUnmute(c.peer_key_hex) : onMute(c.peer_key_hex); }}
+                onClick={e => { e.stopPropagation(); if (isMuted) { onUnmute(c.peer_key_hex); } else { onMute(c.peer_key_hex); } }}
                 aria-label={isMuted ? "Unmute" : "Mute"}>
                 {isMuted ? "🔇" : "🔔"}
               </button>
