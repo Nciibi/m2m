@@ -237,6 +237,12 @@ pub struct SecurityConfig {
     /// Lock vault after N seconds of inactivity (0 = never lock).
     /// Default: 0 (disabled). Recommended: 300 (5 min) when enabled.
     pub idle_lock_secs: u64,
+    /// Accept incoming connections ONLY from known contacts — peers already
+    /// in the key store (previously connected) or family members. Strangers
+    /// with validly-signed identities are rejected at handshake completion
+    /// and never persisted. OFF by default so first-time invite connections
+    /// work out of the box; high-risk users should enable it (H5).
+    pub require_known_contact: bool,
 }
 
 /// Peer discovery method configuration.
