@@ -466,8 +466,7 @@ async fn handle_incoming_connection(
     // dispatcher when the allowlist is enabled.
     {
         let require_known = state.security_config.read().await.require_known_contact;
-        if !contact_gate_allows(require_known, false, false) {
-            // Only consult the store when the gate can actually reject.
+        if require_known {
             let peer_key_bytes = match util::decode_peer_key(&peer_key_hex) {
                 Ok(k) => k,
                 Err(_) => {
@@ -480,18 +479,18 @@ async fn handle_incoming_connection(
                     return;
                 }
             };
-            let known = {
+            // Key-store lock scoped narrowly; no .await while held.
+            let (is_family, is_known) = {
                 let ks = state.key_store.lock().await;
                 match ks.as_ref() {
-                    Some(store) => {
-                        let family = store.is_family_member(&peer_key_bytes).unwrap_or(false);
-                        let known_peer = store.is_known_peer(&peer_key_bytes).unwrap_or(false);
-                        (family, known_peer)
-                    }
+                    Some(store) => (
+                        store.is_family_member(&peer_key_bytes).unwrap_or(false),
+                        store.is_known_peer(&peer_key_bytes).unwrap_or(false),
+                    ),
                     None => (false, false),
                 }
             };
-            if !contact_gate_allows(require_known, known.0, known.1) {
+            if !contact_gate_allows(require_known, is_family, is_known) {
                 tracing::warn!(
                     peer = %peer_key_hex,
                     fingerprint = %peer_fingerprint,
