@@ -2715,7 +2715,7 @@ mod session_tests {
             session.send_heartbeat(&mut alice_io).await?;
             // Injected plaintext heartbeat from an attacker.
             network::write_frame(&mut alice_io, PacketType::HeartbeatAck, &[]).await?;
-            Ok::<_, SessionError>(())
+            Ok::<_, SessionError>(session)
         });
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
