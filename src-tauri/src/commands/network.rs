@@ -1810,7 +1810,7 @@ drop(conns);
                                     // traffic (also how late joiners get existing chain keys).
                                     if receipt == Some(crate::group::SenderKeyReceipt::NewMember) {
                                         if let Some(our) = &our_peer_key_hex {
-                                            if let Err(e) = send_own_bundle(state, app_handle.clone(), &sk_data.group_id, &peer_key_hex, our).await {
+                                            if let Err(e) = send_own_bundle(state.clone(), &sk_data.group_id, &peer_key_hex, our).await {
                                                 tracing::warn!(error = %e, peer = %peer_key_hex, "failed to reply with own sender key");
                                             }
                                         }
