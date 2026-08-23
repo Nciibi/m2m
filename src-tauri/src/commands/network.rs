@@ -1732,8 +1732,16 @@ pub fn spawn_receive_loop(
                                 if let Ok(create) = protocol::deserialize::<protocol::GroupCreateData>(&plaintext) {
                                     tracing::info!(group = %create.group_id, "received group create");
                                     let gid = create.group_id.clone();
+                                    // Roster = creator + initial members (H2: we generate
+                                    // our own keys; never trust key material shipped to us).
+                                    let mut roster = vec![create.creator_peer_key_hex.clone()];
+                                    for m in &create.initial_members {
+                                        if !roster.contains(m) {
+                                            roster.push(m.clone());
+                                        }
+                                    }
                                     drop(conn);
-drop(conns);
+        drop(conns);
 
                                     state.ensure_message_store(&state.data_dir).await.ok();
                                     let ms = state.message_store.lock().await;
@@ -1745,6 +1753,41 @@ drop(conns);
                                         }
                                     }
                                     drop(ms);
+
+                                    // Join locally with OUR OWN keys, then announce them.
+                                    let joined_bundle = {
+                                        let our_peer_key_hex = {
+                                            let id = state.identity.read().await;
+                                            id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
+                                        };
+                                        match our_peer_key_hex {
+                                            Some(our) => {
+                                                let mut gm = state.group_manager.write().await;
+                                                gm.join_group(
+                                                    gid.clone(),
+                                                    create.group_name.clone(),
+                                                    create.created_at,
+                                                    our.clone(),
+                                                    false,
+                                                    &roster,
+                                                ).ok()
+                                            }
+                                            None => None,
+                                        }
+                                    };
+
+                                    if let Some(mut bundle) = joined_bundle {
+                                        let our_peer_key_hex = {
+                                            let id = state.identity.read().await;
+                                            id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
+                                        };
+                                        if let Some(our) = our_peer_key_hex {
+                                            if let Err(e) = fan_out_own_bundle(state.clone(), &gid, &roster, &our).await {
+                                                tracing::warn!(error = %e, group = %gid, "failed to announce own sender key after group create");
+                                            }
+                                            let _ = bundle; // consumed by fan_out
+                                        }
+                                    }
 
                                     let _ = app_handle.emit("m2m://group-event", GroupEvent {
                                         group_id: gid,
