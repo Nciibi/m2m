@@ -71,6 +71,35 @@ pub struct Session {
     pub peer_sync_device_name: Option<String>,
 }
 
+/// Append network candidates to handshake signature input.
+///
+/// The handshake signatures previously covered only the ephemeral key and
+/// timestamp, so an active MITM could strip or replace the `candidates`
+/// field of a HandshakeInit/Response — poisoning reconnect targets with
+/// attacker-controlled addresses — while leaving the signature valid.
+/// Both sides now fold a canonical, length-prefixed encoding of the
+/// candidate list into the signed data, so any candidate tampering
+/// invalidates the signature.
+///
+/// The encoding is hand-rolled (not MessagePack) to guarantee byte-level
+/// determinism between signer and verifier.
+fn append_candidates_to_sign_data(sign_data: &mut Vec<u8>, candidates: &[WireCandidate]) {
+    sign_data.extend_from_slice(&(candidates.len() as u32).to_be_bytes());
+    for c in candidates {
+        sign_data.extend_from_slice(&(c.address.len() as u32).to_be_bytes());
+        sign_data.extend_from_slice(c.address.as_bytes());
+        sign_data.push(c.candidate_type);
+        match &c.relay_id {
+            Some(id) => {
+                sign_data.push(1);
+                sign_data.extend_from_slice(&(id.len() as u32).to_be_bytes());
+                sign_data.extend_from_slice(id.as_bytes());
+            }
+            None => sign_data.push(0),
+        }
+    }
+}
+
 impl Session {
     /// Create a new session in the initial state.
     ///
