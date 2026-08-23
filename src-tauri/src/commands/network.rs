@@ -784,6 +784,31 @@ pub async fn get_listen_address(
 
 /// Spawn an async task that reads incoming frames from a peer
 /// and emits Tauri events for the React frontend.
+/// Rotate OUR OWN sending chain for `group_id` (forward secrecy after a
+/// member was removed or left) and announce the new signed bundle to all
+/// remaining members with active connections.
+pub(crate) async fn rotate_and_announce(
+    state: Arc<AppState>,
+    group_id: &str,
+    our_peer_key_hex: &str,
+) -> Result<(), String> {
+    {
+        let mut gm = state.group_manager.write().await;
+        let group = gm.get_group_mut(group_id).ok_or("group not found")?;
+        group.rotate_own_sender_key()?;
+    }
+
+    let roster: Vec<String> = {
+        let gm = state.group_manager.read().await;
+        let group = gm.get_group(group_id).ok_or("group not found")?;
+        group.members.iter()
+            .map(|m| m.peer_key_hex.clone())
+            .collect()
+    };
+
+    fan_out_own_bundle(state, group_id, &roster, our_peer_key_hex).await
+}
+
 /// Send our own signed sender-key bundle for `group_id` to every roster
 /// member with an active connection, excluding ourselves (H2 fan-out).
 pub(crate) async fn fan_out_own_bundle(
