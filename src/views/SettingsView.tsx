@@ -276,6 +276,20 @@ export default function SettingsView() {
               <span className="settings-hint">Auto-lock vault after inactivity</span>
             </div>
 
+            <div className="settings-row">
+              <span className="settings-label"><LockIcon size={16} /> Known Contacts Only</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.require_known_contact ?? false}
+                  onChange={handleRequireKnownContactToggle}
+                  aria-label="Toggle known contacts only"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">Reject incoming connections from strangers (first-time invites require turning this off)</span>
+            </div>
+
             <div className="settings-divider" />
 
             <div className="settings-row">
