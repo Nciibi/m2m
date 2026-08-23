@@ -592,8 +592,6 @@ impl GroupManager {
         _our_peer_key_hex: &str,
         peer_identity_pub: &[u8; 32],
     ) -> Result<SenderKeyReceipt, String> {
-        let _ = our_peer_key_hex;
-
         if data.signing_key.is_some() {
             return Err(
                 "rejected sender key bundle: contains private signing key material".to_string(),
