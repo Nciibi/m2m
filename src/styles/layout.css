@@ -303,16 +303,15 @@
   padding: var(--space-sm) var(--space-md);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: color var(--transition-base), border-color var(--transition-base);
+  transition: color var(--transition-base);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-xs);
   font-family: inherit;
 }
 
