@@ -2176,6 +2176,8 @@ drop(conns);
                                         );
                                         continue;
                                     }
+                                    drop(conn);
+        drop(conns);
 
                                     let our_peer_key_hex = {
                                         let id = state.identity.read().await;
