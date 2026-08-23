@@ -1776,7 +1776,7 @@ pub fn spawn_receive_loop(
                                         }
                                     };
 
-                                    if let Some(mut bundle) = joined_bundle {
+                                    if joined_bundle.is_some() {
                                         let our_peer_key_hex = {
                                             let id = state.identity.read().await;
                                             id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
@@ -1785,7 +1785,6 @@ pub fn spawn_receive_loop(
                                             if let Err(e) = fan_out_own_bundle(state.clone(), &gid, &roster, &our).await {
                                                 tracing::warn!(error = %e, group = %gid, "failed to announce own sender key after group create");
                                             }
-                                            let _ = bundle; // consumed by fan_out
                                         }
                                     }
 
