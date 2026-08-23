@@ -128,6 +128,7 @@ export interface SecurityConfig {
   screen_capture_protection: boolean;
   clipboard_clear_secs: number;
   idle_lock_secs: number;
+  require_known_contact: boolean;
 }
 
 export interface TransferProgress {
