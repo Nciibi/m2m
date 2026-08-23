@@ -240,7 +240,7 @@ pub async fn unlock_vault(
             sk_bytes.zeroize();
 
             // Derive new key and re-encrypt
-            let new_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
+            let new_key = derive_key_blocking(passphrase.clone(), pub_bytes.clone()).await?;
             let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
             let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
@@ -267,7 +267,7 @@ pub async fn unlock_vault(
         let pub_bytes = kp.public_key_bytes();
         let sk_bytes = kp.secret_key_bytes();
 
-        let storage_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
+        let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.clone()).await?;
         let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
             .map_err(|e| format!("failed to encrypt identity: {e}"))?;
 
@@ -728,7 +728,7 @@ pub async fn import_identity(
         arr
     };
 
-    let export_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_arr)?;
+    let export_key = derive_key_blocking(passphrase, pub_arr.to_vec()).await?;
     let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &export_key, crate::commands::util::AAD_EXPORT_V2)
         .map_err(|_| "wrong export passphrase or corrupted backup file".to_string())?;
 
