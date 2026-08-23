@@ -913,22 +913,8 @@ pub async fn import_identity(
     // stays cryptographically domain-separated.
     let storage_key = export_key;
 
-    let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_arr, &storage_key, util::AAD_KEY_STORE)
-        .map_err(|e| format!("encryption failed: {e}"))?;
+    seal_imported_identity(&key_store, &pub_bytes, &sk_arr, &storage_key)?;
     sk_arr.zeroize();
-
-    let now = chrono::Utc::now().timestamp();
-    key_store.store_identity(&pub_bytes, &new_enc_sk, &new_nonce, now)
-        .map_err(|e| format!("failed to store identity: {e}"))?;
-    key_store.set_vault_initialized()
-        .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
-    // Register as a vault account so multi-account unlock can select it by
-    // passphrase. If this identity is already an account row (UNIQUE pubkey),
-    // refresh its wrapped secret key instead.
-    if key_store.insert_account(&pub_bytes, &new_enc_sk, &new_nonce, Some("Imported"), now).is_err() {
-        key_store.update_account_private_key(&pub_bytes, &new_enc_sk, &new_nonce)
-            .map_err(|e| format!("failed to persist imported account: {e}"))?;
-    }
 
     // Import family members
     if let Some(family_arr) = payload.get("family").and_then(|v| v.as_array()) {
