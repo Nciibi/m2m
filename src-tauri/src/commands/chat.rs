@@ -833,9 +833,9 @@ pub async fn search_messages(
             stored.into_iter().filter_map(|m| {
                 if m.deleted { return None; }
                 // Decrypt content to search
-                let decrypted = util::crypto_decrypt_storage(
+                let decrypted = MessageStore::decrypt_stored_content(
                     &m.content_encrypted, &m.content_nonce,
-                    key, util::AAD_MSG_STORE,
+                    m.content_key_wrapped.as_deref(), key,
                 ).ok()?;
                 let text = String::from_utf8(decrypted).ok()?;
                 if text.to_lowercase().contains(&query_lower) {
