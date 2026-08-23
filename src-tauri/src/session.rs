@@ -287,10 +287,11 @@ impl Session {
         let ephemeral = EphemeralKeypair::generate();
         let now = now_unix_secs();
 
-        // Sign our ephemeral key
+        // Sign our ephemeral key + advertised candidates
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&ephemeral.public_key_bytes());
         sign_data.extend_from_slice(&now.to_be_bytes());
+        append_candidates_to_sign_data(&mut sign_data, &local_candidates);
 
         let signature = identity.sign(&sign_data);
 
