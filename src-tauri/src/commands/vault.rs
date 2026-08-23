@@ -741,10 +741,11 @@ pub async fn update_family_member(
     let new_public_key = signed.payload.identity_pub;
     let new_address = signed.payload.address_hint.clone();
 
+    let sk = state.storage_key.read().await;
     let ks = state.key_store.lock().await;
     let store = ks.as_ref().ok_or("key store not initialized")?;
 
-    let updated = store.update_family_member(&old_key, &new_public_key, Some(&new_address))
+    let updated = store.update_family_member(&old_key, &new_public_key, Some(&new_address), sk.as_ref())
         .map_err(|e| format!("failed to update family member: {e}"))?;
 
     Ok(updated)
@@ -778,9 +779,10 @@ pub async fn export_identity(
     let sk_bytes = kp.secret_key_bytes();
 
     // Get family list
+    let sk = state.storage_key.read().await;
     let ks = state.key_store.lock().await;
     let store = ks.as_ref().ok_or("key store not initialized")?;
-    let family = store.list_family_all().map_err(|e| format!("list family: {e}"))?;
+    let family = store.list_family_all(sk.as_ref()).map_err(|e| format!("list family: {e}"))?;
     drop(ks);
 
     // Encrypt the secret key with export passphrase
