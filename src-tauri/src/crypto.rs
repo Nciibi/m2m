@@ -247,9 +247,6 @@ pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8>
     result.truncate(length);
     result
 }
-    result.truncate(length);
-    result
-}
 
 /// Full HKDF: HKDF(salt, IKM, info, length) = HKDF-Expand(HKDF-Extract(salt, IKM), info, length)
 pub(crate) fn hkdf(salt: &[u8], ikm: &[u8], info: &[u8], length: usize) -> Vec<u8> {
