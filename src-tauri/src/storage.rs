@@ -294,19 +294,8 @@ impl KeyStore {
     // passphrase. On the unlock screen, the entered passphrase is tried against
     // every account blob; AEAD decryption success selects the account.
 
-    /// One stored account (secret material still encrypted).
-    #[derive(Debug, Clone)]
-    pub struct AccountRow {
-        pub id: i64,
-        pub public_key: Vec<u8>,
-        pub encrypted_private_key: Vec<u8>,
-        pub private_key_nonce: Vec<u8>,
-        pub label: Option<String>,
-    }
-
-    impl KeyStore {
-        /// Migrate a legacy single-identity row into `accounts` (idempotent).
-        pub fn migrate_legacy_identity_to_account(&self) -> Result<(), StorageError> {
+    /// Migrate a legacy single-identity row into `accounts` (idempotent).
+    pub fn migrate_legacy_identity_to_account(&self) -> Result<(), StorageError> {
             self.conn.execute(
                 "INSERT OR IGNORE INTO accounts (public_key, encrypted_private_key, private_key_nonce, label, created_at)
                  SELECT public_key, encrypted_private_key, private_key_nonce, 'Main', created_at
