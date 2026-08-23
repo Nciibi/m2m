@@ -1115,6 +1115,65 @@ pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     Ok(())
 }
 
+/// Register the duress passphrase (coercion resistance). Stores only an
+/// Argon2id hash. Entering it at unlock silently WIPES all local data and
+/// reports a normal wrong-passphrase error.
+///
+/// IRREVERSIBLE by design — the frontend must show an explicit confirmation
+/// before calling this.
+#[tauri::command]
+pub async fn set_duress_passphrase(
+    state: State<'_, Arc<AppState>>,
+    passphrase: String,
+) -> Result<(), String> {
+    let unlocked = *state.vault_unlocked.read().await;
+    if !unlocked {
+        return Err("vault must be unlocked to register a duress passphrase".to_string());
+    }
+    // Same strength gates as unlock: the duress passphrase must be able to
+    // pass them too, or it could never trigger (unlock checks run first).
+    if passphrase.len() < 12 {
+        return Err("duress passphrase must be at least 12 characters".to_string());
+    }
+    let entropy = util::estimate_passphrase_entropy(&passphrase);
+    if entropy < 40.0 {
+        return Err(format!("duress passphrase too weak: ~{:.0} bits", entropy));
+    }
+
+    let ks_guard = state.key_store.lock().await;
+    let key_store = ks_guard.as_ref().ok_or("key store not initialized")?;
+    let ks_ref: &storage::KeyStore = key_store;
+    crate::duress::register(ks_ref, &passphrase)?;
+    tracing::info!("duress passphrase registered");
+    Ok(())
+}
+
+/// Remove the duress passphrase registration.
+#[tauri::command]
+pub async fn clear_duress_passphrase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let unlocked = *state.vault_unlocked.read().await;
+    if !unlocked {
+        return Err("vault must be unlocked to change duress settings".to_string());
+    }
+    let ks_guard = state.key_store.lock().await;
+    let key_store = ks_guard.as_ref().ok_or("key store not initialized")?;
+    crate::duress::clear(key_store)
+}
+
+/// Whether a duress passphrase is registered (UI display only).
+#[tauri::command]
+pub async fn is_duress_configured(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+    let unlocked = *state.vault_unlocked.read().await;
+    if !unlocked {
+        return Ok(false);
+    }
+    let ks_guard = state.key_store.lock().await;
+    match ks_guard.as_ref() {
+        Some(key_store) => Ok(crate::duress::is_set(key_store)),
+        None => Ok(false),
+    }
+}
+
 /// Check if this is the first launch (onboarding not yet shown).
 #[tauri::command]
 pub async fn is_first_run(state: State<'_, Arc<AppState>>) -> Result<bool, String> {    let fr = state.first_run.read().await;
