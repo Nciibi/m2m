@@ -788,12 +788,10 @@ pub async fn get_listen_address(
 /// `target_peer` over its pairwise session (H2 trust model v2).
 pub(crate) async fn send_own_bundle(
     state: Arc<AppState>,
-    app_handle: AppHandle,
     group_id: &str,
     target_peer: &str,
     our_peer_key_hex: &str,
 ) -> Result<(), String> {
-    let _ = &app_handle;
     let mut bundle = {
         let gm = state.group_manager.read().await;
         let group = gm.get_group(group_id).ok_or("group not found")?;
@@ -804,7 +802,6 @@ pub(crate) async fn send_own_bundle(
         let identity = id.as_ref().ok_or("identity not initialized")?;
         super::groups::finalize_bundle(identity, our_peer_key_hex, &mut bundle);
     }
-    drop(bundle.sender_peer_key_hex.clone()); // no-op, keeps clone semantics clear
 
     let serialized = protocol::serialize(&bundle)
         .map_err(|e| format!("serialize sender key: {e}"))?;
