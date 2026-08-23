@@ -89,6 +89,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       catch { /* noop */ }
       try { setSecurityConfig(await invoke<SecurityConfig>("get_security_config")); }
       catch { /* noop */ }
+      try { setCaptureCapability(await invoke<CaptureCapability>("get_capture_capability")); }
+      catch { /* noop */ }
     } catch { /* noop */ }
   }, [setView]);
 
