@@ -809,12 +809,34 @@ pub async fn export_identity(
 }
 
 /// Import identity + family list from an encrypted file.
+///
+/// The backup passphrase doubles as the initial vault passphrase: the imported
+/// secret key is re-sealed under Argon2id(passphrase, salt = public key) —
+/// never under the deprecated publicly-computable legacy key — and registered
+/// as a vault account, so the vault is unlocked and initialized immediately.
 #[tauri::command]
 pub async fn import_identity(
     state: State<'_, Arc<AppState>>,
     path: String,
     passphrase: String,
 ) -> Result<IdentityInfo, String> {
+    // The passphrase becomes the vault passphrase for the imported identity,
+    // so it must meet the same strength requirements as unlock_vault.
+    if passphrase.len() < 12 {
+        return Err(
+            "passphrase must be at least 12 characters — longer is more secure".to_string(),
+        );
+    }
+    let entropy = util::estimate_passphrase_entropy(&passphrase);
+    if entropy < 40.0 {
+        return Err(format!(
+            "passphrase too weak: ~{:.0} bits of entropy. \
+             Use a longer passphrase (aim for 60+ bits). \
+             Try a diceware phrase with 5+ random words.",
+            entropy
+        ));
+    }
+
     let data = std::fs::read(&path)
         .map_err(|e| format!("failed to read import file: {e}"))?;
 
