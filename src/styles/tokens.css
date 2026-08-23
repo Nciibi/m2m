@@ -74,9 +74,9 @@
   --color-warning: #f59e0b;
   --color-warning-glow: rgba(245, 158, 11, 0.2);
   --color-warning-bg: rgba(245, 158, 11, 0.1);
-  --color-info: #6366f1;
-  --color-info-glow: rgba(99, 102, 241, 0.2);
-  --color-info-bg: rgba(99, 102, 241, 0.1);
+  --color-info: var(--color-accent);
+  --color-info-glow: var(--color-accent-glow);
+  --color-info-bg: var(--color-accent-glow-subtle);
 
   /* ─── Glass Effects ─── */
   --glass-blur-sm: blur(12px);
