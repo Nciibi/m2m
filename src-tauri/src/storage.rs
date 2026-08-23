@@ -471,9 +471,9 @@ impl KeyStore {
         let mut members = Vec::new();
         for row in rows {
             let mut m = row?;
-            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)?;
+            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(addr) = &m.last_address {
-                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY)?);
+                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string()));
             }
             members.push(m);
         }
@@ -542,9 +542,9 @@ impl KeyStore {
         });
         match result {
             Ok(mut m) => {
-                m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)?;
+                m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string());
                 if let Some(addr) = &m.last_address {
-                    m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY)?);
+                    m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string()));
                 }
                 Ok(m)
             }
@@ -599,9 +599,9 @@ impl KeyStore {
         let mut members = Vec::new();
         for row in rows {
             let mut m = row?;
-            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)?;
+            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(addr) = &m.last_address {
-                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY)?);
+                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string()));
             }
             members.push(m);
         }
@@ -2218,12 +2218,12 @@ impl TransferStore {
         let mut transfers = Vec::new();
         for row in rows {
             let mut t = row?;
-            t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER)?;
+            t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(p) = &t.local_path {
-                t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER)?);
+                t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
             }
             if let Some(e) = &t.error {
-                t.error = Some(open_meta_value(key, e, AAD_TRANSFER)?);
+                t.error = Some(open_meta_value(key, e, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
             }
             transfers.push(t);
         }
@@ -2261,12 +2261,12 @@ impl TransferStore {
         });
         match result {
             Ok(mut t) => {
-                t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER)?;
+                t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string());
                 if let Some(p) = &t.local_path {
-                    t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER)?);
+                    t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
                 }
                 if let Some(e) = &t.error {
-                    t.error = Some(open_meta_value(key, e, AAD_TRANSFER)?);
+                    t.error = Some(open_meta_value(key, e, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
                 }
                 Ok(Some(t))
             }
