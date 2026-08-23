@@ -987,7 +987,49 @@ pub async fn import_identity(
     })
 }
 
-/// Lock the vault — zeroizes keys in memory and marks vault as locked.
+/// Seal an imported identity's secret key into the key store under a
+/// passphrase-derived storage key (H1).
+///
+/// This is the single write path for imported identities. It must NEVER use
+/// `util::derive_storage_key(&pub_bytes)`: that legacy key is SHA-256 of the
+/// public identity key, so anyone with keys.db can compute it and any
+/// ciphertext sealed under it is plaintext-equivalent at rest.
+///
+/// Persists three things:
+/// 1. The identity row (public key + wrapped secret key)
+/// 2. The vault-initialized flag (the passphrase is now set)
+/// 3. An account row labeled "Imported" so multi-account unlock can select
+///    it by passphrase — or, if this public key already has an account row,
+///    refreshes that row's wrapped secret key instead.
+fn seal_imported_identity(
+    key_store: &KeyStore,
+    pub_bytes: &[u8],
+    sk_bytes: &[u8],
+    storage_key: &crate::secure_key::StorageKey,
+) -> Result<(), String> {
+    let (new_nonce, new_enc_sk) =
+        util::crypto_encrypt_storage(sk_bytes, storage_key, util::AAD_KEY_STORE)
+            .map_err(|e| format!("encryption failed: {e}"))?;
+
+    let now = chrono::Utc::now().timestamp();
+    key_store
+        .store_identity(pub_bytes, &new_enc_sk, &new_nonce, now)
+        .map_err(|e| format!("failed to store identity: {e}"))?;
+    key_store
+        .set_vault_initialized()
+        .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
+    // insert_account fails only on the UNIQUE(public_key) conflict — i.e.
+    // this identity was already registered as an account. Refresh it.
+    if key_store
+        .insert_account(pub_bytes, &new_enc_sk, &new_nonce, Some("Imported"), now)
+        .is_err()
+    {
+        key_store
+            .update_account_private_key(pub_bytes, &new_enc_sk, &new_nonce)
+            .map_err(|e| format!("failed to persist imported account: {e}"))?;
+    }
+    Ok(())
+}
 ///
 /// After calling this, the user must unlock the vault again to perform
 /// sensitive operations. Active connections remain open.
