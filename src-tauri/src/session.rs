@@ -73,26 +73,27 @@ pub struct Session {
 
 impl Session {
     /// Create a new session in the initial state.
-    /// Uses a random initial counter to prevent cross-session replay attacks.
-    /// Each session starts with a different counter value, so messages from
-    /// a previous session cannot be replayed into a new session.
+    ///
+    /// Counters start at ZERO deterministically (H4). A previous version
+    /// started them at a random value "to prevent cross-session replay",
+    /// but the two peers' values were never exchanged, so legacy-mode
+    /// sessions failed whenever one side's random receive watermark
+    /// exceeded the other's transmit counter (~50% per direction).
+    /// Deterministic zero-start is correct because:
+    /// - Cross-session replay is already impossible: SessionKeys derive
+    ///   from a FRESH ephemeral keyexchange per handshake, so a replayed
+    ///   envelope from an old session fails AEAD regardless of counter.
+    /// - In-session ordering/replay protection needs only monotonicity,
+    ///   which the high-water-mark check enforces from zero upward.
     pub fn new() -> Self {
-        // Generate a random initial counter — prevents replay across sessions.
-        let initial_counter = {
-            let mut buf = [0u8; 8];
-            let rand_bytes = crate::crypto::random_bytes(8);
-            buf.copy_from_slice(&rand_bytes);
-            u64::from_be_bytes(buf)
-        };
-
         Self {
             state: ConnectionState::Disconnected,
             peer_identity_pub: [0u8; 32],
             peer_verified: false,
             session_keys: None,
             ratchet: None,
-            tx_counter: initial_counter,
-            rx_high_water_mark: initial_counter,
+            tx_counter: 0,
+            rx_high_water_mark: 0,
             established_at: 0,
             peer_candidates: Vec::new(),
             our_candidates: Vec::new(),
