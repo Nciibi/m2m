@@ -44,16 +44,24 @@ export default function VaultView() {
   const handleUnlock = async () => {
     setVaultError("");
     if (passphrase.length < 12) { fail("Passphrase must be at least 12 characters."); return; }
-    if (isFirstTime && passphraseConfirm !== passphrase) { fail("Passphrases do not match."); return; }
+    if (showConfirm && passphraseConfirm !== passphrase) { fail("Passphrases do not match."); return; }
     const est = estimateEntropy(passphrase);
     if (est < 40) { fail(`Passphrase too weak: ~${Math.round(est)} bits. Use longer (aim for 60+).`); return; }
     setLoading(true);
     try {
-      await handleUnlockVault(passphrase);
+      if (createMode) {
+        await invoke("create_vault_account", { passphrase });
+        setCreateMode(false);
+        setView("hub");
+      } else {
+        await handleUnlockVault(passphrase);
+      }
       setPassphrase("");
       setPassphraseConfirm("");
     } catch (e: any) {
-      const msg = typeof e === "string" ? e : e?.message || "Unlock failed. Check your passphrase.";
+      const msg = typeof e === "string"
+        ? e
+        : e?.message || (createMode ? "Account creation failed." : "Unlock failed. Check your passphrase.");
       fail(msg);
       addToast(msg, "error");
     } finally {
