@@ -1,5 +1,5 @@
-import { useNavigate } from "react-router-dom";
-import { MessageIcon, GearIcon, LockIcon, HomeIcon, GroupsIcon } from "../components/ui/Icons";
+import { invoke } from "@tauri-apps/api/core";
+import { MessageIcon, GearIcon, LockIcon, GroupsIcon } from "./ui/Icons";
 
 type View = import("../context/AppContext").ViewName;
 
@@ -14,13 +14,15 @@ const items: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <GearIcon size={18} /> },
 ];
 
-export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
-  const navigate = useNavigate();
+/** Views that should highlight the Chats entry. */
+const HUB_VIEWS: View[] = ["hub", "chat"];
 
+export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
   const handleLockVault = async () => {
     try {
       await invoke("lock_vault");
-      navigate("/vault");
+      // Routing back to the unlock screen; state cleanup happens in lock_vault.
+      onNavigate("vault");
     } catch (error) {
       console.error("Failed to lock vault:", error);
     }
@@ -38,28 +40,28 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
         </div>
       </div>
       <nav className="app-sidebar__nav" aria-label="Main navigation">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            className={`app-sidebar__item ${currentView === item.id ? "app-sidebar__item--active" : ""}`}
-            onClick={() => onNavigate(item.id)}
-          >
-            {item.icon}
-            {item.label}
-          </button>
-        ))}
+        {items.map((item) => {
+          const active =
+            item.id === "hub"
+              ? HUB_VIEWS.includes(currentView)
+              : currentView === item.id;
+          return (
+            <button
+              key={item.id}
+              className={`app-sidebar__item ${active ? "app-sidebar__item--active" : ""}`}
+              onClick={() => onNavigate(item.id)}
+              aria-current={active ? "page" : undefined}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          );
+        })}
       </nav>
       <div className="app-sidebar__bottom">
-        <button
-          className="app-sidebar__item app-sidebar__item--lock"
-          onClick={handleLockVault}
-        >
+        <button className="app-sidebar__item" onClick={handleLockVault}>
           <LockIcon size={18} />
           Lock Vault
-        </button>
-        <button className="app-sidebar__item" onClick={() => onNavigate("setup")}>
-          <HomeIcon size={18} />
-          About
         </button>
       </div>
     </aside>
