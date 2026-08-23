@@ -15,7 +15,6 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useIdleDetection } from "./hooks/useIdleDetection";
 import ShortcutHelp from "./components/ShortcutHelp";
-import { UpdateBanner } from "./components/ui";
 import SetupView from "./views/SetupView";
 import VaultView from "./views/VaultView";
 import HubView from "./views/HubView";
