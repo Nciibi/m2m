@@ -1883,7 +1883,7 @@ mod session_tests {
             &mut io_rx, &bob_identity, &frame, vec![], bob_xp,
         ).await;
         assert!(
-            matches!(result, Err(SessionError::HandshakeFailed(e)) if e.contains("timestamp")),
+            matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("timestamp")),
             "expected stale-timestamp rejection, got: {:?}",
             result
         );
