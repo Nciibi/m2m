@@ -2034,6 +2034,66 @@ mod session_tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_responder_rejects_tampered_candidates() {
+        init_crypto();
+        let (bob_identity, bob_x25519) = make_identities();
+        let (alice_identity, _alice_x25519) = make_identities();
+
+        // Alice signs over her REAL candidate; an active MITM swaps the
+        // address (reconnect-target poisoning) before the frame reaches
+        // Bob. The candidates are covered by the signature, so the
+        // handshake must fail.
+        let eph = EphemeralKeypair::generate();
+        let timestamp = now_unix_secs();
+        let real_candidates = vec![WireCandidate {
+            address: "203.0.113.10:7777".to_string(),
+            candidate_type: 1,
+            relay_id: None,
+        }];
+        let mut sign_data = Vec::new();
+        sign_data.extend_from_slice(&eph.public_key_bytes());
+        sign_data.extend_from_slice(&timestamp.to_be_bytes());
+        append_candidates_to_sign_data(&mut sign_data, &real_candidates);
+        let signature = alice_identity.sign(&sign_data);
+
+        let poisoned = vec![WireCandidate {
+            address: "198.51.100.66:6666".to_string(),
+            candidate_type: 0,
+            relay_id: None,
+        }];
+
+        let init = HandshakeInit {
+            version: PROTOCOL_VERSION,
+            ephemeral_pub: eph.public_key_bytes(),
+            identity_pub: alice_identity.public_key_bytes(),
+            x25519_identity_pub: [0u8; 32],
+            used_opk: None,
+            timestamp,
+            signature,
+            candidates: poisoned,
+        };
+        let body = protocol::serialize(&init).unwrap();
+        let frame = RawFrame {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::HandshakeInit,
+            body,
+        };
+
+        let bob_xp = bob_x25519.public_key_bytes();
+        let mut session = Session::new();
+        // Signature verification fires before any I/O, so a bare rx half suffices.
+        let (_io_tx, mut io_rx) = tokio::io::duplex(65536);
+        let result = session.handshake_as_responder(
+            &mut io_rx, &bob_identity, &frame, vec![], bob_xp,
+        ).await;
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("signature")),
+            "expected tampered-candidate rejection, got: {:?}",
+            result
+        );
+    }
+
     // ═══════════════════════════════════════════════════════════
     // State machine edge cases
     // ═══════════════════════════════════════════════════════════
