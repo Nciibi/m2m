@@ -2567,11 +2567,14 @@ mod tests {
     #[test]
     fn test_transfer_store_roundtrip() {
         let store = mem_transferstore();
+        let key = test_key();
+        // Encrypted-at-rest write (filename sealed under the vault key).
         store.store_transfer(
             "xfer-001", "alice_pk", "report.pdf", 1048576, "received", "completed", 16,
+            Some(&key),
         ).unwrap();
 
-        let saved = store.get_transfer("xfer-001").unwrap().unwrap();
+        let saved = store.get_transfer("xfer-001", Some(&key)).unwrap().unwrap();
         assert_eq!(saved.id, "xfer-001");
         assert_eq!(saved.filename, "report.pdf");
         assert_eq!(saved.total_size, 1048576);
@@ -2584,12 +2587,12 @@ mod tests {
     fn test_transfer_store_update_state() {
         let store = mem_transferstore();
         store.store_transfer(
-            "xfer-002", "bob_pk", "photo.jpg", 524288, "sent", "transferring", 8,
+            "xfer-002", "bob_pk", "photo.jpg", 524288, "sent", "transferring", 8, None,
         ).unwrap();
 
-        store.update_state("xfer-002", "completed", Some(2000), None).unwrap();
+        store.update_state("xfer-002", "completed", Some(2000), None, None).unwrap();
 
-        let saved = store.get_transfer("xfer-002").unwrap().unwrap();
+        let saved = store.get_transfer("xfer-002", None).unwrap().unwrap();
         assert_eq!(saved.state, "completed");
         assert_eq!(saved.completed_at, Some(2000));
     }
@@ -2597,13 +2600,15 @@ mod tests {
     #[test]
     fn test_transfer_store_update_error() {
         let store = mem_transferstore();
+        let key = test_key();
         store.store_transfer(
             "xfer-003", "carol_pk", "archive.zip", 2097152, "sent", "transferring", 32,
+            Some(&key),
         ).unwrap();
 
-        store.update_state("xfer-003", "failed", None, Some("connection lost")).unwrap();
+        store.update_state("xfer-003", "failed", None, Some("connection lost"), Some(&key)).unwrap();
 
-        let saved = store.get_transfer("xfer-003").unwrap().unwrap();
+        let saved = store.get_transfer("xfer-003", Some(&key)).unwrap().unwrap();
         assert_eq!(saved.state, "failed");
         assert_eq!(saved.error, Some("connection lost".to_string()));
     }
@@ -2612,39 +2617,41 @@ mod tests {
     fn test_transfer_store_update_progress() {
         let store = mem_transferstore();
         store.store_transfer(
-            "xfer-004", "dave_pk", "video.mp4", 10485760, "sent", "transferring", 40,
+            "xfer-004", "dave_pk", "video.mp4", 10485760, "sent", "transferring", 40, None,
         ).unwrap();
 
         store.update_progress("xfer-004", 15).unwrap();
 
-        let saved = store.get_transfer("xfer-004").unwrap().unwrap();
+        let saved = store.get_transfer("xfer-004", None).unwrap().unwrap();
         assert_eq!(saved.chunks_completed, 15);
     }
 
     #[test]
     fn test_transfer_store_set_local_path() {
         let store = mem_transferstore();
+        let key = test_key();
         store.store_transfer(
             "xfer-005", "eve_pk", "doc.pdf", 65536, "received", "completed", 1,
+            Some(&key),
         ).unwrap();
 
-        store.set_local_path("xfer-005", "/downloads/doc.pdf").unwrap();
+        store.set_local_path("xfer-005", "/downloads/doc.pdf", Some(&key)).unwrap();
 
-        let saved = store.get_transfer("xfer-005").unwrap().unwrap();
+        let saved = store.get_transfer("xfer-005", Some(&key)).unwrap().unwrap();
         assert_eq!(saved.local_path, Some("/downloads/doc.pdf".to_string()));
     }
 
     #[test]
     fn test_transfer_store_list_limit() {
         let store = mem_transferstore();
-        store.store_transfer("xf-01", "pk1", "a.txt", 100, "sent", "completed", 1).unwrap();
-        store.store_transfer("xf-02", "pk2", "b.txt", 200, "received", "failed", 2).unwrap();
-        store.store_transfer("xf-03", "pk3", "c.txt", 300, "sent", "transferring", 3).unwrap();
+        store.store_transfer("xf-01", "pk1", "a.txt", 100, "sent", "completed", 1, None).unwrap();
+        store.store_transfer("xf-02", "pk2", "b.txt", 200, "received", "failed", 2, None).unwrap();
+        store.store_transfer("xf-03", "pk3", "c.txt", 300, "sent", "transferring", 3, None).unwrap();
 
-        let limited = store.list_transfers(2).unwrap();
+        let limited = store.list_transfers(2, None).unwrap();
         assert_eq!(limited.len(), 2);
 
-        let all = store.list_transfers(10).unwrap();
+        let all = store.list_transfers(10, None).unwrap();
         assert_eq!(all.len(), 3);
         // All IDs present
         let ids: std::collections::HashSet<String> = all.iter().map(|t| t.id.clone()).collect();
@@ -2656,18 +2663,57 @@ mod tests {
     #[test]
     fn test_transfer_store_delete() {
         let store = mem_transferstore();
-        store.store_transfer("xf-del", "pk", "nope.txt", 100, "sent", "cancelled", 1).unwrap();
-        assert!(store.get_transfer("xf-del").unwrap().is_some());
+        store.store_transfer("xf-del", "pk", "nope.txt", 100, "sent", "cancelled", 1, None).unwrap();
+        assert!(store.get_transfer("xf-del", None).unwrap().is_some());
 
         store.delete_transfer("xf-del").unwrap();
-        assert!(store.get_transfer("xf-del").unwrap().is_none());
+        assert!(store.get_transfer("xf-del", None).unwrap().is_none());
     }
 
     #[test]
     fn test_transfer_store_get_not_found() {
         let store = mem_transferstore();
-        let result = store.get_transfer("nonexistent").unwrap();
+        let result = store.get_transfer("nonexistent", None).unwrap();
         assert!(result.is_none());
+    }
+
+    /// Metadata-at-rest (H-secondary): keyed writes must produce an
+    /// "enc1:" envelope on disk and decrypt back with the right key;
+    /// wrong-key reads must NOT return the plaintext.
+    #[test]
+    fn test_transfer_metadata_encrypted_at_rest() {
+        let store = mem_transferstore();
+        let key = test_key();
+        let wrong_key = StorageKey::new([0xEE; 32]);
+
+        store.store_transfer(
+            "enc-t1", "pk", "secret-report.pdf", 1, "sent", "failed", 1, Some(&key),
+        ).unwrap();
+        store.update_state("enc-t1", "failed", Some(99), Some("disk full"), Some(&key)).unwrap();
+        store.set_local_path("enc-t1", "/tmp/secret-report.pdf", Some(&key)).unwrap();
+
+        // Raw row must not contain any plaintext metadata.
+        let raw_name: String = store.conn.query_row(
+            "SELECT filename FROM transfers WHERE id = 'enc-t1'", [], |r| r.get(0)).unwrap();
+        assert!(raw_name.starts_with("enc1:"), "filename must be stored as envelope, got {raw_name}");
+        assert!(!raw_name.contains("secret"));
+
+        // Right key decrypts everything.
+        let t = store.get_transfer("enc-t1", Some(&key)).unwrap().unwrap();
+        assert_eq!(t.filename, "secret-report.pdf");
+        assert_eq!(t.error.as_deref(), Some("disk full"));
+        assert_eq!(t.local_path.as_deref(), Some("/tmp/secret-report.pdf"));
+
+        // Wrong key must fail to decrypt (not silently return plaintext).
+        let bad = store.get_transfer("enc-t1", Some(&wrong_key));
+        assert!(bad.is_err() || bad.unwrap().unwrap().filename != "secret-report.pdf");
+
+        // Legacy plaintext rows still read back unchanged without a key.
+        store.store_transfer(
+            "legacy-t2", "pk2", "old-file.txt", 2, "sent", "completed", 1, None,
+        ).unwrap();
+        let legacy = store.get_transfer("legacy-t2", None).unwrap().unwrap();
+        assert_eq!(legacy.filename, "old-file.txt");
     }
 
     // ─── Crypto-shredding tests (H7) ──────────────────────────
