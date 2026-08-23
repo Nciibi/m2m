@@ -198,10 +198,11 @@ impl Session {
             ));
         }
 
-    // Verify peer's signature on their ephemeral key
+    // Verify peer's signature on their ephemeral key + advertised candidates
     let mut peer_sign_data = Vec::new();
     peer_sign_data.extend_from_slice(&response.ephemeral_pub);
     peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes());   // timestamp used ONLY here
+    append_candidates_to_sign_data(&mut peer_sign_data, &response.candidates);
 
     crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
         .map_err(|_| {
