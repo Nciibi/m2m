@@ -114,7 +114,9 @@ pub async fn load_messages(
         .unwrap_or_default();
 
     for m in stored {
-        let content = util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key, util::AAD_MSG_STORE)
+        let content = MessageStore::decrypt_stored_content(
+                &m.content_encrypted, &m.content_nonce, m.content_key_wrapped.as_deref(), key,
+            )
             .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
             .unwrap_or_else(|_| "[encrypted]".to_string());
 
@@ -175,7 +177,9 @@ pub async fn list_conversations(
                 .ok()
                 .and_then(|msgs| msgs.into_iter().last())
                 .and_then(|m| {
-                    util::crypto_decrypt_storage(&m.content_encrypted, &m.content_nonce, key, util::AAD_MSG_STORE)
+                    MessageStore::decrypt_stored_content(
+                        &m.content_encrypted, &m.content_nonce, m.content_key_wrapped.as_deref(), key,
+                    )
                         .ok()
                         .map(|bytes| {
                             let text = String::from_utf8_lossy(&bytes).to_string();
