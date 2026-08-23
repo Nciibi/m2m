@@ -2021,7 +2021,7 @@ drop(conns);
                                             match super::util::crypto_encrypt_storage(content_str.as_bytes(), key, super::util::AAD_MSG_STORE) {
                                                 Ok((nonce, encrypted)) => {
                                                     let _ = store.store_group_message(&msg_id, &gid, &sender, &encrypted, &nonce, now as i64, true);
-                                                    let preview = if content_str.len() > 80 { format!("{}...", &content_str[..80]) } else { content_str.clone() };
+                                                    let preview = super::util::truncate_utf8(&content_str, 80, "...");
                                                     let _ = store.update_group_last_message(&gid, now as i64, &preview);
                                                 }
                                                 Err(e) => tracing::warn!(error = %e, "failed to encrypt group message for storage"),

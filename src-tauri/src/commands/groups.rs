@@ -219,11 +219,7 @@ pub async fn send_group_message(
                     &msg_id, &group_id, &our_peer_key_hex,
                     &encrypted, &nonce, now as i64, delivered,
                 );
-                let preview = if content.len() > 80 {
-                    format!("{}...", &content[..80])
-                } else {
-                    content.clone()
-                };
+                let preview = super::util::truncate_utf8(&content, 80, "...");
                 let _ = store.update_group_last_message(&group_id, now as i64, &preview);
             }
             Err(e) => {
