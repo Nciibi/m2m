@@ -693,15 +693,27 @@ impl DoubleRatchet {
             .ok_or(CryptoError::DoubleRatchetError("no recv chain key".into()))?;
 
         // ── Derive through gap, caching intermediate keys ──
+        // Cap how far ahead of the receive counter a single message may pull
+        // the chain: a peer announcing a huge message number must not make us
+        // derive millions of HKDFs before AEAD verification ever happens
+        // (CPU amplification DoS).
+        let gap = (message_number - self.recv_message_number) as usize;
+        if gap > MAX_GAP_DERIVATION {
+            return Err(CryptoError::DoubleRatchetError(format!(
+                "message number {} is {} messages ahead — exceeds max gap derivation ({})",
+                message_number, gap, MAX_GAP_DERIVATION
+            )));
+        }
+
         let mut current_chain = recv_chain;
         while self.recv_message_number < message_number {
-            let (msg_key, next_chain) = Self::derive_message_key(&current_chain);
-
-            // Cache the intermediate message key for out-of-order delivery.
-            // Cap at MAX_SKIP to prevent memory exhaustion.
+            // Check cache capacity BEFORE deriving so we never burn CPU on a
+            // key that would be rejected anyway.
             if self.skipped_keys.len() >= MAX_SKIP {
                 return Err(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
             }
+            let (msg_key, next_chain) = Self::derive_message_key(&current_chain);
+
             self.skipped_keys.insert(self.recv_message_number, msg_key.0);
 
             current_chain = next_chain;
