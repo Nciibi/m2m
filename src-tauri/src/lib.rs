@@ -99,6 +99,37 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // ── Restore persisted security config & re-apply protections ──
+            // Runs AFTER the main window exists (config windows are created
+            // before setup), so capture protection is active from the first
+            // frame if the user enabled it. Survives restarts AND heals the
+            // "webview recreated → protection silently dropped" gap.
+            {
+                let app_handle = app.handle().clone();
+                let state: tauri::State<Arc<AppState>> = app_handle.state();
+                let data_dir = state.data_dir.clone();
+
+                let persisted = commands::security::load_config(&data_dir);
+                let effective = persisted.unwrap_or_default();
+                {
+                    let mut sc = state.security_config.blocking_write();
+                    *sc = effective.clone();
+                }
+                drop(state);
+
+                commands::security::apply_side_effects(
+                    &app_handle.state::<Arc<AppState>>(),
+                    &app_handle,
+                    &effective,
+                );
+                tracing::info!(
+                    screen_protection = effective.screen_capture_protection,
+                    capture_detection = effective.capture_process_detection,
+                    blur_on_focus_loss = effective.blur_on_focus_loss,
+                    "security config restored"
+                );
+            }
+
             // ── System Tray ──
             let show_item = MenuItemBuilder::with_id("show", "Show M2M").build(app)?;
             let separator = PredefinedMenuItem::separator(app)?;
