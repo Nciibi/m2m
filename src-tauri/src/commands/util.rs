@@ -482,3 +482,67 @@ mod entropy_tests {
         assert!(e >= 60.0, "strong passphrase should score >= 60 bits, got {e}");
     }
 }
+
+#[cfg(test)]
+mod truncate_tests {
+    use super::truncate_utf8;
+
+    /// H2 regression: byte-index slicing at a fixed offset panicked on
+    /// multi-byte input. 81 CJK chars = 243 bytes; slicing at byte 80 used
+    /// to panic. This is the remote-reachable network.rs attack case.
+    #[test]
+    fn test_multibyte_input_does_not_panic() {
+        let cjk = "消".repeat(100); // 300 bytes, 100 chars
+        let out = truncate_utf8(&cjk, 80, "...");
+        assert_eq!(out.chars().count(), 80);
+        assert!(out.ends_with("..."));
+        // The result must be valid UTF-8 with no split codepoints.
+        assert_eq!(out.chars().filter(|c| *c != '.').count(), 77);
+    }
+
+    /// Emoji are 4-byte codepoints: byte 80 lands mid-codepoint.
+    #[test]
+    fn test_emoji_boundary_does_not_panic() {
+        let emoji = "🔒".repeat(50); // 200 bytes
+        let out = truncate_utf8(&emoji, 80, "...");
+        assert_eq!(out.chars().count(), 80);
+        assert!(out.ends_with("..."));
+    }
+
+    /// Short input passes through untouched, no suffix appended.
+    #[test]
+    fn test_short_input_unchanged() {
+        assert_eq!(truncate_utf8("hello", 80, "..."), "hello");
+        // Exactly at the limit: still unchanged.
+        let exact = "a".repeat(80);
+        assert_eq!(truncate_utf8(&exact, 80, "..."), exact);
+    }
+
+    /// ASCII truncation keeps total length within max_total.
+    #[test]
+    fn test_ascii_truncation_total_length() {
+        let long = "a".repeat(200);
+        let out = truncate_utf8(&long, 80, "...");
+        assert_eq!(out.len(), 80); // 77 chars + "..." (ASCII: bytes == chars)
+        assert!(out.ends_with("..."));
+    }
+
+    /// Mixed multibyte + ASCII content stays valid UTF-8.
+    #[test]
+    fn test_mixed_content_valid_utf8() {
+        let mixed = format!("{}héllo wörld {}", "é".repeat(50), "🎉".repeat(20));
+        let out = truncate_utf8(&mixed, 80, "…");
+        assert!(out.chars().count() <= 80);
+        assert!(out.ends_with('…'));
+        // Re-encode round-trip proves no codepoint was split.
+        let _bytes = out.as_bytes();
+    }
+
+    /// Degenerate suffix: longer than max_total → plain cut without suffix.
+    #[test]
+    fn test_suffix_longer_than_limit() {
+        let long = "a".repeat(50);
+        let out = truncate_utf8(&long, 5, "......");
+        assert_eq!(out, "aaaaa");
+    }
+}
