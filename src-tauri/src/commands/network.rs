@@ -444,8 +444,9 @@ async fn handle_incoming_connection(
                     return;
                 }
             };
+            let opk_lock = state.active_one_time_prekey.read().await;
             if let Err(e) = session.handshake_as_responder_x3dh(
-                &mut stream, kp, x25519_kp, spk, &frame, wire_candidates,
+                &mut stream, kp, x25519_kp, spk, opk_lock.as_ref(), &frame, wire_candidates,
             ).await {
                 tracing::warn!(error = %e, "X3DH handshake failed for incoming connection");
                 let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, "x3dh handshake failed").await;
@@ -701,9 +702,10 @@ pub async fn connect_to_peer(
                 let spk_lock = state.active_signed_prekey.read().await;
                 let spk = spk_lock.as_ref()
                     .ok_or("no signed prekey available for X3DH responder handshake")?;
+                let opk_lock = state.active_one_time_prekey.read().await;
                 session
                     .handshake_as_responder_x3dh(
-                        &mut stream, kp, xkp, spk, &frame, our_candidates,
+                        &mut stream, kp, xkp, spk, opk_lock.as_ref(), &frame, our_candidates,
                     )
                     .await
                     .map_err(|e| format!("X3DH responder handshake failed: {e}"))?;
