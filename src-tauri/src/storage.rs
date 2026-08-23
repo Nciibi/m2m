@@ -1325,6 +1325,10 @@ pub struct StoredMessage {
     pub direction: String,
     pub content_encrypted: Vec<u8>,
     pub content_nonce: Vec<u8>,
+    /// Per-message content key wrapped under the vault storage key
+    /// (crypto-shredding, H7). `None` for legacy rows, whose content was
+    /// encrypted directly under the vault key.
+    pub content_key_wrapped: Option<Vec<u8>>,
     pub timestamp: i64,
     /// When this message was read by the recipient (null = unread).
     pub read_at: Option<i64>,
