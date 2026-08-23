@@ -349,6 +349,111 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [securityConfig, addToast]);
 
+  const handleAirGapToggle = useCallback(async () => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false,
+      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
+      send_batching_ms: 0, cover_typing_traffic: false,
+    };
+    const newConfig: SecurityConfig = { ...current, air_gap_mode: !current.air_gap_mode };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+      addToast(
+        result.air_gap_mode
+          ? "Air-gap mode ON — internet-facing operations blocked (LAN only)"
+          : "Air-gap mode off — internet operations allowed again",
+        result.air_gap_mode ? "warning" : "info",
+      );
+    } catch (e) {
+      addToast("Failed to toggle air-gap mode: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleEphemeralModeToggle = useCallback(async () => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false,
+      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
+      send_batching_ms: 0, cover_typing_traffic: false,
+    };
+    const newConfig: SecurityConfig = { ...current, ephemeral_mode: !current.ephemeral_mode };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+      addToast(
+        result.ephemeral_mode
+          ? "Ephemeral mode ON — conversations stay in RAM only"
+          : "Ephemeral mode off — conversations persist to encrypted storage",
+        "info",
+      );
+    } catch (e) {
+      addToast("Failed to toggle ephemeral mode: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleSendBatchingChange = useCallback(async (ms: number) => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false,
+      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
+      send_batching_ms: 0, cover_typing_traffic: false,
+    };
+    const newConfig: SecurityConfig = { ...current, send_batching_ms: ms };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+    } catch (e) {
+      addToast("Failed to update send batching: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  const handleCoverTypingToggle = useCallback(async () => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false,
+      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
+      send_batching_ms: 0, cover_typing_traffic: false,
+    };
+    const newConfig: SecurityConfig = { ...current, cover_typing_traffic: !current.cover_typing_traffic };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+    } catch (e) {
+      addToast("Failed to toggle typing cover traffic: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
+  // ── Duress passphrase ──
+
+  const setDuressPassphrase = useCallback(async (passphrase: string) => {
+    try {
+      await invoke("set_duress_passphrase", { passphrase });
+      setDuressConfigured(true);
+      addToast("Duress passphrase registered — entering it at unlock will WIPE the vault", "warning");
+    } catch (e) {
+      addToast("Failed to register duress passphrase: " + e, "error");
+      throw e;
+    }
+  }, [addToast]);
+
+  const clearDuressPassphrase = useCallback(async () => {
+    try {
+      await invoke("clear_duress_passphrase");
+      setDuressConfigured(false);
+      addToast("Duress passphrase removed", "info");
+    } catch (e) {
+      addToast("Failed to remove duress passphrase: " + e, "error");
+      throw e;
+    }
+  }, [addToast]);
+
+  const refreshDuressStatus = useCallback(async () => {
+    try { setDuressConfigured(await invoke<boolean>("is_duress_configured")); }
+    catch { /* noop */ }
+  }, []);
+
   const handleLockVault = useCallback(async () => {
     try {
       await invoke("lock_vault");
@@ -383,6 +488,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       securityConfig,
       captureCapability,
       handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
+      handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle,
+      duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
       handleClipboardClearSecsChange,
       handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
       scheduleClipboardClear,
