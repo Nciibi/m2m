@@ -61,7 +61,7 @@
   --color-text-secondary: #cbd5e1;
   --color-text-muted: #94a3b8;
   --color-text-inverse: #0f172a;
-  --color-text-accent: #c0c1ff;
+  --color-text-accent: var(--color-accent-bright);
   --color-text-placeholder: #475569;
 
   /* ─── Colors: Semantic ─── */
