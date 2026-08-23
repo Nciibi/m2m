@@ -784,6 +784,25 @@ pub async fn get_listen_address(
 
 /// Spawn an async task that reads incoming frames from a peer
 /// and emits Tauri events for the React frontend.
+/// Send our own signed sender-key bundle for `group_id` to every roster
+/// member with an active connection, excluding ourselves (H2 fan-out).
+pub(crate) async fn fan_out_own_bundle(
+    state: Arc<AppState>,
+    group_id: &str,
+    roster: &[String],
+    our_peer_key_hex: &str,
+) -> Result<(), String> {
+    for peer in roster {
+        if peer == our_peer_key_hex {
+            continue;
+        }
+        if let Err(e) = send_own_bundle(state.clone(), group_id, peer, our_peer_key_hex).await {
+            tracing::debug!(peer = %peer, error = %e, "sender key fan-out skipped (peer offline?)");
+        }
+    }
+    Ok(())
+}
+
 /// Build, sign, and send OUR OWN sender-key bundle for `group_id` to
 /// `target_peer` over its pairwise session (H2 trust model v2).
 pub(crate) async fn send_own_bundle(    state: Arc<AppState>,
