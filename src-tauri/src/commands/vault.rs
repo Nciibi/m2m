@@ -267,7 +267,7 @@ pub async fn unlock_vault(
         let pub_bytes = kp.public_key_bytes();
         let sk_bytes = kp.secret_key_bytes();
 
-        let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.clone()).await?;
+        let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
         let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
             .map_err(|e| format!("failed to encrypt identity: {e}"))?;
 
