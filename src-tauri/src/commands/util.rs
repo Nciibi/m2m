@@ -8,6 +8,12 @@ pub const AAD_KEY_STORE: &[u8] = b"m2m-keys-v1";
 /// Domain-separates messages.db ciphertext from keys.db ciphertext.
 pub const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
 
+/// AAD context for per-message content-key wrapping (crypto-shredding).
+/// Domain-separates the wrapped CEK blob from both message content and
+/// keys.db material, so a wrapped key can never be substituted for other
+/// ciphertext domains under the same vault storage key.
+pub const AAD_MSG_CEK: &[u8] = b"m2m-msg-cek-v1";
+
 /// AAD context for conversation export encryption.
 /// Domain-separates export files from on-disk storage.
 pub const AAD_EXPORT: &[u8] = b"m2m-export-v1";
