@@ -1081,10 +1081,6 @@ fn seal_imported_identity(
     Ok(())
 }
 
-/// Lock the vault — zeroizes keys in memory and marks vault as locked.
-///
-/// After calling this, the user must unlock the vault again to perform
-/// sensitive operations. Active connections remain open.
 /// Duress wipe: zeroize every in-memory secret, close all stores, and
 /// delete every local database + persisted config. Called ONLY from the
 /// duress path in `unlock_vault`. Deleting keys.db destroys every wrapped
