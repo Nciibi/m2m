@@ -355,15 +355,14 @@ impl Session {
             ephemeral_pub: ek_a.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: x25519_identity.public_key_bytes(),
-            used_opk: None,
+            // Signal which one-time prekey was used for DH4 so the responder
+            // can deterministically decide whether to apply its OPK secret
+            // (H6). None when the invite's bundle carried no OPK.
+            used_opk: peer_bundle.one_time_prekey,
             timestamp: now,
             signature,
             candidates: local_candidates,
         };
-        let init_bytes = protocol::serialize(&init)?;
-        network::write_frame(stream, PacketType::X3DHHandshakeInit, &init_bytes).await?;
-
-        let resp_frame = network::read_frame(stream).await?;
         if resp_frame.packet_type != PacketType::X3DHHandshakeResponse {
             return Err(SessionError::HandshakeFailed(format!(
                 "expected X3DHHandshakeResponse, got {:?}", resp_frame.packet_type
