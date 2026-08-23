@@ -736,8 +736,12 @@ mod group_tests {
         assert!(result.is_ok());
         let (gid, bundles) = result.unwrap();
         assert_eq!(gid, "group-1");
-        // 2 members = 4 bundles (their_own + our for each)
-        assert_eq!(bundles.len(), 4);
+        // Trust model v2: one bundle per initial member (our own, unsigned —
+        // members generate their own keys locally).
+        assert_eq!(bundles.len(), 2);
+        for (_, b) in &bundles {
+            assert!(b.signing_key.is_none(), "private keys must never be shipped");
+        }
 
         let group = gm.get_group("group-1").unwrap();
         assert_eq!(group.members.len(), 3); // alice + bob + charlie
