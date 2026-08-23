@@ -72,6 +72,39 @@ impl ChatMessage {
             sender_peer_key_hex: String::new(),
         }
     }
+
+    /// Builder-style setters so construction sites only specify the fields
+    /// that differ from the defaults (single source of truth for the
+    /// 11-field shape — adding a field requires touching `new` only).
+    pub fn with_read_at(mut self, v: Option<i64>) -> Self {
+        self.read_at = v;
+        self
+    }
+
+    pub fn with_edited_at(mut self, v: Option<i64>) -> Self {
+        self.edited_at = v;
+        self
+    }
+
+    pub fn with_deleted(mut self, v: bool) -> Self {
+        self.deleted = v;
+        self
+    }
+
+    pub fn with_expires_at(mut self, v: Option<i64>) -> Self {
+        self.expires_at = v;
+        self
+    }
+
+    pub fn with_reactions(mut self, v: std::collections::HashMap<String, Vec<String>>) -> Self {
+        self.reactions = v;
+        self
+    }
+
+    pub fn with_sender(mut self, v: String) -> Self {
+        self.sender_peer_key_hex = v;
+        self
+    }
 }
 
 impl Drop for ChatMessage {
