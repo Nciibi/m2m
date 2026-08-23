@@ -153,21 +153,26 @@
 .app-sidebar__nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-xxs);
   flex: 1;
 }
 
 .app-sidebar__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
+  padding: 10px var(--space-md);
   border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-normal);
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--duration-micro) var(--ease-ios);
   border: none;
   background: none;
   font-family: inherit;
@@ -175,15 +180,53 @@
   text-align: left;
 }
 
+.app-sidebar__item svg {
+  transition: color var(--transition-fast), transform var(--transition-micro);
+}
+
 .app-sidebar__item:hover {
   background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+}
+
+.app-sidebar__item:hover svg {
+  transform: translateX(1px);
+}
+
+.app-sidebar__item:active {
+  transform: scale(0.98);
 }
 
 .app-sidebar__item--active {
-  background: var(--color-accent-glow-subtle);
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-glow-subtle),
+    transparent
+  );
   color: var(--color-accent-bright);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.app-sidebar__item--active svg {
+  color: var(--color-accent-bright);
+}
+
+/* Accent indicator bar — slides in via transform for compositor-only motion */
+.app-sidebar__item--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 20%;
+  height: 60%;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent-glow-strong);
+  animation: sidebarIndicator var(--duration-slow) var(--ease-ios);
+}
+
+@keyframes sidebarIndicator {
+  from { transform: scaleY(0); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
 }
 
 .app-sidebar__bottom {
@@ -191,7 +234,11 @@
   padding-top: var(--space-md);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-xxs);
+}
+
+.app-sidebar__bottom .app-sidebar__item:hover {
+  color: var(--color-warning);
 }
 
 /* ─── Main Content ─── */
