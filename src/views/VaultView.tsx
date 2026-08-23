@@ -126,27 +126,23 @@ export default function VaultView() {
             <div className="vault-input-wrap">
               <Input
                 id="vault-passphrase"
+                ref={mainInputRef}
                 type={showPassphrase ? "text" : "password"}
                 placeholder="Enter your passphrase"
                 value={passphrase}
                 onChange={e => { setPassphrase(e.target.value); setVaultError(""); }}
                 onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                onFocus={() => setOskTarget("main")}
                 autoFocus
               />
               <div className="vault-input-actions">
                 <button
-                  onClick={async () => {
-                    try {
-                      const text = await navigator.clipboard.readText();
-                      setPassphrase(text);
-                      setVaultError("");
-                    } catch { /* clipboard unavailable */ }
-                  }}
+                  onClick={() => { setOskOpen(o => !o); setOskTarget("main"); }}
                   className="vault-paste-btn"
-                  title="Paste from clipboard"
-                  aria-label="Paste passphrase"
+                  title="On-screen keyboard (bypasses hardware keyloggers)"
+                  aria-label="Toggle on-screen keyboard"
                 >
-                  Paste
+                  ⌨
                 </button>
                 <button
                   onClick={() => setShowPassphrase(!showPassphrase)}
