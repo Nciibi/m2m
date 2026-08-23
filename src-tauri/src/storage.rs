@@ -332,7 +332,7 @@ impl KeyStore {
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>()
-                .map_err(|e| StorageError::QueryFailed(e.to_string()))
+                .map_err(|e| StorageError::Db(e.to_string()))
         }
 
         pub fn count_accounts(&self) -> Result<i64, StorageError> {
