@@ -76,6 +76,22 @@ export default function SettingsView() {
               <span className="settings-label">Public Key</span>
               <span className="settings-mono settings-mono--truncate">{identity?.public_key_hex || "—"}</span>
             </div>
+            <div className="settings-row">
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  try {
+                    await invoke("lock_vault");
+                    setView("vault");
+                  } catch (e) {
+                    addToast("Failed to sign out: " + e, "error");
+                  }
+                }}
+              >
+                Sign Out
+              </Button>
+              <span className="text-muted text-sm">Locks the vault and returns to the unlock screen.</span>
+            </div>
           </div>
         </section>
 
