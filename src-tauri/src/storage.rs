@@ -597,7 +597,103 @@ pub struct MessageStore {
     conn: Connection,
 }
 
+// ─── Crypto-shredding primitives (H7) ──────────────────────────────────────
+//
+// Every message is encrypted under its own random 32-byte content key (CEK),
+// never directly under the vault storage key. The CEK is wrapped under the
+// vault key with a dedicated AAD domain and stored alongside the row.
+//
+// Deletion therefore destroys only a 72-byte wrapped key per message:
+// after shredding, ciphertext copies lingering in WAL frames, freed pages,
+// or disk slack are undecryptable even with full knowledge of the vault
+// storage key. This converts an unbounded remnant problem into a bounded
+// one that `secure_delete` + WAL checkpointing can reliably cover.
+
+/// AAD domain for message content ciphertext (must match commands::util::AAD_MSG_STORE).
+const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
+/// AAD domain for wrapped content keys — distinct from every other domain.
+const AAD_MSG_CEK: &[u8] = b"m2m-msg-cek-v1";
+
+/// Length of a wrapped CEK blob: 24-byte XChaCha nonce || 32-byte CEK || 16-byte Poly1305 tag.
+pub const WRAPPED_CEK_LEN: usize = 24 + 32 + 16;
+
+/// Encrypt plaintext under `key`; returns (nonce, ciphertext).
+fn seal_msg(key: &[u8; 32], plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
+    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
+    let nonce = aead::gen_nonce();
+    let aead_key = aead::Key::from_slice(key).ok_or(StorageError::KeyNotFound)?;
+    let ct = aead::seal(plaintext, Some(aad), &nonce, &aead_key);
+    Ok((nonce.0.to_vec(), ct))
+}
+
+/// Authenticate-and-decrypt; error on tag mismatch.
+fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Result<Vec<u8>, ()> {
+    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
+    let nonce = aead::Nonce::from_slice(nonce).ok_or(())?;
+    let aead_key = aead::Key::from_slice(key).ok_or(())?;
+    aead::open(ciphertext, Some(aad), &nonce, &aead_key)
+}
+
 impl MessageStore {
+    /// Generate a fresh 32-byte content encryption key.
+    fn generate_cek() -> [u8; 32] {
+        sodiumoxide::crypto::aead::gen_key()
+    }
+
+    /// Wrap a CEK under the vault storage key → single BLOB (nonce || ciphertext).
+    fn wrap_cek(
+        cek: &[u8; 32],
+        storage_key: &crate::secure_key::StorageKey,
+    ) -> Result<Vec<u8>, StorageError> {
+        let (nonce, ct) = seal_msg(storage_key.as_bytes(), cek, AAD_MSG_CEK)?;
+        let mut blob = nonce;
+        blob.extend_from_slice(&ct);
+        Ok(blob)
+    }
+
+    /// Inverse of [`wrap_cek`]. Fails on tampering or wrong vault key.
+    fn unwrap_cek(
+        wrapped: &[u8],
+        storage_key: &crate::secure_key::StorageKey,
+    ) -> Result<[u8; 32], StorageError> {
+        if wrapped.len() < 24 + 1 {
+            return Err(StorageError::KeyNotFound);
+        }
+        let mut cek = [0u8; 32];
+        let pt = open_msg(storage_key.as_bytes(), &wrapped[..24], &wrapped[24..], AAD_MSG_CEK)
+            .map_err(|_| StorageError::KeyNotFound)?;
+        if pt.len() != 32 {
+            return Err(StorageError::KeyNotFound);
+        }
+        cek.copy_from_slice(&pt);
+        Ok(cek)
+    }
+
+    /// Decrypt a stored message row's content.
+    ///
+    /// - Rows written via [`store_message_secure`]/[`edit_message_secure`]:
+    ///   unwrap the CEK first, then decrypt the content under it.
+    /// - Legacy rows (`content_key_wrapped IS NULL`): decrypt directly under
+    ///   the vault storage key, matching pre-crypto-shredding behavior.
+    pub fn decrypt_stored_content(
+        stored_content: &[u8],
+        stored_nonce: &[u8],
+        content_key_wrapped: Option<&[u8]>,
+        storage_key: &crate::secure_key::StorageKey,
+    ) -> Result<Vec<u8>, StorageError> {
+        match content_key_wrapped {
+            Some(wrapped) => {
+                let cek = Self::unwrap_cek(wrapped, storage_key)?;
+                let pt = open_msg(&cek, stored_nonce, stored_content, AAD_MSG_STORE)
+                    .map_err(|_| StorageError::KeyNotFound)?;
+                Ok(pt)
+            }
+            None => {
+                open_msg(storage_key.as_bytes(), stored_nonce, stored_content, AAD_MSG_STORE)
+                    .map_err(|_| StorageError::KeyNotFound)
+            }
+        }
+    }
     /// Open or create the message store.
     pub fn open(db_path: &Path) -> Result<Self, StorageError> {
         let conn = Connection::open(db_path)?;
