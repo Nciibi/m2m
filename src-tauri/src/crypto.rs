@@ -718,9 +718,11 @@ impl DoubleRatchet {
         ratchet_key: Option<&[u8; 32]>,
     ) -> Result<Vec<u8>, CryptoError> {
         // ── Check skipped message key cache for out-of-order messages ──
-        // Runs before ratchet handling: a malformed frame carrying a bogus
-        // ratchet key must never reach state-mutating code paths.
-        if message_number < self.recv_message_number {
+        // Only reached WITHOUT a ratchet key: a DH ratchet resets the
+        // receive counter to zero, so ratcheted frames always pass through
+        // the main path below. With no ratchet key, a frame numbered below
+        // our counter must come from the cached skipped keys.
+        if ratchet_key.is_none() && message_number < self.recv_message_number {
             let saved_key = match self.skipped_keys.get(&message_number) {
                 Some(k) => *k,
                 None => {
