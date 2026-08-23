@@ -2164,15 +2164,38 @@ drop(conns);
                                 if let Ok(leave) = protocol::deserialize::<protocol::GroupLeaveData>(&plaintext) {
                                     let leaving = leave.leaving_peer_key_hex.clone();
                                     let gid = leave.group_id.clone();
-                                    drop(conn);
-drop(conns);
 
-                                    let mut gm = state.group_manager.write().await;
-                                    let _ = gm.leave_group(&gid, &leaving);
+                                    // Authorization (H2): a peer can only announce its OWN
+                                    // departure — forged leave claims on behalf of others
+                                    // are dropped.
+                                    if leaving != peer_key_hex {
+                                        tracing::warn!(
+                                            peer = %peer_key_hex,
+                                            group = %gid,
+                                            "forged group leave claim — ignored"
+                                        );
+                                        continue;
+                                    }
+
+                                    let our_peer_key_hex = {
+                                        let id = state.identity.read().await;
+                                        id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
+                                    };
+                                    {
+                                        let mut gm = state.group_manager.write().await;
+                                        let _ = gm.leave_group(&gid, &leaving);
+                                    }
                                     state.ensure_message_store(&state.data_dir).await.ok();
                                     let ms = state.message_store.lock().await;
                                     if let Some(store) = ms.as_ref() {
                                         let _ = store.remove_group_member(&gid, &leaving);
+                                    }
+                                    drop(ms);
+
+                                    // Forward secrecy: the leaver knew our old chain key —
+                                    // rotate our sending chain and announce the new one.
+                                    if let Some(our) = our_peer_key_hex {
+                                        rotate_and_announce(state.clone(), &gid, &our).await.ok();
                                     }
 
                                     let _ = app_handle.emit("m2m://group-event", GroupEvent {
