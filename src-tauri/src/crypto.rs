@@ -1728,12 +1728,13 @@ mod crypto_tests {
     }
 
     #[test]
-    fn test_dr_encrypt_no_send_chain_fails() {
+    fn test_dr_responder_first_send_forces_ratchet() {
         init_sodiumoxide();
         let x3dh = X3DHSessionKeys {
             root_key: [0xAA; 32],
             chain_key: [0xBB; 32],
         };
+        // Responder role: send_chain_key = None.
         let mut dr = DoubleRatchet::new(
             x3dh,
             EphemeralKeypair::generate(),
@@ -1741,8 +1742,11 @@ mod crypto_tests {
             false,
         );
         let aad = [PacketType::EncryptedMessage.to_byte()];
-        let result = dr.encrypt(b"test", &aad, false);
-        assert!(result.is_err());
+        // Pre-fix this returned "no send chain key", making the responder's
+        // FIRST outbound message in any X3DH session impossible. The forced
+        // DH ratchet must now establish the send chain (rk present).
+        let (rk, _num, _n, _c) = dr.encrypt(b"test", &aad, false).unwrap();
+        assert!(rk.is_some(), "first responder send must carry a new ratchet key");
     }
 
     #[test]
