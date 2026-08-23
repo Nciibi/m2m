@@ -500,9 +500,9 @@ pub async fn create_vault_account(
 pub async fn list_family(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<FamilyMember>, String> {
+    let sk = state.storage_key.read().await;
     let ks = state.key_store.lock().await;
     let store = ks.as_ref().ok_or("key store not initialized")?;
-    let sk = state.storage_key.read().await;
     store.list_family(sk.as_ref()).map_err(|e| format!("failed to list family: {e}"))
 }
 
