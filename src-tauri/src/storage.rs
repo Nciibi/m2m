@@ -723,6 +723,8 @@ fn open_meta_value(key: Option<&crate::secure_key::StorageKey>, stored: &str, aa
     String::from_utf8(pt).map_err(|_| StorageError::DecryptionFailed)
 }
 
+impl KeyStore {
+
 impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
     fn generate_cek() -> [u8; 32] {
