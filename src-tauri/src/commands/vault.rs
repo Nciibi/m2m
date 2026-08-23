@@ -652,7 +652,7 @@ pub async fn export_identity(
     drop(ks);
 
     // Encrypt the secret key with export passphrase
-    let export_key = util::derive_storage_key_from_passphrase(&passphrase, &pub_bytes)?;
+    let export_key = derive_key_blocking(passphrase, pub_bytes.clone()).await?;
     let (nonce, encrypted_sk) = util::crypto_encrypt_storage(&sk_bytes, &export_key, crate::commands::util::AAD_EXPORT_V2)
         .map_err(|e| format!("encryption failed: {e}"))?;
 
