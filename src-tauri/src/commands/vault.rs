@@ -604,6 +604,7 @@ pub async fn connect_family_member(
 
     // Look up the family member — drop key_store lock before any .await
     let saved_addr_str: Option<String> = {
+        let sk = state.storage_key.read().await;
         let ks = state.key_store.lock().await;
         let store = ks.as_ref().ok_or("key store not initialized")?;
         if !store.is_family_member(&pk_bytes).map_err(|e| format!("family check: {e}"))? {
