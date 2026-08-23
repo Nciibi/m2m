@@ -383,6 +383,9 @@ impl Session {
         crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
             .map_err(|_| SessionError::HandshakeFailed("peer signature invalid".to_string()))?;
 
+        // Replay protection (M1): reject stale/future timestamps.
+        validate_handshake_timestamp(response.timestamp)?;
+
         // Initialize Double Ratchet
         self.ratchet = Some(DoubleRatchet::new(
             x3dh_out, dh_ratchet, response.ephemeral_pub, true,
