@@ -398,33 +398,21 @@ async fn handle_incoming_connection(
             }
         };
 
-        // Gather our local candidates to share with the peer during handshake.
-        let config = state.stun_config.read().await;
-        let stun_result = stun::discover_public_addrs(&config).await.ok();
-        drop(config);
-
-        let host_candidates = candidate::gather_host_candidates();
-        let ipv6_candidates = candidate::gather_ipv6_candidates();
-        let reflexive_candidates = stun_result
-            .as_ref()
-            .map(candidate::gather_reflexive_candidates)
-            .unwrap_or_default();
-
-        let mut all = host_candidates;
-        all.extend(ipv6_candidates);
-        all.extend(reflexive_candidates);
-        all.sort_by(|a, b| b.priority.cmp(&a.priority));
-        let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-            relay_id: None,
-        }).collect();
-
-        // Update state with gathered candidates
-        {
-            let mut cand_state = state.candidates.write().await;
-            *cand_state = all;
-        }
+        // Use CACHED candidates for the handshake response. Running a full
+        // STUN discovery here would let any unauthenticated host force us
+        // into expensive outbound work just by opening a connection (DoS
+        // amplification). The cache is populated at listener startup /
+        // settings refresh; if it's empty we schedule an authenticated
+        // post-handshake refresh below.
+        let wire_candidates: Vec<WireCandidate> = {
+            let cached = state.candidates.read().await;
+            cached.iter().map(|c| WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+                relay_id: None,
+            }).collect()
+        };
+        let cache_empty = wire_candidates.is_empty();
 
         if is_x3dh {
             // X3DH handshake path
