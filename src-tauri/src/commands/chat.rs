@@ -402,8 +402,8 @@ pub async fn remove_reaction(
     message_id: String,
     reaction: String,
 ) -> Result<(), String> {
-    // Remove locally (scoped to this conversation — H4)
-    {
+    // Remove locally (scoped to this conversation — H4). Ephemeral mode: no-op.
+    if !state.security_config.read().await.ephemeral_mode {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
