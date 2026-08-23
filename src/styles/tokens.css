@@ -143,26 +143,38 @@
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.25);
   --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.3);
-  --shadow-accent: 0 0 12px rgba(99, 102, 241, 0.25);
-  --shadow-accent-strong: 0 0 20px rgba(99, 102, 241, 0.35);
-  --shadow-accent-glow: 0 0 24px rgba(99, 102, 241, 0.1);
+  --shadow-accent: 0 0 12px var(--color-accent-glow);
+  --shadow-accent-strong: 0 0 20px var(--color-accent-glow-strong);
+  --shadow-accent-glow: 0 0 24px var(--color-accent-glow-subtle);
   --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.15);
   --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   --shadow-card-hover: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 4px 16px rgba(0, 0, 0, 0.2);
-  --shadow-bubble-sent: 0 0 12px rgba(99, 102, 241, 0.2);
+  --shadow-bubble-sent: 0 0 12px var(--color-accent-glow);
   --shadow-bubble-received: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.5);
   --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-app-shell: 0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 8px 32px -8px rgba(0, 0, 0, 0.5);
 
-  /* ─── Transitions ─── */
+  /* ─── Motion (SwiftUI-grade) ───
+     Micro interactions 120ms, standard 200ms, sheets/modals 280ms.
+     iOS-like decelerate curve for enters; animate transform+opacity only. */
+  --duration-micro: 120ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-fast: 150ms var(--ease-out-expo);
-  --transition-base: 250ms var(--ease-out-expo);
+  --transition-micro: var(--duration-micro) var(--ease-ios);
+  --transition-fast: var(--duration-fast) var(--ease-out-expo);
+  --transition-base: var(--duration-base) var(--ease-out-expo);
   --transition-smooth: 400ms var(--ease-out-expo);
   --transition-spring: 500ms var(--ease-out-back);
+
+  /* ─── Focus ─── */
+  --focus-ring: 0 0 0 2px color-mix(in srgb, var(--color-bg-dark) 100%, transparent),
+    0 0 0 4px var(--color-accent);
 
   /* ─── Z-Index ─── */
   --z-base: 1;
