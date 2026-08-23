@@ -35,10 +35,10 @@ export default defineConfig(async () => ({
         "src/components/ui/icons/**"
       ],
       thresholds: {
-        statements: 20,
-        branches: 15,
-        functions: 20,
-        lines: 20
+        statements: 45,
+        branches: 55,
+        functions: 30,
+        lines: 45
       }
     }
   },
