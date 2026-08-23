@@ -560,20 +560,13 @@ pub async fn edit_message(
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-            match util::crypto_encrypt_storage(new_content.as_bytes(), key, util::AAD_MSG_STORE) {
-                Ok((nonce, encrypted)) => {
-                    match store.edit_message(&message_id, &peer_key_hex, "sent", &encrypted, &nonce) {
-                        Ok(true) => {}
-                        Ok(false) => {
-                            return Err("message not found in this conversation".to_string());
-                        }
-                        Err(e) => {
-                            tracing::error!(error = %e, "failed to encrypt edit for storage");
-                        }
-                    }
+            match store.edit_message_secure(&message_id, &peer_key_hex, "sent", new_content.as_bytes(), key) {
+                Ok(true) => {}
+                Ok(false) => {
+                    return Err("message not found in this conversation".to_string());
                 }
                 Err(e) => {
-                    tracing::error!(error = %e, "failed to encrypt edit for storage");
+                    tracing::error!(error = %e, "failed to persist edited message");
                 }
             }
         }
