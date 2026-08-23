@@ -1384,17 +1384,12 @@ mod crypto_tests {
 
     #[test]
     fn test_ratchet_changes_key() {
-        use sodiumoxide::randombytes;
-        let rx = randombytes::randombytes(32);
-        let tx = randombytes::randombytes(32);
-        let mut rx_arr = [0u8; 32];
-        let mut tx_arr = [0u8; 32];
-        rx_arr.copy_from_slice(&rx);
-        tx_arr.copy_from_slice(&tx);
+        let rx = random_bytes(32).try_into().unwrap();
+        let tx = random_bytes(32).try_into().unwrap();
 
         let mut keys = SessionKeys {
-            rx_key: rx_arr,
-            tx_key: tx_arr,
+            rx_key: rx,
+            tx_key: tx,
         };
 
         let old_tx = keys.tx_key;
