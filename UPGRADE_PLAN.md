@@ -5,6 +5,26 @@
 
 ## Progress log
 
+### Frontend premium overhaul (in progress)
+- ✅ **Phase A — design-system foundation**: `design-system/MASTER.md` written using the
+  ui-ux-pro-max skill (installed at `.opencode/skills/`); all accent-derived tokens
+  (tints/glows/gradients/shadows/scrollbar/borders, dark+light) now derive from
+  `--color-accent` via `color-mix()`; motion tokens (iOS easing curve, micro/fast/base/
+  slow durations); `.sr-only` + global `prefers-reduced-motion` guard actually loaded
+  now (were dead); dead files removed (`styles/global.css`, `styles/theme.ts`).
+- ✅ **Phase B — app shell**: sidebar rebuilt (Groups entry, chat/hub active-state fix,
+  Lock Vault footer action, aria-current), animated accent indicator, frosted header,
+  animated tab underline, per-view enter transition replacing the 0.8s shell replay.
+- ✅ **Phase C — chat experience**: ChatView 748→544 lines; extracted
+  `components/chat/{messageRender,SelfDestructTimer,MessageBubble}`; reactions/menu now
+  keyboard-accessible (focus-visible toggle buttons, aria-pressed/expanded, Escape);
+  GroupChatView shares MessageBubble.
+- ✅ **Phase D — hub/settings polish**: emoji-glyph actions replaced with SVG icons
+  (new BellIcon/FolderIcon in the set; StarIcon filled state); Tor warning uses
+  AlertTriangleIcon; SetupView `alert()` → toast.
+- ⏳ Remaining: Phase E cleanup (93 lint warnings: `any` typing, advisory hooks rules),
+  i18n string extraction, GroupChatView composer parity, heavy component tests.
+
 - ✅ **Phase 1 (C1–C3)** done — transfer caps/validation, key zeroization, relay hardening
 - ✅ **Phase 2 (H1–H4)** done — legacy-migration AAD fix, group E2EE trust model v2
   (self-generated member keys, identity-signed bundles, admin checks on receive,
