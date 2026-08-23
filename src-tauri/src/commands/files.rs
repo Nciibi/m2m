@@ -65,9 +65,14 @@ pub async fn send_file(
     // ── Streaming hash pass ──────────────────────────────────
     // Read the file once, computing both per-chunk hashes and the full-file hash.
     // Uses a fixed buffer sized to the adaptive chunk size — never loads the entire
-    // file into RAM.
-    let (file_hash, chunk_hashes) = compute_file_hashes(&file_path, total_chunks, chunk_size)
-        .map_err(|e| format!("failed to read file: {e}"))?;
+    // file into RAM. Runs on the blocking pool so large files don't stall
+    // the async runtime (M5).
+    let hash_path = file_path.clone();
+    let (file_hash, chunk_hashes) =
+        tokio::task::spawn_blocking(move || compute_file_hashes(&hash_path, total_chunks, chunk_size))
+            .await
+            .map_err(|e| format!("hash task failed: {e}"))?
+            .map_err(|e| format!("failed to read file: {e}"))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
