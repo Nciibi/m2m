@@ -2025,8 +2025,28 @@ drop(conns);
                                 if let Ok(info) = protocol::deserialize::<protocol::GroupInfoData>(&plaintext) {
                                     let new_name = info.new_name.clone();
                                     let gid = info.group_id.clone();
+                                    let changer_is_admin;
+                                    {
+                                        let gm = state.group_manager.read().await;
+                                        changer_is_admin = gm.get_group(&gid)
+                                            .map(|g| g.is_member(&peer_key_hex) && g.is_admin(&info.changed_by_peer_key_hex)
+                                                && info.changed_by_peer_key_hex == peer_key_hex)
+                                            .unwrap_or(false);
+                                    }
                                     drop(conn);
-drop(conns);
+        drop(conns);
+
+                                    // Authorization (H2): renames must come from the claimed
+                                    // changer themselves, who must be an admin member of the
+                                    // group. Anything else is dropped.
+                                    if !changer_is_admin {
+                                        tracing::warn!(
+                                            peer = %peer_key_hex,
+                                            group = %gid,
+                                            "unauthorized group rename attempt — ignored"
+                                        );
+                                        continue;
+                                    }
 
                                     if let Some(ref name) = new_name {
                                         let mut gm = state.group_manager.write().await;
