@@ -78,17 +78,18 @@ static KNOWN_CAPTURE_TOOLS: &[CaptureTool] = &[
     tool!("ffmpeg (possible screen grab)", &["ffmpeg"], &[]),
 ];
 
-/// Pure matcher: given lowercased process names, return the deduplicated
+/// Pure matcher: given process names (ANY case — normalized here so a
+/// caller bug can never silently disable detection), return the deduplicated
 /// display names of known capture tools among them (sorted for stable
 /// comparisons/events).
-fn detect_capture_tools<I>(lowercased_process_names: I) -> Vec<String>
+fn detect_capture_tools<I>(process_names: I) -> Vec<String>
 where
     I: IntoIterator,
     I::Item: AsRef<str>,
 {
-    let names: Vec<String> = lowercased_process_names
+    let names: Vec<String> = process_names
         .into_iter()
-        .map(|s| s.as_ref().to_string())
+        .map(|s| s.as_ref().to_lowercase())
         .collect();
     let mut hits: Vec<&'static str> = Vec::new();
     'tools: for tool in KNOWN_CAPTURE_TOOLS {
