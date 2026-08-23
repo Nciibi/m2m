@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
-function Bomb({ message }: { message: string }) {
+function Bomb({ message }: { message: string }): React.ReactElement {
   throw new Error(message);
 }
 
@@ -36,6 +36,7 @@ describe("ErrorBoundary", () => {
 
   it('falls back to "View" as the default name', () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(spy).toBeDefined();
     render(
       <ErrorBoundary>
         <Bomb message="kaboom" />
@@ -45,8 +46,8 @@ describe("ErrorBoundary", () => {
   });
 
   it("shows a generic message when the error has no message text", () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    function EmptyBomb(): never {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    function EmptyBomb(): React.ReactElement {
       throw new Error();
     }
     render(
@@ -54,16 +55,13 @@ describe("ErrorBoundary", () => {
         <EmptyBomb />
       </ErrorBoundary>,
     );
-    // The fallback copy for empty messages
-    expect(
-      screen.getByText(/unexpected error occurred/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/unexpected error occurred/i)).toBeInTheDocument();
   });
 
   it("recovers when the error state is reset (Reload click)", () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
     let shouldThrow = true;
-    function MaybeBomb({ children }: { children: React.ReactNode }) {
+    function MaybeBomb({ children }: { children: React.ReactNode }): React.ReactElement {
       if (shouldThrow) throw new Error("transient");
       return <>{children}</>;
     }
