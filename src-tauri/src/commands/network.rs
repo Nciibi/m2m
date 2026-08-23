@@ -978,7 +978,9 @@ async fn handle_incoming_text(
                                     };
 
                                     // Persist received message
-                                    let history = *state.history_enabled.read().await;
+                                    // Ephemeral mode: nothing touches SQLite.
+                                    let history = *state.history_enabled.read().await
+                                        && !state.security_config.read().await.ephemeral_mode;
                                     if history {
                                         let sk = state.storage_key.read().await;
                                         let ms = state.message_store.lock().await;
