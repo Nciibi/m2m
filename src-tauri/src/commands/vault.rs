@@ -916,6 +916,8 @@ pub async fn import_identity(
     seal_imported_identity(&key_store, &pub_bytes, &sk_arr, &storage_key)?;
     sk_arr.zeroize();
 
+    let now = chrono::Utc::now().timestamp();
+
     // Import family members
     if let Some(family_arr) = payload.get("family").and_then(|v| v.as_array()) {
         key_store.clear_family().ok(); // Clear existing family
