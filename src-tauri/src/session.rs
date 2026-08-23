@@ -73,6 +73,7 @@ pub struct Session {
 
 impl Session {
     /// Create a new session in the initial state.
+    ///
     /// Counters start at ZERO deterministically (H4). A previous version
     /// started them at a random value "to prevent cross-session replay",
     /// but the two peers' values were never exchanged, so legacy-mode
