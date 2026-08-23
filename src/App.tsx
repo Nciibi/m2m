@@ -73,7 +73,6 @@ function AppInner() {
         {viewComponent}
       </ErrorBoundary>
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
-      <UpdateBanner />
     </>
   );
 }
