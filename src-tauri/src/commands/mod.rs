@@ -315,6 +315,8 @@ pub async fn attempt_reconnect(
                     remote_addr: info.peer_address_hint.parse()
                         .unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap()),
                     strategy_name: info.strategy_name.clone(),
+                    last_hb_sent: None,
+                    last_hb_ack: None,
                 };
 
                 {
