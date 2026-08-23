@@ -2715,7 +2715,11 @@ mod session_tests {
             session.send_heartbeat(&mut alice_io).await?;
             // Injected plaintext heartbeat from an attacker.
             network::write_frame(&mut alice_io, PacketType::HeartbeatAck, &[]).await?;
-            Ok::<_, SessionError>(session)
+            // Bob's encrypted ack must decrypt through Alice's ratchet.
+            let ack_frame = network::read_frame_impl(&mut alice_io).await?;
+            let ack_valid = ack_frame.packet_type == PacketType::HeartbeatAck
+                && session.decrypt_typed_frame(&ack_frame).is_ok();
+            Ok::<_, SessionError>(ack_valid)
         });
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
