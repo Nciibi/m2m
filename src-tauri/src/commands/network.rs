@@ -1825,8 +1825,76 @@ pub fn spawn_receive_loop(
                             Ok(plaintext) => {
                                 if let Ok(invite) = protocol::deserialize::<protocol::GroupInviteData>(&plaintext) {
                                     tracing::info!(group = %invite.group_id, "received group invite");
+                                    let gid = invite.group_id.clone();
+
+                                    // Verify the inviter's signature over the roster
+                                    // (H2: invites are identity-signed by the inviter).
+                                    let inviter_pub_ok = {
+                                        let mut sign_data = Vec::new();
+                                        sign_data.extend_from_slice(gid.as_bytes());
+                                        sign_data.extend_from_slice(&invite.member_count.to_be_bytes());
+                                        crate::crypto::verify_signature(
+                                            &conn.session.peer_identity_pub,
+                                            &sign_data,
+                                            &invite.signature,
+                                        ).is_ok()
+                                    };
+                                    drop(conn);
+        drop(conns);
+
+                                    if !inviter_pub_ok {
+                                        tracing::warn!(group = %gid, peer = %peer_key_hex, "group invite signature invalid — ignoring");
+                                        continue;
+                                    }
+
+                                    // Join locally with OUR OWN keys and announce them to
+                                    // the whole roster (mutual exchange with every member).
+                                    let our_peer_key_hex = {
+                                        let id = state.identity.read().await;
+                                        id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
+                                    };
+                                    let now = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs();
+                                    if let Some(our) = our_peer_key_hex {
+                                        let mut roster = invite.existing_members.clone();
+                                        if !roster.contains(&invite.inviter_peer_key_hex) {
+                                            roster.push(invite.inviter_peer_key_hex.clone());
+                                        }
+                                        let joined = {
+                                            let mut gm = state.group_manager.write().await;
+                                            gm.join_group(
+                                                gid.clone(),
+                                                invite.group_name.clone(),
+                                                now,
+                                                our.clone(),
+                                                false,
+                                                &roster,
+                                            )
+                                        };
+                                        match joined {
+                                            Ok(_) => {
+                                                state.ensure_message_store(&state.data_dir).await.ok();
+                                                let ms = state.message_store.lock().await;
+                                                if let Some(store) = ms.as_ref() {
+                                                    let _ = store.upsert_group(&gid, &invite.group_name, now as i64, "member");
+                                                    for key in &roster {
+                                                        let _ = store.add_group_member(&gid, key, None, "member", now as i64);
+                                                    }
+                                                }
+                                                drop(ms);
+
+                                                if let Err(e) = fan_out_own_bundle(state.clone(), &gid, &roster, &our).await {
+                                                    tracing::warn!(error = %e, group = %gid, "failed to announce own sender key after invite");
+                                                }
+                                            }
+                                            Err(e) => tracing::warn!(error = %e, group = %gid, "failed to join group from invite"),
+                                        }
+                                    }
+
                                     let _ = app_handle.emit("m2m://group-event", GroupEvent {
-                                        group_id: invite.group_id,
+                                        group_id: gid,
                                         event_type: "invited".to_string(),
                                         peer_key_hex: Some(invite.inviter_peer_key_hex),
                                     });
