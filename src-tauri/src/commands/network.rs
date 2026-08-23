@@ -412,7 +412,6 @@ async fn handle_incoming_connection(
                 relay_id: None,
             }).collect()
         };
-        let cache_empty = wire_candidates.is_empty();
 
         if is_x3dh {
             // X3DH handshake path
