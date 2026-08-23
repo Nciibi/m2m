@@ -790,8 +790,7 @@ pub fn spawn_receive_loop(
     mut read_half: tokio::net::tcp::OwnedReadHalf,
     peer_key_hex: String,
     reconnect_info: Option<crate::reconnect::ReconnectInfo>,
-) {
-    let hb_peer = peer_key_hex.clone();
+) {    let hb_peer = peer_key_hex.clone();
     let hb_state = state.clone();
     // Spawn a heartbeat worker: sends a Heartbeat every HEARTBEAT_INTERVAL_SECS
     // and expects an ack within HEARTBEAT_TIMEOUT_SECS.
