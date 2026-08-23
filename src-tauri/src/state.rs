@@ -39,6 +39,14 @@ pub struct PeerConnection {
     /// (e.g. "host", "ipv6", "port-mapped", "srflx", "prflx", "relay").
     /// Used for adaptive chunk size computation.
     pub strategy_name: String,
+    /// Last outbound heartbeat probe we sent (liveness tracking).
+    /// `None` until the first heartbeat of this connection is sent.
+    pub last_hb_sent: Option<std::time::Instant>,
+    /// Last time the peer answered a heartbeat probe (`HeartbeatAck`).
+    /// `None` until the first ack arrives. If an ack for the most recent
+    /// probe has not arrived within HEARTBEAT_TIMEOUT_SECS, the connection
+    /// is considered dead and torn down by the heartbeat worker.
+    pub last_hb_ack: Option<std::time::Instant>,
 }
 
 /// Transfer state machine.

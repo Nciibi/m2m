@@ -670,6 +670,8 @@ pub async fn connect_family_member(
                     session,
                     remote_addr: addr,
                     strategy_name: "family".to_string(),
+                    last_hb_sent: None,
+                    last_hb_ack: None,
                 };
 
                 {
