@@ -77,6 +77,18 @@ export default function VaultView() {
   const colorMap: Record<string, string> = { weak: "var(--color-danger)", fair: "var(--color-warning)", strong: "var(--color-success)", "very-strong": "#22d3ee" };
   const confirmMismatch = passphraseConfirm.length > 0 && passphraseConfirm !== passphrase;
 
+  // On-screen keyboard insertion — routes to the focused/targeted field and
+  // never lets keystrokes touch the physical keyboard event path.
+  const oskInsert = (ch: string) => {
+    setVaultError("");
+    if (oskTarget === "confirm") setPassphraseConfirm((p) => p + ch);
+    else setPassphrase((p) => p + ch);
+  };
+  const oskBackspace = () => {
+    if (oskTarget === "confirm") setPassphraseConfirm((p) => p.slice(0, -1));
+    else setPassphrase((p) => p.slice(0, -1));
+  };
+
   return (
     <div className="app-shell">
       <div className="centered-view">
