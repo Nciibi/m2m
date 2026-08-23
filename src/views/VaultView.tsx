@@ -189,23 +189,34 @@ export default function VaultView() {
             <div className="vault-field">
               <label className="vault-field__label" htmlFor="vault-passphrase-confirm">Confirm</label>
               <div className="vault-input-wrap">
-                <Input
-                  id="vault-passphrase-confirm"
-                  type={showPassphrase ? "text" : "password"}
-                  placeholder="Repeat your passphrase"
-                  value={passphraseConfirm}
-                  onChange={e => setPassphraseConfirm(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleUnlock()}
-                  error={confirmMismatch ? "Passphrases do not match" : undefined}
-                />
-                {passphraseConfirm && passphrase === passphraseConfirm && passphrase.length >= 12 && (
-                  <span className="vault-match-check">
-                    <CheckIcon size={14} color="var(--color-success)" />
-                  </span>
-                )}
-              </div>
+              <Input
+                id="vault-passphrase-confirm"
+                ref={confirmInputRef}
+                type={showPassphrase ? "text" : "password"}
+                placeholder="Repeat your passphrase"
+                value={passphraseConfirm}
+                onChange={e => setPassphraseConfirm(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                onFocus={() => setOskTarget("confirm")}
+                error={confirmMismatch ? "Passphrases do not match" : undefined}
+              />
+              {passphraseConfirm && passphrase === passphraseConfirm && passphrase.length >= 12 && (
+                <span className="vault-match-check">
+                  <CheckIcon size={14} color="var(--color-success)" />
+                </span>
+              )}
             </div>
-          )}
+          </div>
+        )}
+
+        {oskOpen && (
+          <OnScreenKeyboard
+            open={oskOpen}
+            onInsert={oskInsert}
+            onBackspace={oskBackspace}
+            onClose={() => setOskOpen(false)}
+          />
+        )}
 
           {vaultError && <div className="vault-error" role="alert">{vaultError}</div>}
 
