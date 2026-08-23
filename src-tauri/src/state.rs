@@ -251,6 +251,16 @@ pub struct SecurityConfig {
     /// and never persisted. OFF by default so first-time invite connections
     /// work out of the box; high-risk users should enable it (H5).
     pub require_known_contact: bool,
+    /// Periodically scan for known screen-recording / capture software
+    /// (OBS, XSplit, Snipping Tool, …) and warn the user while active.
+    /// Stops nothing by itself — it is an honest detection/warning UX layer.
+    /// OFF by default.
+    #[serde(default)]
+    pub capture_process_detection: bool,
+    /// Blur the entire app content whenever the window loses focus or is
+    /// hidden (background capture tools, shoulder surfing). OFF by default.
+    #[serde(default)]
+    pub blur_on_focus_loss: bool,
 }
 
 /// Peer discovery method configuration.
