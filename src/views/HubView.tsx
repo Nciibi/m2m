@@ -393,21 +393,20 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
               {/* Favorite toggle */}
               <button className="btn btn--icon btn--icon-sm" title={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
                 onClick={(e) => toggleFav(c.peer_key_hex, e)}
-                aria-label={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}
-                style={{ color: favorites.has(c.peer_key_hex) ? 'var(--color-warning)' : undefined }}>
-                {favorites.has(c.peer_key_hex) ? "★" : "☆"}
+                aria-label={favorites.has(c.peer_key_hex) ? "Unfavorite" : "Favorite"}>
+                <StarIcon size={16} filled={favorites.has(c.peer_key_hex)} />
               </button>
               {/* Archive toggle */}
               <button className="btn btn--icon btn--icon-sm" title={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}
                 onClick={(e) => toggleArch(c.peer_key_hex, e)}
                 aria-label={archived.has(c.peer_key_hex) ? "Unarchive" : "Archive"}>
-                {archived.has(c.peer_key_hex) ? "📂" : "📁"}
+                <FolderIcon size={16} open={archived.has(c.peer_key_hex)} />
               </button>
               <button className="btn btn--icon btn--icon-sm"
                 title={isMuted ? "Unmute conversation" : "Mute conversation"}
                 onClick={e => { e.stopPropagation(); if (isMuted) { onUnmute(c.peer_key_hex); } else { onMute(c.peer_key_hex); } }}
                 aria-label={isMuted ? "Unmute" : "Mute"}>
-                {isMuted ? "🔇" : "🔔"}
+                <BellIcon size={16} off={isMuted} />
               </button>
               <button className="btn btn--icon btn--icon-sm"
                 onClick={e => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }}
