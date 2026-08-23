@@ -501,7 +501,8 @@ pub async fn send_message_with_timer(
 
     // Persist to local storage
     let history = *state.history_enabled.read().await;
-    if history {
+    let persist = history && !state.security_config.read().await.ephemeral_mode;
+    if persist {
         state.ensure_message_store(&state.data_dir).await.map_err(|e| format!("message store init: {e}"))?;
 
         let sk = state.storage_key.read().await;
