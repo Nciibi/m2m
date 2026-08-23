@@ -100,6 +100,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       catch { /* noop */ }
       try { setCaptureCapability(await invoke<CaptureCapability>("get_capture_capability")); }
       catch { /* noop */ }
+      try { setDuressConfigured(await invoke<boolean>("is_duress_configured")); }
+      catch { /* noop */ }
     } catch { /* noop */ }
   }, [setView]);
 
