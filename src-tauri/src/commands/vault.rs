@@ -200,25 +200,13 @@ pub async fn unlock_vault(
     // ─── Duress passphrase check (coercion resistance) ───
     // Read the verifier BEFORE dropping the store; the expensive Argon2id
     // runs afterwards without holding the !Send guard.
-    let duress_verifier: Option<(String, Vec<u8>)> =
-        match (
-            key_store.get_meta(crate::duress::META_DURESS_HASH).ok().flatten(),
-            key_store.get_meta(crate::duress::META_DURESS_SALT).ok().flatten(),
-        ) {
-            (Some(h), Some(s)) if h.len() == 64 => match hex::decode(&s) {
-                Ok(salt) if salt.len() == 16 => Some((h, salt)),
-                _ => None,
-            },
-            _ => None,
-        };
+    let duress_verifier = crate::duress::read_verifier(key_store);
     drop(ks_guard); // key_store is dead — .await is safe now
 
     if let Some((stored_hash_hex, salt)) = duress_verifier {
         let entered = passphrase.clone();
         let derived_hex = tauri::async_runtime::spawn_blocking(move || {
-            util::derive_storage_key_from_passphrase(&entered, &salt)
-                .map(|k| hex::encode(k.as_bytes()))
-                .ok()
+            crate::duress::derive_verifier_hex(&entered, &salt)
         })
         .await
         .unwrap_or(None);
