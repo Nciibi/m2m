@@ -226,10 +226,13 @@ pub struct ReconnectAttemptEvent {
 /// Attempt to reconnect to a peer whose connection dropped.
 /// Uses exponential backoff (1s, 2s, 4s, ..., 30s cap, max 5 attempts).
 /// The user must explicitly call this — no auto-reconnect.
-/// Since we can't do a full X3DH handshake without the peer's invite,
-/// we try a direct TCP connection to the last-known address. If the peer
-/// is still listening and our network hasn't changed, this will work.
-/// Otherwise, the user must re-share an invite.
+///
+/// On TCP success we perform a REAL authenticated handshake as initiator
+/// (classic Ed25519-signed ephemeral exchange — no prekey bundle needed,
+/// which we deliberately don't have without re-sharing an invite). The
+/// "established" state is only emitted once that handshake succeeds, so
+/// the UI never reports an encrypted session that was never cryptographically
+/// set up (M4).
 #[tauri::command]
 pub async fn attempt_reconnect(
     app_handle: tauri::AppHandle,
