@@ -105,11 +105,14 @@ function AppInner() {
 
   return (
     <>
-      <ErrorBoundary name={view}>
-        <div key={view} className="view-fade">
-          {viewComponent}
-        </div>
-      </ErrorBoundary>
+      <CaptureWarningBanner active={captureWarning} />
+      <div
+        className={`view-fade ${blurred ? "security-blur" : ""}`}
+        key={view}
+        aria-hidden={blurred}
+      >
+        {viewComponent}
+      </div>
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
