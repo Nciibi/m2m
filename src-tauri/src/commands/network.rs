@@ -1727,12 +1727,10 @@ async fn handle_message_update_frame(
                                         }
                                     }
                                 }
-                                if !accepted {
+                                // Ephemeral mode: accept edits without persistence.
+                                if !accepted && !ephemeral {
                                     return;
                                 }
-
-                                // Notify frontend
-                                let _ = app_handle.emit("m2m://edit", serde_json::json!({
                                     "message_id": edit.message_id,
                                     "new_content": edit.new_content,
                                     "edited_at": edit.edited_at,
