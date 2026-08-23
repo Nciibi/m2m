@@ -269,10 +269,11 @@ impl Session {
             SessionError::HandshakeFailed(format!("version mismatch: {e}"))
         })?;
 
-        // Verify initiator's signature
+        // Verify initiator's signature (covers ephemeral key + advertised candidates)
         let mut peer_sign_data = Vec::new();
         peer_sign_data.extend_from_slice(&init.ephemeral_pub);
         peer_sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
+        append_candidates_to_sign_data(&mut peer_sign_data, &init.candidates);
 
     crypto::verify_signature(&init.identity_pub, &peer_sign_data, &init.signature)
         .map_err(|_| {
