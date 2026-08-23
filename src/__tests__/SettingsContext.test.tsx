@@ -217,7 +217,7 @@ describe("SettingsContext", () => {
 
   it("handleScreenCaptureToggle calls set_security_config", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue({ screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false });
+    mockInvoke.mockResolvedValue({ screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false });
 
     render(
       <SettingsProvider>
@@ -227,7 +227,7 @@ describe("SettingsContext", () => {
 
     await user.click(screen.getByText("Toggle Screen Capture"));
     expect(mockInvoke).toHaveBeenCalledWith("set_security_config", {
-      config: { screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false },
+      config: { screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false },
     });
   });
 
