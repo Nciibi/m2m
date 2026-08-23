@@ -36,6 +36,14 @@ interface SettingsContextValue {
   handleScreenCaptureToggle: () => Promise<void>;
   handleCaptureDetectionToggle: () => Promise<void>;
   handleBlurOnFocusLossToggle: () => Promise<void>;
+  handleAirGapToggle: () => Promise<void>;
+  handleEphemeralModeToggle: () => Promise<void>;
+  handleSendBatchingChange: (ms: number) => Promise<void>;
+  handleCoverTypingToggle: () => Promise<void>;
+  duressConfigured: boolean;
+  setDuressPassphrase: (passphrase: string) => Promise<void>;
+  clearDuressPassphrase: () => Promise<void>;
+  refreshDuressStatus: () => Promise<void>;
   handleClipboardClearSecsChange: (secs: number) => Promise<void>;
   handleIdleLockSecsChange: (secs: number) => Promise<void>;
   handleRequireKnownContactToggle: () => Promise<void>;
@@ -69,6 +77,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Security state
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig | null>(null);
   const [captureCapability, setCaptureCapability] = useState<CaptureCapability | null>(null);
+  const [duressConfigured, setDuressConfigured] = useState(false);
   // Clipboard clear timer ref
   const clipboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
