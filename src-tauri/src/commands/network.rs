@@ -1658,56 +1658,64 @@ pub fn spawn_receive_loop(
                     break;
                 }
                 PacketType::MessageReaction => {
-                    let conns = state.connections.read().await;
-                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
-                        let mut conn = conn_arc.lock().await;
-                        match conn.session.decrypt_typed_frame(&frame) {
-                            Ok(plaintext) => {
-                                if let Ok(rxn) = crate::protocol::deserialize::<crate::protocol::MessageReactionData>(&plaintext) {
-                                    // Mirror the send-side cap on receive (H4).
-                                    if rxn.reaction.chars().count() > 10 {
-                                        tracing::warn!(peer = %peer_key_hex, "rejected oversized reaction");
-                                        continue;
-                                    }
-                                    // Store locally, scoped to the sender's conversation (H4):
-                                    // reactions to messages in other conversations are dropped.
-                                    let ms = state.message_store.lock().await;
-                                    let mut accepted = false;
-                                    if let Some(ref store) = *ms {
-                                        match store.upsert_reaction(
-                                            &rxn.message_id, &rxn.reaction,
-                                            &peer_key_hex, rxn.remove, &peer_key_hex,
-                                        ) {
-                                            Ok(true) => accepted = true,
-                                            Ok(false) => {
-                                                tracing::warn!(
-                                                    peer = %peer_key_hex,
-                                                    "reaction for message outside sender conversation — rejected"
-                                                );
-                                            }
-                                            Err(e) => {
-                                                tracing::warn!(error = %e, "failed to store reaction");
-                                            }
+                    // Decrypt under the per-peer lock only (head-of-line fix).
+                    let decrypted = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(conn_arc) => {
+                                let mut conn = conn_arc.lock().await;
+                                Some(conn.session.decrypt_typed_frame(&frame))
+                            }
+                            None => None,
+                        }
+                    };
+                    match decrypted {
+                        Some(Ok(plaintext)) => {
+                            if let Ok(rxn) = crate::protocol::deserialize::<crate::protocol::MessageReactionData>(&plaintext) {
+                                // Mirror the send-side cap on receive (H4).
+                                if rxn.reaction.chars().count() > 10 {
+                                    tracing::warn!(peer = %peer_key_hex, "rejected oversized reaction");
+                                    continue;
+                                }
+                                // Store locally, scoped to the sender's conversation (H4):
+                                // reactions to messages in other conversations are dropped.
+                                let ms = state.message_store.lock().await;
+                                let mut accepted = false;
+                                if let Some(ref store) = *ms {
+                                    match store.upsert_reaction(
+                                        &rxn.message_id, &rxn.reaction,
+                                        &peer_key_hex, rxn.remove, &peer_key_hex,
+                                    ) {
+                                        Ok(true) => accepted = true,
+                                        Ok(false) => {
+                                            tracing::warn!(
+                                                peer = %peer_key_hex,
+                                                "reaction for message outside sender conversation — rejected"
+                                            );
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(error = %e, "failed to store reaction");
                                         }
                                     }
-                                    drop(ms);
-                                    if !accepted {
-                                        continue;
-                                    }
-
-                                    // Notify frontend
-                                    let _ = app_handle.emit("m2m://reaction", serde_json::json!({
-                                        "message_id": rxn.message_id,
-                                        "reaction": rxn.reaction,
-                                        "peer_key_hex": peer_key_hex,
-                                        "remove": rxn.remove,
-                                    }));
                                 }
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, "failed to decrypt message reaction");
+                                drop(ms);
+                                if !accepted {
+                                    continue;
+                                }
+
+                                // Notify frontend
+                                let _ = app_handle.emit("m2m://reaction", serde_json::json!({
+                                    "message_id": rxn.message_id,
+                                    "reaction": rxn.reaction,
+                                    "peer_key_hex": peer_key_hex,
+                                    "remove": rxn.remove,
+                                }));
                             }
                         }
+                        Some(Err(e)) => {
+                            tracing::warn!(error = %e, "failed to decrypt message reaction");
+                        }
+                        None => {}
                     }
                 }
                 PacketType::MessageEdit => {
