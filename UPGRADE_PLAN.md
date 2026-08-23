@@ -3,6 +3,20 @@
 > Full-repo audit (2026-08-22): backend security review + frontend/infra review.
 > Self-reported score in `ROADMAP.md` is 9.3/10; realistic current score is **~7.5–8/10**.
 
+## Progress log
+
+- ✅ **Phase 1 (C1–C3)** done — transfer caps/validation, key zeroization, relay hardening
+- ✅ **Phase 2 (H1–H4)** done — legacy-migration AAD fix, group E2EE trust model v2
+  (self-generated member keys, identity-signed bundles, admin checks on receive,
+  rotation+fan-out on membership change), conversation-scoped edits/deletes/reactions,
+  chunk state/peer gating
+- ✅ **Phase 6** mostly done — updater footgun removed (plugin + empty-pubkey config +
+  UpdateBanner), `release.yml` with tauri-action draft releases + tag/version check +
+  signing-secret hooks. Remaining (needs owner action): obtain Apple/Windows signing
+  certs, decide on a hosted updater endpoint before re-enabling it.
+- ⏳ **Phase 0** remaining: rotate `STITCH_API_KEY` + purge git history (destructive;
+  requires force-push coordination)
+
 ---
 
 ## Phase 0 — Immediate (secrets & hygiene)
