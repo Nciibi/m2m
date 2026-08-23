@@ -86,7 +86,7 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 ### Traffic analysis resistance
 - [ ] **Fixed-size / bucketed frame padding** — message sizes currently reveal content type (64 KiB text vs chunks vs reactions)
 - [ ] Optional batching delay for sends — send-time reveals nothing
-- [ ] Encrypted+authenticated heartbeats or remove them (currently plaintext oracle, `protocol.rs:130`)
+- [x] **Encrypted+authenticated heartbeats** — heartbeats now travel through the session AEAD path (`Session::send_heartbeat`/`send_heartbeat_ack`, Double Ratchet or legacy SessionKeys); plaintext keepalives were a liveness oracle and forgeable. Only a DECRYPTABLE ack counts as liveness, so injected frames can't defeat the heartbeat timeout. Fixing this exposed and repaired two latent Double Ratchet bugs: the responder could never send first ("no send chain key" — encrypt now forces a DH ratchet when no send chain exists) and the initiator could never decrypt that reply (receive path now accepts a ratcheted frame with no prior receive chain; initiator's initial DR ratchet keypair is the X3DH ephemeral, matching the responder's assumption).
 - [ ] Consider cover traffic for typing indicators / read receipts timing metadata
 
 ### Supply chain & build integrity
