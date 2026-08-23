@@ -1440,11 +1440,32 @@ impl MessageStore {
         }
         let stored = seal_meta_value(key, reaction, AAD_REACTION)?;
         if remove {
-            // Match on the STORED form (encrypted envelope or plaintext).
-            self.conn.execute(
-                "DELETE FROM reactions WHERE message_id = ?1 AND reaction = ?2 AND peer_key_hex = ?3",
-                rusqlite::params![message_id, stored, peer_key_hex],
+            // Match by DECRYPTED text: envelopes carry fresh random nonces,
+            // so re-encrypting the probe would never equal the stored form.
+            let mut stmt = self.conn.prepare(
+                "SELECT rowid, reaction FROM reactions
+                 WHERE message_id = ?1 AND peer_key_hex = ?2",
             )?;
+            let rows = stmt.query_map(
+                rusqlite::params![message_id, peer_key_hex],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+            )?;
+            let matched: Vec<i64> = rows
+                .filter_map(|r| r.ok())
+                .filter(|(_, stored)| {
+                    open_meta_value(key, stored, AAD_REACTION)
+                        .map(|plain| plain == reaction)
+                        .unwrap_or(false)
+                })
+                .map(|(rowid, _)| rowid)
+                .collect();
+            drop(stmt);
+            for rowid in matched {
+                self.conn.execute(
+                    "DELETE FROM reactions WHERE rowid = ?1",
+                    rusqlite::params![rowid],
+                )?;
+            }
         } else {
             let now = chrono::Utc::now().timestamp();
             // Deduplicate: each envelope uses a fresh random nonce, so
