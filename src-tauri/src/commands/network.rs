@@ -1634,33 +1634,28 @@ pub fn spawn_receive_loop(
                                         tracing::warn!(peer = %peer_key_hex, "rejected oversized message edit");
                                         continue;
                                     }
-                                    // Encrypt new content first (no lock held yet)
-                                    let encrypted_result = {
-                                        let sk = state.storage_key.read().await;
-                                        sk.as_ref().and_then(|key| {
-                                            util::crypto_encrypt_storage(
-                                                edit.new_content.as_bytes(), key, util::AAD_MSG_STORE,
-                                            ).ok()
-                                        })
-                                    };
-                                    // Then update storage (separate lock scope), scoped to the
-                                    // sender's conversation and 'received' messages only (H4) —
-                                    // a peer can never rewrite our own sent messages or rows in
-                                    // unrelated conversations.
+                                    // Validate + update storage with a fresh per-message
+                                    // content key (crypto-shredding, H7), scoped to the
+                                    // sender's conversation and 'received' messages only
+                                    // (H4) — a peer can never rewrite our own sent messages
+                                    // or rows in unrelated conversations.
                                     let mut accepted = false;
-                                    if let Some((nonce, encrypted)) = encrypted_result {
-                                        let ms = state.message_store.lock().await;
-                                        if let Some(ref store) = *ms {
-                                            match store.edit_message(&edit.message_id, &peer_key_hex, "received", &encrypted, &nonce) {
-                                                Ok(true) => accepted = true,
-                                                Ok(false) => {
-                                                    tracing::warn!(
-                                                        peer = %peer_key_hex,
-                                                        "edit for message outside sender conversation — rejected"
-                                                    );
-                                                }
-                                                Err(e) => {
-                                                    tracing::warn!(error = %e, "failed to persist edit");
+                                    {
+                                        let sk = state.storage_key.read().await;
+                                        if let Some(key) = sk.as_ref() {
+                                            let ms = state.message_store.lock().await;
+                                            if let Some(ref store) = *ms {
+                                                match store.edit_message_secure(&edit.message_id, &peer_key_hex, "received", edit.new_content.as_bytes(), key) {
+                                                    Ok(true) => accepted = true,
+                                                    Ok(false) => {
+                                                        tracing::warn!(
+                                                            peer = %peer_key_hex,
+                                                            "edit for message outside sender conversation — rejected"
+                                                        );
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::warn!(error = %e, "failed to persist edit");
+                                                    }
                                                 }
                                             }
                                         }
