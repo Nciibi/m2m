@@ -488,9 +488,10 @@ async fn finish_and_chain(
                 t.state = TransferState::Completed;
             }
 
+            let sk = state.storage_key.read().await;
             let ts = state.transfer_store.lock().await;
             if let Some(ref store) = *ts {
-                let _ = store.update_state(transfer_id, "completed", Some(now as i64), None);
+                let _ = store.update_state(transfer_id, "completed", Some(now as i64), None, sk.as_ref());
             }
 
             let _ = app_handle.emit("m2m://transfer-completed", serde_json::json!({
@@ -503,9 +504,10 @@ async fn finish_and_chain(
                 t.state = TransferState::Failed;
             }
 
+            let sk = state.storage_key.read().await;
             let ts = state.transfer_store.lock().await;
             if let Some(ref store) = *ts {
-                let _ = store.update_state(transfer_id, "failed", Some(now as i64), Some(e));
+                let _ = store.update_state(transfer_id, "failed", Some(now as i64), Some(e), sk.as_ref());
             }
 
             let _ = app_handle.emit("m2m://transfer-error", serde_json::json!({
