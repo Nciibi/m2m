@@ -28,6 +28,8 @@ pub enum StorageError {
     PathError(String),
     #[error("key not found")]
     KeyNotFound,
+    #[error("decryption failed")]
+    DecryptionFailed,
     #[error("data directory creation failed: {0}")]
     DirCreationFailed(String),
 }
