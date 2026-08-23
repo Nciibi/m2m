@@ -386,6 +386,9 @@ pub struct AppState {
     // ─── Group Chat (Phase 3) ───
     /// Manages group state, members, and Sender Key chains.
     pub group_manager: RwLock<GroupManager>,
+    /// Single-monitor invariant for the capture-software detector.
+    /// true while the background scanner task is running.
+    pub capture_monitor_running: AtomicBool,
 }
 
 impl AppState {
@@ -437,6 +440,7 @@ impl AppState {
             accent_color: RwLock::new("#6366f1".to_string()),
             sync_manager: RwLock::new(crate::sync::SyncManager::new()),
             group_manager: RwLock::new(GroupManager::new()),
+            capture_monitor_running: AtomicBool::new(false),
         }
     }
 
