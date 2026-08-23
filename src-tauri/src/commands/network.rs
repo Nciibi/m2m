@@ -48,6 +48,10 @@ pub async fn create_invite(
     validity_minutes: u64,
     one_time: bool,
 ) -> Result<String, String> {
+    // Air-gap mode: invite creation performs STUN/UPnP/relay registration —
+    // all internet-facing. LAN invites are still possible via manual
+    // address exchange, so this is a hard block rather than silent degrade.
+    state.ensure_not_air_gapped().await?;
     let identity = state.identity.read().await;
     let kp = identity
         .as_ref()
