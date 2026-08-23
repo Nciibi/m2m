@@ -7,11 +7,11 @@ describe("estimateEntropy", () => {
   });
 
   it("scales with length for a uniform lowercase passphrase", () => {
-    const short = estimateEntropy("abcdefgh");
-    const long = estimateEntropy("abcdefghijklmnop");
+    const short = estimateEntropy("kqhzlxmp");
+    const long = estimateEntropy("kqhzlxmpbwcvmfje");
     expect(long).toBeGreaterThan(short);
     // 16 chars * log2(26) ≈ 75 bits, no penalties, capped at 128
-    expect(estimateEntropy("abcdefghijklmnop")).toBeCloseTo(75.2, 0);
+    expect(estimateEntropy("kqhzlxmpbwcvmfje")).toBeCloseTo(75.2, 0);
   });
 
   it("rewards larger character pools", () => {
