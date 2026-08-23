@@ -579,31 +579,6 @@ impl DoubleRatchet {
         (MessageKey(msg_key), next_key)
     }
 
-    /// Perform a DH ratchet: advance root key using a new DH shared secret.
-    ///
-    /// Clears the skipped message key cache since the receiving chain is reset.
-    #[allow(dead_code)]
-    fn dh_ratchet_step(&mut self, remote_pub: &[u8; 32]) -> Result<(), CryptoError> {
-        let shared = self.our_ratchet_keypair.diffie_hellman(remote_pub)?;
-        let out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
-        let mut new_root = [0u8; 32];
-        let mut new_chain = [0u8; 32];
-        new_root.copy_from_slice(&out[..32]);
-        new_chain.copy_from_slice(&out[32..]);
-        self.root_key.zeroize();
-        self.root_key = new_root;
-        // New chain key goes to the receiving chain (we received the DH key)
-        if let Some(old) = self.recv_chain_key.as_mut() {
-            old.zeroize();
-        }
-        self.recv_chain_key = Some(new_chain);
-        self.their_ratchet_pub = *remote_pub;
-        self.recv_message_number = 0;
-        // Clear skipped keys — they belong to the old receiving chain
-        self.skipped_keys.clear();
-        Ok(())
-    }
-
     /// Tentatively derived receive state, ready to commit.
     ///
     /// All fields are produced by [`DoubleRatchet::receive_tentative`] AFTER
