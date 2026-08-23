@@ -1413,6 +1413,13 @@ impl MessageStore {
     /// `conversation_id` scopes the operation: the message must exist in that
     /// conversation or the call is a no-op (returns Ok(false)). This prevents
     /// a peer from reacting to messages in unrelated conversations.
+    /// Insert or remove a reaction.
+    ///
+    /// The reaction TEXT is encrypted at rest when `key` is provided
+    /// (reaction metadata reveals who felt what about which message);
+    /// `key = None` stores it as plaintext (legacy/no-vault profiles).
+    /// Lookup keys (message_id, peer_key_hex) stay plaintext so queries
+    /// remain indexable.
     pub fn upsert_reaction(
         &self,
         message_id: &str,
@@ -1420,6 +1427,7 @@ impl MessageStore {
         peer_key_hex: &str,
         remove: bool,
         conversation_id: &str,
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<bool, StorageError> {
         // Ownership gate: message must belong to the given conversation.
         let owns = self.conn.query_row(
@@ -1430,17 +1438,19 @@ impl MessageStore {
         if !owns {
             return Ok(false);
         }
+        let stored = seal_meta_value(key, reaction, AAD_REACTION)?;
         if remove {
+            // Match on the STORED form (encrypted envelope or plaintext).
             self.conn.execute(
                 "DELETE FROM reactions WHERE message_id = ?1 AND reaction = ?2 AND peer_key_hex = ?3",
-                rusqlite::params![message_id, reaction, peer_key_hex],
+                rusqlite::params![message_id, stored, peer_key_hex],
             )?;
         } else {
             let now = chrono::Utc::now().timestamp();
             self.conn.execute(
                 "INSERT OR IGNORE INTO reactions (message_id, reaction, peer_key_hex, created_at)
                  VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![message_id, reaction, peer_key_hex, now],
+                rusqlite::params![message_id, stored, peer_key_hex, now],
             )?;
         }
         Ok(true)
@@ -1448,9 +1458,14 @@ impl MessageStore {
 
     /// Get all reactions for a list of message IDs.
     /// Returns a map of message_id → Vec<(reaction, peer_key_hex, created_at)>.
+    ///
+    /// Encrypted reaction texts are decrypted when `key` is provided;
+    /// legacy plaintext rows pass through either way. Rows that fail
+    /// decryption (wrong key / tampering) are skipped, not fatal.
     pub fn get_reactions(
         &self,
         message_ids: &[String],
+        key: Option<&crate::secure_key::StorageKey>,
     ) -> Result<ReactionsMap, StorageError> {
         if message_ids.is_empty() {
             return Ok(ReactionsMap::new());
@@ -1478,8 +1493,16 @@ impl MessageStore {
 
         let mut result: ReactionsMap = ReactionsMap::new();
         for row in rows {
-            let (msg_id, reaction, peer, ts) = row?;
-            result.entry(msg_id).or_default().push((reaction, peer, ts));
+            let (msg_id, reaction_stored, peer, ts) = row?;
+            match open_meta_value(key, &reaction_stored, AAD_REACTION) {
+                Ok(reaction) => result.entry(msg_id).or_default().push((reaction, peer, ts)),
+                Err(_) => {
+                    tracing::warn!(
+                        message_id = %msg_id,
+                        "reaction row failed to decrypt — skipping (wrong key or tampered)"
+                    );
+                }
+            }
         }
         Ok(result)
     }
