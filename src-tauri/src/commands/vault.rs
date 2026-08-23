@@ -951,6 +951,7 @@ pub async fn import_identity(
             if let Ok(pk) = util::decode_peer_key(member_pk_hex) {
                 let _ = key_store.insert_family_member_raw(
                     &pk, nickname, added_at, expires_at, last_address,
+                    Some(&storage_key),
                 );
             }
         }
