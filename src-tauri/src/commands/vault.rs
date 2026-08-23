@@ -163,104 +163,144 @@ pub async fn unlock_vault(
         .as_ref()
         .ok_or("key store not initialized — call init_identity first")?;
 
+    key_store.migrate_legacy_identity_to_account().ok();
+
     let vault_was_initialized = key_store.is_vault_initialized().unwrap_or(false);
     let has_identity = key_store.has_identity().unwrap_or(false);
 
-    // Read all persisted material from key_store before dropping the lock.
-    let read_data = if has_identity {
-        let (pub_bytes, enc_sk, nonce) = key_store
-            .load_identity()
-            .map_err(|e| format!("failed to load identity: {e}"))?;
-        let has_x25519 = key_store.has_x25519_key().unwrap_or(false);
-        let x25519_preload = if has_x25519 {
-            match key_store.load_x25519_key() {
-                Ok((xp, xe, xn)) => Some((xp, xe, xn)),
-                Err(e) => return Err(format!("failed to load X25519 key: {e}")),
-            }
-        } else {
-            None
-        };
-        Some((pub_bytes, enc_sk, nonce, vault_was_initialized, x25519_preload))
+    let accounts: Vec<storage::AccountRow> = if vault_was_initialized {
+        key_store
+            .list_accounts()
+            .map_err(|e| format!("failed to list accounts: {e}"))?
+    } else {
+        Vec::new()
+    };
+
+    // Pre-vault profile needing migration — read the legacy row directly.
+    let legacy_row = if !vault_was_initialized && has_identity {
+        Some(
+            key_store
+                .load_identity()
+                .map_err(|e| format!("failed to load identity: {e}"))?,
+        )
+    } else {
+        None
+    };
+
+    // X25519 rows are vault-global (v1) — preload if present.
+    let x25519_preload = if key_store.has_x25519_key().unwrap_or(false) {
+        match key_store.load_x25519_key() {
+            Ok((xp, xe, xn)) => Some((xp, xe, xn)),
+            Err(e) => return Err(format!("failed to load X25519 key: {e}")),
+        }
     } else {
         None
     };
     drop(ks_guard); // key_store is dead — .await is safe now
 
-    // ─── Phase 2: Synchronous crypto (no .await, no key_store) ───
-    let (keypair, x25519_kp, needs_store_x25519, legacy_store_data): (_, _, _, Option<(Vec<u8>, Vec<u8>, [u8;64])>) = if let Some((pub_bytes, enc_sk, nonce, was_init, x25519_load)) = read_data {
+    // ─── Phase 2: Async crypto + per-branch logic (no key_store held) ───
+    let (keypair, x25519_kp, needs_store_x25519, legacy_store_data): (
+        _,
+        _,
+        _,
+        Option<(Vec<u8>, Vec<u8>, [u8; 64], Vec<u8>)>,
+    ) = if vault_was_initialized && !accounts.is_empty() {
+        // Case 3: Multi-account unlock — passphrase selects the account.
+        let mut matched: Option<(IdentityKeypair, crate::secure_key::StorageKey)> = None;
+        for acct in &accounts {
+            let storage_key =
+                derive_key_blocking(passphrase.clone(), acct.public_key.clone()).await?;
+            let sk_bytes = match util::crypto_decrypt_storage(
+                &acct.encrypted_private_key,
+                &acct.private_key_nonce,
+                &storage_key,
+                util::AAD_KEY_STORE,
+            ) {
+                Ok(sk) => sk,
+                Err(_) => continue,
+            };
+            if sk_bytes.len() != 64 || acct.public_key.len() != 32 {
+                continue;
+            }
+            let mut pub_arr = [0u8; 32];
+            pub_arr.copy_from_slice(&acct.public_key);
+            let mut sk_arr = [0u8; 64];
+            sk_arr.copy_from_slice(&sk_bytes);
+            match IdentityKeypair::from_bytes(&pub_arr, &sk_arr) {
+                Ok(kp) => {
+                    matched = Some((kp, storage_key));
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+        let (kp, storage_key) = matched.ok_or("No account matches this passphrase.")?;
+
+        let (xkp, x_needs_store) = if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_preload
+        {
+            match util::crypto_decrypt_storage(x_enc, x_nonce, &storage_key, util::AAD_KEY_STORE) {
+                Ok(x_sk_bytes) => {
+                    let mut x_sk_arr = [0u8; 32];
+                    x_sk_arr.copy_from_slice(&x_sk_bytes);
+                    let xkp = crate::crypto::X25519IdentityKeypair::from_bytes(x_pub, &x_sk_arr)
+                        .map_err(|e| format!("failed to reconstruct X25519: {e}"))?;
+                    (xkp, false)
+                }
+                Err(_) => (crate::crypto::X25519IdentityKeypair::generate(), true),
+            }
+        } else {
+            (crate::crypto::X25519IdentityKeypair::generate(), true)
+        };
+
+        // Store storage_key in state (one .await write)
+        {
+            let mut sk_lock = state.storage_key.write().await;
+            *sk_lock = Some(storage_key);
+        }
+
+        (kp, xkp, x_needs_store, None)
+    } else if let Some((pub_bytes, enc_sk, nonce)) = legacy_row {
+        // Case 2: Legacy migration
+        tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
         let mut pub_arr = [0u8; 32];
         pub_arr.copy_from_slice(&pub_bytes);
+        let legacy_key = util::derive_storage_key(&pub_bytes);
+        // Historic writers used two different AADs: very old profiles
+        // were sealed with an empty AAD, while import_identity seals
+        // with AAD_KEY_STORE. Try both so every legacy profile and all
+        // imported identities can migrate (H1).
+        let sk_bytes = match util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"") {
+            Ok(sk) => sk,
+            Err(_) => util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, util::AAD_KEY_STORE)
+                .map_err(|_| {
+                    "failed to decrypt legacy identity — data may be corrupted".to_string()
+                })?,
+        };
+        let mut sk_arr = [0u8; 64];
+        sk_arr.copy_from_slice(&sk_bytes);
+        let mut sk_bytes = sk_bytes;
+        sk_bytes.zeroize();
 
-        if was_init {
-            // Case 3: Normal unlock
-        let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
-            let sk_bytes = util::crypto_decrypt_storage(&enc_sk, &nonce, &storage_key, util::AAD_KEY_STORE)
-                .map_err(|_| "incorrect passphrase or corrupted data".to_string())?;
-            let mut sk_arr = [0u8; 64];
-            sk_arr.copy_from_slice(&sk_bytes);
-            let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
-                .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
+        // Derive new key and re-encrypt
+        let new_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
+        let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_arr, &new_key, util::AAD_KEY_STORE)
+            .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
+        let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
+            .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
 
-            let xkp = if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_load {
-                let x_sk_bytes = util::crypto_decrypt_storage(x_enc, x_nonce, &storage_key, util::AAD_KEY_STORE)
-                    .map_err(|_| "failed to decrypt X25519 key".to_string())?;
-                let mut x_sk_arr = [0u8; 32];
-                x_sk_arr.copy_from_slice(&x_sk_bytes);
-                crate::crypto::X25519IdentityKeypair::from_bytes(x_pub, &x_sk_arr)
-                    .map_err(|e| format!("failed to reconstruct X25519: {e}"))?
-            } else {
-                let xkp = crate::crypto::X25519IdentityKeypair::generate();
-                xkp
-            };
+        let xkp = crate::crypto::X25519IdentityKeypair::generate();
 
-            // Store storage_key in state (one .await write)
-            {
-                let mut sk_lock = state.storage_key.write().await;
-                *sk_lock = Some(storage_key);
-            }
+        // Pack the data needed for Phase 4 DB writes
+        let legacy_store_data = Some((new_nonce, new_enc_sk, kp.secret_key_bytes(), pub_bytes));
 
-            (kp, xkp, x25519_load.is_none(), None)
-        } else {
-            // Case 2: Legacy migration
-            tracing::warn!("migrating legacy identity to vault — setting passphrase for first time");
-            let legacy_key = util::derive_storage_key(&pub_bytes);
-            // Historic writers used two different AADs: very old profiles
-            // were sealed with an empty AAD, while import_identity seals
-            // with AAD_KEY_STORE. Try both so every legacy profile and all
-            // imported identities can migrate (H1).
-            let sk_bytes = match util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, b"") {
-                Ok(sk) => sk,
-                Err(_) => util::crypto_decrypt_storage(&enc_sk, &nonce, &legacy_key, util::AAD_KEY_STORE)
-                    .map_err(|_| {
-                        "failed to decrypt legacy identity — data may be corrupted".to_string()
-                    })?,
-            };
-            let mut sk_arr = [0u8; 64];
-            sk_arr.copy_from_slice(&sk_bytes);
-            let mut sk_bytes = sk_bytes;
-            sk_bytes.zeroize();
-
-            // Derive new key and re-encrypt
-            let new_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
-            let (new_nonce, new_enc_sk) = util::crypto_encrypt_storage(&sk_bytes, &new_key, util::AAD_KEY_STORE)
-                .map_err(|e| format!("failed to re-encrypt identity: {e}"))?;
-            let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
-                .map_err(|e| format!("failed to reconstruct identity: {e}"))?;
-
-            let xkp = crate::crypto::X25519IdentityKeypair::generate();
-
-            // Pack the data needed for Phase 4 DB writes
-            let legacy_store_data = Some((new_nonce, new_enc_sk, kp.secret_key_bytes()));
-
-            // Store storage_key in state
-            {
-                let mut sk_lock = state.storage_key.write().await;
-                *sk_lock = Some(new_key);
-            }
-
-            (kp, xkp, true, legacy_store_data)
+        // Store storage_key in state
+        {
+            let mut sk_lock = state.storage_key.write().await;
+            *sk_lock = Some(new_key);
         }
-    } else {
+
+        (kp, xkp, true, legacy_store_data)
+    } else if !has_identity {
         // Case 1: First run
         let kp = IdentityKeypair::generate()
             .map_err(|e| format!("keypair generation failed: {e}"))?;
@@ -289,6 +329,8 @@ pub async fn unlock_vault(
             .map_err(|e| format!("failed to mark vault initialized: {e}"))?;
         key_store2.store_x25519_key(&x_pub, &x_enc, &x_nonce)
             .map_err(|e| format!("failed to store X25519 key: {e}"))?;
+        key_store2.insert_account(&pub_bytes, &encrypted_sk, &nonce, Some("Main"), now)
+            .map_err(|e| format!("failed to store account: {e}"))?;
         drop(ks_guard2);
 
         // Store storage_key in state
@@ -298,6 +340,8 @@ pub async fn unlock_vault(
         }
 
         (kp, xkp, false, None)
+    } else {
+        return Err("vault data missing — cannot unlock".to_string());
     };
 
     // ─── Phase 3: Async state writes ───
