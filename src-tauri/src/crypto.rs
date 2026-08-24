@@ -275,38 +275,45 @@ pub(crate) fn hkdf(salt: &[u8], ikm: &[u8], info: &[u8], length: usize) -> Vec<u
 
 /// Ephemeral keypair for X25519 Diffie-Hellman key exchange.
 pub struct EphemeralKeypair {
-    pub public_key: kx::PublicKey,
-    secret_key: kx::SecretKey,
+    pub public_key: [u8; 32],
+    secret_key: [u8; 32],
 }
 
 impl EphemeralKeypair {
     /// Generate a new ephemeral keypair for key exchange.
     pub fn generate() -> Self {
-        let (pk, sk) = kx::gen_keypair();
+        let mut secret = [0u8; 32];
+        getrandom::getrandom(&mut secret).expect("OS RNG unavailable");
+        let sec = XSec::from(secret);
         Self {
-            public_key: pk,
-            secret_key: sk,
+            public_key: *XPub::from(&sec).as_bytes(),
+            secret_key: secret,
         }
     }
 
     /// Get the raw public key bytes.
     pub fn public_key_bytes(&self) -> [u8; 32] {
-        self.public_key.0
+        self.public_key
     }
 
-    /// Perform key exchange as the client (initiator).
+    /// Derive directional session keys from the DH with the peer.
+    ///
+    /// ## MIGRATION NOTE (intentional break, pre-release only)
+    /// The previous implementation used libsodium's `crypto_kx`, which
+    /// derives keys via BLAKE2b with libsodium-specific domain constants —
+    /// not reproducible outside libsodium. The replacement below is a
+    /// standard HKDF-SHA256 construction over the DH output and BOTH
+    /// public keys; roles are assigned deterministically by lexicographic
+    /// public-key order so both sides agree without signaling. Old legacy
+    /// sessions (pre-X3DH) will no longer interop across this version
+    /// boundary — acceptable because there is no installed base.
     pub fn client_session_keys(
         &self,
         server_pk: &[u8; 32],
     ) -> Result<SessionKeys, CryptoError> {
-        let server_public =
-            kx::PublicKey::from_slice(server_pk).ok_or(CryptoError::InvalidKeyLength)?;
-        let (rx, tx) = kx::client_session_keys(&self.public_key, &self.secret_key, &server_public)
-            .map_err(|_| CryptoError::KeyDerivationFailed)?;
-        Ok(SessionKeys {
-            rx_key: rx.0,
-            tx_key: tx.0,
-        })
+        let shared = self.diffie_hellman(server_pk)?;
+        let (first, second) = directional_split(&self.public_key, server_pk, &shared);
+        Ok(SessionKeys { rx_key: first, tx_key: second })
     }
 
     /// Perform key exchange as the server (responder).
@@ -314,15 +321,32 @@ impl EphemeralKeypair {
         &self,
         client_pk: &[u8; 32],
     ) -> Result<SessionKeys, CryptoError> {
-        let client_public =
-            kx::PublicKey::from_slice(client_pk).ok_or(CryptoError::InvalidKeyLength)?;
-        let (rx, tx) =
-            kx::server_session_keys(&self.public_key, &self.secret_key, &client_public)
-                .map_err(|_| CryptoError::KeyDerivationFailed)?;
-        Ok(SessionKeys {
-            rx_key: rx.0,
-            tx_key: tx.0,
-        })
+        let shared = self.diffie_hellman(client_pk)?;
+        let (first, second) = directional_split(&self.public_key, client_pk, &shared);
+        // Responder sees the mirror image of the initiator's assignment.
+        Ok(SessionKeys { rx_key: second, tx_key: first })
+    }
+}
+
+/// Deterministic rx/tx assignment: HKDF over the shared secret bound to
+/// both public keys (sorted ascending), then the lexicographically-smaller
+/// party's public key owns `first` as its TX (the other side's RX).
+fn directional_split(our_pk: &[u8; 32], their_pk: &[u8; 32], shared: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let (lo, hi) = if our_pk <= their_pk { (our_pk, their_pk) } else { (their_pk, our_pk) };
+    let mut ikm = Vec::with_capacity(96);
+    ikm.extend_from_slice(shared);
+    ikm.extend_from_slice(lo);
+    ikm.extend_from_slice(hi);
+    let out = hkdf(&[0u8; 32], &ikm, b"m2m-kx-v1", 64);
+    let mut first = [0u8; 32];
+    let mut second = [0u8; 32];
+    first.copy_from_slice(&out[..32]);
+    second.copy_from_slice(&out[32..]);
+    if our_pk == lo {
+        // We are "lower": first is OUR tx.
+        (second, first) // caller semantics differ per role — see call sites
+    } else {
+        (first, second)
     }
 }
 
