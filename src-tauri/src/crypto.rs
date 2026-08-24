@@ -234,8 +234,8 @@ impl Drop for X25519IdentityKeypair {
 
 /// HKDF-Extract: PRK = HMAC-SHA256(salt, IKM)
 pub(crate) fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
-    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
-    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(salt)
+    use hmac::Mac;
+    let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(salt)
         .expect("HMAC accepts any key length");
     mac.update(ikm);
     let result = mac.finalize();
