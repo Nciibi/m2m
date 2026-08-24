@@ -492,10 +492,12 @@ pub async fn create_vault_account(
 
     {
         let mut id_lock = state.identity.write().await;
+        kp.lock_memory();
         *id_lock = Some(kp);
     }
     {
         let mut x_lock = state.x25519_identity.write().await;
+        xkp.lock_memory();
         *x_lock = Some(xkp);
     }
     {
