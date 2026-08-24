@@ -454,45 +454,25 @@ fn x3dh_respond_raw(
     their_ephemeral: &[u8; 32],
     their_identity: &[u8; 32],
 ) -> Result<X3DHSessionKeys, CryptoError> {
-    // For DH operations we need to convert kx keys to X25519 keys.
-    // SPK_B's secret key is an EphemeralKeypair (kx::SecretKey).
-    // We use diffie_hellman style but with the raw secret.
-    use sodiumoxide::crypto::scalarmult::curve25519 as sm;
-
-    // Convert SPK_B secret to scalar
-    let spk_scalar = sm::Scalar::from_slice(&our_signed_prekey.secret_key.0)
-        .ok_or(CryptoError::InvalidKeyLength)?;
-
-    // DH1 = DH(SPK_B, IK_A) — use SPK_B's secret, IK_A's public
-    let ik_a = sm::GroupElement::from_slice(their_identity)
-        .ok_or(CryptoError::InvalidKeyLength)?;
-    let dh1_g = sm::scalarmult(&spk_scalar, &ik_a)
-        .map_err(|_| CryptoError::KeyDerivationFailed)?;
+    // DH1 = DH(SPK_B, IK_A) — SPK_B's secret, IK_A's public
+    let mut dh1 = x25519_dh(&our_signed_prekey.secret_key, their_identity)?;
 
     // DH2 = DH(IK_B, EK_A)
     let mut dh2 = our_identity.diffie_hellman(their_ephemeral)?;
 
-    // For DH3 = DH(SPK_B, EK_A), use SPK_B's secret again
-    let ek_a = sm::GroupElement::from_slice(their_ephemeral)
-        .ok_or(CryptoError::InvalidKeyLength)?;
-    let dh3_g = sm::scalarmult(&spk_scalar, &ek_a)
-        .map_err(|_| CryptoError::KeyDerivationFailed)?;
+    // DH3 = DH(SPK_B, EK_A)
+    let mut dh3 = x25519_dh(&our_signed_prekey.secret_key, their_ephemeral)?;
 
     let mut sk = Vec::with_capacity(96);
-    let mut dh1 = dh1_g.0;
-    let mut dh3 = dh3_g.0;
     sk.extend_from_slice(&dh1);
     sk.extend_from_slice(&dh2);
     sk.extend_from_slice(&dh3);
 
     // DH4 = DH(OPK_B, EK_A) if available
     if let Some(opk) = our_one_time_prekey {
-        let opk_scalar = sm::Scalar::from_slice(&opk.secret_key.0)
-            .ok_or(CryptoError::InvalidKeyLength)?;
-        let mut dh4 = sm::scalarmult(&opk_scalar, &ek_a)
-            .map_err(|_| CryptoError::KeyDerivationFailed)?;
-        sk.extend_from_slice(&dh4.0);
-        dh4.0.zeroize();
+        let mut dh4 = x25519_dh(&opk.secret_key, their_ephemeral)?;
+        sk.extend_from_slice(&dh4);
+        dh4.zeroize();
     }
 
     let mut output = hkdf(&[0u8; 32], &sk, b"M2M-X3DH", 64);
