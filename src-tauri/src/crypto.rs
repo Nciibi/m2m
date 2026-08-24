@@ -142,8 +142,8 @@ impl IdentityKeypair {
 
 /// Generate a fingerprint from a raw public key.
 pub fn fingerprint_from_public_key(public_key: &[u8; 32]) -> String {
-    let hash = sha256::hash(public_key);
-    let hex_str = hex::encode_upper(&hash.0[..16]); // Use first 16 bytes (128 bits)
+    let hash = sha2::Sha256::digest(public_key);
+    let hex_str = hex::encode_upper(&hash[..16]); // Use first 16 bytes (128 bits)
     hex_str
         .as_bytes()
         .chunks(4)
@@ -158,16 +158,14 @@ pub fn verify_signature(
     message: &[u8],
     signature: &[u8],
 ) -> Result<(), CryptoError> {
-    let pk = sign::PublicKey::from_slice(public_key).ok_or(CryptoError::InvalidKeyLength)?;
+    use ed25519_dalek::Signature;
+    let vk = VerifyingKey::from_bytes(public_key).map_err(|_| CryptoError::InvalidKeyLength)?;
     if signature.len() != 64 {
         return Err(CryptoError::SignatureInvalid);
     }
-    let sig = sign::Signature::from_bytes(signature).map_err(|_| CryptoError::SignatureInvalid)?;
-    if sign::verify_detached(&sig, message, &pk) {
-        Ok(())
-    } else {
-        Err(CryptoError::SignatureInvalid)
-    }
+    let sig = Signature::from_slice(signature).map_err(|_| CryptoError::SignatureInvalid)?;
+    vk.verify(message, &sig)
+        .map_err(|_| CryptoError::SignatureInvalid)
 }
 
 // ─── X25519 Identity Key (for X3DH) ──────────────────────────────────────────
