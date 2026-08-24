@@ -1,6 +1,6 @@
 [package]
 name = "m2m"
-version = "3.6.21"
+version = "4.0.0"
 description = "Peer-to-peer encrypted messenger for journalists and high-risk users"
 authors = ["M2M Contributors"]
 edition = "2021"
