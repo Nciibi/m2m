@@ -1273,7 +1273,7 @@ async fn handle_file_transfer_packet(
                                             }
                                         } else {
                                             let hash_valid = if let Some(ref mut file) = transfer.temp_file {
-                                                use std::io::{Read, Seek};
+                                            use std::io::{Read, Seek};
                                                 // Stream-hash the temp file in fixed-size chunks —
                                                 // never buffer the whole file in RAM (peer could
                                                 // have declared up to MAX_FILE_SIZE).
@@ -1297,10 +1297,10 @@ async fn handle_file_transfer_packet(
                                                         }
                                                     }
                                                 }
+                                                let digest: [u8; 32] = hasher.finalize().into();
                                                 read_ok
                                                     && hashed_len == transfer.total_size
-                                                    && let digest: [u8; 32] = hasher.finalize().into();
-                                                            digest.to_vec() == transfer.file_hash
+                                                    && digest.to_vec() == transfer.file_hash
                                             } else {
                                                 false
                                             };
