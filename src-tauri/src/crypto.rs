@@ -234,8 +234,8 @@ impl Drop for X25519IdentityKeypair {
 
 /// HKDF-Extract: PRK = HMAC-SHA256(salt, IKM)
 pub(crate) fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
-    use hmac::Mac;
-    let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(salt)
+    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(salt)
         .expect("HMAC accepts any key length");
     mac.update(ikm);
     let result = mac.finalize();
@@ -359,7 +359,7 @@ fn kx_derive(our_pk: &[u8; 32], their_pk: &[u8; 32], shared: &[u8; 32]) -> ([u8;
 
 impl Drop for EphemeralKeypair {
     fn drop(&mut self) {
-        self.secret_key.0.zeroize();
+        self.secret_key.zeroize();
     }
 }
 
