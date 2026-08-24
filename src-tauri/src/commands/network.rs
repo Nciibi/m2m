@@ -1206,7 +1206,10 @@ async fn handle_file_transfer_packet(
                                             tracing::trace!(chunk = chunk.chunk_index, "duplicate file chunk — ignoring");
                                         } else {
                                         // Verify chunk hash before writing to disk
-                                        let hash = sodiumoxide::crypto::hash::sha256::hash(&chunk.data);
+                                        let hash: [u8; 32] = {
+                                                        use sha2::Digest;
+                                                        sha2::Sha256::digest(&chunk.data).into()
+                                                    };
                                         let hash_valid = hash.0.to_vec() == chunk.chunk_hash;
 
                                         if !hash_valid {
