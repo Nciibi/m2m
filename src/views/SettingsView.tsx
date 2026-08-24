@@ -368,6 +368,20 @@ export default function SettingsView() {
             </div>
 
             <div className="settings-row">
+              <span className="settings-label"><LockIcon size={16} /> Panic Hotkey (Ctrl+Alt+Shift+W)</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={securityConfig?.panic_hotkey_enabled ?? false}
+                  onChange={handlePanicHotkeyArmToggle}
+                  aria-label="Arm emergency panic wipe hotkey"
+                />
+                <span className="toggle-slider" />
+              </label>
+              <span className="settings-hint">{securityConfig?.panic_hotkey_enabled ? "ARMED — hotkey deletes everything instantly, no confirmation" : "Emergency wipe: delete all data and exit instantly"}</span>
+            </div>
+
+            <div className="settings-row">
               <span className="settings-label">Clipboard Auto-Clear</span>
               <select className="select--compact"
                 value={securityConfig?.clipboard_clear_secs ?? 0}
