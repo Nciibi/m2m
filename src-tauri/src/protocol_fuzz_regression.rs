@@ -15,6 +15,7 @@ use crate::protocol;
 
 fn parse_frames(bytes: &[u8]) -> Result<network::RawFrame, network::NetworkError> {
     let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
         .build()
         .expect("runtime");
     rt.block_on(async { network::read_frame(&mut &bytes[..]).await })
