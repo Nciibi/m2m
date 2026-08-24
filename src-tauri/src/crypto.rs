@@ -1034,22 +1034,21 @@ fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
 }
 
 // ─── Migration golden-vector helpers (test-only) ───────────────────────────
+// Post-migration these route through the RustCrypto primitives; the
+// GOLDEN_* constants above were captured from libsodium and remain the
+// compatibility contract.
 #[cfg(test)]
 pub(crate) mod golden {
     pub fn x25519_raw(scalar: &[u8; 32], point: &[u8; 32]) -> [u8; 32] {
-        let n = sodiumoxide::crypto::scalarmult::curve25519::Scalar::from_slice(scalar).unwrap();
-        let p = sodiumoxide::crypto::scalarmult::curve25519::GroupElement::from_slice(point).unwrap();
-        sodiumoxide::crypto::scalarmult::curve25519::scalarmult(&n, &p).unwrap().0
+        super::x25519_dh(scalar, point).unwrap()
     }
 
     pub fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], pt: &[u8], aad: &[u8]) -> Vec<u8> {
-        use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as a;
-        a::seal(pt, Some(aad), &a::Nonce::from_slice(nonce).unwrap(), &a::Key::from_slice(key).unwrap())
+        super::aead_seal(key, nonce, pt, aad)
     }
 
     pub fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ct: &[u8], aad: &[u8]) -> Result<Vec<u8>, ()> {
-        use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as a;
-        a::open(ct, Some(aad), &a::Nonce::from_slice(nonce).unwrap(), &a::Key::from_slice(key).unwrap())
+        super::aead_open(key, nonce, ct, aad).map_err(|_| ())
     }
 }
 
