@@ -774,7 +774,7 @@ fn compute_file_hashes(
     let mut file = std::fs::File::open(file_path)
         .map_err(|e| format!("failed to open file: {e}"))?;
 
-    let mut full_hasher = sha256::State::new();
+    let mut full_hasher = sha2::Sha256::new();
     let mut chunk_hashes = Vec::with_capacity(total_chunks as usize);
     let mut buf = vec![0u8; chunk_size];
 
@@ -786,10 +786,10 @@ fn compute_file_hashes(
         let chunk = &buf[..n];
         full_hasher.update(chunk);
 
-        let chunk_hash = sha256::hash(chunk);
-        chunk_hashes.push(chunk_hash.0);
+        let chunk_hash: [u8; 32] = sha2::Sha256::digest(chunk).into();
+        chunk_hashes.push(chunk_hash);
     }
 
-    let full_hash = full_hasher.finalize();
-    Ok((full_hash.0, chunk_hashes))
+    let full_hash: [u8; 32] = full_hasher.finalize().into();
+    Ok((full_hash, chunk_hashes))
 }
