@@ -22,14 +22,14 @@
     <a href="https://react.dev/">
       <img src="https://img.shields.io/badge/react-19-61DAFB?style=flat-square&logo=react" alt="React">
     </a>
-    <a href="https://doc.libsodium.org/">
-      <img src="https://img.shields.io/badge/crypto-libsodium-CC0000?style=flat-square" alt="libsodium">
+    <a href="docs/SECURITY-HARDENING.md">
+      <img src="https://img.shields.io/badge/crypto-RustCrypto-000000?style=flat-square&logo=rust" alt="RustCrypto">
     </a>
     <a href="docs/threat-model.md">
       <img src="https://img.shields.io/badge/threat%20model-v1.1-success?style=flat-square" alt="Threat Model">
     </a>
-    <a href="ROADMAP.md">
-      <img src="https://img.shields.io/badge/score-7.9%2F10-yellow?style=flat-square" alt="Score">
+    <a href="docs/SECURITY-HARDENING.md">
+      <img src="https://img.shields.io/badge/security-hardened-success?style=flat-square" alt="Security Hardened">
     </a>
   </p>
 
@@ -53,7 +53,7 @@
 
 M2M (Machine-to-Machine / Mouth-to-Mouth) is a **privacy-first, decentralized desktop messaging application** designed for journalists, whistleblowers, security researchers, and anyone who values their digital privacy.
 
-Unlike conventional messaging platforms that route everything through central servers, M2M connects peers **directly** over TCP — no servers to store, forward, or inspect your messages. Every byte crossing the wire is authenticated and encrypted using **state-of-the-art libsodium cryptography**.
+Unlike conventional messaging platforms that route everything through central servers, M2M connects peers **directly** over TCP — no servers to store, forward, or inspect your messages. Every byte crossing the wire is authenticated and encrypted using **pure-Rust RustCrypto primitives** (Ed25519, X25519, XChaCha20-Poly1305).
 
 ### Why M2M?
 
@@ -187,7 +187,7 @@ The shadow listener binds with `SO_REUSEADDR` on the same port as the main liste
 
 ## 🔒 Security Model
 
-M2M treats the **network boundary as entirely hostile**. All cryptographic operations use **libsodium** (via `sodiumoxide`), a proven, audited library. No custom cryptography is implemented.
+M2M treats the **network boundary as entirely hostile**. All cryptographic operations use the **pure-Rust RustCrypto stack** (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) - actively maintained, fuzzed by the community, and free of C FFI boundaries. No custom cryptography is implemented, and wire formats are pinned by golden-vector tests.
 
 ### Identity & Authentication
 
@@ -276,7 +276,7 @@ graph TB
     end
 
     subgraph Backend ["Backend (Rust)"]
-        CR["crypto.rs<br/><i>libsodium primitives</i>"]
+        CR["crypto.rs<br/><i>RustCrypto primitives</i>"]
         PR["protocol.rs<br/><i>MessagePack framing</i>"]
         NW["network.rs<br/><i>TCP + rate limiter</i>"]
         SE["session.rs<br/><i>handshake + encryption</i>"]
