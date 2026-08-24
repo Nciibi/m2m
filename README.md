@@ -580,7 +580,7 @@ SOFTWARE.
 
 ## 👏 Acknowledgements
 
-- **[libsodium](https://doc.libsodium.org/)** — The cryptographic library that makes M2M's security possible.
+- **RustCrypto** ([ed25519-dalek](https://docs.rs/ed25519-dalek), [x25519-dalek](https://docs.rs/x25519-dalek), [chacha20poly1305](https://docs.rs/chacha20poly1305)) - The pure-Rust cryptographic stack that makes M2M's security possible.
 - **[Tauri](https://tauri.app/)** — The framework that makes desktop Rust apps practical and beautiful.
 - **[Signal Protocol](https://signal.org/docs/)** — Inspiration for our ratcheting design and handshake flow.
 - **[Tokio](https://tokio.rs/)** — The async runtime powering our networking stack (especially `JoinSet` for Happy Eyeballs).
