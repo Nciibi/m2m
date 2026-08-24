@@ -136,6 +136,7 @@ export interface SecurityConfig {
   send_batching_ms: number;
   cover_typing_traffic: boolean;
   panic_hotkey_enabled: boolean;
+}
 
 /** Honest per-platform capability report for screen-capture protection. */
 export interface CaptureCapability {
