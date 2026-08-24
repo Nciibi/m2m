@@ -943,11 +943,9 @@ impl SessionKeys {
                 max: MAX_ENCRYPT_SIZE,
             });
         }
-        let nonce = aead::gen_nonce();
-        let key =
-            aead::Key::from_slice(&self.tx_key).ok_or(CryptoError::InvalidKeyLength)?;
-        let ciphertext = aead::seal(plaintext, Some(aad), &nonce, &key);
-        Ok((nonce.0.to_vec(), ciphertext))
+        let nonce: [u8; 24] = random_bytes(24).try_into().expect("24 bytes");
+        let ciphertext = aead_seal(&self.tx_key.clone(), &nonce, plaintext, aad);
+        Ok((nonce.to_vec(), ciphertext))
     }
 
     /// Decrypt a received ciphertext.
@@ -957,12 +955,12 @@ impl SessionKeys {
         nonce_bytes: &[u8],
         aad: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        let nonce =
-            aead::Nonce::from_slice(nonce_bytes).ok_or(CryptoError::DecryptionFailed)?;
-        let key =
-            aead::Key::from_slice(&self.rx_key).ok_or(CryptoError::InvalidKeyLength)?;
-        aead::open(ciphertext, Some(aad), &nonce, &key)
-            .map_err(|_| CryptoError::DecryptionFailed)
+        if nonce_bytes.len() != 24 {
+            return Err(CryptoError::DecryptionFailed);
+        }
+        let mut nonce = [0u8; 24];
+        nonce.copy_from_slice(nonce_bytes);
+        aead_open(&self.rx_key.clone(), &nonce, ciphertext, aad)
     }
 
     /// Ratchet the sending key forward after encrypting a message.
