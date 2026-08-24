@@ -179,10 +179,13 @@ pub struct X25519IdentityKeypair {
 
 impl X25519IdentityKeypair {
     pub fn generate() -> Self {
-        let (pk, sk) = kx::gen_keypair();
+        let mut secret = [0u8; 32];
+        getrandom::getrandom(&mut secret).expect("OS RNG unavailable");
+        // StaticSecret clamps the scalar on construction (same as libsodium).
+        let sec = XSec::from(secret);
         Self {
-            public_key: pk.0,
-            secret_key: sk.0,
+            public_key: *XPub::from(&sec).as_bytes(),
+            secret_key: secret,
         }
     }
 
@@ -203,14 +206,19 @@ impl X25519IdentityKeypair {
 
     /// Perform X25519 Diffie-Hellman with this identity key and a peer's public key.
     pub fn diffie_hellman(&self, their_public: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
-        let n = scalarmult::Scalar::from_slice(&self.secret_key)
-            .ok_or(CryptoError::InvalidKeyLength)?;
-        let p = scalarmult::GroupElement::from_slice(their_public)
-            .ok_or(CryptoError::InvalidKeyLength)?;
-        let shared = scalarmult::scalarmult(&n, &p)
-            .map_err(|_| CryptoError::KeyDerivationFailed)?;
-        Ok(shared.0)
+        x25519_dh(&self.secret_key, their_public)
     }
+}
+
+/// Raw X25519 scalar×point with libsodium-parity semantics:
+/// scalars are clamped; all-zero (non-contributory) outputs are rejected.
+fn x25519_dh(secret: &[u8; 32], their_public: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
+    let sec = XSec::from(*secret);
+    let shared = sec.diffie_hellman(&XPub::from(*their_public));
+    if !shared.was_contributory() {
+        return Err(CryptoError::KeyDerivationFailed);
+    }
+    Ok(shared.to_bytes())
 }
 
 impl Drop for X25519IdentityKeypair {
