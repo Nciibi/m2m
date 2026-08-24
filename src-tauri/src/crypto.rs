@@ -1883,7 +1883,7 @@ mod crypto_tests {
     // proving wire format, DB ciphertext, and signatures stay identical.
 
     /// Fixed-input AEAD ciphertext captured from libsodium XChaCha20-Poly1305-IETF.
-    const GOLDEN_AEAD_CT: [u8; 42] = [193, 206, 201, 199, 160, 206, 171, 164, 151, 8, 132, 48, 103, 91, 138, 209, 163, 249, 123, 214, 226, 198, 36, 217, 205, 56, 230, 196, 38, 124, 39, 152, 10, 188, 125, 4, 44, 110, 140, 117, 24, 229, 4]; // libsodium-captured
+    const GOLDEN_AEAD_CT: [u8; 43] = [193, 206, 201, 199, 160, 206, 171, 164, 151, 8, 132, 48, 103, 91, 138, 209, 163, 249, 123, 214, 226, 198, 36, 217, 205, 56, 230, 196, 38, 124, 39, 152, 10, 188, 125, 4, 44, 110, 140, 117, 24, 229, 4]; // libsodium-captured
     /// Ed25519 public key derived from GOLDEN_SEED (libsodium).
     const GOLDEN_ED_PUB: [u8; 32] = [3, 161, 7, 191, 243, 206, 16, 190, 29, 112, 221, 24, 231, 75, 192, 153, 103, 228, 214, 48, 155, 165, 13, 95, 29, 220, 134, 100, 18, 85, 49, 184]; // libsodium-captured
     /// Ed25519 detached signature over b"m2m golden message" with GOLDEN_SEED key.
