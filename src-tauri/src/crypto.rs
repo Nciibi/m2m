@@ -1015,7 +1015,7 @@ fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[u8]) -> 
     let cipher = <XChaCha20Poly1305 as chacha20poly1305::KeyInit>::new(chacha20poly1305::Key::from_slice(key));
     cipher
         .encrypt(
-            chacha20poly1305::Nonce::from_slice(nonce),
+            chacha20poly1305::XNonce::from_slice(nonce),
             Payload { msg: plaintext, aad },
         )
         .expect("AEAD encryption cannot fail for valid key/nonce lengths")
@@ -1027,7 +1027,7 @@ fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
     let cipher = <XChaCha20Poly1305 as chacha20poly1305::KeyInit>::new(chacha20poly1305::Key::from_slice(key));
     cipher
         .decrypt(
-            chacha20poly1305::Nonce::from_slice(nonce),
+            chacha20poly1305::XNonce::from_slice(nonce),
             Payload { msg: ciphertext, aad },
         )
         .map_err(|_| CryptoError::DecryptionFailed)

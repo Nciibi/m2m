@@ -705,7 +705,7 @@ fn seal_msg(key: &[u8; 32], plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Ve
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
     let ct = cipher
         .encrypt(
-            chacha20poly1305::Nonce::from_slice(&nonce_bytes),
+            chacha20poly1305::XNonce::from_slice(&nonce_bytes),
             chacha20poly1305::aead::Payload { msg: plaintext, aad },
         )
         .map_err(|_| StorageError::EncryptionFailed)?;
@@ -721,7 +721,7 @@ fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Resu
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
     cipher
         .decrypt(
-            chacha20poly1305::Nonce::from_slice(nonce),
+            chacha20poly1305::XNonce::from_slice(nonce),
             chacha20poly1305::aead::Payload { msg: ciphertext, aad },
         )
         .map_err(|_| ())

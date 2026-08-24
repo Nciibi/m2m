@@ -1210,7 +1210,7 @@ async fn handle_file_transfer_packet(
                                                         use sha2::Digest;
                                                         sha2::Sha256::digest(&chunk.data).into()
                                                     };
-                                        let hash_valid = hash.0.to_vec() == chunk.chunk_hash;
+                                        let hash_valid = hash.to_vec() == chunk.chunk_hash;
 
                                         if !hash_valid {
                                             tracing::warn!(chunk = chunk.chunk_index, "file chunk hash mismatch — skipping");

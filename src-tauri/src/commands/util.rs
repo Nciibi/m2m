@@ -386,7 +386,7 @@ pub fn crypto_encrypt_storage(
     use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
     let nonce_bytes = crate::crypto::random_bytes(24);
-    let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
+    let nonce = chacha20poly1305::XNonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
         .encrypt(nonce, chacha20poly1305::aead::Payload { msg: plaintext, aad })
         .map_err(|_| "encryption failed".to_string())?;
@@ -408,7 +408,7 @@ pub fn crypto_decrypt_storage(
     }
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
     cipher
-        .decrypt(chacha20poly1305::Nonce::from_slice(nonce_bytes),
+        .decrypt(chacha20poly1305::XNonce::from_slice(nonce_bytes),
                  chacha20poly1305::aead::Payload { msg: ciphertext, aad })
         .map_err(|_| "decryption failed".to_string())
 }

@@ -599,7 +599,7 @@ async fn send_file_chunks_inner(
                 use sha2::Digest;
                 sha2::Sha256::digest(&buf).into()
             };
-            if actual_hash.0 != expected_hash {
+            if actual_hash != expected_hash {
                 return Err(format!(
                     "chunk {} hash mismatch before send — file may have changed on disk",
                     chunk_index

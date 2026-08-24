@@ -135,7 +135,10 @@ pub async fn generate_sync_invite(
     // Generate 24 random bytes as the token
     let token = crate::crypto::random_bytes(24);
     let token_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&token);
-    let token_hash = hex::encode(sha2::Sha256::digest(&token));
+    let token_hash = hex::encode({
+        use sha2::Digest;
+        sha2::Sha256::digest(&token)
+    });
 
     // Store pending invite (one-time, 15-min expiry)
     let now = now_unix();
@@ -452,7 +455,10 @@ mod sync_tests {
     fn test_invite_expiry() {
         let mut mgr = SyncManager::new();
         let token = crate::crypto::random_bytes(24);
-        let token_hash = hex::encode(sha2::Sha256::digest(&token));
+        let token_hash = hex::encode({
+        use sha2::Digest;
+        sha2::Sha256::digest(&token)
+    });
         let now = now_unix() - 1000; // 1000 seconds ago — expired
 
         mgr.pending_invites.insert(token_hash, SyncInvite {
