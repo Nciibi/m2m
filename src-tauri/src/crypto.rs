@@ -1012,7 +1012,8 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
 // by golden vectors captured from the previous implementation.
 
 fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[u8]) -> Vec<u8> {
-    let cipher = <XChaCha20Poly1305 as chacha20poly1305::KeyInit>::new(chacha20poly1305::Key::from_slice(key));
+    use chacha20poly1305::KeyInit;
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
     cipher
         .encrypt(
             chacha20poly1305::XNonce::from_slice(nonce),
@@ -1024,7 +1025,8 @@ fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[u8]) -> 
 fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
     -> Result<Vec<u8>, CryptoError>
 {
-    let cipher = <XChaCha20Poly1305 as chacha20poly1305::KeyInit>::new(chacha20poly1305::Key::from_slice(key));
+    use chacha20poly1305::KeyInit;
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
     cipher
         .decrypt(
             chacha20poly1305::XNonce::from_slice(nonce),
