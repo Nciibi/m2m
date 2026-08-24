@@ -1965,7 +1965,7 @@ mod crypto_tests {
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
     // RustCrypto swap) ---
     // These constants were captured from the ORIGINAL libsodium implementation.
-    // After swapping to RustCrypto, the computed values MUST equal them �
+    // After swapping to RustCrypto, the computed values MUST equal them —
     // proving wire format, DB ciphertext, and signatures stay identical.
 
     /// Fixed-input AEAD ciphertext captured from libsodium XChaCha20-Poly1305-IETF.
@@ -1974,7 +1974,7 @@ mod crypto_tests {
     const GOLDEN_ED_PUB: [u8; 32] = [3, 161, 7, 191, 243, 206, 16, 190, 29, 112, 221, 24, 231, 75, 192, 153, 103, 228, 214, 48, 155, 165, 13, 95, 29, 220, 134, 100, 18, 85, 49, 184]; // libsodium-captured
     /// Ed25519 detached signature over b"m2m golden message" with GOLDEN_SEED key.
     const GOLDEN_ED_SIG: [u8; 64] = [198, 233, 112, 99, 236, 203, 64, 230, 223, 187, 49, 32, 1, 107, 230, 149, 210, 6, 19, 251, 188, 43, 220, 1, 59, 172, 16, 77, 5, 168, 153, 155, 35, 66, 154, 19, 98, 115, 28, 124, 141, 191, 127, 60, 38, 15, 35, 71, 159, 227, 196, 149, 160, 136, 15, 15, 63, 138, 20, 0, 190, 83, 91, 0]; // libsodium-captured
-    /// X25519 shared secret for GOLDEN_X_SCALAR � GOLDEN_X_POINT (libsodium).
+    /// X25519 shared secret for GOLDEN_X_SCALAR — GOLDEN_X_POINT (libsodium).
     const GOLDEN_X25519_SHARED: [u8; 32] = [177, 42, 42, 212, 203, 150, 77, 92, 253, 252, 123, 110, 38, 38, 230, 27, 52, 208, 38, 25, 223, 160, 78, 184, 24, 178, 184, 3, 222, 60, 165, 112]; // libsodium-captured
 
     const GOLDEN_SEED: [u8; 32] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31];
