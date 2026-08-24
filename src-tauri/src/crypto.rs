@@ -312,8 +312,13 @@ impl EphemeralKeypair {
         server_pk: &[u8; 32],
     ) -> Result<SessionKeys, CryptoError> {
         let shared = self.diffie_hellman(server_pk)?;
-        let (first, second) = directional_split(&self.public_key, server_pk, &shared);
-        Ok(SessionKeys { rx_key: first, tx_key: second })
+        let (k_lo, k_hi) = kx_derive(&self.public_key, server_pk, &shared);
+        // Initiator: own TX is one of the two, mirrored on the responder.
+        if self.public_key.as_slice() <= server_pk.as_slice() {
+            Ok(SessionKeys { tx_key: k_lo, rx_key: k_hi })
+        } else {
+            Ok(SessionKeys { tx_key: k_hi, rx_key: k_lo })
+        }
     }
 
     /// Perform key exchange as the server (responder).
@@ -322,32 +327,32 @@ impl EphemeralKeypair {
         client_pk: &[u8; 32],
     ) -> Result<SessionKeys, CryptoError> {
         let shared = self.diffie_hellman(client_pk)?;
-        let (first, second) = directional_split(&self.public_key, client_pk, &shared);
-        // Responder sees the mirror image of the initiator's assignment.
-        Ok(SessionKeys { rx_key: second, tx_key: first })
+        let (k_lo, k_hi) = kx_derive(&self.public_key, client_pk, &shared);
+        // Responder mirrors the initiator's assignment exactly.
+        if self.public_key.as_slice() <= client_pk.as_slice() {
+            Ok(SessionKeys { rx_key: k_hi, tx_key: k_lo })
+        } else {
+            Ok(SessionKeys { rx_key: k_lo, tx_key: k_hi })
+        }
     }
 }
 
-/// Deterministic rx/tx assignment: HKDF over the shared secret bound to
-/// both public keys (sorted ascending), then the lexicographically-smaller
-/// party's public key owns `first` as its TX (the other side's RX).
-fn directional_split(our_pk: &[u8; 32], their_pk: &[u8; 32], shared: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+/// Deterministic rx/tx material: HKDF over the DH output bound to both
+/// public keys (sorted ascending). Returns (key_owned_by_lower_pk,
+/// key_owned_by_higher_pk); each side then maps them to rx/tx by comparing
+/// public keys — no role signaling needed and both sides agree.
+fn kx_derive(our_pk: &[u8; 32], their_pk: &[u8; 32], shared: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     let (lo, hi) = if our_pk <= their_pk { (our_pk, their_pk) } else { (their_pk, our_pk) };
     let mut ikm = Vec::with_capacity(96);
     ikm.extend_from_slice(shared);
     ikm.extend_from_slice(lo);
     ikm.extend_from_slice(hi);
     let out = hkdf(&[0u8; 32], &ikm, b"m2m-kx-v1", 64);
-    let mut first = [0u8; 32];
-    let mut second = [0u8; 32];
-    first.copy_from_slice(&out[..32]);
-    second.copy_from_slice(&out[32..]);
-    if our_pk == lo {
-        // We are "lower": first is OUR tx.
-        (second, first) // caller semantics differ per role — see call sites
-    } else {
-        (first, second)
-    }
+    let mut k_lo = [0u8; 32];
+    let mut k_hi = [0u8; 32];
+    k_lo.copy_from_slice(&out[..32]);
+    k_hi.copy_from_slice(&out[32..]);
+    (k_lo, k_hi)
 }
 
 impl Drop for EphemeralKeypair {
