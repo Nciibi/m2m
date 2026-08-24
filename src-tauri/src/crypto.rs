@@ -1001,7 +1001,37 @@ impl Drop for SessionKeys {
 
 /// Generate cryptographically secure random bytes.
 pub fn random_bytes(len: usize) -> Vec<u8> {
-    randombytes::randombytes(len)
+    let mut buf = vec![0u8; len];
+    getrandom::getrandom(&mut buf).expect("OS RNG unavailable");
+    buf
+}
+
+// ─── AEAD primitive (XChaCha20-Poly1305-IETF) ──────────────────────────────
+//
+// Wire format identical to libsodium's xchacha20poly1305_ietf: 24-byte
+// nonce, ciphertext || 16-byte Poly1305 tag, AAD authenticated. Enforced
+// by golden vectors captured from the previous implementation.
+
+fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[u8]) -> Vec<u8> {
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
+    cipher
+        .encrypt(
+            chacha20poly1305::Nonce::from_slice(nonce),
+            Payload { msg: plaintext, aad },
+        )
+        .expect("AEAD encryption cannot fail for valid key/nonce lengths")
+}
+
+fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
+    -> Result<Vec<u8>, CryptoError>
+{
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
+    cipher
+        .decrypt(
+            chacha20poly1305::Nonce::from_slice(nonce),
+            Payload { msg: ciphertext, aad },
+        )
+        .map_err(|_| CryptoError::DecryptionFailed)
 }
 
 // ─── Migration golden-vector helpers (test-only) ───────────────────────────
