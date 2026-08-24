@@ -174,17 +174,8 @@ impl Group {
             .next_message_key()
             .map_err(|e| format!("sender key derivation failed: {e}"))?;
 
-        let aead_key = sodiumoxide::crypto::aead::xchacha20poly1305_ietf::Key::from_slice(&msg_key)
-            .ok_or("invalid AEAD key")?;
-
         let padded = crypto::pad_message_variable(plaintext);
-        let ciphertext = sodiumoxide::crypto::aead::xchacha20poly1305_ietf::seal(
-            &padded,
-            None,
-            &sodiumoxide::crypto::aead::xchacha20poly1305_ietf::Nonce::from_slice(&nonce)
-                .ok_or("invalid nonce")?,
-            &aead_key,
-        );
+        let ciphertext = crypto::aead_seal_pub(&msg_key, &nonce, &padded, b"");
 
         let message_number = chain.current_message_number() - 1; // next_message_key already advanced
 
@@ -244,20 +235,8 @@ impl Group {
             .peek_message_key(data.message_number)
             .map_err(|e| format!("receiver key derivation failed: {e}"))?;
 
-        let aead_key = sodiumoxide::crypto::aead::xchacha20poly1305_ietf::Key::from_slice(&msg_key)
-            .ok_or("invalid AEAD key")?;
-
-        let aead_nonce =
-            sodiumoxide::crypto::aead::xchacha20poly1305_ietf::Nonce::from_slice(&nonce)
-                .ok_or("invalid nonce")?;
-
-        let padded = sodiumoxide::crypto::aead::xchacha20poly1305_ietf::open(
-            &data.ciphertext,
-            None,
-            &aead_nonce,
-            &aead_key,
-        )
-        .map_err(|_| "group message decryption failed (AEAD open)".to_string())?;
+        let padded = crypto::aead_open_pub(&msg_key, &nonce, &data.ciphertext, b"")
+            .map_err(|_| "group message decryption failed (AEAD open)".to_string())?;
 
         let plaintext = crypto::unpad_message_variable(&padded)
             .map_err(|e| format!("unpad failed: {e}"))?;
