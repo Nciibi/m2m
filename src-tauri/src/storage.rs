@@ -698,19 +698,31 @@ pub const WRAPPED_CEK_LEN: usize = 24 + 32 + 16;
 
 /// Encrypt plaintext under `key`; returns (nonce, ciphertext).
 fn seal_msg(key: &[u8; 32], plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
-    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-    let nonce = aead::gen_nonce();
-    let aead_key = aead::Key::from_slice(key).ok_or(StorageError::KeyNotFound)?;
-    let ct = aead::seal(plaintext, Some(aad), &nonce, &aead_key);
-    Ok((nonce.0.to_vec(), ct))
+    use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
+    let nonce_bytes = crate::crypto::random_bytes(24);
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
+    let ct = cipher
+        .encrypt(
+            chacha20poly1305::Nonce::from_slice(&nonce_bytes),
+            chacha20poly1305::aead::Payload { msg: plaintext, aad },
+        )
+        .map_err(|_| StorageError::EncryptionFailed)?;
+    Ok((nonce_bytes, ct))
 }
 
 /// Authenticate-and-decrypt; error on tag mismatch.
 fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Result<Vec<u8>, ()> {
-    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-    let nonce = aead::Nonce::from_slice(nonce).ok_or(())?;
-    let aead_key = aead::Key::from_slice(key).ok_or(())?;
-    aead::open(ciphertext, Some(aad), &nonce, &aead_key)
+    use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
+    if nonce.len() != 24 {
+        return Err(());
+    }
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
+    cipher
+        .decrypt(
+            chacha20poly1305::Nonce::from_slice(nonce),
+            chacha20poly1305::aead::Payload { msg: ciphertext, aad },
+        )
+        .map_err(|_| ())
 }
 
 // ─── Metadata-at-rest encryption (H-secondary) ─────────────────────────────
@@ -757,7 +769,9 @@ fn open_meta_value(key: Option<&crate::secure_key::StorageKey>, stored: &str, aa
 impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
     fn generate_cek() -> [u8; 32] {
-        sodiumoxide::crypto::aead::xchacha20poly1305_ietf::gen_key().0
+        let mut cek = [0u8; 32];
+        getrandom::getrandom(&mut cek).expect("OS RNG unavailable");
+        cek
     }
 
     /// Wrap a CEK under the vault storage key → single BLOB (nonce || ciphertext).
