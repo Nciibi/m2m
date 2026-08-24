@@ -1206,14 +1206,11 @@ pub fn derive_receiver_chain(initial_chain_key: &[u8; 32]) -> SenderKeyChain {
 
 /// Generate an Ed25519 signing keypair for a group sender.
 /// Returns (signing_key_secret_bytes, verification_key).
-/// signing_key_secret_bytes is a 64-byte Ed25519 seed+private key.
+/// signing_key_secret_bytes is a 64-byte Ed25519 seed+public key
+/// (libsodium-compatible layout).
 pub fn generate_sender_signing_keypair() -> ([u8; 64], [u8; 32]) {
-    let (pk, sk) = sign::gen_keypair();
-    let mut sk_bytes = [0u8; 64];
-    let mut pk_bytes = [0u8; 32];
-    sk_bytes.copy_from_slice(&sk.0);
-    pk_bytes.copy_from_slice(&pk.0);
-    (sk_bytes, pk_bytes)
+    let kp = IdentityKeypair::generate().expect("OS RNG unavailable");
+    (kp.secret_key_bytes(), kp.public_key_bytes())
 }
 
 /// Sign a group message with the sender's Ed25519 signing key.
@@ -1221,10 +1218,11 @@ pub fn sign_group_message(
     signing_key: &[u8; 64],
     data: &[u8],
 ) -> Result<Vec<u8>, CryptoError> {
-    let sk = sign::SecretKey::from_slice(signing_key)
-        .ok_or(CryptoError::InvalidKeyLength)?;
-    let sig = sign::sign_detached(data, &sk);
-    Ok(sig.as_ref().to_vec())
+    let mut pk = [0u8; 32];
+    pk.copy_from_slice(&signing_key[32..]);
+    let kp = IdentityKeypair::from_bytes(&pk, signing_key)
+        .map_err(|_| CryptoError::InvalidKeyLength)?;
+    Ok(kp.sign(data))
 }
 
 /// Verify a group message signature against the sender's Ed25519 verification key.
@@ -1233,18 +1231,13 @@ pub fn verify_group_message_signature(
     data: &[u8],
     signature: &[u8],
 ) -> bool {
-    let pk = match sign::PublicKey::from_slice(verification_key) {
-        Some(pk) => pk,
-        None => return false,
-    };
-    if signature.len() != 64 {
-        return false;
-    }
-    let sig = match sign::Signature::from_bytes(signature) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-    sign::verify_detached(&sig, data, &pk)
+    verify_signature(verification_key, data, signature).is_ok()
+}
+
+/// Initialize the crypto subsystem. Kept for API compatibility: the pure-
+/// Rust stack needs no initialization. Always succeeds.
+pub fn init() -> Result<(), CryptoError> {
+    Ok(())
 }
 
 /// Initialize the sodiumoxide library. Must be called once at startup.
