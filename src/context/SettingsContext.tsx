@@ -277,7 +277,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const current = securityConfig ?? {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
-      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false,
+      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const newConfig: SecurityConfig = { ...current, capture_process_detection: !current.capture_process_detection };
     try {
@@ -298,7 +298,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const current = securityConfig ?? {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
-      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false,
+      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const newConfig: SecurityConfig = { ...current, blur_on_focus_loss: !current.blur_on_focus_loss };
     try {
@@ -356,7 +356,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false,
       blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false,
+      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const newConfig: SecurityConfig = { ...current, air_gap_mode: !current.air_gap_mode };
     try {
@@ -378,7 +378,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false,
       blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false,
+      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const newConfig: SecurityConfig = { ...current, ephemeral_mode: !current.ephemeral_mode };
     try {
@@ -400,7 +400,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false,
       blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false,
+      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const newConfig: SecurityConfig = { ...current, send_batching_ms: ms };
     try {
@@ -416,7 +416,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
       require_known_contact: false, capture_process_detection: false,
       blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false,
+      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const newConfig: SecurityConfig = { ...current, cover_typing_traffic: !current.cover_typing_traffic };
     try {
