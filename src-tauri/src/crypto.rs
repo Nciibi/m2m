@@ -139,6 +139,27 @@ impl IdentityKeypair {
     }
     // NOTE: no manual Drop — ed25519-dalek's SigningKey is ZeroizeOnDrop,
     // which scrubs the seed when the keypair is dropped.
+
+    /// Location of the secret seed for mlock-style page locking AFTER this
+    /// keypair has been placed at its final stable address (see
+    /// `secure_key::lock_range` move-semantics caveat).
+    pub fn secret_location(&self) -> (*const u8, usize) {
+        (self.signing.as_bytes().as_ptr(), 32)
+    }
+
+    /// Lock the seed's pages into RAM. Call only once stored in state.
+    pub fn lock_memory(&self) {
+        let (ptr, len) = self.secret_location();
+        if !crate::secure_key::lock_range(ptr as *const std::ffi::c_void, len) {
+            tracing::warn!("identity seed mlock failed — swap protection unavailable for this key");
+        }
+    }
+
+    /// Unlock pages previously locked via [`lock_memory`].
+    pub fn unlock_memory(&self) {
+        let (ptr, len) = self.secret_location();
+        crate::secure_key::unlock_range(ptr as *const std::ffi::c_void, len);
+    }
 }
 
 /// Generate a fingerprint from a raw public key.
