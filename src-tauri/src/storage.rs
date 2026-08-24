@@ -30,6 +30,8 @@ pub enum StorageError {
     KeyNotFound,
     #[error("decryption failed")]
     DecryptionFailed,
+    #[error("encryption failed")]
+    EncryptionFailed,
     #[error("data directory creation failed: {0}")]
     DirCreationFailed(String),
 }
