@@ -306,7 +306,7 @@ Each module owns exactly **one mechanism**:
 
 | Module | What it does | Design rationale |
 |--------|-------------|-----------------|
-| [`crypto.rs`](src-tauri/src/crypto.rs) | Libsodium wrappers | Single crypto abstraction layer — swap libsodium for a different provider without touching anything else |
+| [`crypto.rs`](src-tauri/src/crypto.rs) | RustCrypto wrappers (Ed25519, X25519, XChaCha20-Poly1305) | Single crypto abstraction layer � golden-vector tests pin wire formats across provider changes |
 | [`protocol.rs`](src-tauri/src/protocol.rs) | Wire format | Versioned, length-prefixed framing with strict validation — the network boundary enforcement point |
 | [`network.rs`](src-tauri/src/network.rs) | TCP transport | Framing, timeouts, rate limiting — everything related to raw socket I/O |
 | [`session.rs`](src-tauri/src/session.rs) | Encrypted sessions | Handshake state machine, encryption/decryption, replay protection — the E2EE core |
@@ -391,7 +391,7 @@ sequenceDiagram
 |------------|---------|---------|
 | [Rust](https://www.rust-lang.org/) | ≥ 1.85 (stable) | Backend compilation |
 | [Node.js](https://nodejs.org/) | ≥ 20 LTS | Frontend toolchain |
-| [pnpm](https://pnpm.io/) | ≥ 9 | Package manager |
+
 | [libsodium](https://doc.libsodium.org/) | ≥ 1.0.18 | Cryptographic library *(system dep on Linux/macOS)* |
 
 ### Installation
