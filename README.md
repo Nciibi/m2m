@@ -517,15 +517,15 @@ The relay server is lightweight (~5 MB binary, ~8 MB RSS). Configure your M2M cl
 | [Design System](docs/design-system.md) | Designers, Frontend devs | Design tokens, principles, theming, accessibility |
 | [Component Guide](docs/component-guide.md) | Frontend developers | Component usage with code examples |
 | [Icon System](docs/icon-system.md) | Frontend developers | Icon inventory, sizing guidelines, usage patterns |
-| [WCAG Audit](docs/wcag-contrast-audit.md) | QA, Accessibility reviewers | Color contrast compliance report |
-| [UI/UX Upgrade - Phase 1](docs/ui-ux-upgrade-phase-1-summary.md) | All | Phase 1 summary and roadmap |
 
 ### General
 | Document | Audience | Content |
 |----------|----------|---------|
 | [Beginner's Guide](docs/beginners-guide.md) | New contributors | Gentle introduction to the codebase |
-| [Full Analysis](docs/full_analysis.md) | All | Comprehensive project analysis |
-| [Roadmap](ROADMAP.md) | Contributors | Planned improvements (7.9 → 10/10) |
+| [Security Hardening Log](docs/SECURITY-HARDENING.md) | Contributors, auditors | Complete hardening roadmap with per-item status |
+| [Signed Updates](docs/SIGNED-UPDATES.md) | Maintainers | Updater signing setup and release workflow |
+| [High-Risk Environments](docs/HIGH-RISK-ENVIRONMENTS.md) | Users | Tails / Whonix / Qubes operational guide |
+| [Fuzzing](src-tauri/fuzz/README.md) | Contributors | Fuzz targets, run instructions, found-bugs log |
 
 ---
 
