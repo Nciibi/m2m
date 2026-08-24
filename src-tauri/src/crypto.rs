@@ -917,18 +917,11 @@ impl DoubleRatchet {
     }
 }
 
-/// Perform X25519 DH using an EphemeralKeypair (kx keys).
+/// Perform X25519 DH using an EphemeralKeypair (raw scalar semantics).
 impl EphemeralKeypair {
     /// Compute shared secret with a peer's public key.
     pub fn diffie_hellman(&self, their_public: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
-        use sodiumoxide::crypto::scalarmult::curve25519 as sm;
-        let n = sm::Scalar::from_slice(&self.secret_key.0)
-            .ok_or(CryptoError::InvalidKeyLength)?;
-        let p = sm::GroupElement::from_slice(their_public)
-            .ok_or(CryptoError::InvalidKeyLength)?;
-        let shared = sm::scalarmult(&n, &p)
-            .map_err(|_| CryptoError::KeyDerivationFailed)?;
-        Ok(shared.0)
+        x25519_dh(&self.secret_key, their_public)
     }
 }
 
