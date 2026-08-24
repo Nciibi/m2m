@@ -361,13 +361,13 @@ pub fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Resu
 /// (`derive_storage_key_from_passphrase`) on the next unlock. Do NOT call this
 /// from any code path that writes new secrets to disk.
 pub fn derive_storage_key(public_key: &[u8]) -> crate::secure_key::StorageKey {
-    use sodiumoxide::crypto::hash::sha256;
+    use sha2::Digest;
     let context = b"m2m-storage-key-v1";
     let mut input = Vec::with_capacity(context.len() + public_key.len());
     input.extend_from_slice(context);
     input.extend_from_slice(public_key);
-    let hash = sha256::hash(&input);
-    crate::secure_key::StorageKey::new(hash.0)
+    let hash = sha2::Sha256::digest(&input);
+    crate::secure_key::StorageKey::new(hash.into())
 }
 
 /// Encrypt data for storage using XChaCha20-Poly1305.
