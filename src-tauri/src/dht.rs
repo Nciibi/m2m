@@ -556,7 +556,7 @@ mod dht_tests {
     use crate::crypto::IdentityKeypair;
 
     fn init_crypto() {
-        let _ = sodiumoxide::init();
+        // Pure-Rust crypto stack: no initialization needed.
     }
 
     fn make_identity() -> IdentityKeypair {
