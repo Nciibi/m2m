@@ -1,0 +1,8 @@
+# M2M Tor configuration for the hardened image.
+# Client-only: SocksPort for optional SOCKS5 use, no relays, no control.
+SocksPort 9050
+SafeLogging 1
+Log notice syslog
+ClientOnly 1
+# Refuse plaintext risky exits? Tor handles circuit isolation per app.
+ExitPolicy reject *:*   # belt-and-braces; client only anyway
