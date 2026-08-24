@@ -382,11 +382,15 @@ pub fn crypto_encrypt_storage(
     key: &crate::secure_key::StorageKey,
     aad: &[u8],
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-    let nonce = aead::gen_nonce();
-    let aead_key = aead::Key::from_slice(key.as_bytes()).ok_or("invalid key length")?;
-    let ciphertext = aead::seal(plaintext, Some(aad), &nonce, &aead_key);
-    Ok((nonce.0.to_vec(), ciphertext))
+    // XChaCha20-Poly1305-IETF: 24-byte nonce, ciphertext||tag (RustCrypto).
+    use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
+    let nonce_bytes = crate::crypto::random_bytes(24);
+    let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(nonce, chacha20poly1305::aead::Payload { msg: plaintext, aad })
+        .map_err(|_| "encryption failed".to_string())?;
+    Ok((nonce_bytes, ciphertext))
 }
 
 /// Decrypt storage-encrypted data.
@@ -398,10 +402,15 @@ pub fn crypto_decrypt_storage(
     key: &crate::secure_key::StorageKey,
     aad: &[u8],
 ) -> Result<Vec<u8>, String> {
-    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-    let nonce = aead::Nonce::from_slice(nonce_bytes).ok_or("invalid nonce")?;
-    let aead_key = aead::Key::from_slice(key.as_bytes()).ok_or("invalid key length")?;
-    aead::open(ciphertext, Some(aad), &nonce, &aead_key).map_err(|_| "decryption failed".to_string())
+    use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
+    if nonce_bytes.len() != 24 {
+        return Err("invalid nonce".to_string());
+    }
+    let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
+    cipher
+        .decrypt(chacha20poly1305::Nonce::from_slice(nonce_bytes),
+                 chacha20poly1305::aead::Payload { msg: ciphertext, aad })
+        .map_err(|_| "decryption failed".to_string())
 }
 
 /// Create a temporary file for an incoming transfer.
