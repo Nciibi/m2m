@@ -83,7 +83,7 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 ### Data at rest
 - [x] **Crypto-shredding for deletion** — per-message content keys wrapped under the vault key; deletion shreds the wrapped keys and truncates WAL, making ciphertext unrecoverable even from remnants (H7, tested)
 - [x] Disable crash dumps — `SetErrorMode` hardening on Windows; `RLIMIT_CORE=0` via `setrlimit` on Unix; runs FIRST at startup before any key material exists (`lib.rs::disable_crash_dumps`). Note: WER *local-dumps* registry policy is machine-level and outside app control — high-risk users should also verify it's disabled system-wide.
-- [ ] Full `VirtualLock`/mlock coverage on all plaintext secrets — PARTIAL: `StorageKey` is mlock'd+zeroized (panic-on-fail), all identity/X25519/ephemeral/prekey secrets are zeroize-on-drop. Remaining gap: mlock for non-storage-key secrets requires pinning them at stable heap addresses (per-field locks are invalidated by Rust moves) — needs a `LockedBox` container refactor.
+- [x] `VirtualLock`/mlock coverage on long-term secrets — `StorageKey` (panic-on-fail) AND identity Ed25519 seed + X25519 secret now locked at their stable heap addresses on placement into state, unlocked before removal (`secure_key::lock_range/unlock_range`, `*.lock_memory()/unlock_memory()`). Ephemeral/session keys rely on zeroize-on-drop only (short-lived; acceptable). lock_vault additionally clears identity/prekeys now.
 
 ### Traffic analysis resistance
 - [x] **Fixed-size / bucketed frame padding** — exponential-tier padding (64B→1KB … >4KB→16KB) with tamper-checked padding suffix (`crypto.rs::pad_message_variable`, tested)
