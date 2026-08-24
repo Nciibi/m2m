@@ -5,7 +5,6 @@
 
 #![no_main]
 
-use libfuzzer_sys::fuzz_data;
 
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     if let Ok(unpadded) = m2m_lib::crypto::unpad_message_variable(data) {

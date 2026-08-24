@@ -8,7 +8,6 @@
 
 #![no_main]
 
-use libfuzzer_sys::fuzz_data;
 
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     let rt = tokio::runtime::Builder::new_current_thread()
