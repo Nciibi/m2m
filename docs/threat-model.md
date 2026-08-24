@@ -81,7 +81,7 @@
 | Authentication | Ed25519 signatures on handshake + X25519 DH |
 | Replay protection | Monotonic counters + AEAD AAD binding |
 | Key agreement | X3DH: 3 DH ops (4 with OPK) → HKDF → root + chain key |
-| Side-channel resistance | Constant-time libsodium primitives |
+| Side-channel resistance | Constant-time dalek/RustCrypto primitives |
 
 ## 5. Network Attack Mitigations
 

@@ -102,11 +102,11 @@ Each module owns exactly **one mechanism**. If a module needs functionality from
 
 | Module | Owns | Calls | Why separate? |
 |--------|------|-------|--------------|
-| `crypto.rs` | Libsodium wrappers (Ed25519, X25519, XChaCha20-Poly1305, SHA-256 KDF, random bytes, padding) | — | Single crypto boundary — swap libsodium for a different provider without touching anything else |
+| `crypto.rs` | RustCrypto wrappers (Ed25519, X25519, XChaCha20-Poly1305, SHA-256 KDF, random bytes, padding) � golden vectors pin wire formats | — | Single crypto boundary — swap libsodium for a different provider without touching anything else |
 | `identity.rs` | Ed25519 keypair generation, storage, invite creation/validation | `crypto.rs` | Identity is a higher-level concept than raw crypto — it combines keys, signatures, and business logic |
 | `session.rs` | Handshake state machine, encryption/decryption, replay protection, ratchet | `crypto.rs`, `protocol.rs`, `network.rs` | Session is a protocol-level concept that ties crypto, wire format, and network I/O together |
 
-**Why not use `rustls` or `openssl`?** M2M doesn't use TLS because the security model doesn't need X.509 certificate authorities — trust is established out-of-band via fingerprint comparison, not through a hierarchical PKI. Using raw TCP + libsodium gives us the same AEAD properties as TLS 1.3 without the complexity of certificate chains, CRLs, and CA trust stores.
+**Why not use `rustls` or `openssl`?** M2M doesn't use TLS because the security model doesn't need X.509 certificate authorities — trust is established out-of-band via fingerprint comparison, not through a hierarchical PKI. Using raw TCP + RustCrypto AEAD gives us the same AEAD properties as TLS 1.3 without the complexity of certificate chains, CRLs, and CA trust stores.
 
 #### Networking Layer
 

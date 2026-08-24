@@ -21,7 +21,7 @@ Session Layer (ephemeral, per-connection)
 
 ## 2. Identity Keypair
 
-- **Algorithm**: Ed25519 (via libsodium `crypto_sign_keypair`)
+- **Algorithm**: Ed25519 (via `ed25519-dalek`)
 - **Generated**: On first app launch, never regenerated unless user explicitly resets
 - **Storage**: Private key encrypted at rest in key store (separate from message DB)
 - **Fingerprint**: SHA-256 of public key, displayed as hex groups (e.g., `A1B2:C3D4:...`)
