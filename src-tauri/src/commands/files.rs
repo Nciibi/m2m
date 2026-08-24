@@ -595,7 +595,10 @@ async fn send_file_chunks_inner(
             let expected_hash = chunk_hashes.get(chunk_index as usize)
                 .cloned()
                 .unwrap_or([0u8; 32]);
-            let actual_hash = sodiumoxide::crypto::hash::sha256::hash(&buf);
+            let actual_hash: [u8; 32] = {
+                use sha2::Digest;
+                sha2::Sha256::digest(&buf).into()
+            };
             if actual_hash.0 != expected_hash {
                 return Err(format!(
                     "chunk {} hash mismatch before send — file may have changed on disk",
@@ -766,7 +769,7 @@ fn compute_file_hashes(
     chunk_size: usize,
 ) -> Result<([u8; 32], Vec<[u8; 32]>), String> {
     use std::io::Read;
-    use sodiumoxide::crypto::hash::sha256;
+    use sha2::Digest;
 
     let mut file = std::fs::File::open(file_path)
         .map_err(|e| format!("failed to open file: {e}"))?;
