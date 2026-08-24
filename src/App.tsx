@@ -69,6 +69,22 @@ function AppInner() {
     onIdle: () => { invoke("lock_vault").catch(() => {}); },
   });
 
+  // Emergency panic wipe (Ctrl+Alt+Shift+W) — only when explicitly armed
+  // in Security settings. Wipes all local data and exits, no confirmation.
+  useEffect(() => {
+    if (!securityConfig?.panic_hotkey_enabled) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && e.shiftKey && (e.key === "W" || e.key === "w")) {
+        invoke("panic_wipe").catch((err) => {
+          // Not armed / backend refused — surface instead of failing silently.
+          console.error("panic wipe refused:", err);
+        });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [securityConfig?.panic_hotkey_enabled]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && e.target instanceof Element && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
