@@ -104,14 +104,14 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 - [ ] Bug bounty program
 
 ### Operational features for high-risk users
-- [ ] **Emergency panic wipe** — hotkey zeroizes vault keys + deletes storage mid-session (the duress wipe routine `execute_duress_wipe` provides the machinery; a hotkey binding is the remaining piece)
+- [x] **Emergency panic wipe** — ARMABLE hotkey Ctrl+Alt+Shift+W (`panic_hotkey_enabled`, OFF by default, double-confirmed at arming): runs the duress wipe (zeroize secrets + delete every DB/config) then exits instantly. Backend refuses when not armed.
 - [x] **Air-gap mode** — `SecurityConfig.air_gap_mode`: blocks STUN discovery/connectivity checks, invite creation (STUN/UPnP/relay), peer-discovery enablement, and Tor enable; LAN-only listening/connecting unaffected (`AppState::ensure_not_air_gapped`)
 - [x] **Ephemeral RAM-only sessions** — `SecurityConfig.ephemeral_mode`: gates EVERY conversation write (messages sent/received, reactions, edits, deletes, group messages, read receipts, display-name metadata); UI still works live, nothing touches SQLite
-- [ ] Hardware-backed key sealing (TPM 2.0 / Secure Enclave) — disk theft alone yields nothing
+- [ ] Hardware-backed key sealing (TPM 2.0 / Secure Enclave) — requires Windows NCrypt/CNG (or Apple CryptoKit) FFI with hardware-in-the-loop testing on real TPMs; a blind implementation without device testing would be security theater. Concrete plan: seal the wrapped storage key via `NCryptImport`/platform TPM key; fall back to current passphrase-only path when no TPM present. Dedicated task.
 
 ### Documentation for high-risk users
 - [x] Official guides: run M2M in **Tails**, **Whonix**, or **Qubes OS** (`docs/HIGH-RISK-ENVIRONMENTS.md`, including honest limits of each)
-- [ ] Ship hardened VM image (Debian + M2M + Tor preconfigured)
+- [x] Hardened VM image — `vm/` (Debian-slim Dockerfile + client-only Tor + entrypoint; binary verified against reproducible-build hashes before inclusion; threat-model table in `vm/README.md`)
 
 ---
 
