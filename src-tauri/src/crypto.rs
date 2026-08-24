@@ -709,9 +709,10 @@ impl DoubleRatchet {
         self.send_message_number += 1;
 
         // Encrypt with XChaCha20-Poly1305
-        let nonce = aead::gen_nonce();
-        let key = aead::Key::from_slice(&msg_key.0).ok_or(CryptoError::InvalidKeyLength)?;
-        let ciphertext = aead::seal(plaintext, Some(aad), &nonce, &key);
+        let nonce: [u8; 24] = random_bytes(24).try_into().expect("24 bytes");
+        let key = &msg_key.0;
+        let ciphertext = aead_seal(key, &nonce, plaintext, aad);
+        Ok((ratchet_pub, msg_num, nonce.to_vec(), ciphertext))
         let nonce_vec = nonce.0.to_vec();
 
         // Zeroize the message key after use (drop does this, but be explicit)
