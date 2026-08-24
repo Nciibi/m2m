@@ -29,6 +29,7 @@ mod local_addr;
 pub mod network;
 mod port_mapping;
 pub mod protocol;
+mod protocol_fuzz_regression;
 mod reconnect;
 mod relay;
 mod secure_key;
