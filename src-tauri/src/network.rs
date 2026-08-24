@@ -291,7 +291,12 @@ pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Res
     // is garbage from an attacker, not a parseable frame. (Fuzzing found
     // the pre-fix version panicking on payload[0]/[1] for tiny frames.)
     if payload.len() < 2 {
-        return Err(NetworkError::Protocol(protocol::ProtocolError::InvalidVersion(payload[0])));
+        return Err(NetworkError::Protocol(
+            protocol::ProtocolError::FrameTooSmall {
+                size: frame_len,
+                min: 2,
+            },
+        ));
     }
 
     // Parse version
