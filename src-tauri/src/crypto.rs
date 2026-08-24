@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 use chacha20poly1305::{
     aead::{Aead, Payload},
-    KeyInit, XChaCha20Poly1305,
+    XChaCha20Poly1305,
 };
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use sha2::Digest;
