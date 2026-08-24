@@ -1,22 +1,31 @@
 /// M2M — Crypto Module
 ///
-/// Provides all cryptographic operations using libsodium (sodiumoxide).
-/// No custom cryptography. All primitives are standard, audited constructions.
+/// Provides all cryptographic operations using the pure-Rust RustCrypto
+/// stack (ed25519-dalek, x25519-dalek, chacha20poly1305). No custom
+/// cryptography. All primitives are standard, audited constructions.
 ///
 /// Key algorithms:
-/// - Ed25519: identity signing/verification
-/// - X25519: ephemeral Diffie-Hellman key exchange
-/// - XChaCha20-Poly1305: authenticated encryption (AEAD)
-/// - HKDF-SHA256: key derivation
+/// - Ed25519: identity signing/verification (RFC 8032)
+/// - X25519: ephemeral Diffie-Hellman key exchange (RFC 7748)
+/// - XChaCha20-Poly1305-IETF: authenticated encryption (AEAD)
+/// - HKDF-SHA256: key derivation (RFC 5869)
 /// - SHA-256: fingerprint generation
+///
+/// ## Migration note
+/// Previously libsodium via sodiumoxide (archived). Byte-compatible:
+/// golden vectors captured from libsodium + RFC vectors enforce identical
+/// outputs for keys, signatures, DH shares, and AEAD ciphertexts. The ONLY
+/// intentional break is the legacy `kx` session-key derivation (see
+/// `EphemeralKeypair::client_session_keys`).
 use std::collections::HashMap;
 
-use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-use sodiumoxide::crypto::hash::sha256;
-use sodiumoxide::crypto::kx;
-use sodiumoxide::crypto::scalarmult::curve25519 as scalarmult;
-use sodiumoxide::crypto::sign;
-use sodiumoxide::randombytes;
+use chacha20poly1305::{
+    aead::{Aead, Payload},
+    KeyInit, XChaCha20Poly1305,
+};
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use sha2::Digest;
+use x25519_dalek::{PublicKey as XPub, StaticSecret as XSec};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 
