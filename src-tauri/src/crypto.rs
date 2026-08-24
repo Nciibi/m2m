@@ -98,7 +98,9 @@ impl IdentityKeypair {
     /// seed-derived key so a corrupt vault row fails loudly instead of
     /// silently producing a different identity.
     pub fn from_bytes(public: &[u8; 32], secret: &[u8; 64]) -> Result<Self, CryptoError> {
-        let signing = SigningKey::from_bytes(&secret[..32]);
+        let mut seed = [0u8; 32];
+        seed.copy_from_slice(&secret[..32]);
+        let signing = SigningKey::from_bytes(&seed);
         if &signing.verifying_key().to_bytes() != public {
             return Err(CryptoError::InvalidKeyLength);
         }
