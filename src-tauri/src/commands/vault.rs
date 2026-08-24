@@ -987,6 +987,7 @@ pub async fn import_identity(
     // Load into state
     {
         let mut id_lock = state.identity.write().await;
+        kp.lock_memory();
         *id_lock = Some(kp);
     }
     {
