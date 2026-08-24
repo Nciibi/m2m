@@ -99,7 +99,7 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 
 ### Assurance (what makes "military-grade" a fact, not marketing)
 - [ ] **External crypto audit** — non-negotiable; the entire difference between claims and reality
-- [ ] Fuzzing with cargo-fuzz on `protocol.rs` parsing (internet-facing packet parser)
+- [x] **Fuzzing on `protocol.rs` + internet-facing parsers** — cargo-fuzz crate (`src-tauri/fuzz/`) with 4 targets: length-prefixed frame parser, all attacker-reachable MessagePack wire structs, message padding (roundtrip property), DHT bootstrap parsers. Runs under Linux/WSL nightly (`cargo +nightly fuzz run <target>`); deterministic regression tests (`protocol_fuzz_regression`, 12 tests) encode hostile inputs into normal CI so parser regressions fail on every platform. **First run already paid off**: found `read_frame_impl` panicking on frames declaring `< 2` payload bytes (remote DoS via index OOB) — FIXED with a FrameTooSmall rejection.
 - [ ] Formal verification of ratchet/HKDF protocol logic (ProVerif/hax)
 - [ ] Bug bounty program
 
