@@ -319,7 +319,7 @@ fn build_find_node_body(peer_id: &[u8; 32]) -> Vec<u8> {
 /// legacy entry size, it is parsed as legacy.
 ///
 /// Note: NO permanent identity key is transmitted.
-fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
+pub fn parse_node_response(body: &[u8]) -> Result<Vec<DhtPeer>, DhtError> {
     if let Some(peers) = parse_node_response_tagged(body) {
         return Ok(peers);
     }
