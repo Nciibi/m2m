@@ -1949,25 +1949,6 @@ mod crypto_tests {
     const GOLDEN_AEAD_AAD: &[u8] = b"m2m-golden-aad";
     const GOLDEN_AEAD_PT: &[u8] = b"M2M golden vector plaintext";
 
-    #[test]
-    fn migration_vector_capture_PRINT() {
-        // Ed25519: seed ? keypair ? signature
-        let kp = IdentityKeypair::from_seed(&GOLDEN_SEED).unwrap();
-        println!("ED_PUB  = {:?}", kp.public_key_bytes());
-        println!("ED_SIG  = {:?}", kp.sign(b"m2m golden message"));
-
-        // X25519: raw scalar � raw point (no clamping surprises � both impls clamp)
-        let scalar: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0xA5);
-        let point: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0x5A);
-        let shared = golden::x25519_raw(&scalar, &point);
-        println!("X_SHARED= {:?}", shared);
-
-        // AEAD seal with fixed nonce
-        let ct = golden::aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
-        println!("AEAD_CT = {:?}", ct);
-
-        panic!("capture run � read values above");
-    }
 
     #[test]
     fn test_golden_vectors_post_migration() {
@@ -1983,7 +1964,6 @@ mod crypto_tests {
         assert_eq!(ct.len(), GOLDEN_AEAD_CT.len());
         assert!(ct.iter().zip(GOLDEN_AEAD_CT.iter()).all(|(a, b)| a == b), "AEAD ciphertext mismatch");
 
-        // And the decrypt direction opens the libsodium-produced ciphertext.
         // And the decrypt direction opens the libsodium-produced ciphertext.
         let pt = golden::aead_open(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, &ct, GOLDEN_AEAD_AAD).unwrap();
         assert_eq!(pt, GOLDEN_AEAD_PT);
