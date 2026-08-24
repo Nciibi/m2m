@@ -1033,6 +1033,22 @@ fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
         .map_err(|_| CryptoError::DecryptionFailed)
 }
 
+/// Public AEAD helpers for modules outside crypto (group.rs) — fixed
+/// 24-byte nonce, empty-AAD-tolerant. Same wire format as before.
+pub fn aead_seal_pub(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[u8]) -> Vec<u8> {
+    aead_seal(key, nonce, plaintext, aad)
+}
+
+/// Inverse of [`aead_seal_pub`]; fails on tag mismatch or bad lengths.
+pub fn aead_open_pub(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
+    -> Result<Vec<u8>, CryptoError>
+{
+    if key.len() != 32 || nonce.len() != 24 {
+        return Err(CryptoError::InvalidKeyLength);
+    }
+    aead_open(key, nonce, ciphertext, aad)
+}
+
 // ─── Migration golden-vector helpers (test-only) ───────────────────────────
 // Post-migration these route through the RustCrypto primitives; the
 // GOLDEN_* constants above were captured from libsodium and remain the
