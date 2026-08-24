@@ -287,6 +287,13 @@ pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Res
     let mut payload = vec![0u8; frame_len as usize];
     read_exact_timeout(reader, &mut payload, "frame body").await?;
 
+    // Frame must carry at least version(1) + packet_type(1); anything less
+    // is garbage from an attacker, not a parseable frame. (Fuzzing found
+    // the pre-fix version panicking on payload[0]/[1] for tiny frames.)
+    if payload.len() < 2 {
+        return Err(NetworkError::Protocol(protocol::ProtocolError::InvalidVersion(payload[0])));
+    }
+
     // Parse version
     let version = payload[0];
     validate_version(version)?;
