@@ -905,10 +905,9 @@ impl DoubleRatchet {
         nonce: &[u8],
         aad: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        let key = aead::Key::from_slice(key_bytes).ok_or(CryptoError::InvalidKeyLength)?;
-        let nonce_obj = aead::Nonce::from_slice(nonce).ok_or(CryptoError::DecryptionFailed)?;
-        aead::open(ciphertext, Some(aad), &nonce_obj, &key)
-            .map_err(|_| CryptoError::DecryptionFailed)
+        let mut nonce_arr = [0u8; 24];
+        nonce_arr.copy_from_slice(nonce);
+        aead_open(key_bytes, &nonce_arr, ciphertext, aad)
     }
 
     /// Check if we should perform a DH ratchet (based on message count).
