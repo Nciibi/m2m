@@ -136,15 +136,8 @@ impl IdentityKeypair {
     pub fn fingerprint(&self) -> String {
         fingerprint_from_public_key(&self.public_key_bytes())
     }
-}
-
-impl Drop for IdentityKeypair {
-    fn drop(&mut self) {
-        // SigningKey is ZeroizeOnDrop internally, but scrub the expanded
-        // representation defensively via re-derivation of nothing — instead
-        // zeroize what we can observe. (The struct owns no extra copies.)
-        // This Drop exists to keep the historical guarantee explicit.
-    }
+    // NOTE: no manual Drop — ed25519-dalek's SigningKey is ZeroizeOnDrop,
+    // which scrubs the seed when the keypair is dropped.
 }
 
 /// Generate a fingerprint from a raw public key.
