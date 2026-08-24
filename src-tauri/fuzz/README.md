@@ -15,8 +15,10 @@ structs, message padding, and DHT bootstrap responses.
 
 ## Running
 
-Requires **nightly Rust** and a libFuzzer-supported OS (Linux; use WSL on
-Windows):
+Requires **nightly Rust** and a libFuzzer-supported OS (**Linux** — use
+WSL on Windows; plain MSVC `cargo build` of these targets fails at LINK
+with "entry point must be defined" because libFuzzer's driver is only
+wired in by cargo-fuzz's sanitizer flags):
 
 ```sh
 cd src-tauri/fuzz
@@ -25,6 +27,9 @@ cargo +nightly fuzz run wire_structs -- -max_total_time=300
 cargo +nightly fuzz run padding     -- -max_total_time=300
 cargo +nightly fuzz run dht_parser  -- -max_total_time=300
 ```
+
+`cargo check` (any toolchain, any OS) type-checks all targets without
+linking — use it for quick validation after edits.
 
 Crashes land in `crash-*` files — minimize with
 `cargo +nightly fuzz tmin crash-*`, then convert to a regression test in
