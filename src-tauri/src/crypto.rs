@@ -248,7 +248,7 @@ pub(crate) fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
 /// SHA-256; larger requests panic (they are a programming error — all
 /// internal callers request ≤ 64 bytes).
 pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8> {
-    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+    use hmac::Mac;
     let n = length.div_ceil(32);
     assert!(
         n <= 255,
@@ -257,7 +257,7 @@ pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8>
     let mut result = Vec::with_capacity(length);
     let mut t: Vec<u8> = Vec::new();
     for i in 1..=n as u8 {
-        let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(prk)
+        let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(prk)
             .expect("HMAC accepts any key length");
         mac.update(&t);
         mac.update(info);
