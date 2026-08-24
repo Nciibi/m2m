@@ -1,12 +1,12 @@
-# M2M — Security Checklist
+# M2M â€” Security Checklist
 
 > **Canonical, per-item status lives in [SECURITY-HARDENING.md](SECURITY-HARDENING.md).**
 > This page is the quick-scan summary. Last updated: v4.0.0.
 
 ## Cryptography
-- [x] Pure-Rust RustCrypto stack (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) — no C FFI, actively maintained
+- [x] Pure-Rust RustCrypto stack (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) â€” no C FFI, actively maintained
 - [x] No custom crypto constructions; wire formats pinned by libsodium golden vectors + RFC 8032/7748 tests
-- [x] Ed25519 signatures · X25519 key exchange · XChaCha20-Poly1305 AEAD · HKDF-SHA256 · Argon2id
+- [x] Ed25519 signatures â€” X25519 key exchange â€” XChaCha20-Poly1305 AEAD â€” HKDF-SHA256 â€” Argon2id
 - [x] Zeroize on drop for all key material
 
 ## Data at rest

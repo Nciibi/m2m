@@ -475,7 +475,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
-      addToast(arming ? "Panic hotkey ARMED — Ctrl+Alt+Shift+W wipes everything" : "Panic hotkey disarmed", arming ? "warning" : "info");
+      addToast(arming ? "Panic hotkey ARMED â€” Ctrl+Alt+Shift+W wipes everything" : "Panic hotkey disarmed", arming ? "warning" : "info");
     } catch (e) {
       addToast("Failed to toggle panic hotkey: " + e, "error");
     }

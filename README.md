@@ -306,7 +306,7 @@ Each module owns exactly **one mechanism**:
 
 | Module | What it does | Design rationale |
 |--------|-------------|-----------------|
-| [`crypto.rs`](src-tauri/src/crypto.rs) | RustCrypto wrappers (Ed25519, X25519, XChaCha20-Poly1305) | Single crypto abstraction layer � golden-vector tests pin wire formats across provider changes |
+| [`crypto.rs`](src-tauri/src/crypto.rs) | RustCrypto wrappers (Ed25519, X25519, XChaCha20-Poly1305) | Single crypto abstraction layer — golden-vector tests pin wire formats across provider changes |
 | [`protocol.rs`](src-tauri/src/protocol.rs) | Wire format | Versioned, length-prefixed framing with strict validation — the network boundary enforcement point |
 | [`network.rs`](src-tauri/src/network.rs) | TCP transport | Framing, timeouts, rate limiting — everything related to raw socket I/O |
 | [`session.rs`](src-tauri/src/session.rs) | Encrypted sessions | Handshake state machine, encryption/decryption, replay protection — the E2EE core |
