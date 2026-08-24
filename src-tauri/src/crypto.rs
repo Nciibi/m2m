@@ -52,7 +52,7 @@ const MAX_GAP_DERIVATION: usize = 1000;
 
 #[derive(Debug, Error)]
 pub enum CryptoError {
-    #[error("sodiumoxide initialization failed")]
+    #[error("initialization failed")]
     InitFailed,
     #[error("encryption failed")]
     EncryptionFailed,
@@ -1530,7 +1530,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_initiate_and_respond_produce_same_key() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1555,7 +1555,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_with_opk() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1582,7 +1582,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_wrong_identity_key_fails() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ik_evil = X25519IdentityKeypair::generate();
@@ -1608,7 +1608,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_wrong_signed_prekey_fails() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1635,7 +1635,7 @@ mod crypto_tests {
 
     #[test]
     fn test_x3dh_without_opk_works() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1658,13 +1658,13 @@ mod crypto_tests {
 
     // ─── Double Ratchet Tests ────────────────────────────────
 
-    fn init_sodiumoxide() {
+    fn init_crypto_test_hook() {
         // Pure-Rust stack: no initialization needed (no-op kept for tests).
         let _ = crate::crypto::init();
     }
 
     fn make_dr_pair() -> (DoubleRatchet, DoubleRatchet) {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let ik_alice = X25519IdentityKeypair::generate();
         let ik_bob = X25519IdentityKeypair::generate();
         let ek_alice = EphemeralKeypair::generate();
@@ -1806,7 +1806,7 @@ mod crypto_tests {
 
     #[test]
     fn test_dr_responder_first_send_forces_ratchet() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let x3dh = X3DHSessionKeys {
             root_key: [0xAA; 32],
             chain_key: [0xBB; 32],
@@ -1828,7 +1828,7 @@ mod crypto_tests {
 
     #[test]
     fn test_dr_decrypt_no_recv_chain_fails() {
-        init_sodiumoxide();
+        init_crypto_test_hook();
         let x3dh = X3DHSessionKeys {
             root_key: [0xAA; 32],
             chain_key: [0xBB; 32],
