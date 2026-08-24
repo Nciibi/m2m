@@ -1277,7 +1277,7 @@ async fn handle_file_transfer_packet(
                                                 // Stream-hash the temp file in fixed-size chunks —
                                                 // never buffer the whole file in RAM (peer could
                                                 // have declared up to MAX_FILE_SIZE).
-                                                let mut hasher = sodiumoxide::crypto::hash::sha256::State::new();
+                                                let mut hasher = sha2::Sha256::new();
                                                 let mut buf = vec![0u8; crate::protocol::MAX_FILE_CHUNK_SIZE];
                                                 let mut hashed_len: u64 = 0;
                                                 let mut read_ok = true;
@@ -1299,7 +1299,8 @@ async fn handle_file_transfer_packet(
                                                 }
                                                 read_ok
                                                     && hashed_len == transfer.total_size
-                                                    && hasher.finalize().0.to_vec() == transfer.file_hash
+                                                    && let digest: [u8; 32] = hasher.finalize().into();
+                                                            digest.to_vec() == transfer.file_hash
                                             } else {
                                                 false
                                             };
