@@ -1988,6 +1988,4 @@ mod crypto_tests {
         ];
         assert_eq!(golden::x25519_raw(&scalar, &point), expected);
     }
-        assert_eq!(pt, GOLDEN_AEAD_PT);
-    }
 }
