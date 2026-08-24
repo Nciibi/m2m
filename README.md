@@ -235,6 +235,7 @@ Peer receives invite ──▶ Verifies Ed25519 signature
 ├─────────────────────────────────────────────┤
 │                 TCP Transport               │
 └─────────────────────────────────────────────┘
+```
 
 ### Rate Limiting & DoS Protection
 
