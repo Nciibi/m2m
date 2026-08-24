@@ -370,10 +370,14 @@ pub async fn unlock_vault(
     // ─── Phase 3: Async state writes ───
     {
         let mut id_lock = state.identity.write().await;
+        // mlock sweep: lock seed pages now that the keypair sits at its
+        // stable heap address inside the RwLock (see lock_range caveat).
+        keypair.lock_memory();
         *id_lock = Some(keypair);
     }
     {
         let mut x_lock = state.x25519_identity.write().await;
+        x25519_kp.lock_memory();
         *x_lock = Some(x25519_kp);
     }
     {
