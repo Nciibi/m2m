@@ -392,7 +392,6 @@ sequenceDiagram
 | [Rust](https://www.rust-lang.org/) | ≥ 1.85 (stable) | Backend compilation |
 | [Node.js](https://nodejs.org/) | ≥ 20 LTS | Frontend toolchain |
 
-| [libsodium](https://doc.libsodium.org/) | ≥ 1.0.18 | Cryptographic library *(system dep on Linux/macOS)* |
 
 ### Installation
 
@@ -488,7 +487,7 @@ The relay server is lightweight (~5 MB binary, ~8 MB RSS). Configure your M2M cl
 | **Desktop Shell** | [Tauri v2](https://tauri.app/) | Secure WebView sandbox, small binary (~10 MB vs Electron's ~150 MB), native Rust IPC |
 | **UI Framework** | [React 19](https://react.dev/) | Component model maps naturally to chat UI, well-audited, large ecosystem |
 | **Bundler** | [Vite 7](https://vitejs.dev/) | Sub-second HMR, native ESM, optimized production builds |
-| **Cryptography** | [libsodium](https://doc.libsodium.org/) via `sodiumoxide` 0.2 | Audited C library with safe Rust bindings — never implement your own crypto |
+| **Cryptography** | RustCrypto (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) | Pure-Rust, actively maintained, no C FFI — never implement your own crypto |
 | **Serialization** | [MessagePack](https://msgpack.org/) via `rmp-serde` 1 | Compact binary format (no parsing ambiguity like JSON), zero-copy deserialization |
 | **Async Runtime** | [tokio](https://tokio.rs/) 1 (full features) | Industry-standard async Rust — TCP, timers, concurrency, JoinSet for Happy Eyeballs |
 | **Local Storage** | [rusqlite](https://github.com/rusqlite/rusqlite) 0.33 (bundled) | Zero-dependency SQLite (no system libsqlite3 needed) |
