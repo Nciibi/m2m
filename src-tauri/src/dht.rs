@@ -186,7 +186,7 @@ fn build_dht_message(msg_type: u8, body: &[u8]) -> Vec<u8> {
 }
 
 /// Parse a DHT message: returns (type, body).
-fn parse_dht_message(data: &[u8]) -> Result<(u8, &[u8]), DhtError> {
+pub fn parse_dht_message(data: &[u8]) -> Result<(u8, &[u8]), DhtError> {
     if data.len() < 5 {
         return Err(DhtError::BadResponse("message too short".into()));
     }
