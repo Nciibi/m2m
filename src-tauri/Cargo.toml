@@ -23,8 +23,15 @@ tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Crypto: libsodium bindings (proven, audited)
-sodiumoxide = "0.2"
+# Crypto: pure-Rust RustCrypto stack (security roadmap §4 — migrated FROM
+# the archived sodiumoxide/libsodium bindings). Byte-compatible with the
+# previous wire/DB formats: Ed25519 + X25519 are curve math; XChaCha20-
+# Poly1305-IETF layout is identical (24B nonce, 16B tag appended).
+# Enforced by golden vectors captured from libsodium + RFC 8032/7748 tests.
+ed25519-dalek = "2"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+getrandom = "0.2"
 
 # HKDF + HMAC for X3DH and Double Ratchet key derivation
 hkdf = "0.13"
