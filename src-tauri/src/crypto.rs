@@ -230,6 +230,24 @@ impl X25519IdentityKeypair {
     pub fn diffie_hellman(&self, their_public: &[u8; 32]) -> Result<[u8; 32], CryptoError> {
         x25519_dh(&self.secret_key, their_public)
     }
+
+    /// Lock the secret's pages into RAM (call once stored in state).
+    pub fn lock_memory(&self) {
+        if !crate::secure_key::lock_range(
+            self.secret_key.as_ptr() as *const std::ffi::c_void,
+            32,
+        ) {
+            tracing::warn!("X25519 secret mlock failed — swap protection unavailable");
+        }
+    }
+
+    /// Unlock pages previously locked via [`lock_memory`].
+    pub fn unlock_memory(&self) {
+        crate::secure_key::unlock_range(
+            self.secret_key.as_ptr() as *const std::ffi::c_void,
+            32,
+        );
+    }
 }
 
 /// Raw X25519 scalar×point with libsodium-parity semantics:
