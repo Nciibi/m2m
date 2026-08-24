@@ -40,6 +40,7 @@ interface SettingsContextValue {
   handleEphemeralModeToggle: () => Promise<void>;
   handleSendBatchingChange: (ms: number) => Promise<void>;
   handleCoverTypingToggle: () => Promise<void>;
+  handlePanicHotkeyArmToggle: () => Promise<void>;
   duressConfigured: boolean;
   setDuressPassphrase: (passphrase: string) => Promise<void>;
   clearDuressPassphrase: () => Promise<void>;
@@ -256,7 +257,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // ── Security handlers ──
 
   const handleScreenCaptureToggle = useCallback(async () => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
     const newConfig: SecurityConfig = {
       ...current,
       screen_capture_protection: !current.screen_capture_protection,
@@ -310,7 +311,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleClipboardClearSecsChange = useCallback(async (secs: number) => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
     const newConfig: SecurityConfig = { ...current, clipboard_clear_secs: secs };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -321,7 +322,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleIdleLockSecsChange = useCallback(async (secs: number) => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
     const newConfig: SecurityConfig = { ...current, idle_lock_secs: secs };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -332,7 +333,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleRequireKnownContactToggle = useCallback(async () => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false };
+    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
     const newConfig: SecurityConfig = {
       ...current,
       require_known_contact: !current.require_known_contact,
@@ -456,6 +457,30 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     catch { /* noop */ }
   }, []);
 
+
+  const handlePanicHotkeyArmToggle = useCallback(async () => {
+    const current = securityConfig ?? {
+      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
+      require_known_contact: false, capture_process_detection: false,
+      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
+      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
+    };
+    const arming = !current.panic_hotkey_enabled;
+    if (arming) {
+      if (!window.confirm(
+        "ARM PANIC HOTKEY?\n\nCtrl+Alt+Shift+W will IMMEDIATELY delete all local data and close M2M. No confirmation. No undo.\n\nArm it?"
+      )) return;
+    }
+    const newConfig: SecurityConfig = { ...current, panic_hotkey_enabled: arming };
+    try {
+      const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+      setSecurityConfig(result);
+      addToast(arming ? "Panic hotkey ARMED � Ctrl+Alt+Shift+W wipes everything" : "Panic hotkey disarmed", arming ? "warning" : "info");
+    } catch (e) {
+      addToast("Failed to toggle panic hotkey: " + e, "error");
+    }
+  }, [securityConfig, addToast]);
+
   const handleLockVault = useCallback(async () => {
     try {
       await invoke("lock_vault");
@@ -490,7 +515,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       securityConfig,
       captureCapability,
       handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
-      handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle,
+      handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle, handlePanicHotkeyArmToggle,
       duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
       handleClipboardClearSecsChange,
       handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
