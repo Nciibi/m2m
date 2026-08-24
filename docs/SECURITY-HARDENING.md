@@ -93,7 +93,7 @@ The only in-app path that meaningfully beats kernel-level keyloggers. This is ho
 
 ### Supply chain & build integrity
 - [x] **Reproducible builds scaffolding** — pinned toolchain (`src-tauri/rust-toolchain.toml`), locked-dependency release script with fixed SOURCE_DATE_EPOCH + published hashes (`scripts/build-release.sh`). Full reproducibility claim still needs two independent CI machines producing byte-identical artifacts.
-- [ ] Migrate archived sodiumoxide → RustCrypto (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) — deliberately deferred: a whole-crypto-library swap must be its own change with test-vector validation, not a batch item.
+- [x] **sodiumoxide → RustCrypto migration COMPLETE** — Ed25519 (ed25519-dalek 2), X25519 (x25519-dalek 2), XChaCha20-Poly1305-IETF (chacha20poly1305 0.10), SHA-256 (sha2), CSPRNG (getrandom). Byte-compatibility PROVEN by golden vectors captured from libsodium pre-swap (keys, signatures, DH shares, AEAD ciphertexts all identical) plus RFC 8032 §7.1 / RFC 7748 §5.2 known-answer tests. Intentional break: legacy `crypto_kx` session-key derivation replaced with documented HKDF construction (`m2m-kx-v1`) — libsodium's BLAKE2b-based kx is not reproducible outside libsodium; no installed base exists to interop with.
 - [x] **Signed updates wiring** — `tauri-plugin-updater` registered, `createUpdaterArtifacts: true`; channel INERT until maintainer sets pubkey+endpoint per `docs/SIGNED-UPDATES.md`
 - [x] Dependency pinning + periodic `cargo audit` (CI already runs this); sysinfo pinned to exact version
 
