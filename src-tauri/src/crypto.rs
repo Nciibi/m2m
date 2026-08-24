@@ -1641,7 +1641,8 @@ mod crypto_tests {
     // ─── Double Ratchet Tests ────────────────────────────────
 
     fn init_sodiumoxide() {
-        let _ = sodiumoxide::init();
+        // Pure-Rust stack: no initialization needed (no-op kept for tests).
+        let _ = crate::crypto::init();
     }
 
     fn make_dr_pair() -> (DoubleRatchet, DoubleRatchet) {
