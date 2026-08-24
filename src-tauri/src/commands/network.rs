@@ -7,6 +7,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use sha2::Digest;
+
 use chrono::Utc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
