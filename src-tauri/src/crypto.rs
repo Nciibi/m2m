@@ -114,7 +114,6 @@ impl IdentityKeypair {
 
     /// Sign a message with this identity key.
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
-        use ed25519_dalek::Signature;
         self.signing.sign(message).to_bytes().to_vec()
     }
 
