@@ -718,7 +718,7 @@ impl DoubleRatchet {
         // Zeroize the message key after use (drop does this, but be explicit)
         drop(msg_key);
 
-        Ok((ratchet_pub, msg_num, nonce_vec, ciphertext))
+        Ok((ratchet_pub, msg_num, nonce.to_vec(), ciphertext))
     }
 
     /// Decrypt a message: derive message key, decrypt, advance chain.
