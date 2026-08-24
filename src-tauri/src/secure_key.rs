@@ -107,6 +107,37 @@ impl Drop for StorageKey {
     }
 }
 
+/// Lock an arbitrary fixed-size secret buffer into physical RAM
+/// (mlock/VirtualLock). Best-effort: returns false instead of panicking so
+/// callers can degrade gracefully for non-critical secrets.
+///
+/// # Move semantics caveat
+/// Rust moves invalidate addresses — callers MUST lock only AFTER placing
+/// the secret at its final stable location (e.g., inside a heap-backed
+/// RwLock) and unlock BEFORE removing it.
+pub fn lock_range(ptr: *const std::ffi::c_void, len: usize) -> bool {
+    #[cfg(unix)]
+    unsafe {
+        mlock(ptr, len) == 0
+    }
+    #[cfg(windows)]
+    unsafe {
+        VirtualLock(ptr, len) != 0
+    }
+}
+
+/// Inverse of [`lock_range`]. Best-effort; failures are non-fatal.
+pub fn unlock_range(ptr: *const std::ffi::c_void, len: usize) {
+    #[cfg(unix)]
+    unsafe {
+        let _ = munlock(ptr, len);
+    }
+    #[cfg(windows)]
+    unsafe {
+        let _ = VirtualUnlock(ptr, len);
+    }
+}
+
 impl std::fmt::Debug for StorageKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("StorageKey").field(&"[redacted]").finish()
