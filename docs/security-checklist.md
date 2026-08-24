@@ -1,65 +1,28 @@
-# M2M â€” Security Hardening Checklist
+# M2M — Security Checklist
 
-> **Last Updated**: 2026-05-28
+> **Canonical, per-item status lives in [SECURITY-HARDENING.md](SECURITY-HARDENING.md).**
+> This page is the quick-scan summary. Last updated: v4.0.0.
 
 ## Cryptography
-- [x] Use only proven libraries (libsodium via sodiumoxide)
-- [x] No custom crypto constructions
-- [x] Ed25519 for signatures
-- [x] X25519 for key exchange
-- [x] XChaCha20-Poly1305 for AEAD
-- [x] HKDF-SHA256 for key derivation
-- [x] Argon2id for passphrase-based key derivation
-- [x] Zeroize all sensitive memory on drop
-- [ ] Verify no secret material in core dumps
+- [x] Pure-Rust RustCrypto stack (`ed25519-dalek`, `x25519-dalek`, `chacha20poly1305`) — no C FFI, actively maintained
+- [x] No custom crypto constructions; wire formats pinned by libsodium golden vectors + RFC 8032/7748 tests
+- [x] Ed25519 signatures · X25519 key exchange · XChaCha20-Poly1305 AEAD · HKDF-SHA256 · Argon2id
+- [x] Zeroize on drop for all key material
+
+## Data at rest
+- [x] Passphrase-derived storage keys (Argon2id) locked via mlock/VirtualLock
+- [x] Crypto-shredding deletion (per-message wrapped CEKs)
+- [x] Crash dumps disabled at process start
+- [x] Encrypted metadata: reactions, family contacts, transfer filenames
 
 ## Network
-- [x] Length-prefixed framing with size limits
-- [x] Timeout on all network operations
-- [ ] Rate limiting on incoming messages
-- [x] Heartbeat with bounded retry
-- [x] Graceful disconnect protocol
-- [x] No plaintext ever on the wire after handshake
+- [x] X3DH + Double Ratchet with transactional receive (H3)
+- [x] Handshake signatures cover candidates; encrypted heartbeats with ack-timeout liveness
+- [x] Contact allowlist gate; connection rate limiting; frame size caps
+- [x] Air-gap mode blocks all internet-facing operations on demand
 
-## Protocol
-- [x] Version byte on every packet
-- [x] Strict packet type validation
-- [x] Reject unknown packet types
-- [x] No silent fallback to insecure behavior
-- [x] Replay protection via monotonic counters
-- [x] Message sequencing validation
-
-## Authentication
-- [x] Signed handshake messages
-- [x] Fingerprint display for out-of-band verification
-- [x] Invite signature verification before any processing
-- [x] Invite expiry enforcement
-- [x] One-time invite consumption tracking
-
-## Storage
-- [x] Keys encrypted at rest (Argon2id + SQLCipher)
-- [x] Messages encrypted at rest (separate key)
-- [x] Attachments encrypted individually
-- [x] Secure deletion with VACUUM
-- [x] Optional message history disable
-
-## UI / UX
-- [x] No auto-open of files
-- [x] No auto-render of untrusted content in main process
-- [x] Clear security state indicators
-- [x] Sanitized chat display (no XSS)
-- [x] Fingerprint comparison flow
-
-## Logging
-- [x] No keys in logs
-- [x] No plaintext in logs
-- [x] No invite contents in logs
-- [x] No IPs in logs (where avoidable)
-- [x] Redaction layer active
-
-## Build & Supply Chain
-- [x] Minimal dependencies
-- [ ] No telemetry or analytics
-- [ ] Reproducible builds
-- [x] Dependency audit
-- [x] CSP headers in Tauri webview
+## Operations
+- [x] Fuzzing targets + deterministic CI regressions for all parsers
+- [x] Reproducible-build scaffolding (pinned toolchain, locked deps)
+- [x] Signed-update wiring (inert until maintainer pubkey/endpoint)
+- [ ] External crypto audit ? the remaining gap

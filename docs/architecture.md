@@ -63,7 +63,7 @@ The tradeoff: TCP adds framing overhead and head-of-line blocking. For a messagi
 │  │  │              Cryptographic Layer                      │    │  │
 │  │  │  ┌─────────────┐ ┌─────────────┐ ┌────────────────┐  │    │  │
 │  │  │  │  crypto.rs  │ │  identity   │ │   session.rs   │  │    │  │
-│  │  │  │ (libsodium) │ │  .rs (keys) │ │  (handshake +  │  │    │  │
+│  │  │  │ (RustCrypto) │ │  .rs (keys) │ │  (handshake +  │  │    │  │
 │  │  │  └─────────────┘ └─────────────┘ │   encryption)  │  │    │  │
 │  │  │                                  └────────────────┘  │    │  │
 │  │  ├──────────────────────────────────────────────────────┤    │  │

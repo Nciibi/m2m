@@ -51,7 +51,7 @@ graph TD
 
 ## 3. Cryptography Explained (For Beginners)
 
-Cryptography sounds intimidating, but it revolves around a few core concepts. M2M uses a famous and highly audited library called **libsodium** to handle this safely.
+Cryptography sounds intimidating, but it revolves around a few core concepts. M2M uses a famous and highly audited library called **RustCrypto** to handle this safely.
 
 ### Public and Private Keys (Asymmetric Cryptography)
 When you first open M2M, it generates an **Identity Keypair** using an algorithm called `Ed25519`.
@@ -136,7 +136,7 @@ This ensures that the database file sitting on your hard drive looks entirely li
 
 ## 7. Conclusion
 
-By combining React for a beautiful User Interface, Rust for high-performance memory safety, and libsodium for military-grade cryptography, M2M creates a messaging environment that is fast, resilient, and entirely private. 
+By combining React for a beautiful User Interface, Rust for high-performance memory safety, and RustCrypto for military-grade cryptography, M2M creates a messaging environment that is fast, resilient, and entirely private. 
 
 ---
 
@@ -210,7 +210,7 @@ Because multiple tasks (like the UI clicking a button, and the network receiving
 ### Step 4: The Session State Machine (`src-tauri/src/session.rs`)
 When `commands.rs` calls `session.send_text()`, it hands the message to the **Session**. 
 
-The Session represents the mathematical and cryptographic state of a connection. It holds the shared `Session Key` we talked about in the Cryptography section. Its job is to take raw text, encrypt it into cipher-bytes using `libsodium`, and format it into a `PacketType::EncryptedMessage`.
+The Session represents the mathematical and cryptographic state of a connection. It holds the shared `Session Key` we talked about in the Cryptography section. Its job is to take raw text, encrypt it into cipher-bytes using `RustCrypto`, and format it into a `PacketType::EncryptedMessage`.
 
 ```rust
 // Inside session.rs
@@ -243,7 +243,7 @@ Let's trace a message from start to finish:
 1. You type "Hello" and click Send in **`App.tsx`**.
 2. React triggers an IPC command which calls `send_message` in **`commands.rs`**.
 3. `commands.rs` grabs the active connection from **`state.rs`**.
-4. The raw text is passed to **`session.rs`**, which uses `libsodium` to encrypt "Hello" into unreadable cipher-bytes.
+4. The raw text is passed to **`session.rs`**, which uses `RustCrypto` to encrypt "Hello" into unreadable cipher-bytes.
 5. The cipher-bytes are passed to **`network.rs`**, which calculates the size, prepends a 4-byte header, and fires it over the TCP socket.
 6. `commands.rs` then uses **`storage.rs`** to securely encrypt the message *again* and save it to your local SQLite database for later.
 7. Finally, the function returns, and React displays your chat bubble!
