@@ -219,23 +219,22 @@ Peer receives invite ──▶ Verifies Ed25519 signature
 
 ```
 ┌─────────────────────────────────────────────┐
-│              Message Plaintext               │
+│              Message Plaintext              │
 ├─────────────────────────────────────────────┤
-│         Exponential-Tier Padding             │  ← Traffic analysis mitigation
+│         Exponential-Tier Padding            │──▶ Traffic analysis mitigation
 ├─────────────────────────────────────────────┤
-│        EncryptedEnvelope (AEAD)              │
-│   ┌───────────────────────────────────────┐  │
-│   │ Nonce (24 B) │ Counter (8 B) │ CT     │  │
-│   └───────────────────────────────────────┘  │
+│        EncryptedEnvelope (AEAD)             │
+│   ┌───────────────┬──────────────┬───────┐  │
+│   │ Nonce (24 B)  │ Counter (8B) │  CT   │  │
+│   └───────────────┴──────────────┴───────┘  │
 ├─────────────────────────────────────────────┤
-│           Binary Frame (MessagePack)          │
-│   ┌───────────────────────────────────────┐  │
-│   │ Length (4 B) │ Ver (1 B) │ Type (1 B)│  │
-│   └───────────────────────────────────────┘  │
+│           Binary Frame (MessagePack)        │
+│   ┌──────────┬─────────┬─────────────────┐  │
+│   │ Len (4 B)│ Ver(1 B)│ Type (1 B)+Body │  │
+│   └──────────┴─────────┴─────────────────┘  │
 ├─────────────────────────────────────────────┤
-│                 TCP Transport                 │
+│                 TCP Transport               │
 └─────────────────────────────────────────────┘
-```
 
 ### Rate Limiting & DoS Protection
 
