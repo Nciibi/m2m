@@ -23,6 +23,7 @@ export default function SettingsView() {
     captureCapability,
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
     handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle,
+    handlePanicHotkeyArmToggle,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
