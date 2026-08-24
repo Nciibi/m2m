@@ -280,6 +280,11 @@ pub struct SecurityConfig {
     /// OFF by default.
     #[serde(default)]
     pub cover_typing_traffic: bool,
+    /// Arm the emergency panic-wipe hotkey (Ctrl+Alt+Shift+W). When armed
+    /// and the hotkey fires, ALL local data is deleted immediately and the
+    /// app exits — no confirmation, by design. OFF by default.
+    #[serde(default)]
+    pub panic_hotkey_enabled: bool,
 }
 
 /// Peer discovery method configuration.
