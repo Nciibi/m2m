@@ -537,7 +537,7 @@ We welcome contributions that align with M2M's zero-trust, privacy-first vision.
 
 1. **Read** the [Architecture](docs/architecture.md) doc to understand module boundaries.
 2. **Review** the [Threat Model](docs/threat-model.md) — never violate its assumptions.
-3. **Follow** the [ROADMAP.md](ROADMAP.md) for planned work.
+3. **Review** the [Security Hardening log](docs/SECURITY-HARDENING.md) before touching crypto or network code.
 4. **Run** `cargo test` and `cargo clippy -- -D warnings` before submitting.
 
 ### Principles
@@ -597,5 +597,5 @@ SOFTWARE.
   <a href="https://github.com/Nciibi/m2m">GitHub</a> •
   <a href="docs/threat-model.md">Security</a> •
   <a href="CONTRIBUTING.md">Contribute</a> •
-  <a href="ROADMAP.md">Roadmap</a>
+  <a href="docs/SECURITY-HARDENING.md">Security</a>
 </p>
