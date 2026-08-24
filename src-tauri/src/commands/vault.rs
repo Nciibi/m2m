@@ -1089,9 +1089,18 @@ async fn execute_duress_wipe(state: &Arc<AppState>) {
         state.transfer_store.lock().await.take();
     }
 
-    // 2. Zeroize all in-memory secrets (Drop impls zeroize).
-    state.identity.write().await.take();
-    state.x25519_identity.write().await.take();
+    // 2. Zeroize all in-memory secrets (Drop impls zeroize; mlock'd pages
+    //    are unlocked first).
+    {
+        let mut id_lock = state.identity.write().await;
+        if let Some(kp) = id_lock.as_ref() { kp.unlock_memory(); }
+        *id_lock = None;
+    }
+    {
+        let mut x_lock = state.x25519_identity.write().await;
+        if let Some(kp) = x_lock.as_ref() { kp.unlock_memory(); }
+        *x_lock = None;
+    }
     state.active_signed_prekey.write().await.take();
     state.active_one_time_prekey.write().await.take();
     state.storage_key.write().await.take();
