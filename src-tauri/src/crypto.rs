@@ -1240,11 +1240,6 @@ pub fn init() -> Result<(), CryptoError> {
     Ok(())
 }
 
-/// Initialize the sodiumoxide library. Must be called once at startup.
-pub fn init() -> Result<(), CryptoError> {
-    sodiumoxide::init().map_err(|_| CryptoError::InitFailed)
-}
-
 // ─── Message Padding ────────────────────────────────────────────────────────
 
 /// NOTE: Fixed `pad_message`/`unpad_message` have been replaced by the
