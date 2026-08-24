@@ -171,7 +171,7 @@ pub fn run() {
                     let mut sc = state.security_config.blocking_write();
                     *sc = effective.clone();
                 }
-                drop(state);
+                drop(state); // release the State wrapper (contents stay managed)
 
                 commands::security::apply_side_effects(
                     &app_handle.state::<Arc<AppState>>(),
