@@ -1128,6 +1128,25 @@ async fn execute_duress_wipe(state: &Arc<AppState>) {
     tracing::warn!(files_removed = removed, "duress wipe complete");
 }
 
+/// Emergency panic wipe: hotkey-triggered variant of the duress wipe.
+/// Gated behind an explicit arm toggle (`panic_hotkey_enabled`) so a stray
+/// keypress can never destroy data. Wipes EVERYTHING, then exits the app.
+#[tauri::command]
+pub async fn panic_wipe(
+    app_handle: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let armed = state.security_config.read().await.panic_hotkey_enabled;
+    if !armed {
+        return Err("panic hotkey is not armed".to_string());
+    }
+    tracing::warn!("PANIC WIPE triggered via hotkey");
+    execute_duress_wipe(&state).await;
+    app_handle.exit(0);
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
 /// Lock the vault — zeroizes keys in memory and marks vault as locked.
 ///
 /// After calling this, the user must unlock the vault again to perform
