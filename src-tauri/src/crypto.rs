@@ -974,9 +974,9 @@ impl SessionKeys {
         let mut input = Vec::with_capacity(32 + 14);
         input.extend_from_slice(&self.tx_key);
         input.extend_from_slice(b"m2m-ratchet-v1");
-        let hash = sha256::hash(&input);
+        let hash = sha2::Sha256::digest(&input);
         self.tx_key.zeroize();
-        self.tx_key.copy_from_slice(&hash.0[..32]);
+        self.tx_key.copy_from_slice(&hash[..32]);
     }
 
     /// Ratchet the receiving key forward after decrypting a message.
@@ -985,9 +985,9 @@ impl SessionKeys {
         let mut input = Vec::with_capacity(32 + 14);
         input.extend_from_slice(&self.rx_key);
         input.extend_from_slice(b"m2m-ratchet-v1");
-        let hash = sha256::hash(&input);
+        let hash = sha2::Sha256::digest(&input);
         self.rx_key.zeroize();
-        self.rx_key.copy_from_slice(&hash.0[..32]);
+        self.rx_key.copy_from_slice(&hash[..32]);
     }
 }
 
