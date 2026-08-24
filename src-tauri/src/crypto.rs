@@ -1891,7 +1891,7 @@ mod crypto_tests {
     /// X25519 shared secret for GOLDEN_X_SCALAR � GOLDEN_X_POINT (libsodium).
     const GOLDEN_X25519_SHARED: [u8; 32] = [0u8; 32]; // CAPTURE
 
-    const GOLDEN_SEED: [u8; 32] = core::array::from_fn(|i| i as u8);
+    const GOLDEN_SEED: [u8; 32] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31];
     const GOLDEN_AEAD_KEY: [u8; 32] = [0x42u8; 32];
     const GOLDEN_AEAD_NONCE: [u8; 24] = [
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
