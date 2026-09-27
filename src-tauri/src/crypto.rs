@@ -211,9 +211,27 @@ impl X25519IdentityKeypair {
         }
     }
 
+    /// Reconstruct a keypair from stored bytes.
+    ///
+    /// The stored public key is **verified against the secret** by
+    /// re-deriving it. This mirrors [`IdentityKeypair::from_bytes`] for
+    /// Ed25519, and matters because the public half lives in `vault_meta` as
+    /// unauthenticated plaintext alongside the AEAD-sealed secret: without
+    /// this check, anyone able to write to the key database could substitute
+    /// `x25519_pub` and have the client advertise, and sign into its
+    /// handshake, an attacker-chosen identity key while still performing DH
+    /// with the real secret. Every X3DH handshake would then fail
+    /// permanently (silent, unrecoverable denial of service) with no
+    /// indication of why.
     pub fn from_bytes(public: &[u8; 32], secret: &[u8; 32]) -> Result<Self, CryptoError> {
+        // `XSec::from` clamps the scalar exactly as `generate()` does, so the
+        // re-derivation is byte-identical to the original construction.
+        let derived = *XPub::from(&XSec::from(*secret)).as_bytes();
+        if !ct_eq(&derived, public) {
+            return Err(CryptoError::InvalidKeyLength);
+        }
         Ok(Self {
-            public_key: *public,
+            public_key: derived,
             secret_key: *secret,
         })
     }
