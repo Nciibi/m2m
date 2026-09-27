@@ -17,16 +17,6 @@ export type MockEventHandler = (event: unknown) => void;
 export type EventHandlerRegistry = Map<string, MockEventHandler>;
 
 /**
- * Build a `vi.hoisted()`-compatible registry.
- *
- * Must be called inside `vi.hoisted(...)` so the registry exists before the
- * `vi.mock` factories that close over it.
- */
-export function createEventHandlerRegistry(): { eventHandlers: EventHandlerRegistry } {
-  return { eventHandlers: new Map<string, MockEventHandler>() };
-}
-
-/**
  * Wrap a `vi.fn()` as the Tauri `invoke` mock.
  *
  * Tauri commands are `Result<T, String>` on the Rust side, so a rejected call

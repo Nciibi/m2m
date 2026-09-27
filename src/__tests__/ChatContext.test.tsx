@@ -3,14 +3,20 @@ import { act, screen, waitFor } from "@testing-library/react";
 import { render } from "./setup";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { createEventHandlerRegistry, type MockEventHandler } from "./tauriMock";
+import type { MockEventHandler } from "./tauriMock";
 
 const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }));
 // Capture the registered event handlers so a test can simulate a peer
 // connecting — the trust-anchor behaviour under test only applies once
 // `connection.peer_key_hex` is set.
-const { eventHandlers } = vi.hoisted(() => createEventHandlerRegistry());
+// NOTE: the Map is constructed inline rather than via a helper from
+// ./tauriMock — `vi.hoisted` callbacks are hoisted above the import statements,
+// so they cannot reference an imported *value* (a type-only import like
+// `MockEventHandler` is erased and is fine).
+const { eventHandlers } = vi.hoisted(() => ({
+  eventHandlers: new Map<string, MockEventHandler>(),
+}));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn((name: string, handler: MockEventHandler) => {
     eventHandlers.set(name, handler);
