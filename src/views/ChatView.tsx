@@ -120,29 +120,46 @@ export default function ChatView() {
 
   // Listen for file transfer progress events
   useEffect(() => {
-    const unlisten = listen<any>("m2m://transfer-progress", (event) => {
-      setFileProgress((prev) => ({ ...prev, [event.payload.transfer_id]: event.payload }));
+    const unlisten = listen("m2m://transfer-progress", (event) => {
+      // `filename` and `state` are peer-influenced and are rendered, and
+      // `state` is interpolated into a className — so validate.
+      const progress = asTransferProgressEvent(event.payload);
+      if (!progress) {
+        console.warn("M2M: dropping malformed m2m://transfer-progress payload");
+        return;
+      }
+      setFileProgress((prev) => ({ ...prev, [progress.transfer_id]: progress }));
     });
-    const unlistenComplete = listen<any>("m2m://file-complete", (event) => {
+    const unlistenComplete = listen("m2m://file-complete", (event) => {
+      const done = asTransferCompletedEvent(event.payload);
+      if (!done) {
+        console.warn("M2M: dropping malformed m2m://file-complete payload");
+        return;
+      }
       setFileProgress((prev) => {
         const next = { ...prev };
-        if (event.payload.transfer_id && next[event.payload.transfer_id]) {
-          next[event.payload.transfer_id] = { ...next[event.payload.transfer_id], state: "completed" };
+        if (next[done.transfer_id]) {
+          next[done.transfer_id] = { ...next[done.transfer_id], state: "completed" };
         }
         return next;
       });
     });
-    const unlistenCancelled = listen<any>("m2m://transfer-cancelled", (event) => {
+    const unlistenCancelled = listen("m2m://transfer-cancelled", (event) => {
+      const cancelled = asTransferCancelledEvent(event.payload);
+      if (!cancelled) {
+        console.warn("M2M: dropping malformed m2m://transfer-cancelled payload");
+        return;
+      }
       setFileProgress((prev) => {
         const next = { ...prev };
-        if (event.payload.transfer_id && next[event.payload.transfer_id]) {
-          next[event.payload.transfer_id] = { ...next[event.payload.transfer_id], state: "cancelled" };
+        if (next[cancelled.transfer_id]) {
+          next[cancelled.transfer_id] = { ...next[cancelled.transfer_id], state: "cancelled" };
         }
         return next;
       });
     });
     return () => {
-      unlisten.then(f => f());
+      unlisten.then(f => f()).catch(() => {});
       unlistenComplete.then(f => f());
       unlistenCancelled.then(f => f());
     };

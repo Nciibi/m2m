@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { asGroupEvent, asGroupMessageEvent } from "../events";
 import { Button, Badge, Input, ToastContainer } from "../components/ui";
 import {
   ArrowLeftIcon, PlusIcon, GroupsIcon, MessageIcon, SendIcon, LockIcon,
@@ -34,21 +35,27 @@ export default function GroupChatView() {
 
   useEffect(() => {
     loadGroups();
-    const unlisten = listen<any>("m2m://group-event", () => { loadGroups(); });
-    const unlistenMsg = listen<any>("m2m://group-message", (event) => {
-      const payload = event.payload.message || event.payload;
-      const msg: ChatMessage = {
-        id: payload.id || Date.now().toString(),
-        content: payload.content || "",
-        direction: "received",
-        timestamp: payload.timestamp || Math.floor(Date.now() / 1000),
-        read_at: null,
-        edited_at: null,
-        deleted: false,
-        expires_at: null,
-        reactions: {},
-        sender_peer_key_hex: payload.sender_peer_key_hex || "",
-      };
+    const unlisten = listen("m2m://group-event", (event) => {
+      // `event_type` is a known set; an unknown one means we do not understand
+      // what changed, so refresh anyway but do not trust the label.
+      if (!asGroupEvent(event.payload)) {
+        console.warn("M2M: unrecognised m2m://group-event payload");
+      }
+      loadGroups();
+    });
+    const unlistenMsg = listen("m2m://group-message", (event) => {
+      // The message body is peer-controlled and reaches renderMarkdown, and
+      // `sender_peer_key_hex` is rendered as the sender label.
+      const payload = asGroupMessageEvent(event.payload);
+      if (!payload) {
+        console.warn("M2M: dropping malformed m2m://group-message payload");
+        return;
+      }
+      // `direction` is forced to "received" for BOTH the locally-sent and the
+      // inbound event (the emitter supplies it, but the bubble renders from
+      // this flag), so keep the previous behaviour explicitly rather than
+      // silently depending on the payload.
+      const msg: ChatMessage = { ...payload.message, direction: "received" };
       setMessages((prev) => [...prev, msg]);
     });
     return () => {
