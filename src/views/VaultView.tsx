@@ -62,9 +62,13 @@ export default function VaultView() {
       setPassphrase("");
       setPassphraseConfirm("");
     } catch (e) {
-      const msg = typeof e === "string"
-        ? e
-        : e?.message || (createMode ? "Account creation failed." : "Unlock failed. Check your passphrase.");
+      // `errorMessage` handles both shapes Tauri rejections arrive in
+      // (a bare string, or an Error) — the previous `e?.message` access was
+      // unsound on `unknown` and yielded `undefined` for the string case.
+      const msg = errorMessage(
+        e,
+        createMode ? "Account creation failed." : "Unlock failed. Check your passphrase.",
+      );
       fail(msg);
       addToast(msg, "error");
     } finally {
