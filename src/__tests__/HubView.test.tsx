@@ -8,15 +8,15 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undef
 
 // Shared mock state that tests can mutate
 const state = {
-  identity: null as IdentityInfo | null,
-  conversations: [] as ConversationEntry[],
+  identity: null as DeepPartial<IdentityInfo> | null,
+  conversations: [] as DeepPartial<ConversationEntry>[],
   generatedInvite: "",
   inviteToConnect: "",
   inviteValid: false,
   isConnecting: false,
   namingMyName: "",
   namingTheirName: "",
-  networkSettings: null as NetworkSettings | null,
+  networkSettings: null as DeepPartial<NetworkSettings> | null,
   privateMode: false,
   toasts: [] as ToastData[],
   handleGenerateInvite: vi.fn(),
@@ -31,8 +31,8 @@ const state = {
   removeToast: vi.fn(),
   addToast: vi.fn(),
   setView: vi.fn(),
-  discoveryConfig: null as DiscoveryConfig | null,
-  discoveredPeers: [] as DiscoveredPeer[],
+  discoveryConfig: null as DeepPartial<DiscoveryConfig> | null,
+  discoveredPeers: [] as DeepPartial<DiscoveredPeer>[],
 };
 
 vi.mock("../context/AppContext", () => ({
@@ -88,6 +88,7 @@ import type {
   NetworkSettings,
 } from "../types";
 import type { ToastData } from "../components/ui/Toast";
+import type { DeepPartial } from "./tauriMock";
 
 describe("HubView", () => {
   beforeEach(() => {

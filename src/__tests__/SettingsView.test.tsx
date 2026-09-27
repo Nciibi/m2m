@@ -7,14 +7,14 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 // State for SettingsContext mock
 const settingsState = {
-  networkSettings: null as NetworkSettings | null,
+  networkSettings: null as DeepPartial<NetworkSettings> | null,
   publicIp: null as string | null,
   stunLoading: false,
-  networkDiagnostics: null as NatTypeInfo | null,
-  stunConfig: null as StunConfig | null,
+  networkDiagnostics: null as DeepPartial<NatTypeInfo> | null,
+  stunConfig: null as DeepPartial<StunConfig> | null,
   stunServerInput: "",
   privateMode: false,
-  connectivityResult: null as ConnectivityStatus | null,
+  connectivityResult: null as DeepPartial<ConnectivityStatus> | null,
   openSettings: vi.fn(),
   handleStunDiscover: vi.fn(),
   handleAddStunServer: vi.fn(),
@@ -24,8 +24,8 @@ const settingsState = {
   handleConnectivityCheck: vi.fn(),
   handleTorToggle: vi.fn(),
   setStunServerInput: vi.fn(),
-  discoveryConfig: null as DiscoveryConfig | null,
-  discoveredPeers: [] as DiscoveredPeer[],
+  discoveryConfig: null as DeepPartial<DiscoveryConfig> | null,
+  discoveredPeers: [] as DeepPartial<DiscoveredPeer>[],
   handleLanToggle: vi.fn(),
   handleDhtToggle: vi.fn(),
   handleConnectDiscoveredPeer: vi.fn(),
@@ -34,7 +34,7 @@ const settingsState = {
 
 // State for AppContext mock
 const appState = {
-  identity: null as IdentityInfo | null,
+  identity: null as DeepPartial<IdentityInfo> | null,
   toasts: [] as ToastData[],
   removeToast: vi.fn(),
   addToast: vi.fn(),
@@ -100,6 +100,7 @@ import type {
   StunConfig,
 } from "../types";
 import type { ToastData } from "../components/ui/Toast";
+import type { DeepPartial } from "./tauriMock";
 
 describe("SettingsView", () => {
   beforeEach(() => {

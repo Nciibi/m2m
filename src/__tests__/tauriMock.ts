@@ -43,3 +43,19 @@ export function asInvokeMock(fn: (...args: never[]) => unknown) {
 export function rejectWith(message: string): Promise<never> {
   return Promise.reject(message);
 }
+
+/**
+ * Recursively-optional version of `T`.
+ *
+ * Context mocks in these tests intentionally populate only the fields the
+ * component under test actually reads. Typing them as the full `T` would force
+ * every fixture to spell out all ~10 fields of a `ChatMessage`, most of which
+ * are irrelevant to the assertion — and the fields that *are* relevant would
+ * drown in the noise. `DeepPartial` states the real intent: this is a partial
+ * stand-in, not a full value.
+ */
+export type DeepPartial<T> = T extends (infer U)[]
+  ? DeepPartial<U>[]
+  : T extends object
+    ? { [K in keyof T]?: DeepPartial<T[K]> }
+    : T;

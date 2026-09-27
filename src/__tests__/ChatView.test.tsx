@@ -8,10 +8,10 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() =
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save: vi.fn() }));
 
 const state = {
-  connection: null as ConnectionInfo | null,
-  messages: [] as ChatMessage[],
-  identity: null as IdentityInfo | null,
-  fileRequests: [] as FileRequest[],
+  connection: null as DeepPartial<ConnectionInfo> | null,
+  messages: [] as DeepPartial<ChatMessage>[],
+  identity: null as DeepPartial<IdentityInfo> | null,
+  fileRequests: [] as DeepPartial<FileRequest>[],
   activeConversationId: null as string | null,
   typingPeers: [] as string[],
   reconnecting: false,
@@ -88,6 +88,7 @@ import type {
   IdentityInfo,
 } from "../types";
 import type { ToastData } from "../components/ui/Toast";
+import type { DeepPartial } from "./tauriMock";
 
 describe("ChatView", () => {
   beforeEach(() => {
