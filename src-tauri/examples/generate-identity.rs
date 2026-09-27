@@ -1,11 +1,24 @@
-use sodiumoxide::crypto::hash::sha256;
-use sodiumoxide::crypto::sign;
+//! Offline identity generator.
+//!
+//! Useful for air-gapped setups: generate a keypair on a machine that never
+//! touches the network, print the fingerprint, and carry the secret across.
+//!
+//! Uses `m2m_lib::crypto` rather than a direct dependency. It previously
+//! imported `sodiumoxide`, which the project migrated away from — so this
+//! target had not compiled since the migration, and `cargo test` /
+//! `cargo clippy --all-targets` both failed on it.
 
+use m2m_lib::crypto::IdentityKeypair;
+
+/// Format an Ed25519 public key as a colon-separated fingerprint.
+///
+/// MUST match `Session::peer_fingerprint` / `IdentityKeypair::fingerprint`
+/// byte for byte, or a user comparing fingerprints out of band would be
+/// comparing two different derivations and could be fooled by a mismatch that
+/// is actually cosmetic.
 fn fingerprint_from_public_key(public_key: &[u8; 32]) -> String {
-    let hash = sha256::hash(public_key);
-    let hex_str = hex::encode_upper(&hash.0[..16]);
-    hex_str
-        .as_bytes()
+    let full = IdentityKeypair::fingerprint_hex(public_key);
+    full.as_bytes()
         .chunks(4)
         .map(|chunk| std::str::from_utf8(chunk).unwrap_or("????"))
         .collect::<Vec<&str>>()
@@ -13,14 +26,11 @@ fn fingerprint_from_public_key(public_key: &[u8; 32]) -> String {
 }
 
 fn main() {
-    sodiumoxide::init().expect("sodiumoxide init failed");
+    let kp = IdentityKeypair::generate().expect("OS RNG unavailable");
 
-    // Generate Ed25519 keypair
-    let (pk, sk) = sign::gen_keypair();
-
-    let public_key_hex = hex::encode(pk.0);
-    let secret_key_hex = hex::encode(sk.0);
-    let fingerprint = fingerprint_from_public_key(&pk.0);
+    let public_key_hex = hex::encode(kp.public_key_bytes());
+    let secret_key_hex = hex::encode(kp.secret_key_bytes());
+    let fingerprint = fingerprint_from_public_key(&kp.public_key_bytes());
 
     println!("=== M2M Identity Generated ===");
     println!();
@@ -28,10 +38,8 @@ fn main() {
     println!("Public Key:      {}", public_key_hex);
     println!("Private Key:     {}", secret_key_hex);
     println!();
-    println!("⚠️  The private key is shown ONCE. Store it securely.");
+    println!("WARNING: The private key is shown ONCE. Store it securely.");
     println!("   This is the key that controls your identity.");
-    println!();
-    println!("Passkey:         {}", &secret_key_hex[..32]);
     println!();
     println!("=== Save this somewhere safe ===");
 }

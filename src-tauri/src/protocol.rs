@@ -6,11 +6,32 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroize;
 
-/// Current protocol version (v0x02 — includes X3DH + Double Ratchet).
-pub const PROTOCOL_VERSION: u8 = 0x02;
+/// Current protocol version (v0x03 — X3DH + Double Ratchet, authenticated
+/// DR header).
+///
+/// ## Why 0x03 and not 0x02
+///
+/// The Double Ratchet header (`ratchet_key`, `message_number`) is now folded
+/// into the AEAD's associated data. That is a **breaking wire-format change**:
+/// a v0x03 peer computes `AAD = context ‖ has_ratchet ‖ ratchet_key ‖
+/// message_number`, while a v0x02 peer computes just `context`.
+///
+/// Both would previously have reported `PROTOCOL_VERSION = 0x02` and passed the
+/// version handshake, then failed to decrypt *every* message with no useful
+/// diagnostic — indistinguishable from a broken network. Bumping the version
+/// makes that failure mode explicit: `validate_version` rejects the peer at
+/// handshake time with `UnsupportedVersion`, and the user is told to upgrade.
+///
+/// Never make an authenticated-format change without a version bump. If a
+/// future change *is* backward compatible, note that here explicitly.
+pub const PROTOCOL_VERSION: u8 = 0x03;
 
 /// Legacy protocol version (v0x01 — pre-X3DH, SHA-256 KDF ratchet only).
 /// Accepted for backward compatibility with older peers.
+///
+/// v0x02 (X3DH + Double Ratchet with an *unauthenticated* DR header) is
+/// deliberately NOT accepted: its AAD differs from v0x03's, so a v0x02 peer
+/// would handshake and then fail to decrypt everything.
 pub const PROTOCOL_VERSION_LEGACY: u8 = 0x01;
 
 /// Reserved version values that must never be used.

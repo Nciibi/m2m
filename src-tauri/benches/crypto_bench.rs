@@ -42,20 +42,23 @@ fn make_dr_receiver() -> (DoubleRatchet, [u8; 32]) {
 
 /// Inline storage-style encrypt (XChaCha20-Poly1305) so we don't need
 /// private module access to `commands::util`.
+/// Inline storage-style encrypt.
+///
+/// Uses `m2m_lib::crypto`'s public AEAD helper rather than a direct
+/// dependency. This previously imported `sodiumoxide`, which the project
+/// migrated away from, so the bench target had not compiled since — and
+/// `cargo clippy --all-targets` builds benches, so it broke the whole lint run.
 fn storage_encrypt(plaintext: &[u8], key: &[u8; 32], aad: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-    let nonce = aead::gen_nonce();
-    let key_bytes = aead::Key::from_slice(key).unwrap();
-    let ct = aead::seal(plaintext, Some(aad), &nonce, &key_bytes);
-    (nonce.0.to_vec(), ct)
+    let nonce = m2m_lib::crypto::random_bytes(24);
+    let nonce_arr: [u8; 24] = nonce.as_slice().try_into().expect("24 bytes");
+    let ct = m2m_lib::crypto::aead_seal_pub(key, &nonce_arr, plaintext, aad);
+    (nonce, ct)
 }
 
 /// Inline storage-style decrypt.
 fn storage_decrypt(ciphertext: &[u8], nonce: &[u8], key: &[u8; 32], aad: &[u8]) -> Vec<u8> {
-    use sodiumoxide::crypto::aead::xchacha20poly1305_ietf as aead;
-    let nonce_bytes = aead::Nonce::from_slice(nonce).unwrap();
-    let key_bytes = aead::Key::from_slice(key).unwrap();
-    aead::open(ciphertext, Some(aad), &nonce_bytes, &key_bytes).unwrap()
+    let nonce_arr: [u8; 24] = nonce.try_into().expect("24 bytes");
+    m2m_lib::crypto::aead_open_pub(key, &nonce_arr, ciphertext, aad).expect("decrypt")
 }
 
 // ── Benchmarks ─────────────────────────────────────────────────────────
