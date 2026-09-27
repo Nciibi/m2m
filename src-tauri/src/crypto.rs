@@ -23,7 +23,7 @@ use chacha20poly1305::{
     aead::{Aead, Payload},
     XChaCha20Poly1305,
 };
-use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use sha2::Digest;
 use x25519_dalek::{PublicKey as XPub, StaticSecret as XSec};
 use zeroize::{Zeroize, ZeroizeOnDrop};

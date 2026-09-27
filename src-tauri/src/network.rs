@@ -372,8 +372,9 @@ pub enum NetworkError {
     #[error("connection in invalid state: {0}")]
     #[expect(dead_code, reason = "Reserved error variant for invalid connection states")]
     InvalidState(String),
+    // Now constructed by `FrameRateLimiter`, so the dead-code expectation no
+    // longer applies.
     #[error("rate limit exceeded")]
-    #[expect(dead_code, reason = "Reserved error variant for rate limiting")]
     RateLimitExceeded,
 }
 
