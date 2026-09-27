@@ -1015,7 +1015,7 @@ mod tests {
     #[test]
     fn test_tampered_body_is_rejected_by_fingerprint() {
         let txn = [0x22u8; 12];
-        let msg = build_response_with_fingerprint(txn, true);
+        let mut msg = build_response_with_fingerprint(txn, true);
         // Sanity: untouched, it parses.
         assert!(parse_binding_response(&msg, &txn).is_ok());
 
