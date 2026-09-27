@@ -429,8 +429,16 @@
    FOCUSED capture by malware on the same host. */
 
 .security-blur {
+  /*
+   * Blurs the whole app shell when the window loses focus.
+
+   * `user-select: none` is added because a CSS blur does NOT stop a text
+   * selection: without it, a drag-select while unfocused can copy real
+   * message text straight into the clipboard, quietly defeating the control.
+   */
   filter: blur(18px) saturate(0.6);
   pointer-events: none;
+  user-select: none;
   transition: filter 120ms ease;
 }
 

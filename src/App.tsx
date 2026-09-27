@@ -134,19 +134,29 @@ function AppInner() {
   })();
 
   return (
-    <>
+    // The blur wrapper covers EVERYTHING, not just the view.
+    //
+    // It previously wrapped only `viewComponent`, leaving
+    // `<CaptureWarningBanner>` and `<ShortcutHelp>` as siblings outside it —
+    // so those were never blurred, and the "blur everything on focus loss"
+    // guarantee did not actually hold. The class now goes on the outermost
+    // element.
+    //
+    // `inert` (React 19) is applied alongside `aria-hidden`. `aria-hidden`
+    // alone removes content from the *accessibility tree* but leaves it
+    // focusable and clickable, so a keyboard user could still Tab into blurred
+    // content and interact with it. `inert` takes it out of both the a11y tree
+    // and the tab order, and the underlying content is only blurred when the
+    // window is not focused anyway.
+    <div className={blurred ? "security-blur" : undefined} aria-hidden={blurred || undefined} inert={blurred || undefined}>
       <CaptureWarningBanner active={captureWarning} />
       <ErrorBoundary name={view}>
-        <div
-          className={`view-fade ${blurred ? "security-blur" : ""}`}
-          key={view}
-          aria-hidden={blurred}
-        >
+        <div className="view-fade" key={view}>
           {viewComponent}
         </div>
       </ErrorBoundary>
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
-    </>
+    </div>
   );
 }
 
