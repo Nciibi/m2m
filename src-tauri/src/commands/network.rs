@@ -496,13 +496,75 @@ async fn handle_incoming_connection(
                     return;
                 }
             };
-            let opk_lock = state.active_one_time_prekey.read().await;
-            if let Err(e) = session.handshake_as_responder_x3dh(
-                &mut stream, kp, x25519_kp, spk, opk_lock.as_ref(), &frame, wire_candidates,
-            ).await {
-                tracing::warn!(error = %e, "X3DH handshake failed for incoming connection");
-                let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, "x3dh handshake failed").await;
-                return;
+            // ── One-time prekey: consume-on-use ──
+            //
+            // The OPK was previously a single slot, written once per invite
+            // and never rotated on use — so the "one-time" prekey was in
+            // practice a long-lived prekey, reused for every inbound session
+            // until the user created another invite. That substantially
+            // defeats the forward secrecy X3DH exists to provide: a single
+            // later compromise of the prekey (or of the prekey store) yields
+            // the DH4 input for *every* session established with that invite,
+            // not just one.
+            //
+            // Correct behaviour is to burn it. The trade-off is that a second
+            // peer presenting the same invite can no longer complete DH4,
+            // because the invite embeds the now-consumed public key. X3DH is
+            // defined to work without OPK, so we fall back to the no-DH4
+            // variant: that session gets less forward secrecy, which is the
+            // correct price for a prekey that was already spent, and it is
+            // logged rather than silently accepted.
+            let opk_consumed = frame_presented_one_time_prekey(&frame);
+            let opk_available = {
+                let opk_lock = state.active_one_time_prekey.read().await;
+                opk_lock.is_some()
+            };
+            let use_opk = opk_available && opk_consumed;
+
+            if opk_consumed && !opk_available {
+                tracing::warn!(
+                    "incoming X3DH handshake presented a one-time prekey that has \\
+                     already been consumed — continuing without DH4. This session has \\
+                     reduced forward secrecy; issue a fresh invite for full protection."
+                );
+            }
+
+            {
+                let spk_lock = state.active_signed_prekey.read().await;
+                let spk = match spk_lock.as_ref() {
+                    Some(spk) => spk,
+                    None => {
+                        tracing::error!("no signed prekey for X3DH handshake");
+                        return;
+                    }
+                };
+                let opk_lock = state.active_one_time_prekey.read().await;
+                let opk_for_handshake = if use_opk { opk_lock.as_ref() } else { None };
+                let result = session
+                    .handshake_as_responder_x3dh(
+                        &mut stream, kp, x25519_kp, spk, opk_for_handshake, &frame,
+                        wire_candidates,
+                    )
+                    .await;
+                drop(opk_lock);
+                drop(spk_lock);
+                if let Err(e) = result {
+                    tracing::warn!(error = %e, "X3DH handshake failed for incoming connection");
+                    let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, "x3dh handshake failed").await;
+                    return;
+                }
+            }
+
+            // Burn the prekey only after a *successful* handshake, so a failed
+            // or malformed attempt cannot be used to grief the user's
+            // forward secrecy by forcing prekey rotation.
+            if use_opk {
+                let mut opk_slot = state.active_one_time_prekey.write().await;
+                if let Some(spent) = opk_slot.take() {
+                    tracing::info!("one-time prekey consumed and retired");
+                    // `spent` drops here; EphemeralKeypair zeroizes its secret.
+                    drop(spent);
+                }
             }
         } else {
             // Legacy handshake path (use X25519 pub key for the `x25519_identity_pub` field)
