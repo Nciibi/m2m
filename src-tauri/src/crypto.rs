@@ -234,7 +234,7 @@ pub struct X25519IdentityKeypair {
 impl X25519IdentityKeypair {
     pub fn generate() -> Self {
         let mut secret = [0u8; 32];
-        getrandom::getrandom(&mut secret).expect("OS RNG unavailable");
+        fill_random(&mut secret)?;
         // StaticSecret clamps the scalar on construction (same as libsodium).
         let sec = XSec::from(secret);
         Self {
@@ -373,7 +373,7 @@ impl EphemeralKeypair {
     /// Generate a new ephemeral keypair for key exchange.
     pub fn generate() -> Self {
         let mut secret = [0u8; 32];
-        getrandom::getrandom(&mut secret).expect("OS RNG unavailable");
+        fill_random(&mut secret)?;
         let sec = XSec::from(secret);
         Self {
             public_key: *XPub::from(&sec).as_bytes(),
@@ -799,7 +799,9 @@ impl DoubleRatchet {
         self.send_message_number += 1;
 
         // Encrypt with XChaCha20-Poly1305
-        let nonce: [u8; 24] = random_bytes(24).try_into().expect("24 bytes");
+        let nonce: [u8; 24] = random_bytes(24)?
+            .try_into()
+            .map_err(|_| CryptoError::RandomnessUnavailable("nonce length".into()))?;
         let key = &msg_key.0;
         let ciphertext = aead_seal(key, &nonce, plaintext, aad);
 
@@ -1049,7 +1051,9 @@ impl SessionKeys {
                 max: MAX_ENCRYPT_SIZE,
             });
         }
-        let nonce: [u8; 24] = random_bytes(24).try_into().expect("24 bytes");
+        let nonce: [u8; 24] = random_bytes(24)?
+            .try_into()
+            .map_err(|_| CryptoError::RandomnessUnavailable("nonce length".into()))?;
         let ciphertext = aead_seal(&self.tx_key.clone(), &nonce, plaintext, aad);
         Ok((nonce.to_vec(), ciphertext))
     }
