@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, ToastContainer, OnScreenKeyboard } from "../components/ui";
 import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon, CheckIcon } from "../components/ui/Icons";
