@@ -92,6 +92,10 @@ type Bucket = governor::RateLimiter<
 pub struct FrameRateLimiter {
     frames: Bucket,
     bytes: Bucket,
+    /// The configured per-second byte budget, retained so a frame larger than
+    /// the whole budget can be clamped to it (and therefore always rejected)
+    /// without a wrapping subtraction.
+    byte_budget: u32,
 }
 
 /// Why a frame was rejected by [`FrameRateLimiter`].
