@@ -257,19 +257,43 @@ pub async fn unlock_vault(
         }
         let (kp, storage_key) = matched.ok_or("No account matches this passphrase.")?;
 
+        // X25519 identity: a failed decrypt must NOT silently mint a new
+        // identity. The previous behaviour generated a fresh keypair, set
+        // `needs_store = true`, and overwrote the row — so any corruption,
+        // partial write, or local tampering of `x25519_enc` irreversibly
+        // rotated the user's X25519 identity. Every invite already
+        // distributed carries the old key, so all pending inbound sessions
+        // broke, and nothing told the user why.
+        //
+        // Fail closed instead. The passphrase has already been proven correct
+        // at this point, so a failure here means real corruption and the user
+        // needs to hear about it.
         let (xkp, x_needs_store) = if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_preload
         {
-            match util::crypto_decrypt_storage(x_enc, x_nonce, &storage_key, util::AAD_KEY_STORE) {
-                Ok(x_sk_bytes) => {
-                    let mut x_sk_arr = [0u8; 32];
-                    x_sk_arr.copy_from_slice(&x_sk_bytes);
-                    let xkp = crate::crypto::X25519IdentityKeypair::from_bytes(x_pub, &x_sk_arr)
-                        .map_err(|e| format!("failed to reconstruct X25519: {e}"))?;
-                    (xkp, false)
-                }
-                Err(_) => (crate::crypto::X25519IdentityKeypair::generate(), true),
-            }
+            let x_sk_bytes = util::crypto_decrypt_storage(x_enc, x_nonce, &storage_key, util::AAD_KEY_STORE)
+                .map_err(|_| {
+                    "Your X25519 identity key could not be decrypted and has NOT been \
+                     replaced. This usually means the key store is damaged. \
+                     Restore from a backup or re-import your identity file — \
+                     generating a new key would silently break every contact."
+                        .to_string()
+                })?;
+            let x_sk_arr: [u8; 32] = x_sk_bytes.as_slice().try_into().map_err(|_| {
+                "Stored X25519 secret has the wrong length; the key store is damaged.".to_string()
+            })?;
+            // `from_bytes` re-derives the public key from the secret and
+            // rejects a mismatch, so a substituted `x25519_pub` cannot be
+            // loaded either.
+            let xkp = crate::crypto::X25519IdentityKeypair::from_bytes(x_pub, &x_sk_arr)
+                .map_err(|_| {
+                    "Stored X25519 public key does not match its secret — the key store \
+                     has been tampered with or is damaged. Refusing to load it."
+                        .to_string()
+                })?;
+            (xkp, false)
         } else {
+            // No stored X25519 identity at all — a genuine first run or a
+            // legacy profile being upgraded. Minting one here is correct.
             (crate::crypto::X25519IdentityKeypair::generate(), true)
         };
 
