@@ -2724,7 +2724,36 @@ pub fn spawn_receive_loop(
 
             match frame.packet_type {
                 PacketType::Disconnect => {
-                    tracing::info!(peer = %peer_key_hex, "peer sent disconnect");
+                    // A Disconnect is only honoured if it DECRYPTS. It used to
+                    // be sent and accepted in plaintext, which made a 14-byte
+                    // injected frame a universal session-kill primitive for any
+                    // on-path attacker — and trivially for the relay server,
+                    // which is a full MITM for relayed connections.
+                    //
+                    // The only cost of requiring authentication is that a peer
+                    // whose session is already broken cannot announce its
+                    // departure; it is reaped by the heartbeat timeout anyway.
+                    let authenticated = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(c) => {
+                                let mut c = c.lock().await;
+                                c.session.decrypt_typed_frame(&frame).is_ok()
+                            }
+                            None => false,
+                        }
+                    };
+
+                    if !authenticated {
+                        tracing::warn!(
+                            peer = %peer_key_hex,
+                            "ignoring UNAUTHENTICATED disconnect frame \
+                             (possible injection attempt)"
+                        );
+                        continue;
+                    }
+
+                    tracing::info!(peer = %peer_key_hex, "peer sent authenticated disconnect");
                     let was_verified = reconnect_info.as_ref()
                         .map(|ri| ri.peer_verified).unwrap_or(false);
                     let _ = app_handle.emit("m2m://connection", ConnectionEvent {
@@ -2740,16 +2769,36 @@ pub fn spawn_receive_loop(
                 PacketType::Error => {
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
-                PacketType::TypingIndicator => {
+                // Typing indicators are SENT encrypted (see commands/chat.rs) but
+                // were RECEIVED without decryption — the handler ignored the
+                // body entirely, so any peer could inject fake typing events
+                // into the victim's UI. Authenticate them like every other
+                // encrypted packet type, and only surface a decryptable one.
+                //
+                // Note: the plaintext body is empty, so a successful AEAD open
+                // is the entire check.
+                PacketType::TypingIndicator | PacketType::TypingIndicatorClear => {
+                    let typing = frame.packet_type == PacketType::TypingIndicator;
+                    let authenticated = {
+                        let conns = state.connections.read().await;
+                        match conns.get(&peer_key_hex) {
+                            Some(c) => {
+                                let mut c = c.lock().await;
+                                c.session.decrypt_typed_frame(&frame).is_ok()
+                            }
+                            None => false,
+                        }
+                    };
+                    if !authenticated {
+                        tracing::warn!(
+                            peer = %peer_key_hex,
+                            "ignoring unauthenticated typing indicator"
+                        );
+                        continue;
+                    }
                     let _ = app_handle.emit("m2m://typing", serde_json::json!({
                         "peer_key_hex": peer_key_hex,
-                        "typing": true,
-                    }));
-                }
-                PacketType::TypingIndicatorClear => {
-                    let _ = app_handle.emit("m2m://typing", serde_json::json!({
-                        "peer_key_hex": peer_key_hex,
-                        "typing": false,
+                        "typing": typing,
                     }));
                 }
                 _ => {
