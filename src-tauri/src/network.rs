@@ -160,20 +160,16 @@ impl FrameRateLimiter {
 /// `check`/`check_n` return a *nested* result:
 ///
 /// ```text
-/// Ok(Ok(_))               → allowed
-/// Ok(Err(NegativeOutcome)) → denied, over quota
-/// Err(InsufficientCapacity) → denied, the request can never fit this bucket
+/// Ok(Ok(_))                  → allowed
+/// Ok(Err(NegativeOutcome))   → denied, over quota
+/// Err(InsufficientCapacity)  → denied, can never fit this bucket
 /// ```
 ///
 /// Matching only on `.is_err()` catches just the third case and silently
 /// treats an over-quota rejection as a success — which is how a byte budget
 /// can appear to be enforced while letting everything through.
-fn bucket_denied<M>(r: Result<Result<M, governor::middleware::NegativeOutcome>, InsufficientCapacity>) -> bool {
-    match r {
-        Ok(Ok(_)) => false,
-        Ok(Err(_)) => true,
-        Err(InsufficientCapacity(_)) => true,
-    }
+fn denied<M, N>(r: Result<Result<M, N>, governor::InsufficientCapacity>) -> bool {
+    matches!(r, Ok(Err(_)) | Err(_))
 }
 
 impl Default for FrameRateLimiter {
