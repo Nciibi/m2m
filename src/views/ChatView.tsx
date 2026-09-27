@@ -117,7 +117,8 @@ export default function ChatView() {
       } catch { /* noop — older messages may not exist */ }
       setLoadingOlder(false);
     }
-  }, [messages, hasOlder, loadingOlder, activeConversationId]);
+    // `setMessages` is a stable `useState` setter.
+  }, [messages, hasOlder, loadingOlder, activeConversationId, setMessages]);
 
   // Listen for file transfer progress events
   useEffect(() => {

@@ -112,8 +112,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     view, setView,
     toasts, addToast, removeToast,
     identity, vaultInitialized, vaultUnlocked, refreshVault,
-  }), [view, toasts, identity, vaultInitialized, vaultUnlocked,
-       addToast, removeToast, refreshVault]);
+  }), [view, setView, toasts, addToast, removeToast, identity, vaultInitialized,
+       vaultUnlocked, refreshVault]);
 
   return (
     <AppContext.Provider value={value}>

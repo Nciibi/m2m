@@ -105,9 +105,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // `useMemo` after it (as an earlier revision of this file did) violated the
   // rules of hooks: the very first render called a different number of hooks
   // than every render after initialization, and React is entitled to throw.
+  // `setTheme`/`setAccentColor` are omitted from the deps because they are
+  // `useCallback`s that would otherwise make this memo churn on every render.
+  // The value they close over (`theme`) is already listed.
   const value = useMemo<ThemeContextValue>(
     () => ({ theme, setTheme, resolvedTheme, accentColor, setAccentColor }),
-    [theme, resolvedTheme, accentColor],
+    [theme, resolvedTheme, accentColor, setTheme, setAccentColor],
   );
 
   if (!initialized) {
