@@ -207,7 +207,7 @@ describe("SettingsView", () => {
   });
 
   it("shows connectivity result when available", () => {
-    settingsState.connectivityResult = { reachable: true, latency_ms: 42 };
+    settingsState.connectivityResult = { reachable: true, nat_type: "Full Cone" };
     render(<SettingsView />);
     expect(screen.getByText(/reachable/)).toBeInTheDocument();
   });

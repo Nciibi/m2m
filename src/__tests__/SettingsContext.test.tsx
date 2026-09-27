@@ -83,12 +83,12 @@ const DEFAULT_SECURITY_CONFIG = {
  * Keying the mock on the command name makes the suite independent of how many
  * reads the provider performs, and of the order it performs them in.
  */
-function defaultInvoke(cmd: string, args?: unknown): unknown {
+function defaultInvoke(cmd: string, args?: Record<string, unknown>): unknown {
   switch (cmd) {
     case "get_security_config":
       return { ...DEFAULT_SECURITY_CONFIG };
     case "set_security_config":
-      return { ...(args?.config ?? DEFAULT_SECURITY_CONFIG) };
+      return { ...((args?.config as object | undefined) ?? DEFAULT_SECURITY_CONFIG) };
     case "get_discovery_config":
       return { lan_enabled: false, dht_enabled: false };
     case "set_discovery_config":
