@@ -16,8 +16,25 @@ pub const PROTOCOL_VERSION_LEGACY: u8 = 0x01;
 /// Reserved version values that must never be used.
 const RESERVED_VERSIONS: [u8; 3] = [0x00, 0xFE, 0xFF];
 
-/// Maximum frame size: 16 MiB (version + payload, excluding the 4-byte length prefix).
-pub const MAX_FRAME_SIZE: u32 = 16 * 1024 * 1024;
+/// Maximum frame size: 1 MiB (version + payload, excluding the 4-byte length prefix).
+///
+/// ## Why this dropped from 16 MiB
+///
+/// The old 16 MiB ceiling was a single unattributed number applied to every
+/// packet type. Nothing in the protocol needs it: the largest legitimate
+/// payload is a padded text message (64 KiB, doubling at worst under
+/// variable padding) or a file chunk (256 KiB, plus AEAD/tag overhead).
+///
+/// The cost was that a *declared* length of `0x01000000` forced a 16 MiB
+/// zeroed allocation before a single body byte arrived, and the 1-second
+/// per-read Slowloris timeout let an attacker hold that allocation indefinitely
+/// while trickling bytes. Multiplied by the 50-connection cap that is 800 MiB
+/// of committed, attacker-paced memory from idle sockets.
+///
+/// 1 MiB is comfortably above every legitimate packet and cuts the
+/// amplification 16×. [`max_frame_size_for`] applies a far tighter per-type
+/// limit still.
+pub const MAX_FRAME_SIZE: u32 = 1024 * 1024;
 
 /// Maximum text message size: 64 KiB.
 pub const MAX_TEXT_MESSAGE_SIZE: usize = 64 * 1024;
