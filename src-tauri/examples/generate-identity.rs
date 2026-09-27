@@ -8,28 +8,18 @@
 //! target had not compiled since the migration, and `cargo test` /
 //! `cargo clippy --all-targets` both failed on it.
 
-use m2m_lib::crypto::IdentityKeypair;
-
-/// Format an Ed25519 public key as a colon-separated fingerprint.
-///
-/// MUST match `Session::peer_fingerprint` / `IdentityKeypair::fingerprint`
-/// byte for byte, or a user comparing fingerprints out of band would be
-/// comparing two different derivations and could be fooled by a mismatch that
-/// is actually cosmetic.
-fn fingerprint_from_public_key(public_key: &[u8; 32]) -> String {
-    let full = IdentityKeypair::fingerprint_hex(public_key);
-    full.as_bytes()
-        .chunks(4)
-        .map(|chunk| std::str::from_utf8(chunk).unwrap_or("????"))
-        .collect::<Vec<&str>>()
-        .join(":")
-}
+use m2m_lib::crypto::{fingerprint_from_public_key, IdentityKeypair};
 
 fn main() {
     let kp = IdentityKeypair::generate().expect("OS RNG unavailable");
 
     let public_key_hex = hex::encode(kp.public_key_bytes());
     let secret_key_hex = hex::encode(kp.secret_key_bytes());
+    // Use the crate's own derivation rather than reimplementing it — a second
+    // implementation that drifted by a single byte would produce a fingerprint
+    // that never matches the app's, and a user comparing them out of band would
+    // have no way to tell the difference between "not my contact" and "this
+    // tool is broken".
     let fingerprint = fingerprint_from_public_key(&kp.public_key_bytes());
 
     println!("=== M2M Identity Generated ===");
