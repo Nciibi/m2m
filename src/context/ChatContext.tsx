@@ -500,20 +500,32 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [activeConversationId, setView, addToast]);
 
   useEffect(() => {
-    const unlistenMsg = listen<any>("m2m://message", (event) => {
-      setMessages((prev) => [...prev, event.payload.message]);
+    const unlistenMsg = listen("m2m://message", (event) => {
+      // Validate before touching state. The payload is peer-controlled: the
+      // body goes to `renderMarkdown`, `peer_key_hex` becomes a SQLite lookup
+      // key and a notification group.
+      const payload = asMessageEvent(event.payload);
+      if (!payload) {
+        tracing.warn("dropping malformed m2m://message payload");
+        return;
+      }
+      const message = payload.message;
+      setMessages((prev) => [...prev, message]);
 
       // Send native OS notification if:
       // 1. Notification permission granted
       // 2. Not currently viewing this conversation
       // 3. Conversation is not muted
-      const peerKeyHex: string = event.payload.peer_key_hex;
+      const peerKeyHex = payload.peer_key_hex;
       if (
         notifPermissionRef.current
         && peerKeyHex !== activeConversationIdRef.current
         && !mutedConversationsRef.current.includes(peerKeyHex)
       ) {
-        const peerFingerprint = event.payload.peer_fingerprint ?? event.payload.message?.peer_fingerprint;
+        // `peer_fingerprint` is not part of the Rust `MessageEvent`, so it is
+        // always absent here; the old code read it from two places and got
+        // `undefined` both times. Fall back to the peer key prefix.
+        const peerFingerprint: string | null = null;
         const displayName = peerFingerprint
           ? peerFingerprint.substring(0, 8) + "…"
           : peerKeyHex.substring(0, 8) + "…";
@@ -541,13 +553,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    const unlistenConn = listen<any>("m2m://connection", async (event) => {
-      const stateStr = event.payload.state;
+    const unlistenConn = listen("m2m://connection", async (event) => {
+      // `state` drives view navigation and whether a Reconnect button is
+      // shown, so an unrecognised value must not be acted on.
+      const conn = asConnectionEvent(event.payload);
+      if (!conn) {
+        tracing.warn("dropping malformed m2m://connection payload");
+        return;
+      }
+      const stateStr = conn.state;
       setConnection({
         state: stateStr,
-        peer_fingerprint: event.payload.peer_fingerprint,
-        peer_verified: event.payload.peer_verified ?? false,
-        peer_key_hex: event.payload.peer_key_hex,
+        peer_fingerprint: conn.peer_fingerprint,
+        peer_verified: conn.peer_verified,
+        peer_key_hex: conn.peer_key_hex,
       });
       if (stateStr === "established") {
         setReconnecting(false);
@@ -560,7 +579,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       } else if (stateStr === "disconnected") {
         // For verified peers, stay on ChatView so user can attempt reconnect.
         // For unverified peers, go back to hub (no reconnect possible).
-        if (!event.payload.peer_verified) {
+        if (!conn.peer_verified) {
           setView("hub");
           setConnection(null);
           setMessages([]);
