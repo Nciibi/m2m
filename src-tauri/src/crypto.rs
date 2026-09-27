@@ -2034,18 +2034,27 @@ mod crypto_tests {
 
     /// A message number *behind* the receive counter with no ratchet key must
     /// be rejected without an arithmetic underflow (the `checked_sub` guard).
+    /// The counter is advanced by a few real messages first, so the "behind"
+    /// path is genuinely reachable from the wire.
     #[test]
     fn test_dr_message_number_behind_counter_is_rejected() {
         let (mut alice, mut bob) = make_dr_pair();
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
-        for i in 0..5 {
-            let (_, n_, nn, cc) = alice.encrypt(format!("m{}", i).as_bytes(), &aad, false).unwrap();
-            bob.decrypt(&cc, &nn, &aad, n_, n_.into_iter().next().as_ref()).ok();
+        // Advance Bob's receive counter to 3 via in-order delivery.
+        for i in 0..3u8 {
+            let (_, num, nonce, ct) = alice.encrypt(&[i], &aad, false).unwrap();
+            bob.decrypt(&ct, &nonce, &aad, num, None).unwrap();
         }
-        // Whatever happened above, no panic occurred and Bob still responds.
-        let (rk, num, n, c) = alice.encrypt(b"final", &aad, true).unwrap();
-        assert_eq!(&bob.decrypt(&c, &n, &aad, num, rk.as_ref()).unwrap(), b"final");
+        assert_eq!(bob.recv_message_number, 3);
+
+        // A frame claiming message number 0 with no ratchet key is both
+        // "already consumed" and "behind the counter": must be a clean Err.
+        assert!(bob.decrypt(b"forged", &[0u8; 24], &aad, 0, None).is_err());
+
+        // The session is unharmed and continues to work.
+        let (rk, num, nonce, ct) = alice.encrypt(b"after", &aad, true).unwrap();
+        assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(), b"after");
     }
 
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
