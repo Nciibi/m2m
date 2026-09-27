@@ -51,9 +51,19 @@ export default function MessageBubble({
     <div
       className={`msg-bubble msg-bubble--${m.direction}${m.deleted ? " msg-bubble--deleted" : ""}`}
       style={{ animationDelay: `${index * 0.05}s` }}
-      tabIndex={0}
+      // NOT a tab stop. It used to be `tabIndex={0}`, so reaching the message
+      // composer in a long conversation meant tabbing through every preceding
+      // bubble — each of which announced the first 40 characters of its
+      // content aloud. In a 500-message thread that is 500 stops and a wall of
+      // speech, which makes the app effectively unusable by keyboard or screen
+      // reader.
+      //
+      // The transcript is now a `role="log"` region (see ChatView), which
+      // assistive tech reads as a live stream without requiring focus, so the
+      // message text stays reachable without 500 tab stops. The interactive
+      // affordances (react / edit / delete) are focusable in their own right.
       role="group"
-      aria-label={`Message from ${senderLabel}: ${m.content.substring(0, 40)}`}
+      aria-label={`Message from ${senderLabel}`}
       onMouseEnter={() => canReact && setPickerOpen(true)}
       onMouseLeave={() => setPickerOpen(false)}
       onContextMenu={(e) => { if (!canEdit && !canDelete) return; e.preventDefault(); setMenuOpen(true); }}
