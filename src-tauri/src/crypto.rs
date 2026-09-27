@@ -2015,17 +2015,21 @@ mod crypto_tests {
         let (mut alice, mut bob) = make_dr_pair();
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
-        let sent: Vec<_> = (0..2)
+        let sent: Vec<_> = (0..3)
             .map(|i| alice.encrypt(format!("msg {}", i).as_bytes(), &aad, false).unwrap())
             .collect();
 
-        // Deliver 0, then 2 → message 1's key is cached as a skipped key.
+        // Deliver 0 and 2 → message 1's key is cached as a skipped key.
         bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref()).unwrap();
         bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref()).unwrap();
 
         // A malformed-nonce replay of the cached message must fail cleanly and
         // leave the cached key intact for the real frame.
         assert!(bob.decrypt(&sent[1].3, &[0u8; 5], &aad, sent[1].1, sent[1].0.as_ref()).is_err());
+        assert!(
+            bob.skipped_keys.contains_key(&sent[1].1),
+            "a rejected (bad-nonce) attempt must not consume the cached key"
+        );
 
         let decrypted =
             bob.decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).unwrap();
