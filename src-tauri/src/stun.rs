@@ -971,7 +971,7 @@ mod tests {
         msg.extend_from_slice(&txn);
         msg.extend_from_slice(&0x0020u16.to_be_bytes());
         msg.extend_from_slice(&8u16.to_be_bytes());
-        msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1]);
+        msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1, 0x00, 0x00]);
         // FINGERPRINT
         msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
         msg.extend_from_slice(&4u16.to_be_bytes());
@@ -999,7 +999,7 @@ mod tests {
         msg.extend_from_slice(&txn);
         msg.extend_from_slice(&0x0020u16.to_be_bytes());
         msg.extend_from_slice(&8u16.to_be_bytes());
-        msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1]);
+        msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1, 0x00, 0x00]);
         msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
         msg.extend_from_slice(&4u16.to_be_bytes());
         msg[2..4].copy_from_slice(&20u16.to_be_bytes());
@@ -1056,7 +1056,7 @@ mod tests {
         msg.extend_from_slice(b"test");
         msg.extend_from_slice(&0x0020u16.to_be_bytes()); // XOR-MAPPED-ADDRESS
         msg.extend_from_slice(&8u16.to_be_bytes());
-        msg.extend_from_slice(&[0x00, 0x01, 203, 0, 113, 9]);
+        msg.extend_from_slice(&[0x00, 0x01, 203, 0, 113, 9, 0x00, 0x00]);
         let addr = parse_binding_response(&msg, &txn)
             .expect("a response with no FINGERPRINT must still be accepted");
         assert_eq!(addr.ip().to_string(), "203.0.113.9");
