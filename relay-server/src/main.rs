@@ -240,9 +240,23 @@ async fn registration_reader(
 
                         tracing::info!(relay_id = %relay_id, "starting bidirectional proxy");
 
-                        // Enter raw TCP proxy mode
-                        match tokio::io::copy_bidirectional(&mut alice_stream, &mut bob_stream).await {
-                            Ok((a_to_b, b_to_a)) => {
+                        // Enter raw TCP proxy mode, bounded by an idle
+                        // deadline. Without it a single registration plus one
+                        // CONNECT yielded a permanently open socket with no
+                        // cap and no byte budget — free server capacity for
+                        // anyone who felt like holding it.
+                        //
+                        // `copy_bidirectional` returns when EITHER direction
+                        // closes, so the timeout fires on genuine inactivity
+                        // (no bytes in either direction for
+                        // BRIDGE_IDLE_TIMEOUT), not on normal use.
+                        match time::timeout(
+                            BRIDGE_IDLE_TIMEOUT,
+                            tokio::io::copy_bidirectional(&mut alice_stream, &mut bob_stream),
+                        )
+                        .await
+                        {
+                            Ok(Ok((a_to_b, b_to_a))) => {
                                 tracing::info!(
                                     relay_id = %relay_id,
                                     sent = a_to_b,
@@ -250,8 +264,15 @@ async fn registration_reader(
                                     "relay connection closed normally"
                                 );
                             }
-                            Err(e) => {
+                            Ok(Err(e)) => {
                                 tracing::warn!(relay_id = %relay_id, error = %e, "relay proxy error");
+                            }
+                            Err(_) => {
+                                tracing::warn!(
+                                    relay_id = %relay_id,
+                                    timeout_secs = BRIDGE_IDLE_TIMEOUT.as_secs(),
+                                    "bridge idle timeout — tearing down"
+                                );
                             }
                         }
                     }
