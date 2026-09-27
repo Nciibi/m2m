@@ -51,6 +51,7 @@ function TestConsumer() {
       <span data-testid="verify-error">{verifyError ?? "none"}</span>
       <span data-testid="is-connecting">{String(isConnecting)}</span>
       <span data-testid="messages-count">{messages.length}</span>
+      <span data-testid="messages-text">{messages.map((m) => m.content).join("|")}</span>
       <span data-testid="conversations-count">{conversations.length}</span>
       <span data-testid="file-requests-count">{fileRequests.length}</span>
       <button onClick={handleGenerateInvite}>Generate Invite</button>
@@ -326,5 +327,125 @@ describe("ChatContext", () => {
     await user.click(screen.getByText("Verify"));
     expect(screen.getByTestId("verify-error")).toHaveTextContent(/No active peer/);
     expect(screen.getByTestId("peer-verified")).not.toHaveTextContent("true");
+  });
+});
+
+describe("ChatContext — inbound 1:1 messages", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    appState.addToast.mockClear();
+  });
+
+  /**
+   * A payload shaped the way the backend actually emits a direct message.
+   *
+   * The critical detail is `sender_peer_key_hex: ""`. The Rust `ChatMessage`
+   * documents that field as "Empty string for 1:1 messages (implicit from
+   * conversation)" and `ChatMessage::new` defaults it to `String::new()`.
+   *
+   * A validator requiring a 64-char hex key rejected every one of these, so
+   * this listener dropped 100% of 1:1 traffic while the whole suite stayed
+   * green — no test at this layer ever exercised `m2m://message` at all.
+   */
+  function directMessage(over: Record<string, unknown> = {}) {
+    return {
+      peer_key_hex: "b".repeat(64),
+      message: {
+        id: "m1",
+        content: "the real 1:1 message",
+        direction: "received",
+        timestamp: 1_700_000_000,
+        read_at: null,
+        edited_at: null,
+        deleted: false,
+        expires_at: null,
+        reactions: {},
+        sender_peer_key_hex: "",
+        ...over,
+      },
+    };
+  }
+
+  async function mount() {
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>,
+    );
+    await waitFor(() =>
+      expect(eventHandlers.get("m2m://message")).toBeDefined(),
+    );
+  }
+
+  it("appends an inbound direct message with an empty sender key", async () => {
+    await mount();
+    act(() => {
+      eventHandlers.get("m2m://message")?.({ payload: directMessage() });
+    });
+    expect(screen.getByTestId("messages-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("messages-text")).toHaveTextContent(
+      "the real 1:1 message",
+    );
+  });
+
+  it("appends a direct message whose sender key field is absent", async () => {
+    await mount();
+    const { sender_peer_key_hex: _omitted, ...message } = directMessage().message;
+    act(() => {
+      eventHandlers.get("m2m://message")?.({
+        payload: { peer_key_hex: "b".repeat(64), message },
+      });
+    });
+    expect(screen.getByTestId("messages-count")).toHaveTextContent("1");
+  });
+
+  it("still appends group messages that carry a real sender key", async () => {
+    await mount();
+    act(() => {
+      eventHandlers.get("m2m://message")?.({
+        payload: directMessage({
+          sender_peer_key_hex: "c".repeat(64),
+          content: "group message",
+        }),
+      });
+    });
+    expect(screen.getByTestId("messages-text")).toHaveTextContent("group message");
+  });
+
+  it("appends several messages in arrival order", async () => {
+    await mount();
+    act(() => {
+      for (const n of [1, 2, 3]) {
+        eventHandlers.get("m2m://message")?.({
+          payload: directMessage({ id: `m${n}`, content: `msg ${n}` }),
+        });
+      }
+    });
+    expect(screen.getByTestId("messages-count")).toHaveTextContent("3");
+    expect(screen.getByTestId("messages-text")).toHaveTextContent("msg 1|msg 2|msg 3");
+  });
+
+  it("still drops a malformed payload", async () => {
+    await mount();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    act(() => {
+      eventHandlers.get("m2m://message")?.({
+        payload: directMessage({ content: { evil: true } }),
+      });
+    });
+    expect(screen.getByTestId("messages-count")).toHaveTextContent("0");
+    warn.mockRestore();
+  });
+
+  it("drops a payload whose peer key is not 64 hex chars", async () => {
+    await mount();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    act(() => {
+      eventHandlers.get("m2m://message")?.({
+        payload: { ...directMessage(), peer_key_hex: "short" },
+      });
+    });
+    expect(screen.getByTestId("messages-count")).toHaveTextContent("0");
+    warn.mockRestore();
   });
 });
