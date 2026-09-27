@@ -313,7 +313,7 @@ fn relay_dial_err(e: crate::dial::DialError) -> RelayError {
     match e {
         crate::dial::DialError::TimedOut(_) => RelayError::TimedOut,
         crate::dial::DialError::Io(e) => RelayError::Io(e),
-        crate::dial::DialError::Dial(msg) => RelayError::ConnectionFailed(msg),
+        crate::dial::DialError::Dial(msg) => RelayError::Protocol(msg),
         crate::dial::DialError::NonTorRoutable(a)
         | crate::dial::DialError::TorLanUnsupported(a) => RelayError::Config(format!(
             "relay address {a} is not reachable over Tor — \
