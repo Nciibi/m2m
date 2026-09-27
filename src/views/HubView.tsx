@@ -55,7 +55,7 @@ export default function HubView() {
 
   const handleFamilyConnect = useCallback(async (peerKeyHex: string) => {
     // connect emits m2m://connection event which ChatContext picks up
-    await invoke<any>("connect_family_member", { peerKeyHex });
+    await invoke("connect_family_member", { peerKeyHex });
     setView("chat");
   }, [setView]);
 
@@ -190,7 +190,41 @@ export default function HubView() {
   );
 }
 
-function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName, isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect, setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity, securityConfig, scheduleClipboardClear }: any) {
+/** Props for the Connect tab.
+ *
+ *  This was `any` with 18 destructured properties — which is not a style
+ *  complaint: with `any` props, TypeScript could not catch
+ *  `onDeleteConversation(c.id)` being called against a handler declared as
+ *  `() => void`, and the `conversationId` was silently discarded. The bug it
+ *  allowed is still in the codebase's history.
+ */
+interface ConnectTabProps {
+  generatedInvite: string;
+  inviteToConnect: string;
+  inviteValid: boolean;
+  namingMyName: string;
+  namingTheirName: string;
+  isConnecting: boolean;
+  onGenerateInvite: () => void;
+  onCopyInvite: () => void;
+  copied: boolean;
+  setInviteToConnect: (v: string) => void;
+  onConnect: () => void;
+  setNamingMyName: (v: string) => void;
+  setNamingTheirName: (v: string) => void;
+  networkSettings: NetworkSettings | null;
+  privateMode: boolean;
+  identity: IdentityInfo | null;
+  securityConfig: SecurityConfig | null;
+  scheduleClipboardClear: (secs: number) => void;
+}
+
+function ConnectTab({
+  generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
+  isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect,
+  setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity,
+  securityConfig, scheduleClipboardClear,
+}: ConnectTabProps) {
   const [generating, setGenerating] = useState(false);
   const [fpCopied, setFpCopied] = useState(false);
   const [inviteHistory, setInviteHistory] = useState<string[]>([]);
@@ -201,7 +235,7 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
 
   // Check if we're listening
   useEffect(() => {
-    invoke("get_listen_address").then((addr: any) => {
+    invoke<string>("get_listen_address").then((addr) => {
       setIsListening(!!addr && addr !== "Not listening");
     }).catch(() => {});
   }, []);
@@ -329,14 +363,29 @@ function ConnectTab({ generatedInvite, inviteToConnect, inviteValid, namingMyNam
   );
 }
 
-function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted, mutedConversations, onMute, onUnmute }: any) {
+interface ChatsTabProps {
+  conversations: ConversationEntry[];
+  onOpenChat: (c: ConversationEntry) => void;
+  onDeleteConversation: (conversationId: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  onGetStarted: () => void;
+  mutedConversations: string[];
+  onMute: (peerKeyHex: string) => void;
+  onUnmute: (peerKeyHex: string) => void;
+}
+
+function ChatsTab({
+  conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted,
+  mutedConversations, onMute, onUnmute,
+}: ChatsTabProps) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [archived, setArchived] = useState<Set<string>>(new Set());
 
   // Init from conversation data
   useEffect(() => {
-    setFavorites(new Set(conversations.filter((c: any) => c.is_favorite).map((c: any) => c.peer_key_hex)));
-    setArchived(new Set(conversations.filter((c: any) => c.archived).map((c: any) => c.peer_key_hex)));
+    setFavorites(new Set(conversations.filter((c) => c.is_favorite).map((c) => c.peer_key_hex)));
+    setArchived(new Set(conversations.filter((c) => c.archived).map((c) => c.peer_key_hex)));
   }, [conversations]);
 
   const toggleFav = async (peerKeyHex: string, e: React.MouseEvent) => {
@@ -363,7 +412,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
     } catch { /* noop */ }
   };
   // Sort conversations: favorites first, then by recency, archived at bottom
-  const sorted = [...conversations].sort((a: any, b: any) => {
+  const sorted = [...conversations].sort((a: ConversationEntry, b: ConversationEntry) => {
     if ((a.archived ? 1 : 0) !== (b.archived ? 1 : 0)) return (a.archived ? 1 : 0) - (b.archived ? 1 : 0);
     if ((a.is_favorite ? 1 : 0) !== (b.is_favorite ? 1 : 0)) return (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0);
     return (b.last_message_at || 0) - (a.last_message_at || 0);
@@ -393,7 +442,7 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
           )}
         </div>
       ) : (
-        sorted.map((c: any) => {
+        sorted.map((c) => {
           const isMuted = mutedConversations?.includes(c.peer_key_hex);
           return (
           <div key={c.id} className="conv-item" onClick={() => onOpenChat(c)} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpenChat(c)}>
@@ -445,7 +494,18 @@ function ChatsTab({ conversations, onOpenChat, onDeleteConversation, search, set
   );
 }
 
-function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onOpenSettings, onOpenChat }: any) {
+interface NearbyTabProps {
+  discoveryConfig: DiscoveryConfig | null;
+  discoveredPeers: DiscoveredPeer[];
+  onConnect: (address: string) => void;
+  onRefresh: () => void;
+  onOpenSettings: () => void;
+  onOpenChat: (c: ConversationEntry) => void;
+}
+
+function NearbyTab({
+  discoveryConfig, discoveredPeers, onConnect, onRefresh, onOpenSettings, onOpenChat,
+}: NearbyTabProps) {
   const [connecting, setConnecting] = useState<string | null>(null);
 
   const handleConnectPeer = async (address: string) => {
@@ -514,7 +574,7 @@ function NearbyTab({ discoveryConfig, discoveredPeers, onConnect, onRefresh, onO
       <div className="nearby-actions">
         <Button variant="secondary" size="xs" onClick={onRefresh}>Refresh</Button>
       </div>
-      {discoveredPeers.map((peer: any, idx: number) => (
+      {discoveredPeers.map((peer, idx) => (
         <div key={`${peer.method}-${peer.id_hex}-${idx}`} className="conv-item" role="listitem">
           <div className="conv-avatar conv-avatar--online" style={{
             background: `linear-gradient(135deg, #22c55e, #16a34a)`,
