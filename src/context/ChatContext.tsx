@@ -8,6 +8,19 @@ import type {
   ConnectionInfo, ChatMessage, FileRequest, ConversationEntry, TransferProgress,
 } from "../types";
 
+/**
+ * Coerce a backend result into a list.
+ *
+ * Every one of these values is rendered with `.length` and iterated, so a
+ * null/undefined from the backend crashes the tree on the next render — and
+ * `invoke` returning null is entirely possible (a locked vault, a command that
+ * short-circuits, a deserialisation that yields nothing). Validate the shape
+ * rather than trusting it.
+ */
+function asList<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
+
 interface ChatContextValue {
   connection: ConnectionInfo | null;
   isConnecting: boolean;
@@ -465,8 +478,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       navIntentRef.current = null;
       setActiveConversationId(peerKeyHex);
       setView("chat");
-      invoke<ChatMessage[]>("load_messages", { peerKeyHex })
-        .then(setMessages)
+      invoke("load_messages", { peerKeyHex })
+        .then((r) => setMessages(asList<ChatMessage>(r)))
         .catch((e) => addToast("Could not open conversation: " + e, "error"));
     }
   }, [activeConversationId, setView, addToast]);
