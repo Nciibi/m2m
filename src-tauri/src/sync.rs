@@ -400,11 +400,23 @@ pub fn is_paired_sync_device(state: &AppState, peer_key_hex: &str) -> bool {
 
 /// Handle an incoming SyncPayload from a paired device.
 /// Received conversation metadata is upserted into our MessageStore.
+///
+/// Only *paired* devices are honoured. Without this check any peer with a
+/// live session could inject conversations into the local database and rename
+/// existing ones — the same missing-authorization problem as pairing itself.
 pub async fn handle_sync_payload(
     state: &Arc<AppState>,
     peer_key_hex: &str,
     payload: &SyncPayload,
 ) {
+    if !is_paired_sync_device(state, peer_key_hex) {
+        tracing::warn!(
+            peer = %peer_key_hex,
+            "ignoring sync payload from an unpaired device"
+        );
+        return;
+    }
+
     match payload.payload_type {
         SyncPayloadType::Conversations => {
             if let Ok(convos) = protocol::deserialize::<Vec<SyncConversationEntry>>(&payload.data) {
