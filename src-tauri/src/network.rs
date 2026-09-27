@@ -29,7 +29,6 @@ use crate::protocol::{
 /// A dead connection is detected within 10s instead of 30s.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// TCP connection timeout — used by the hole_punch module's per-strategy timeout.
 
 // ─── Connection Rate Limiting ───────────────────────────────────────────────
 

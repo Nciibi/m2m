@@ -1474,7 +1474,14 @@ mod tests {
         let accounts = key_store.list_accounts().unwrap();
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].public_key, TEST_PUB.to_vec());
-        assert_eq!(accounts[0].label.as_deref(), Some("Imported"));
+        // `label` is not mirrored into `AccountRow` (nothing reads it), so
+        // assert the column directly to keep the migration's labelling
+        // behaviour covered.
+        let label: Option<String> = key_store
+            .conn
+            .query_row("SELECT label FROM accounts LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(label.as_deref(), Some("Imported"));
     }
 
     /// Re-importing the same identity must not duplicate the account row —

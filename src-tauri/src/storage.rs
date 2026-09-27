@@ -75,9 +75,10 @@ pub struct AccountRow {
     pub public_key: Vec<u8>,
     pub encrypted_private_key: Vec<u8>,
     pub private_key_nonce: Vec<u8>,
-    /// Free-text account label ("Main", "Imported", …). Written on import; the
-    /// hook a future multi-account picker would key off.
-    pub label: Option<String>,
+    // The `label` column ("Main" / "Imported", …) is intentionally NOT mirrored
+    // here: nothing reads it, since the unlock screen cannot yet name the
+    // account it is about to open. The column stays in the schema so adding a
+    // multi-account picker is a SELECT change, not a migration.
 }
 
 /// Stored X25519 identity material: `(public_key, encrypted_secret, nonce)`.
@@ -371,7 +372,7 @@ impl KeyStore {
 
     pub fn list_accounts(&self) -> Result<Vec<AccountRow>, StorageError> {
         let mut stmt = self.conn.prepare(
-            "SELECT public_key, encrypted_private_key, private_key_nonce, label
+            "SELECT public_key, encrypted_private_key, private_key_nonce
                  FROM accounts ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -379,7 +380,6 @@ impl KeyStore {
                 public_key: row.get(0)?,
                 encrypted_private_key: row.get(1)?,
                 private_key_nonce: row.get(2)?,
-                label: row.get(3)?,
             })
         })?;
         let mut out: Vec<AccountRow> = Vec::new();
