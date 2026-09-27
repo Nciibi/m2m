@@ -261,7 +261,11 @@ pub fn validate_version(version: u8) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-/// Validate a frame size.
+/// Validate a frame size against the global [`MAX_FRAME_SIZE`] ceiling.
+///
+/// This is the cheap first gate, applied immediately after the 4-byte length
+/// prefix and *before* any allocation. Callers that know the packet type
+/// should follow it with [`validate_frame_size_for`], which is far tighter.
 pub fn validate_frame_size(size: u32) -> Result<(), ProtocolError> {
     if size < MIN_FRAME_SIZE {
         return Err(ProtocolError::FrameTooSmall {
@@ -274,6 +278,85 @@ pub fn validate_frame_size(size: u32) -> Result<(), ProtocolError> {
             size,
             max: MAX_FRAME_SIZE,
         });
+    }
+    Ok(())
+}
+
+/// Maximum frame size permitted for a given packet type.
+///
+/// Binding a *type* to a frame lets the reader reject an over-large
+/// declaration using only the 2-byte header, before the body buffer is
+/// allocated. A heartbeat is a few dozen bytes; accepting 1 MiB "because
+/// file chunks are large" for every packet type is what made the pre-fix
+/// allocation-amplification possible.
+///
+/// The allowances add room for MessagePack framing overhead, AEAD tag +
+/// nonce, and `pad_message_variable` doubling the plaintext.
+pub fn max_frame_size_for(packet_type: PacketType) -> u32 {
+    // +2 for the version and type bytes themselves.
+    let hdr = MIN_FRAME_SIZE;
+    match packet_type {
+        // Heartbeats and their acks are tiny.
+        PacketType::Heartbeat | PacketType::HeartbeatAck => 4 * 1024,
+        // Control frames: disconnect reasons, typing flags, error text.
+        PacketType::Disconnect
+        | PacketType::Error
+        | PacketType::TypingIndicator
+        | PacketType::TypingIndicatorClear
+        | PacketType::MessageReaction
+        | PacketType::MessageDelete => 8 * 1024,
+        // Text messages: 64 KiB plaintext, doubling under worst-case padding.
+        PacketType::EncryptedMessage | PacketType::MessageEdit | PacketType::ConversationMeta => {
+            (MAX_TEXT_MESSAGE_SIZE * 2 + 8 * 1024) as u32 + hdr
+        }
+        // Handshakes carry a signed prekey bundle plus an ICE candidate list,
+        // which is larger than MAX_HANDSHAKE_SIZE once candidates are counted.
+        PacketType::HandshakeInit
+        | PacketType::HandshakeResponse
+        | PacketType::HandshakeComplete
+        | PacketType::X3DHHandshakeInit
+        | PacketType::X3DHHandshakeResponse
+        | PacketType::X3DHComplete => 256 * 1024,
+        // File transfer: a 256 KiB chunk plus headers, hashes and signature.
+        PacketType::FileTransferRequest
+        | PacketType::FileTransferChunk
+        | PacketType::FileTransferComplete
+        | PacketType::FileTransferAccept
+        | PacketType::FileTransferReject
+        | PacketType::FileTransferChunkAck
+        | PacketType::FileTransferCancel => (MAX_FILE_CHUNK_SIZE + 64 * 1024) as u32 + hdr,
+        // Group control frames carry a member roster and a sender-key bundle
+        // with one verification key per member.
+        PacketType::GroupCreate
+        | PacketType::GroupInvite
+        | PacketType::GroupRemove
+        | PacketType::GroupSenderKey
+        | PacketType::GroupInfo
+        | PacketType::GroupLeave => 512 * 1024,
+        // A single group message is a padded text message.
+        PacketType::GroupEncryptedMessage => (MAX_TEXT_MESSAGE_SIZE * 2 + 8 * 1024) as u32 + hdr,
+        // Sync carries a conversation list; bounded well below the global cap
+        // so a peer cannot use it to force a large allocation.
+        PacketType::SyncRequest | PacketType::SyncDeviceInfo | PacketType::SyncPayload => {
+            256 * 1024
+        }
+    }
+}
+
+/// Validate a declared frame size against the limit for its packet type.
+///
+/// Applied after the 2-byte header is read but before the body buffer is
+/// allocated, so an attacker cannot make the client reserve memory by
+/// declaring an enormous frame of a type that has no legitimate use for one.
+pub fn validate_frame_size_for(
+    size: u32,
+    packet_type: PacketType,
+) -> Result<(), ProtocolError> {
+    // The global bounds still apply.
+    validate_frame_size(size)?;
+    let max = max_frame_size_for(packet_type);
+    if size > max {
+        return Err(ProtocolError::FrameTooLarge { size, max });
     }
     Ok(())
 }
