@@ -2538,6 +2538,11 @@ pub fn spawn_receive_loop(
     });
 
     tokio::spawn(async move {
+        // Per-connection inbound budget. Created once per established session
+        // and owned by this receive loop, so it resets when the peer
+        // reconnects and cannot be shared or manipulated across peers.
+        let frame_limiter = network::FrameRateLimiter::new();
+
         loop {
             // Read a frame from the peer's read half
             let frame = match network::read_frame_from_read_half(&mut read_half).await {
