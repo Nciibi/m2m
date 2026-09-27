@@ -190,6 +190,31 @@ pub fn verify_signature(
         .map_err(|_| CryptoError::SignatureInvalid)
 }
 
+// ─── Constant-time comparison ───────────────────────────────────────────────
+
+/// Length-safe, constant-time byte-slice equality.
+///
+/// Compares every byte regardless of *where* the first difference is, so the
+/// running time leaks nothing about the secret. Length is compared first
+/// because a length mismatch is not a secret here: both operands are fixed
+/// width (a 32-byte public key, a 64-char hex verifier).
+///
+/// Used for key-consistency checks and for the duress verifier comparison.
+/// A plain `==` on the latter would short-circuit on the first differing
+/// byte, which in a duress feature — whose entire purpose is that a coercer
+/// cannot distinguish outcomes — is the wrong property to rely on even
+/// though Argon2id's ~100 ms cost dominates any timing signal in practice.
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 // ─── X25519 Identity Key (for X3DH) ──────────────────────────────────────────
 
 /// Long-term X25519 identity keypair for X3DH Diffie-Hellman operations.
