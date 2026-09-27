@@ -2007,6 +2007,22 @@ async fn handle_message_update_frame(
 }
 
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
+/// Maximum age of the sync window a peer may request, in seconds (30 days).
+///
+/// Bounds how much history a single `SyncRequest` can ask the client to scan,
+/// decrypt and re-send. Older than this is clamped rather than refused, so a
+/// legitimate device that has been offline for a long time still catches up to
+/// the retention window instead of failing outright.
+const MAX_SYNC_LOOKBACK_SECS: i64 = 30 * 24 * 60 * 60;
+
+/// Maximum number of messages re-sent in response to one `SyncRequest` (2000).
+///
+/// The lookback clamp bounds the *time* range; this bounds the *count*, which
+/// is what actually bounds the work (a decrypt plus a frame write each). A
+/// peer that asks for more gets the oldest-N within the window rather than
+/// nothing, and the truncation is logged.
+const MAX_SYNC_RESEND_MESSAGES: usize = 2000;
+
 async fn handle_sync_frame(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
@@ -2067,6 +2083,20 @@ async fn handle_sync_frame(
                                         } else {
                                             Vec::new()
                                         }
+                                    };
+
+                                    // Bound the count. The lookback clamp above
+                                    // bounds the time range; this bounds the work.
+                                    let missed = if missed.len() > MAX_SYNC_RESEND_MESSAGES {
+                                        tracing::warn!(
+                                            peer = %peer_key_hex,
+                                            total = missed.len(),
+                                            cap = MAX_SYNC_RESEND_MESSAGES,
+                                            "sync response truncated"
+                                        );
+                                        missed[..MAX_SYNC_RESEND_MESSAGES].to_vec()
+                                    } else {
+                                        missed
                                     };
 
                                     // Re-send each missed message using the destructure pattern
