@@ -638,6 +638,24 @@ pub struct SyncDeviceInfo {
     pub device_name: String,
     /// Sync protocol version (start at 1).
     pub sync_protocol_version: u8,
+    /// The one-time sync invite token issued by the primary device, proving
+    /// the sender was actually invited.
+    ///
+    /// ## Why this field exists
+    ///
+    /// Pairing was previously unconditional: any peer that completed an X3DH
+    /// handshake — which, with `require_known_contact` off by default, is any
+    /// Ed25519 identity on the internet — could send this frame and be
+    /// recorded as a synced device, after which the primary immediately
+    /// broadcast its full conversation metadata (the complete contact graph,
+    /// including people the user had never spoken to). The token check the
+    /// module documentation describes was never implemented.
+    ///
+    /// `#[serde(default)]` so a pre-existing frame still parses; the
+    /// resulting empty token is rejected by the handler, which is the correct
+    /// fail-closed outcome.
+    #[serde(default)]
+    pub sync_token: String,
 }
 
 // --- Sync Payload (0x46) ---
