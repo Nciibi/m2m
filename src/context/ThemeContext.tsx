@@ -99,14 +99,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     invoke("set_theme_preference", { theme: theme, accentColor: color }).catch(() => {});
   }, [theme, applyAccent]);
 
-  if (!initialized) {
-    return <>{children}</>;
-  }
-
+  // Hooks must run unconditionally, in a fixed order on every render — so
+  // this sits ABOVE the `if (!initialized)` early return below. Placing the
+  // `useMemo` after it (as an earlier revision of this file did) violated the
+  // rules of hooks: the very first render called a different number of hooks
+  // than every render after initialization, and React is entitled to throw.
   const value = useMemo<ThemeContextValue>(
     () => ({ theme, setTheme, resolvedTheme, accentColor, setAccentColor }),
     [theme, resolvedTheme, accentColor],
   );
+
+  if (!initialized) {
+    return <>{children}</>;
+  }
 
   return (
     <ThemeContext.Provider value={value}>
