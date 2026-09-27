@@ -234,6 +234,43 @@ impl ConnectionLimiter {
         self.active_connections.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Drop per-IP entries whose entire window has expired.
+    ///
+    /// Without this the `per_ip` map grows without bound: `check()` calls
+    /// `entry(ip).or_default()` for **every** IP, including ones that are
+    /// about to be rejected, and an entry is only ever drained when that same
+    /// IP reconnects. A source-IP rotation (trivial from a /64 on IPv6)
+    /// therefore leaked one map entry per attempt, forever.
+    ///
+    /// Called on the accept path, so the cost is proportional to real inbound
+    /// connection attempts rather than requiring a background task.
+    ///
+    /// # Returns
+    /// The number of entries removed, for logging/tests.
+    pub fn reap(&self) -> usize {
+        let now = Instant::now();
+        let mut removed = 0usize;
+        // `retain` on a DashMap shard holds that shard's lock only, so
+        // concurrent checks on other shards are unaffected.
+        self.per_ip.retain(|_ip, window| {
+            // An empty window, or one whose oldest entry has aged out, is dead.
+            let alive = window.back().is_some_and(|&t| {
+                now.duration_since(t) < self.window_duration
+            });
+            if !alive {
+                removed += 1;
+            }
+            alive
+        });
+        removed
+    }
+
+    /// Number of per-IP entries currently tracked. Exposed for tests and
+    /// diagnostics.
+    pub fn tracked_ips(&self) -> usize {
+        self.per_ip.len()
+    }
+
     /// Record a connection closure (decrements active count).
     pub fn decrement(&self) {
         self.active_connections.fetch_sub(1, Ordering::SeqCst);
