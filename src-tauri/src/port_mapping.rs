@@ -1281,10 +1281,9 @@ async fn gateway_wan_ip_via_upnp(service: &UpnpService) -> Result<IpAddr, PortMa
         .parse()
         .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
+    let mut stream = crate::dial::dial_lan_only(sock_addr, Duration::from_secs(5))
         .await
-        .map_err(|_| PortMapError::Upnp("connection to IGD timed out".into()))?
-        .map_err(PortMapError::Io)?;
+        .map_err(pm_dial_err)?;
 
     use tokio::io::AsyncWriteExt;
     stream.write_all(http_req.as_bytes()).await?;
