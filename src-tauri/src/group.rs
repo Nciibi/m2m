@@ -1024,14 +1024,19 @@ mod group_tests {
             b"hello 0"
         );
 
-        // Hostile member forges a frame with a huge message number. The
+        // Hostile member forges a frame with a forward message number. The
         // signature check passes (they hold their own signing key) but the
         // ciphertext is garbage.
+        //
+        // The number is deliberately INSIDE `MAX_GAP_DERIVATION`, so the
+        // derivation really does run forward and the AEAD open genuinely
+        // fails afterwards. A larger number would be rejected by the gap cap
+        // instead, which is a different (also correct) defence.
         let mut forged = {
             let g = gm.get_group_mut("g1").unwrap();
             g.encrypt_message("alice", b"attacker garbage").unwrap()
         };
-        forged.message_number = 500_000;
+        forged.message_number = 500;
         // Re-sign so the failure is attributable to the AEAD, not the sig.
         let sign_data = {
             let mut sd = Vec::new();
