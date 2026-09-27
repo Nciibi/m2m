@@ -520,7 +520,20 @@ export default function ChatView() {
 
       {/* Fingerprint Modal */}
       <Modal open={showFp} onClose={() => setShowFp(false)} title="Verify Peer Fingerprint"
-        footer={!connection?.peer_verified ? <Button onClick={async () => { await handleVerify(); setShowFp(false); addToast("Peer verified", "success"); }}>Confirm Match & Verify</Button> : undefined}>
+        footer={!connection?.peer_verified ? <Button onClick={async () => {
+          // Only claim success once the backend has actually persisted the
+          // verification. `handleVerify` used to swallow its own error, so this
+          // unconditionally showed a green "Peer verified" toast even when the
+          // write failed — a false confirmation on the one interaction that
+          // anchors the user's trust model.
+          try {
+            await handleVerify();
+            setShowFp(false);
+            addToast("Peer verified", "success");
+          } catch (err) {
+            addToast("Verification failed: " + err, "error");
+          }
+        }}>Confirm Match & Verify</Button> : undefined}>
         <p className="fp-description">Compare fingerprints via a secure out-of-band channel.</p>
         <div className="fp-display">
           <div className="fp-side">
