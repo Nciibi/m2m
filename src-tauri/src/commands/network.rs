@@ -87,6 +87,22 @@ pub async fn check_contact_gate(
     }
 }
 
+/// Did the initiator's handshake frame claim to have used a one-time prekey?
+///
+/// Inspects the `used_opk` field of the X3DH `HandshakeInit`. A malformed
+/// frame is treated as "not presented": the handshake itself will reject it,
+/// and defaulting to the conservative answer means we never burn a prekey on
+/// the strength of an unparseable frame.
+fn frame_presented_one_time_prekey(frame: &network::RawFrame) -> bool {
+    match protocol::deserialize::<protocol::HandshakeInit>(&frame.body) {
+        Ok(init) => init.used_opk.is_some(),
+        Err(e) => {
+            tracing::debug!(error = %e, "could not parse handshake init for OPK check");
+            false
+        }
+    }
+}
+
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
 /// so the invite works across the internet.
