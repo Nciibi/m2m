@@ -94,6 +94,7 @@ function defaultInvoke(cmd: string, args?: any): any {
       return args?.config ?? { lan_enabled: false, dht_enabled: false };
     case "get_discovered_peers":
     case "get_muted_conversations":
+    case "refresh_discovery":
       return [];
     case "get_network_diagnostics":
       return { nat_type: "Unknown", stun_servers: [], consensus: false };

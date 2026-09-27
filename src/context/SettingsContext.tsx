@@ -95,7 +95,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       catch { /* noop */ }
       try { setDiscoveryConfig(await invoke<DiscoveryConfig>("get_discovery_config")); }
       catch { /* noop */ }
-      try { setDiscoveredPeers(await invoke<DiscoveredPeer[]>("get_discovered_peers")); }
+      // `discoveredPeers` is rendered as `.length` and mapped over, so a
+      // non-array result crashes the view. Validate every read that feeds a
+      // shape assumption rather than trusting the backend.
+      try {
+        const peers = await invoke<DiscoveredPeer[] | null>("get_discovered_peers");
+        setDiscoveredPeers(Array.isArray(peers) ? peers : []);
+      }
       catch { /* noop */ }
       try { setSecurityConfig(await invoke<SecurityConfig>("get_security_config")); }
       catch { /* noop */ }

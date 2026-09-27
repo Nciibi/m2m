@@ -406,7 +406,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [mutedConversations, setMutedConversations] = useState<string[]>([]);
 
   const loadMutedConversations = useCallback(async () => {
-    try { setMutedConversations(await invoke<string[]>("get_muted_conversations")); } catch { /* noop */ }
+    try {
+      const muted = await invoke<string[] | null>("get_muted_conversations");
+      // Feeds `mutedConversations.includes(...)` and is rendered, so a
+      // non-array result would crash the tree. Validate rather than trust.
+      setMutedConversations(Array.isArray(muted) ? muted : []);
+    } catch { /* noop */ }
   }, []);
 
   useEffect(() => {
