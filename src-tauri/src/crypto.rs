@@ -863,7 +863,8 @@ impl DoubleRatchet {
             .try_into()
             .expect("random_bytes(24) always yields 24 bytes");
         let key = &msg_key.0;
-        let ciphertext = aead_seal(key, &nonce, plaintext, aad);
+        let ciphertext = aead_seal(key, &nonce, plaintext, &full_aad);
+        full_aad.zeroize();
 
         // Zeroize the message key after use (drop does this, but be explicit)
         drop(msg_key);
@@ -919,7 +920,11 @@ impl DoubleRatchet {
                     )));
                 }
             };
-            let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, aad);
+            // Rebuild the same header-derived AAD the sender used. A
+            // skipped-key message always comes from the current chain, so the
+            // ratchet flag is 0 and no public key is present.
+            let full_aad = Self::dr_header_aad(aad, None, message_number);
+            let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, &full_aad);
             if result.is_ok() {
                 self.skipped_keys.remove(&message_number);
             } else {
@@ -1037,7 +1042,12 @@ impl DoubleRatchet {
         let (msg_key, next_chain) = Self::derive_message_key(&tent_chain);
 
         // ── Authenticate — still nothing committed ──
-        match Self::decrypt_with_key(&msg_key.0, ciphertext, nonce, aad) {
+        //
+        // The AAD is rebuilt from the header the *sender* put on the wire. If
+        // an attacker stripped or altered `ratchet_key` / `message_number`,
+        // this AAD differs from the one used at seal time and the tag fails.
+        let full_aad = Self::dr_header_aad(aad, ratchet_key, message_number);
+        match Self::decrypt_with_key(&msg_key.0, ciphertext, nonce, &full_aad) {
             Ok(plaintext) => Ok(TentativeReceive {
                 root_key: tent_root,
                 recv_chain_key: next_chain,
@@ -1054,6 +1064,26 @@ impl DoubleRatchet {
                 scrub_and!(e)
             }
         }
+    }
+
+    /// Build the full AEAD associated data: caller context ‖ DR header.
+    ///
+    /// The caller context is the packet-type + identity-key binding built in
+    /// `session.rs`; this appends the Double Ratchet header fields so they
+    /// cannot be tampered with in transit. See `encrypt` for the rationale.
+    fn dr_header_aad(
+        context: &[u8],
+        ratchet_key: Option<&[u8; 32]>,
+        message_number: u64,
+    ) -> Vec<u8> {
+        let mut full = Vec::with_capacity(context.len() + 1 + 32 + 8);
+        full.extend_from_slice(context);
+        full.push(u8::from(ratchet_key.is_some()));
+        if let Some(pk) = ratchet_key {
+            full.extend_from_slice(pk);
+        }
+        full.extend_from_slice(&message_number.to_be_bytes());
+        full
     }
 
     /// Decrypt ciphertext using a raw 32-byte message key.
