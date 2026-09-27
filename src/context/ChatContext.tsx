@@ -429,6 +429,43 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [loadMutedConversations]);
 
   // ─── Tauri event listeners ───
+  //
+  // The three values the handlers read but must NOT depend on are mirrored into
+  // refs. The effect used to list `activeConversationId`, `mutedConversations`
+  // and `notifPermission` as dependencies, so every time the user opened or
+  // switched conversation all 13 listeners were torn down and re-registered —
+  // 13 unlisten round-trips plus 13 registrations across the IPC bridge.
+  //
+  // Worse, `listen()` is async. Between the teardown and the re-registration
+  // completing there was NO `m2m://message` listener registered, and messages
+  // arriving in that window were silently dropped. Opening a conversation
+  // could therefore lose a message. Reading through refs removes the churn
+  // entirely and closes the window.
+  const notifPermissionRef = useRef(notifPermission);
+  const activeConversationIdRef = useRef(activeConversationId);
+  const mutedConversationsRef = useRef(mutedConversations);
+  useEffect(() => { notifPermissionRef.current = notifPermission; }, [notifPermission]);
+  useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
+  useEffect(() => { mutedConversationsRef.current = mutedConversations; }, [mutedConversations]);
+
+  // Navigation intents queued by the notification handler, drained by a
+  // separate effect. See the comment at `drainNavigationIntent` for why the
+  // listener cannot navigate directly.
+  const navIntentRef = useRef<{ peerKeyHex: string } | null>(null);
+  const [, forceNavRender] = useState(0);
+
+  useEffect(() => {
+    if (navIntentRef.current) {
+      const { peerKeyHex } = navIntentRef.current;
+      navIntentRef.current = null;
+      setActiveConversationId(peerKeyHex);
+      setView("chat");
+      invoke<ChatMessage[]>("load_messages", { peerKeyHex })
+        .then(setMessages)
+        .catch((e) => addToast("Could not open conversation: " + e, "error"));
+    }
+  }, [activeConversationId, setView, addToast]);
+
   useEffect(() => {
     const unlistenMsg = listen<any>("m2m://message", (event) => {
       setMessages((prev) => [...prev, event.payload.message]);
@@ -438,7 +475,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // 2. Not currently viewing this conversation
       // 3. Conversation is not muted
       const peerKeyHex: string = event.payload.peer_key_hex;
-      if (notifPermission && peerKeyHex !== activeConversationId && !mutedConversations.includes(peerKeyHex)) {
+      if (
+        notifPermissionRef.current
+        && peerKeyHex !== activeConversationIdRef.current
+        && !mutedConversationsRef.current.includes(peerKeyHex)
+      ) {
         const peerFingerprint = event.payload.peer_fingerprint ?? event.payload.message?.peer_fingerprint;
         const displayName = peerFingerprint
           ? peerFingerprint.substring(0, 8) + "…"
@@ -450,16 +491,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             group: peerKeyHex,
           });
         });
-        // Clicking the notification opens the conversation
-        const handleNotifClick = () => {
-          if (peerKeyHex !== activeConversationId) {
-            setActiveConversationId(peerKeyHex);
-            setView("chat");
-            invoke<ChatMessage[]>("load_messages", { peerKeyHex }).then(setMessages).catch(() => {});
-          }
-        };
-        // Bind a one-time click handler if the notification is actionable
-        document.addEventListener("visibilitychange", handleNotifClick, { once: true });
+        // Record an intent to open this conversation, then nudge the app to
+        // return to the foreground so the user sees it.
+        //
+        // The previous code called `document.addEventListener(
+        // "visibilitychange", …, { once: true })` here. That had two problems:
+        // it leaked one document-level listener per unread message (the effect
+        // cleanup never removed them, and `once: true` only fires on an actual
+        // visibility change), and it hijacked the next window-visibility event
+        // to force-navigate to the last peer's conversation, discarding
+        // whatever the user was doing. A queued intent is explicit, has no
+        // listener to leak, and cannot fire spuriously.
+        navIntentRef.current = { peerKeyHex };
+        try { window.focus(); } catch { /* not all platforms allow this */ }
+        forceNavRender((n) => n + 1);
       }
     });
 
@@ -592,21 +637,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
-      unlistenMsg.then((f) => f());
-      unlistenConn.then((f) => f());
-      unlistenFileReq.then((f) => f());
-      unlistenFileProgress.then((f) => f());
-      unlistenFileCompleted.then((f) => f());
-      unlistenFileError.then((f) => f());
-      unlistenFileCancelled.then((f) => f());
-      unlistenConvMeta.then((f) => f());
-      unlistenReaction.then((f) => f());
-      unlistenEdit.then((f) => f());
-      unlistenReconnectAttempt.then((f) => f());
-      unlistenDelete.then((f) => f());
-      unlistenTyping.then((f) => f());
+      // `.catch()` on every teardown: an unhandled rejection here would surface
+      // as an uncaught promise rejection during unmount, and one failing
+      // unlisten must not prevent the other twelve from running.
+      const stop = (p: Promise<() => void>) => { p.then((f) => f()).catch(() => {}); };
+      stop(unlistenMsg);
+      stop(unlistenConn);
+      stop(unlistenFileReq);
+      stop(unlistenFileProgress);
+      stop(unlistenFileCompleted);
+      stop(unlistenFileError);
+      stop(unlistenFileCancelled);
+      stop(unlistenConvMeta);
+      stop(unlistenReaction);
+      stop(unlistenEdit);
+      stop(unlistenReconnectAttempt);
+      stop(unlistenDelete);
+      stop(unlistenTyping);
     };
-  }, [setView, notifPermission, activeConversationId, mutedConversations, addToast]);
+    // Only genuinely stable dependencies. Adding any state value here tears
+    // down and re-registers all 13 listeners, which both churns the IPC bridge
+    // and opens a window where incoming messages are dropped.
+  }, [setView, addToast]);
 
   return (
     <ChatContext.Provider value={{
