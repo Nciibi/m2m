@@ -48,6 +48,23 @@ use thiserror::Error;
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+/// Maximum bytes read from a UPnP IGD HTTP response (256 KiB).
+///
+/// A real device description is a few KB and a SOAP response is smaller still,
+/// so 256 KiB is generous. It exists because every length in these responses —
+/// `Content-Length`, each chunk size — is chosen by whatever host answered our
+/// SSDP probe, and each was previously used directly as a `vec![]` length.
+/// Rust's allocation-failure handler calls `abort()`, and this binary is built
+/// with `panic = "abort"`, so an oversized declared length was a process kill.
+const MAX_HTTP_BODY: usize = 256 * 1024;
+
+/// Per-read timeout when talking to a UPnP IGD (5s).
+///
+/// The `Connection: close` path already had this; the chunked-transfer path
+/// had no timeout at all, so a hostile responder could stall the task
+/// indefinitely part-way through a body.
+const UPNP_READ_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// A successful NAT port mapping from one of the three protocols.
 #[derive(Debug, Clone)]
 pub struct PortMapping {
