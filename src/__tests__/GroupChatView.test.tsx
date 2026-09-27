@@ -69,8 +69,9 @@ function backendMessage(over: Record<string, unknown> = {}) {
   };
 }
 
+/** Deliver a payload to a registered listener, as Tauri does. */
 function emit(name: string, payload: unknown) {
-  eventHandlers.get(name)?.(payload);
+  eventHandlers.get(name)?.({ event: name, id: 0, payload });
 }
 
 beforeEach(() => {
@@ -143,7 +144,7 @@ describe("GroupChatView — list", () => {
   it("returns to the group list from an open group", async () => {
     render(<GroupChatView />);
     await userEvent.click(await screen.findByText("Journalists"));
-    await userEvent.click(await screen.findByRole("button", { name: /Groups/ }));
+    await userEvent.click(backToGroupsButton());
     expect(await screen.findByText("Family")).toBeInTheDocument();
   });
 
@@ -158,7 +159,7 @@ describe("GroupChatView — list", () => {
     render(<GroupChatView />);
     await userEvent.click(await screen.findByText("Journalists"));
     expect(await screen.findByText("hello group")).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("button", { name: /Groups/ }));
+    await userEvent.click(backToGroupsButton());
     expect(screen.queryByText("hello group")).not.toBeInTheDocument();
   });
 });
@@ -308,7 +309,7 @@ describe("GroupChatView — create group", () => {
   it("does nothing without a group name", async () => {
     render(<GroupChatView />);
     await userEvent.click(await screen.findByRole("button", { name: /New Group/ }));
-    await userEvent.type(screen.getByPlaceholderText(/comma-separated/), KEY_A);
+    await userEvent.type(screen.getByPlaceholderText(/aabbccdd/), KEY_A);
     await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
     expect(mockInvoke).not.toHaveBeenCalledWith("create_group", expect.anything());
   });
@@ -318,7 +319,7 @@ describe("GroupChatView — create group", () => {
     render(<GroupChatView />);
     await userEvent.click(await screen.findByRole("button", { name: /New Group/ }));
     await userEvent.type(screen.getByPlaceholderText("My Group"), "Team");
-    await userEvent.type(screen.getByPlaceholderText(/comma-separated/), "tooshort");
+    await userEvent.type(screen.getByPlaceholderText(/aabbccdd/), "tooshort");
     await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith(
@@ -341,7 +342,7 @@ describe("GroupChatView — create group", () => {
     await userEvent.click(await screen.findByRole("button", { name: /New Group/ }));
     await userEvent.type(screen.getByPlaceholderText("My Group"), "  Team  ");
     await userEvent.type(
-      screen.getByPlaceholderText(/comma-separated/),
+      screen.getByPlaceholderText(/aabbccdd/),
       `${KEY_A}, , not-a-key , ${KEY_B}`,
     );
     await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
@@ -365,7 +366,7 @@ describe("GroupChatView — create group", () => {
     render(<GroupChatView />);
     await userEvent.click(await screen.findByRole("button", { name: /New Group/ }));
     await userEvent.type(screen.getByPlaceholderText("My Group"), "Team");
-    await userEvent.type(screen.getByPlaceholderText(/comma-separated/), KEY_A);
+    await userEvent.type(screen.getByPlaceholderText(/aabbccdd/), KEY_A);
     await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
     expect(await screen.findByText("Team")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("My Group")).not.toBeInTheDocument();
@@ -383,7 +384,7 @@ describe("GroupChatView — create group", () => {
     render(<GroupChatView />);
     await userEvent.click(await screen.findByRole("button", { name: /New Group/ }));
     await userEvent.type(screen.getByPlaceholderText("My Group"), "Team");
-    await userEvent.type(screen.getByPlaceholderText(/comma-separated/), KEY_A);
+    await userEvent.type(screen.getByPlaceholderText(/aabbccdd/), KEY_A);
     await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith(
@@ -488,3 +489,16 @@ describe("GroupChatView — sending", () => {
     expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   });
 });
+
+/**
+ * The "back to groups" header button.
+ *
+ * Scoped to the header because `Sidebar` renders its own nav button whose
+ * accessible name also matches /Groups/.
+ */
+function backToGroupsButton(): HTMLElement {
+  const header = document.querySelector(".app-header");
+  const btn = header?.querySelector("button");
+  if (!btn) throw new Error("header back button not found");
+  return btn as HTMLElement;
+}
