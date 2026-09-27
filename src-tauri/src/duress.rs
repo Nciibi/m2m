@@ -95,6 +95,7 @@ pub fn derive_verifier_hex(entered: &str, salt: &[u8]) -> Option<String> {
 /// exercise the same comparator. This used to be `#[cfg(test)]`-only, which
 /// meant the test suite validated a code path production never ran — the
 /// vault's duress check used a plain `==`.
+#[cfg(test)]
 use crate::crypto::ct_eq;
 
 /// Convenience check composing read + derive + compare. Test-only: the
