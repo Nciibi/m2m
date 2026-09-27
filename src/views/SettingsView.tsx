@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
 import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
+import type { ConnectivityStatus } from "../types";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useT } from "../i18n/I18nContext";

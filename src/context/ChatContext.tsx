@@ -21,7 +21,12 @@ import { listen } from "@tauri-apps/api/event";
 import { useApp } from "./AppContext";
 import { useT } from "../i18n/I18nContext";
 import type {
-  ConnectionInfo, ChatMessage, FileRequest, ConversationEntry, TransferProgress,
+  ChatMessage,
+  ConnectionInfo,
+  ConversationEntry,
+  FileRequest,
+  InviteInfo,
+  TransferProgress,
 } from "../types";
 
 /**
