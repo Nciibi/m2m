@@ -637,7 +637,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     securityConfig, captureCapability,
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
     handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange,
-    handleCoverTypingToggle, handlePanicHotkeyArmToggle,
+    handleCoverTypingToggle,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault,

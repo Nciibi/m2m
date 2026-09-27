@@ -87,7 +87,6 @@ function isDisplayText(v: unknown): v is string {
   return (
     isString(v) &&
     v.length <= MAX_LABEL_LEN &&
-    // eslint-disable-next-line no-control-regex
     !/[\u0000-\u001f\u007f]/.test(v)
   );
 }
