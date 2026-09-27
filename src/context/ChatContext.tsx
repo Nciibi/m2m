@@ -660,23 +660,53 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // and opens a window where incoming messages are dropped.
   }, [setView, addToast]);
 
+  /**
+   * Memoized — this is the single biggest render-cost fix in the app.
+   *
+   * The ~30 handlers were all `useCallback`'d, but the wrapping object literal
+   * was rebuilt on every render, which discards the benefit of all of them.
+   * Combined with `useChat()` returning the whole context to `ChatView` and
+   * `MessageBubble` not being `React.memo`'d, the effect was: typing one
+   * character in the composer calls `handleTextChange` → `setText` → re-render
+   * → a new context object → every message bubble in the transcript re-renders,
+   * each re-running `renderMarkdown`. In a 500-message conversation that is
+   * 500 component re-renders per keystroke.
+   */
+  const value = useMemo<ChatContextValue>(() => ({
+    connection, isConnecting, reconnecting, reconnectAttempt, messages, setMessages, fileRequests, transfers,
+    conversations, activeConversationId, typingPeers,
+    inviteToConnect, setInviteToConnect, inviteValid,
+    namingMyName, setNamingMyName, namingTheirName, setNamingTheirName,
+    generatedInvite,
+    retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
+    handleSendMessage, handleVerify, handleDisconnect, handleReconnect, handleSendFile,
+    handleExportConversation, handleSetRetention,
+    handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
+    handleDeleteConversation,
+    handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
+    handleSendMessageWithTimer, handleEditMessage, handleDeleteMessage,
+    mutedConversations, handleMuteConversation, handleUnmuteConversation,
+    handleAcceptFileTransfer, handleRejectFileTransfer,
+  }), [
+    connection, isConnecting, reconnecting, reconnectAttempt, messages, fileRequests, transfers,
+    conversations, activeConversationId, typingPeers,
+    inviteToConnect, inviteValid,
+    namingMyName, namingTheirName, generatedInvite,
+    retentionPolicy, retentionDuration,
+    setMessages, setInviteToConnect, setNamingMyName, setNamingTheirName,
+    setRetentionPolicy, setRetentionDuration,
+    handleSendMessage, handleVerify, handleDisconnect, handleReconnect, handleSendFile,
+    handleExportConversation, handleSetRetention,
+    handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
+    handleDeleteConversation,
+    handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
+    handleSendMessageWithTimer, handleEditMessage, handleDeleteMessage,
+    mutedConversations, handleMuteConversation, handleUnmuteConversation,
+    handleAcceptFileTransfer, handleRejectFileTransfer,
+  ]);
+
   return (
-    <ChatContext.Provider value={{
-      connection, isConnecting, reconnecting, reconnectAttempt, messages, setMessages, fileRequests, transfers,
-      conversations, activeConversationId, typingPeers,
-      inviteToConnect, setInviteToConnect, inviteValid,
-      namingMyName, setNamingMyName, namingTheirName, setNamingTheirName,
-      generatedInvite,
-      retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
-      handleSendMessage, handleVerify, handleDisconnect, handleReconnect, handleSendFile,
-      handleExportConversation, handleSetRetention,
-      handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
-      handleDeleteConversation,
-      handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
-      handleSendMessageWithTimer, handleEditMessage, handleDeleteMessage,
-      mutedConversations, handleMuteConversation, handleUnmuteConversation,
-      handleAcceptFileTransfer, handleRejectFileTransfer,
-    }}>
+    <ChatContext.Provider value={value}>
       {children}
     </ChatContext.Provider>
   );
