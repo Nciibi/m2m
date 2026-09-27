@@ -14,6 +14,11 @@ use crate::storage::{self, KeyStore};
 use zeroize::Zeroize;
 
 use super::util;
+
+/// Pre-passphrase identity material carried through the legacy migration path.
+///
+/// `(ed25519_seed, ed25519_pub, libsodium_layout_secret, legacy_storage_key)`
+type LegacyStoreData = (Vec<u8>, Vec<u8>, [u8; 64], Vec<u8>);
 use super::{ConnectionEvent, ConnectionInfo, FamilyMember, IdentityInfo, VaultStatus};
 
 /// Run Argon2id key derivation on the blocking thread pool so the ~100ms+
