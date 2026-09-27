@@ -937,17 +937,29 @@ mod network_tests {
         assert_eq!(limiter.check(3000), RateLimitVerdict::TooManyBytes);
     }
 
-    /// A frame larger than the entire per-second budget can never be
-    /// admitted. This must be a clean rejection, not a wrapping subtraction
-    /// that produces a tiny charge.
+    /// A frame length larger than the whole per-second budget must be charged
+    /// as a *maximum* cost, never wrapped to a small one. If the arithmetic
+    /// wrapped, `usize::MAX` would become a trivial ~4 GB-modulo charge and
+    /// sail under the limit — the exact bug the clamp exists to prevent.
+    ///
+    /// The bucket is drained first so the assertion tests the charge, not the
+    /// fact that a fresh bucket starts full.
     #[test]
-    fn test_frame_limiter_oversized_frame_is_rejected_not_wrapped() {
+    fn test_frame_limiter_oversized_frame_is_not_wrapped_to_small_charge() {
         let limiter = FrameRateLimiter::with_limits(1000, 4096);
+        // Drain the byte budget.
+        assert_eq!(limiter.check(4096), RateLimitVerdict::Allowed);
+        // A single further byte is already over budget...
+        assert_eq!(limiter.check(1), RateLimitVerdict::TooManyBytes);
+        // ...so an absurd length must be rejected too. Were it truncated to
+        // `len % 4096` or otherwise wrapped small, it could land back under
+        // the limit and be admitted.
         assert_eq!(
             limiter.check(usize::MAX),
             RateLimitVerdict::TooManyBytes,
-            "an absurd length must reject, not wrap to a small charge"
+            "an absurd length must be charged maximally, not wrapped small"
         );
+        assert_eq!(limiter.check(u32::MAX as usize), RateLimitVerdict::TooManyBytes);
     }
 
     /// A zero-byte body must not panic on the `NonZeroU32` conversion.
