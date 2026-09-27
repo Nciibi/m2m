@@ -406,15 +406,22 @@ pub async fn unlock_vault(
     // ─── Phase 3: Async state writes ───
     {
         let mut id_lock = state.identity.write().await;
-        // mlock sweep: lock seed pages now that the keypair sits at its
-        // stable heap address inside the RwLock (see lock_range caveat).
-        keypair.lock_memory();
+        // mlock sweep: MOVE FIRST, then lock. `lock_memory` returns a pointer
+        // into the value's own storage, and assigning into the RwLock
+        // memcpy's the secret to a different address — so locking before the
+        // move protected an address that is immediately abandoned (leaking
+        // the mlock range forever) while leaving the live pages unlocked.
         *id_lock = Some(keypair);
+        if let Some(kp) = id_lock.as_ref() {
+            kp.lock_memory();
+        }
     }
     {
         let mut x_lock = state.x25519_identity.write().await;
-        x25519_kp.lock_memory();
         *x_lock = Some(x25519_kp);
+        if let Some(kp) = x_lock.as_ref() {
+            kp.lock_memory();
+        }
     }
     {
         let mut vi = state.vault_initialized.write().await;
@@ -528,13 +535,19 @@ pub async fn create_vault_account(
 
     {
         let mut id_lock = state.identity.write().await;
-        kp.lock_memory();
+        // Move into the RwLock FIRST, then lock at the final address (see the
+        // mlock ordering note in `unlock_vault`).
         *id_lock = Some(kp);
+        if let Some(kp) = id_lock.as_ref() {
+            kp.lock_memory();
+        }
     }
     {
         let mut x_lock = state.x25519_identity.write().await;
-        xkp.lock_memory();
         *x_lock = Some(xkp);
+        if let Some(kp) = x_lock.as_ref() {
+            kp.lock_memory();
+        }
     }
     {
         let mut sk_lock = state.storage_key.write().await;
@@ -1023,8 +1036,11 @@ pub async fn import_identity(
     // Load into state
     {
         let mut id_lock = state.identity.write().await;
-        kp.lock_memory();
+        // Move first, then lock at the final stable address.
         *id_lock = Some(kp);
+        if let Some(kp) = id_lock.as_ref() {
+            kp.lock_memory();
+        }
     }
     {
         let mut sk_lock = state.storage_key.write().await;
