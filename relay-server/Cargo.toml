@@ -1,6 +1,6 @@
 [package]
 name = "m2m-relay"
-version = "3.6.21"
+version = "5.0.0"
 description = "M2M TCP Relay Server — standalone binary for self-hosting"
 authors = ["M2M Contributors"]
 edition = "2021"
