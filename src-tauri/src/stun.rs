@@ -32,6 +32,9 @@ const STUN_TIMEOUT: Duration = Duration::from_secs(5);
 /// Magic cookie as defined in RFC 8489 §6.
 const STUN_MAGIC_COOKIE: u32 = 0x2112A442;
 
+/// STUN attribute type for FINGERPRINT (RFC 8489 §14.6).
+const FINGERPRINT_ATTR_TYPE: u16 = 0x8028;
+
 /// STUN Binding Request message type.
 const BINDING_REQUEST: u16 = 0x0001;
 
@@ -370,6 +373,52 @@ fn build_binding_request(transaction_id: &[u8; 12]) -> Vec<u8> {
 /// 3. Magic cookie must match (0x2112A442)
 /// 4. Transaction ID must match what we sent (injection protection)
 /// 5. Walk attributes looking for XOR-MAPPED-ADDRESS (preferred) or MAPPED-ADDRESS (fallback)
+/// Locate a trailing FINGERPRINT attribute, returning the offset of its header.
+///
+/// Returns `Ok(None)` when the message carries no FINGERPRINT (tolerated for
+/// backwards compatibility with servers that omit it) and `Err` when a
+/// FINGERPRINT appears somewhere other than the tail, or more than once, which
+/// the RFC forbids.
+fn find_fingerprint(data: &[u8]) -> Result<Option<usize>, StunError> {
+    let msg_len = u16::from_be_bytes([data[2], data[3]]) as usize;
+    let attrs_end = (20 + msg_len).min(data.len());
+    let mut off = 20usize;
+    let mut found: Option<usize> = None;
+    while off + 4 <= attrs_end {
+        let attr_type = u16::from_be_bytes([data[off], data[off + 1]]);
+        let attr_len = u16::from_be_bytes([data[off + 2], data[off + 3]]) as usize;
+        let padded = (attr_len + 3) & !3usize;
+        if off + 4 + attr_len > data.len() {
+            return Err(StunError::InvalidResponse {
+                server: "?".to_string(),
+            });
+        }
+        if attr_type == FINGERPRINT_ATTR_TYPE {
+            if found.is_some() || off + 4 + padded != attrs_end {
+                return Err(StunError::InvalidResponse {
+                    server: "?".to_string(),
+                });
+            }
+            found = Some(off);
+        }
+        off += 4 + padded;
+    }
+    Ok(found)
+}
+
+/// CRC-32 (IEEE 802.3 polynomial — the one STUN's FINGERPRINT uses).
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in data {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320u32 & mask);
+        }
+    }
+    !crc
+}
+
 fn parse_binding_response(
     data: &[u8],
     expected_txn: &[u8; 12],
@@ -404,6 +453,38 @@ fn parse_binding_response(
         return Err(StunError::TransactionIdMismatch {
             server: "?".to_string(),
         });
+    }
+
+    // ── FINGERPRINT (RFC 8489 §14.6) ──
+    // The parser previously stopped after the magic cookie and transaction ID.
+    // Those give *off-path* protection — a random packet will not match — but
+    // an on-path attacker can rewrite the response body freely, including the
+    // XOR-MAPPED-ADDRESS that becomes the address advertised in invites. A
+    // FINGERPRINT is a CRC-32 over the message up to the attribute, XORed with
+    // 0x5354554e, so any modification is detected.
+    if let Some(attr_start) = find_fingerprint(data)? {
+        // 4-byte attribute header (type, length) + 4-byte value, and it must
+        // be the final thing in the datagram.
+        if attr_start + 8 != data.len() {
+            return Err(StunError::InvalidResponse {
+                server: "?".to_string(),
+            });
+        }
+        let expected: [u8; 4] = data[attr_start + 4..attr_start + 8]
+            .try_into()
+            .map_err(|_| StunError::InvalidResponse {
+                server: "?".to_string(),
+            })?;
+        // The CRC covers the whole message *including* the FINGERPRINT header,
+        // then is XORed with 0x5354554e.
+        let mut crc = crc32(&data[..attr_start + 4]);
+        crc ^= 0x5354_554eu32;
+        if crc != u32::from_be_bytes(expected) {
+            tracing::debug!("STUN FINGERPRINT mismatch — response was modified in flight");
+            return Err(StunError::InvalidResponse {
+                server: "?".to_string(),
+            });
+        }
     }
 
     // ── Parse attributes ──
