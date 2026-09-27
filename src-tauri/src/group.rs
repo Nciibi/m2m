@@ -1044,7 +1044,7 @@ mod group_tests {
         {
             let g = gm.get_group("g1").unwrap();
             let sk = g.our_signing_key.clone().unwrap();
-            forged.signature = crate::crypto::sign_message(&sk, &sign_data).unwrap();
+            forged.signature = sign_group_message(&sk, &sign_data).unwrap();
         }
         assert!(
             gm.get_group_mut("g1").unwrap().decrypt_message(&forged).is_err(),
