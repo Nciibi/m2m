@@ -11,6 +11,7 @@ import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
+import { useNow } from "../hooks/useNow";
 import type {
   ConnectionInfo,
   ConversationEntry,
@@ -240,7 +241,6 @@ function ConnectTab({
   const [inviteCreatedAt, setInviteCreatedAt] = useState<number | null>(null);
   const [inviteExpiry, setInviteExpiry] = useState<number>(60);
   const [isListening, setIsListening] = useState(false);
-  const [expiryRemaining, setExpiryRemaining] = useState<number>(0);
 
   // Check if we're listening
   useEffect(() => {
@@ -249,18 +249,16 @@ function ConnectTab({
     }).catch(() => {});
   }, []);
 
-  // Invite countdown timer
-  useEffect(() => {
-    if (!inviteCreatedAt) { setExpiryRemaining(0); return; }
-    const update = () => {
-      const elapsed = (Date.now() / 1000) - inviteCreatedAt;
-      const rem = Math.max(0, inviteExpiry * 60 - elapsed);
-      setExpiryRemaining(rem);
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [inviteCreatedAt, inviteExpiry]);
+  // Invite countdown, derived rather than stored.
+  //
+  // This was `useState` + a `setInterval` that pushed a new value every second,
+  // which cost a render per second and left the label showing the previous
+  // second's value on every render. `useNow` supplies the clock, so the
+  // remaining time is computed during render and is correct by construction.
+  const inviteNow = useNow(1000);
+  const expiryRemaining = inviteCreatedAt
+    ? Math.max(0, inviteExpiry * 60 - (inviteNow / 1000 - inviteCreatedAt))
+    : 0;
 
   const handleGenerate = async () => {
     setGenerating(true);
