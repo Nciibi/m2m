@@ -166,24 +166,25 @@ pub async fn connect_sync_device(
     _address: String,
     _my_name: String,
 ) -> Result<crate::commands::ConnectionInfo, String> {
-    // Parse the invite string
-    let sync_token = _invite_str
+    // Parse and sanity-check the invite string. We cannot validate the token
+    // *value* here — only the primary holds the matching `pending_invites`
+    // entry, and it is checked in `handle_sync_device_info` when we announce
+    // ourselves. Validating the shape here just avoids putting a malformed
+    // token on the wire.
+    let token = _invite_str
         .strip_prefix("m2m-sync://")
         .ok_or("invalid sync invite format")?;
+    if token.is_empty() {
+        return Err("sync invite token is empty".to_string());
+    }
 
-    // We don't strictly validate the token here — it's validated by the
-    // primary when we send SyncDeviceInfo. For now, we just need the
-    // primary's address and identity to connect.
-    //
-    // The primary's invitation already carries a regular invite link
-    // that the user shares alongside the sync token. This function
-    // should be called with the *regular* invite + the sync token.
-    //
-    // For the initial implementation, use the existing connect_to_peer
-    // command to establish the session, then call pair_sync_device
-    // to authorize the pairing.
-
-    Err("use the existing connect_to_peer command to connect, then pair_sync_device to authorize".to_string())
+    // The primary's invitation already carries a regular invite link that the
+    // user shares alongside the sync token, so a dedicated connection flow
+    // would have to duplicate the whole Happy-Eyeballs + X3DH path for no
+    // gain. The token is not a connection credential — it is an *authorization*
+    // credential presented afterwards.
+    tracing::debug!("sync invite parsed; pairing requires an established session");
+    Err("use the existing connect_to_peer command to connect, then pair_sync_device with the sync token to authorize".to_string())
 }
 
 /// Authorize an already-connected peer as a sync device.
