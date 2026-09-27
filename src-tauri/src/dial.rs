@@ -286,7 +286,9 @@ mod dial_tests {
     fn public_addresses_are_routable() {
         assert!(!is_non_tor_routable(v4("8.8.8.8")));
         assert!(!is_non_tor_routable(v4("1.1.1.1")));
-        assert!(!is_non_tor_routable(v4("198.51.100.7")), "this host is a real /24");
+        assert!(!is_non_tor_routable(v4("45.33.32.156")));
+        assert!(!is_non_tor_routable(v4("172.32.0.1")), "just outside 172.16/12");
+        assert!(!is_non_tor_routable(v4("100.128.0.1")), "just outside 100.64/10");
         assert!(!is_non_tor_routable(v6("2001:4860:4860::8888")));
         assert!(!is_non_tor_routable(v6("2606:4700:4700::1111")));
     }
