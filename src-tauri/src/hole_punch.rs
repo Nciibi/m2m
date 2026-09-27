@@ -409,15 +409,20 @@ async fn tcp_connect_timeout(
         .map_err(|e| match e {
             crate::dial::DialError::TimedOut(t) => ConnectionError::TimedOut(t),
             crate::dial::DialError::Io(e) => ConnectionError::Io(e),
-            // A refused candidate is a normal, expected outcome while
-            // racing strategies — not an I/O fault.
-            crate::dial::DialError::NonTorRoutable(a) => {
-                tracing::debug!(target = %a, "candidate skipped: not Tor-routable");
+            // A refused candidate is a normal, expected outcome while racing
+            // strategies — not an I/O fault worth aborting the race for.
+            crate::dial::DialError::NonTorRoutable(a)
+            | crate::dial::DialError::TorLanUnsupported(a) => {
+                tracing::debug!(target = %a, "candidate skipped: not usable in current transport mode");
                 ConnectionError::Io(std::io::Error::new(
                     std::io::ErrorKind::AddrNotAvailable,
-                    "address is not reachable over Tor",
+                    "address is not usable in the current transport mode",
                 ))
             }
+            crate::dial::DialError::Dial(msg) => ConnectionError::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                msg,
+            )),
         })
 }
 
