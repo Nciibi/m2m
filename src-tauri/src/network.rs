@@ -137,8 +137,11 @@ impl FrameRateLimiter {
             return RateLimitVerdict::TooManyFrames;
         }
         // Saturate rather than truncate: a bogus huge length must not wrap to
-        // a small charge that sails under the limit.
-        let cost = u32::try_from(bytes).unwrap_or(u32::MAX);
+        // a small charge that sails under the limit. A cost above the whole
+        // per-second budget can never be admitted anyway, so clamp to it.
+        let budget = u32::try_from(MAX_INBOUND_BYTES_PER_SEC).unwrap_or(u32::MAX);
+        let cost = std::num::NonZeroU32::new(bytes.clamp(1, budget as usize) as u32)
+            .expect("clamped into 1..=budget, so non-zero");
         if self.bytes.check_n(cost).is_err() {
             return RateLimitVerdict::TooManyBytes;
         }
