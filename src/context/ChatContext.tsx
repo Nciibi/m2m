@@ -2,6 +2,21 @@ import {
   createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  asConnectionEvent,
+  asConversationMeta,
+  asDeleteEvent,
+  asEditEvent,
+  asFileRequestEvent,
+  asMessageEvent,
+  asReactionEvent,
+  asReconnectAttempt,
+  asTransferCancelledEvent,
+  asTransferCompletedEvent,
+  asTransferErrorEvent,
+  asTransferProgressEvent,
+  asTypingEvent,
+} from "../events";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "./AppContext";
 import type {
