@@ -2142,6 +2142,55 @@ async fn handle_group_frame(
                             Ok(plaintext) => {
                                 if let Ok(create) = protocol::deserialize::<protocol::GroupCreateData>(&plaintext) {
                                     tracing::info!(group = %create.group_id, "received group create");
+
+                                    // ── Authorization ──
+                                    // `GroupInfo`, `GroupRemove` and `GroupLeave`
+                                    // all verify the sender's standing before
+                                    // acting. `GroupCreate` did not, and because
+                                    // `upsert_group` is an INSERT OR REPLACE, any
+                                    // peer that knew a `group_id` could overwrite
+                                    // that group's name, `created_at` and the
+                                    // victim's own `our_role`, force-join the
+                                    // victim, and have the victim's signed
+                                    // sender-key bundle fanned out to an
+                                    // attacker-chosen roster.
+                                    //
+                                    // Two conditions must hold:
+                                    //  1. The claim about who created the group
+                                    //     must match the authenticated peer.
+                                    //  2. The creator must not already exist —
+                                    //     re-using an id would clobber the
+                                    //     established roster and roles.
+                                    let peer_claims_creator =
+                                        create.creator_peer_key_hex == peer_key_hex;
+
+                                    let group_already_exists = {
+                                        let ms = state.message_store.lock().await;
+                                        ms.as_ref()
+                                            .and_then(|s| s.load_group(&create.group_id).ok())
+                                            .is_some()
+                                    };
+
+                                    if !peer_claims_creator {
+                                        tracing::warn!(
+                                            group = %create.group_id,
+                                            peer = %peer_key_hex,
+                                            claimed_creator = %create.creator_peer_key_hex,
+                                            "group create rejected: creator claim does not \
+                                             match the authenticated peer"
+                                        );
+                                        return;
+                                    }
+                                    if group_already_exists {
+                                        tracing::warn!(
+                                            group = %create.group_id,
+                                            peer = %peer_key_hex,
+                                            "group create rejected: group already exists \
+                                             (a re-create would clobber the roster and roles)"
+                                        );
+                                        return;
+                                    }
+
                                     let gid = create.group_id.clone();
                                     // Roster = creator + initial members (H2: we generate
                                     // our own keys; never trust key material shipped to us).
