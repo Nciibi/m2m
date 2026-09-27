@@ -878,13 +878,12 @@ pub async fn disconnect_peer(
         };
         match protocol::serialize(&msg) {
             Ok(body) => {
-                if let Err(e) = conn
-                    .session
-                    .send_encrypted_typed(
-                        &mut conn.write_half,
-                        PacketType::Disconnect,
-                        &body,
-                    )
+                // Destructure first so both borrows come from the
+                // destructured fields rather than from `conn` itself — the
+                // project-wide pattern for `send_encrypted_typed`.
+                let PeerConnection { session, write_half, .. } = &mut *conn;
+                if let Err(e) = session
+                    .send_encrypted_typed(write_half, PacketType::Disconnect, &body)
                     .await
                 {
                     // A session that cannot encrypt is already broken; fall
