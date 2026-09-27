@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { MockEventHandler } from "./tauriMock";
@@ -238,19 +238,20 @@ describe("GroupChatView — inbound group messages", () => {
 
   it("preserves message order across several events", async () => {
     await openGroup();
-    for (const n of [1, 2, 3]) {
-      emit("m2m://group-message", {
-        group_id: "g1",
-        message: backendMessage({ id: `i${n}`, content: `msg ${n}` }),
-      });
-    }
-    const texts = ["msg 1", "msg 2", "msg 3"].map((t) => screen.getByText(t));
-    texts.forEach((el) => expect(el).toBeInTheDocument());
-    // Positions in the DOM must be ascending.
-    const order = texts.map((el) =>
-      el.compareDocumentPosition(texts[2]) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : 0,
-    );
-    expect(order).toEqual([1, 1, 1]);
+    // `act` matters here: three synchronous emits each schedule a functional
+    // state update, and without it the assertions run before React commits.
+    act(() => {
+      for (const n of [1, 2, 3]) {
+        emit("m2m://group-message", {
+          group_id: "g1",
+          message: backendMessage({ id: `i${n}`, content: `msg ${n}` }),
+        });
+      }
+    });
+    const bubbles = Array.from(
+      document.querySelectorAll(".msg-area .msg-content"),
+    ).map((el) => el.textContent);
+    expect(bubbles).toEqual(["msg 1", "msg 2", "msg 3"]);
   });
 
   // The validator is the security boundary for peer-controlled content.
