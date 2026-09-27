@@ -80,6 +80,14 @@ vi.mock("../context/SettingsContext", () => ({
 }));
 
 import HubView from "../views/HubView";
+import type {
+  ConversationEntry,
+  DiscoveredPeer,
+  DiscoveryConfig,
+  IdentityInfo,
+  NetworkSettings,
+} from "../types";
+import type { ToastData } from "../components/ui/Toast";
 
 describe("HubView", () => {
   beforeEach(() => {

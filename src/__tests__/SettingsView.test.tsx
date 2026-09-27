@@ -90,6 +90,16 @@ vi.mock("../context/ThemeContext", () => ({
 }));
 
 import SettingsView from "../views/SettingsView";
+import type {
+  ConnectivityStatus,
+  DiscoveredPeer,
+  DiscoveryConfig,
+  IdentityInfo,
+  NatTypeInfo,
+  NetworkSettings,
+  StunConfig,
+} from "../types";
+import type { ToastData } from "../components/ui/Toast";
 
 describe("SettingsView", () => {
   beforeEach(() => {

@@ -3,6 +3,7 @@ import { act, screen, waitFor } from "@testing-library/react";
 import { render } from "./setup";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { createEventHandlerRegistry, type MockEventHandler } from "./tauriMock";
 
 const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }));

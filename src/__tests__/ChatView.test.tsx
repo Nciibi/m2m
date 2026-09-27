@@ -81,6 +81,13 @@ vi.mock("../context/ChatContext", () => ({
 }));
 
 import ChatView from "../views/ChatView";
+import type {
+  ChatMessage,
+  ConnectionInfo,
+  FileRequest,
+  IdentityInfo,
+} from "../types";
+import type { ToastData } from "../components/ui/Toast";
 
 describe("ChatView", () => {
   beforeEach(() => {
