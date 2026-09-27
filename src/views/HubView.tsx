@@ -139,18 +139,18 @@ export default function HubView() {
         setTab(order[next]);
         document.querySelector<HTMLElement>(`[data-tab="${order[next]}"]`)?.focus();
       }}>
-        <button className={`tab-bar__tab ${tab === "connect" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("connect")} role="tab" id={`tab-connect`} aria-controls="tabpanel-main" aria-selected={tab === "connect"} tabIndex={tab === "connect" ? 0 : -1} data-tab=connect>
+        <button className={`tab-bar__tab ${tab === "connect" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("connect")} role="tab" id={`tab-connect`} aria-controls="tabpanel-main" aria-selected={tab === "connect"} tabIndex={tab === "connect" ? 0 : -1} data-tab={"connect"}>
           <LinkIcon size={16} /> Connect
         </button>
-        <button className={`tab-bar__tab ${tab === "chats" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("chats")} role="tab" id={`tab-chats`} aria-controls="tabpanel-main" aria-selected={tab === "chats"} tabIndex={tab === "chats" ? 0 : -1} data-tab=chats>
+        <button className={`tab-bar__tab ${tab === "chats" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("chats")} role="tab" id={`tab-chats`} aria-controls="tabpanel-main" aria-selected={tab === "chats"} tabIndex={tab === "chats" ? 0 : -1} data-tab={"chats"}>
           <MessageIcon size={16} /> Chats
           {conversations.length > 0 && <span className="tab-bar__badge">{conversations.length}</span>}
         </button>
-        <button className={`tab-bar__tab ${tab === "nearby" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("nearby")} role="tab" id={`tab-nearby`} aria-controls="tabpanel-main" aria-selected={tab === "nearby"} tabIndex={tab === "nearby" ? 0 : -1} data-tab=nearby>
+        <button className={`tab-bar__tab ${tab === "nearby" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("nearby")} role="tab" id={`tab-nearby`} aria-controls="tabpanel-main" aria-selected={tab === "nearby"} tabIndex={tab === "nearby" ? 0 : -1} data-tab={"nearby"}>
           <WifiIcon size={16} /> Nearby
           {discoveredPeers.length > 0 && <span className="tab-bar__badge">{discoveredPeers.length}</span>}
         </button>
-        <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" id={`tab-family`} aria-controls="tabpanel-main" aria-selected={tab === "family"} tabIndex={tab === "family" ? 0 : -1} data-tab=family>
+        <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" id={`tab-family`} aria-controls="tabpanel-main" aria-selected={tab === "family"} tabIndex={tab === "family" ? 0 : -1} data-tab={"family"}>
           <HomeIcon size={16} /> Family
           {family.length > 0 && <span className="tab-bar__badge">{family.length}</span>}
         </button>
