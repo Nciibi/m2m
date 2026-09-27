@@ -118,7 +118,17 @@ export function asChatMessage(v: unknown): ChatMessage | null {
   if (!isStringOrNull(m.edited_at) || (m.edited_at !== null && !isU64(m.edited_at))) return null;
   if (m.deleted !== undefined && !isBool(m.deleted)) return null;
   if (!isStringOrNull(m.expires_at) || (m.expires_at !== null && !isU64(m.expires_at))) return null;
-  if (!isString(m.sender_peer_key_hex) || !isPeerKeyHex(m.sender_peer_key_hex)) return null;
+  // A 1:1 message has an EMPTY sender key by design: the peer is implicit from
+  // the conversation, and the Rust side documents this explicitly
+  // ("Empty string for 1:1 messages (implicit from conversation)" on
+  // ChatMessage.sender_peer_key_hex, defaulting to String::new() in
+  // ChatMessage::new). Only group messages carry a real key.
+  //
+  // Requiring a 64-char key here rejected every direct message, so the chat
+  // listener dropped 100% of 1:1 traffic. The test fixtures all supplied a
+  // group-style key, which is exactly why the suite stayed green.
+  if (!isString(m.sender_peer_key_hex)) return null;
+  if (m.sender_peer_key_hex !== "" && !isPeerKeyHex(m.sender_peer_key_hex)) return null;
 
   // `reactions` becomes object keys AND visible labels, so both the key and
   // the values are bounded.
