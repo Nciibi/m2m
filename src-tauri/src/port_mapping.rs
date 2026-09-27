@@ -1709,7 +1709,6 @@ mod upnp_security_tests {
     /// allocation failure aborts the process under `panic = "abort"`.
     #[tokio::test]
     async fn test_http_body_bounds_are_enforced() {
-
         // (a) A hostile Content-Length.
         let mut evil = Vec::new();
         evil.extend_from_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 500000000\r\n\r\n");
