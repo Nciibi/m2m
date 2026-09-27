@@ -30,7 +30,7 @@ export default function Modal({
     previousFocus.current = document.activeElement as HTMLElement;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onCloseRef.current(); return; }
+      if (e.key === "Escape") { onClose(); return; }
       if (e.key === "Tab" && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -70,7 +70,7 @@ export default function Modal({
     //
     // `handleKeyDown` only ever needs a stable way to CALL `onClose`, so a ref
     // gives the correct behaviour without re-running the effect.
-  }, [open]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
