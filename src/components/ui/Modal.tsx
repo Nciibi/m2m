@@ -20,13 +20,17 @@ export default function Modal({
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  // Latest `onClose` without making it an effect dependency — see the note on
+  // the effect below.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     previousFocus.current = document.activeElement as HTMLElement;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); return; }
+      if (e.key === "Escape") { onCloseRef.current(); return; }
       if (e.key === "Tab" && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -54,7 +58,19 @@ export default function Modal({
       document.removeEventListener("keydown", handleKeyDown);
       previousFocus.current?.focus();
     };
-  }, [open, onClose]);
+    // `onClose` is deliberately NOT a dependency.
+    //
+    // Callers pass an inline arrow (`onClose={() => setShowAdd(false)}`), so
+    // its identity changed on every parent render. With `onClose` in the array,
+    // typing in a text field re-ran this effect, which overwrote
+    // `previousFocus` with the currently-focused element *inside* the dialog
+    // and re-fired the `requestAnimationFrame` that focuses the FIRST field —
+    // so focus jumped back to the top field on every keystroke and the user
+    // physically could not type a nickname.
+    //
+    // `handleKeyDown` only ever needs a stable way to CALL `onClose`, so a ref
+    // gives the correct behaviour without re-running the effect.
+  }, [open]);
 
   if (!open) return null;
 
