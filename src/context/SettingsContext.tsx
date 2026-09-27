@@ -106,6 +106,47 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
   }, [setView]);
 
+  /**
+   * Load the persisted security config on mount.
+   *
+   * This is a security control, not a UI convenience, so it cannot depend on
+   * the user happening to open Settings. It used to be fetched only inside
+   * `openSettings`, which meant that on a fresh launch `securityConfig` was
+   * `null` and the three headline protections were all inert:
+   *
+   *   - the panic-wipe hotkey was never bound (its keydown listener is only
+   *     attached when `panic_hotkey_enabled` is true)
+   *   - the idle auto-lock timeout fell back to 0 (disabled)
+   *   - focus-loss blur fell back to false
+   *
+   * A user who armed panic wipe, quit, and then needed it in an emergency would
+   * have pressed the hotkey and had *nothing happen*. The backend protections
+   * did survive the restart (App.tsx calls `reapply_security_config`), which
+   * made it worse: the setting renders as enabled in Settings while the
+   * frontend behaviour is dead.
+   *
+   * `App.tsx` is at 0% test coverage and the Settings view tests mock
+   * `useSettings` wholesale, which is why this survived so long.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const sc = await invoke<SecurityConfig>("get_security_config");
+        if (!cancelled) setSecurityConfig(sc);
+      } catch (e) {
+        // Leave it null; consumers already fail closed (`?? false` / `?? 0`).
+        // Surface it, though — a user who armed protections deserves to know
+        // they are not currently active.
+        if (!cancelled) {
+          console.error("failed to load security config", e);
+          addToast("Could not load security settings — protections may be inactive", "error");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [addToast]);
+
   const handleStunDiscover = useCallback(async () => {
     setStunLoading(true);
     try {
