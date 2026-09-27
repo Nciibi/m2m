@@ -341,12 +341,12 @@ mod dial_tests {
     /// The property that makes this module load-bearing rather than
     /// advisory: no other module may dial directly. If someone adds a raw
     /// `TcpStream::connect` in a peer-facing module, this fails.
+    ///
+    /// Only `tor.rs` (the transport implementation) and this module are
+    /// allowed to hold the raw call.
     #[test]
     fn test_no_module_bypasses_the_dial_chokepoint() {
-        // `tor.rs` is the transport implementation itself and `dial.rs` is
-        // this module; both legitimately hold the raw call. Everything else
-        // must route through `dial::`.
-        let allowed = ["tor.rs", "dial.rs", "stun.rs"];
+        let allowed = ["tor.rs", "dial.rs"];
 
         let offenders: Vec<String> = crate::protocol_fuzz_regression::crate_root()
             .join("src")
