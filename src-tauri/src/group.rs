@@ -1056,6 +1056,22 @@ mod group_tests {
             "forged frame must be rejected"
         );
 
+        // Sanity: the forged frame really did reach (and fail) the AEAD stage
+        // rather than being short-circuited by an earlier bound. A chain left
+        // at 1 after delivering only message 0 proves nothing was committed.
+        {
+            let g = gm.get_group("g1").unwrap();
+            let chain = g
+                .receiver_chains
+                .get("alice")
+                .expect("receiver chain for alice");
+            assert_eq!(
+                chain.current_message_number(),
+                1,
+                "a failed AEAD must leave the chain exactly where it was"
+            );
+        }
+
         // THE POINT: the receiver chain must be untouched, so Alice's next
         // real message still decrypts.
         let next = {
@@ -1066,6 +1082,52 @@ mod group_tests {
             gm.get_group_mut("g1").unwrap().decrypt_message(&next).unwrap(),
             b"hello 1",
             "a rejected forgery must not desync the receiver chain"
+        );
+    }
+
+    /// A message number beyond `MAX_GAP_DERIVATION` must be rejected before
+    /// any derivation work, so a single forged frame cannot force a long
+    /// CPU-bound HKDF walk (the CPU-exhaustion half of the same attack).
+    #[test]
+    fn test_absurd_gap_rejected_without_deriving() {
+        let mut gm = make_group_manager();
+        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        {
+            let g = gm.get_group_mut("g1").unwrap();
+            let k = g.our_initial_chain_key.clone().unwrap();
+            let v = g.our_verification_key.unwrap();
+            g.store_receiver_key("alice", &k, &v);
+        }
+
+        let mut forged = {
+            let g = gm.get_group_mut("g1").unwrap();
+            g.encrypt_message("alice", b"junk").unwrap()
+        };
+        forged.message_number = 5_000_000;
+        let sign_data = {
+            let mut sd = Vec::new();
+            sd.extend_from_slice(b"g1");
+            sd.extend_from_slice(&forged.message_number.to_be_bytes());
+            sd.extend_from_slice(&forged.nonce);
+            sd.extend_from_slice(&forged.ciphertext);
+            sd
+        };
+        {
+            let g = gm.get_group("g1").unwrap();
+            let sk = g.our_signing_key.clone().unwrap();
+            forged.signature = sign_group_message(&sk, &sign_data).unwrap();
+        }
+
+        assert!(gm.get_group_mut("g1").unwrap().decrypt_message(&forged).is_err());
+        assert_eq!(
+            gm.get_group("g1")
+                .unwrap()
+                .receiver_chains
+                .get("alice")
+                .unwrap()
+                .current_message_number(),
+            0,
+            "an over-gap frame must not advance the chain at all"
         );
     }
 
