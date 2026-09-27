@@ -772,7 +772,7 @@ impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
     fn generate_cek() -> [u8; 32] {
         let mut cek = [0u8; 32];
-        getrandom::getrandom(&mut cek).expect("OS RNG unavailable");
+        crate::crypto::fill_random(&mut cek);
         cek
     }
 

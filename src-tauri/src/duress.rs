@@ -49,7 +49,7 @@ pub fn is_set(key_store: &KeyStore) -> bool {
 /// Argon2id(passphrase, fresh random salt).
 pub fn register(key_store: &KeyStore, passphrase: &str) -> Result<(), String> {
     let mut salt = [0u8; 16];
-    getrandom::getrandom(&mut salt).expect("OS RNG unavailable");
+    crate::crypto::fill_random(&mut salt);
     let key = derive_storage_key_from_passphrase(passphrase, &salt)
         .map_err(|e| format!("duress hash derivation failed: {e}"))?;
     let now = chrono::Utc::now().timestamp().to_string();
