@@ -327,11 +327,17 @@ pub async fn connect_via_relay(
 ) -> Result<TcpStream, RelayError> {
     tracing::info!(relay = %relay_addr, peer_relay = %peer_relay_id, "connecting via relay");
 
-    // Connect to relay server
-    let mut stream = time::timeout(RELAY_CONNECT_TIMEOUT, TcpStream::connect(relay_addr))
+    // Connect to relay server through the Tor-aware chokepoint — the relay
+    // is a third party that must not learn the user's real address.
+    let mut stream = crate::dial::dial_with_timeout(relay_addr, RELAY_CONNECT_TIMEOUT)
         .await
-        .map_err(|_| RelayError::TimedOut)?
-        .map_err(RelayError::Io)?;
+        .map_err(|e| match e {
+            crate::dial::DialError::TimedOut(_) => RelayError::TimedOut,
+            crate::dial::DialError::NonTorRoutable(a) => {
+                RelayError::Config(format!("relay address {a} is not reachable over Tor"))
+            }
+            crate::dial::DialError::Io(e) => RelayError::Io(e),
+        })?;
 
     let _ = stream.set_nodelay(true);
 
