@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render } from "./setup";
 import { renderMarkdown, renderLinks, groupByDate } from "../components/chat/messageRender";
+import type { ChatMessage } from "../types";
 
 /**
  * The markdown / link renderer.
@@ -107,15 +108,24 @@ describe("renderLinks", () => {
 });
 
 describe("groupByDate", () => {
-  const base = 1_700_000_000_000;
-  const msg = (id: string, ts: number) => ({
+  const base = Date.now();
+  // A complete ChatMessage, so adding a field to the type breaks this fixture
+  // loudly rather than letting a partial object slide through.
+  const msg = (id: string, ts: number): ChatMessage => ({
     id,
     conversation_id: "c",
     peer_key_hex: "p",
-    direction: "received" as const,
+    direction: "received",
     content: id,
     timestamp: Math.floor(ts / 1000),
     is_read: false,
+    read_at: null,
+    edited_at: 0,
+    deleted: false,
+    expires_at: null,
+    reply_to: null,
+    self_destruct_secs: 0,
+    reactions: {},
   });
 
   it("groups messages by calendar day", () => {
@@ -149,10 +159,7 @@ describe("groupByDate", () => {
     // The labels come from the catalog, so this also pins the grouping key.
     const now = Date.now();
     const day = 24 * 60 * 60 * 1000;
-    const grouped = groupByDate([
-      { ...msg("now", now), timestamp: Math.floor(now / 1000) },
-      { ...msg("yest", now - day), timestamp: Math.floor((now - day) / 1000) },
-    ]);
+    const grouped = groupByDate([msg("now", now), msg("yest", now - day)]);
     const keys = Object.keys(grouped);
     expect(keys).toContain("Today");
     expect(keys).toContain("Yesterday");
