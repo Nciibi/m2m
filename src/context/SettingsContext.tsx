@@ -276,8 +276,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const handleRefreshDiscovery = useCallback(async () => {
     try {
-      const peers = await invoke<DiscoveredPeer[]>("refresh_discovery");
-      setDiscoveredPeers(peers);
+      const peers = await invoke<DiscoveredPeer[] | null>("refresh_discovery");
+      // Guard the shape: this value is rendered as `discoveredPeers.length`
+      // and iterated, so a null/undefined from the backend crashes the view on
+      // the next render. Validate rather than trust.
+      setDiscoveredPeers(Array.isArray(peers) ? peers : []);
     } catch (e) {
       addToast("Refresh discovery failed: " + e, "error");
     }
