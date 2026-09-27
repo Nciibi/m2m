@@ -215,7 +215,16 @@ export default function GroupChatView() {
                 rows={1}
               />
             </div>
-            <button type="submit" className="msg-send-btn" disabled={!text.trim() || sending}>
+            <button
+              type="submit"
+              className="msg-send-btn"
+              disabled={!text.trim() || sending}
+              // Icon-only button: without this it has no accessible name, so a
+              // screen reader announces nothing at all, and the busy state is
+              // indistinguishable from the idle state.
+              aria-label={sending ? "Sending" : "Send message"}
+              aria-busy={sending}
+            >
               {sending ? <span className="msg-send-spinner" /> : <SendIcon size={20} />}
             </button>
           </form>
