@@ -59,8 +59,29 @@ pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
     }
 }
 
+/// Connect to a peer, routing through Tor if enabled.
+/// Falls back to direct TCP if Tor is disabled.
+///
+/// Prefer [`crate::dial::dial`]: this helper performs no timeout and no
+/// non-Tor-routable address check, so it is only correct for callers that
+/// have already validated the destination. New peer-facing code should use
+/// the chokepoint in `dial` so that Tor routing cannot be bypassed again.
+pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
+    if is_enabled() {
+        connect_via_tor(addr).await
+    } else {
+        TcpStream::connect(addr)
+            .await
+            .map_err(TorError::Io)
+    }
+}
+
 /// Connect to a target address through the Tor SOCKS5 proxy.
-async fn connect_via_tor(target: SocketAddr) -> Result<TcpStream, TorError> {
+///
+/// Always uses the proxy — it does not consult [`is_enabled`]. The
+/// `dial` module relies on that distinction to make the Tor/direct branch
+/// explicit.
+pub async fn connect_via_socks(target: SocketAddr) -> Result<TcpStream, TorError> {
     tracing::debug!(target = %target, proxy = TOR_PROXY_ADDR, "connecting via Tor SOCKS5");
 
     let stream = Socks5Stream::connect(TOR_PROXY_ADDR, target)
