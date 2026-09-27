@@ -41,7 +41,7 @@ use std::time::Duration;
 
 use std::sync::Arc;
 
-use tokio::net::{TcpStream, UdpSocket};
+use tokio::net::UdpSocket;
 use tokio::time;
 
 use thiserror::Error;
