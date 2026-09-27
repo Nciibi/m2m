@@ -1,11 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: any[]) => mockInvoke(...args) }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
+// Capture the registered event handlers so a test can simulate a peer
+// connecting — the trust-anchor behaviour under test only applies once
+// `connection.peer_key_hex` is set.
+const { eventHandlers } = vi.hoisted(() => ({
+  eventHandlers: new Map<string, (e: any) => void>(),
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn((name: string, handler: (e: any) => void) => {
+    eventHandlers.set(name, handler);
+    return Promise.resolve(() => eventHandlers.delete(name));
+  }),
+}));
 
 // Mock AppContext used by ChatProvider
 const appState = {
@@ -208,6 +219,24 @@ describe("ChatContext", () => {
     expect(mockInvoke).not.toHaveBeenCalled();
   });
 
+  /** Simulate a peer completing a handshake. */
+  async function establishConnection() {
+    await waitFor(() => expect(eventHandlers.get("m2m://connection")).toBeDefined());
+    act(() => {
+      eventHandlers.get("m2m://connection")?.({
+        payload: {
+          state: "established",
+          peer_key_hex: "aabbcc",
+          peer_fingerprint: "AA:BB:CC",
+          peer_verified: false,
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-state")).toHaveTextContent("established"),
+    );
+  }
+
   /**
    * Trust-anchor regression.
    *
@@ -232,12 +261,17 @@ describe("ChatContext", () => {
       </ChatProvider>
     );
 
+    await establishConnection();
+
     await user.click(screen.getByText("Verify"));
 
     // The rejection propagated, so the caller knows not to claim success.
     expect(screen.getByTestId("verify-error")).toHaveTextContent(/key store is locked/);
     // And the peer was NOT marked verified.
     expect(screen.getByTestId("peer-verified")).not.toHaveTextContent("true");
+    expect(mockInvoke).toHaveBeenCalledWith("verify_peer", {
+      peerKeyHex: "aabbcc",
+    });
   });
 
   it("handleVerify marks the peer verified when the backend succeeds", async () => {
@@ -254,10 +288,34 @@ describe("ChatContext", () => {
       </ChatProvider>
     );
 
-    // No active connection yet, so handleVerify must refuse rather than
-    // silently succeed.
+    await establishConnection();
+
     await user.click(screen.getByText("Verify"));
-    expect(screen.getByTestId("verify-error")).not.toHaveTextContent("none");
+
+    // No error, and the trust indicator actually flips.
+    expect(screen.getByTestId("verify-error")).toHaveTextContent("none");
+    await waitFor(() =>
+      expect(screen.getByTestId("peer-verified")).toHaveTextContent("true"),
+    );
+  });
+
+  it("handleVerify refuses when there is no active peer", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_muted_conversations") return [];
+      return undefined;
+    });
+
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    // With no connection there is nobody to verify. It must throw rather than
+    // resolve, so the caller cannot mistake a no-op for a success.
+    await user.click(screen.getByText("Verify"));
+    expect(screen.getByTestId("verify-error")).toHaveTextContent(/No active peer/);
     expect(screen.getByTestId("peer-verified")).not.toHaveTextContent("true");
   });
 });
