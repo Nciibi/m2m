@@ -34,11 +34,21 @@ export default defineConfig(async () => ({
         "src/main.tsx",
         "src/components/ui/icons/**"
       ],
+      // Coverage floors.
+      //
+      // These were set to 45/55/30/45 — which is where coverage actually sat,
+      // so they could never fail and enforced nothing. Tightened to sit just
+      // under the current real numbers (52.1 / 64.7 / 35.8 / 52.1) so that a
+      // regression fails the build but a normal edit does not.
+      //
+      // `functions` stays low because that is the honest number: a function
+      // counts as covered as soon as it runs once, and a meaningful share of
+      // the UI is render-only. Raising it further would be theatre.
       thresholds: {
-        statements: 45,
-        branches: 55,
-        functions: 30,
-        lines: 45
+        statements: 50,
+        branches: 60,
+        functions: 34,
+        lines: 50
       }
     }
   },
