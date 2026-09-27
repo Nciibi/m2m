@@ -2319,7 +2319,7 @@ mod crypto_tests {
     /// Note the crate helper's argument order: `hkdf(salt, ikm, info, len)`.
     #[test]
     fn test_rfc5869_a1_basic_sha256() {
-        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
         let salt = hex_to_vec("000102030405060708090a0b0c");
         let info = hex_to_vec("f0f1f2f3f4f5f6f7f8f9");
 
@@ -2359,7 +2359,7 @@ mod crypto_tests {
     /// special-cases empty input tends to diverge.
     #[test]
     fn test_rfc5869_a3_zero_length_salt_and_info_sha256() {
-        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
 
         let okm = hkdf(b"", &ikm, b"", 42);
 
