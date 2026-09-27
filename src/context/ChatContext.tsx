@@ -357,7 +357,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     try {
       const info = await invoke<ConnectionInfo>("attempt_reconnect", { peerKeyHex: connection.peer_key_hex });
       setConnection(info);
-    } catch (e) {
+    } catch {
+      // Failure to reconnect is not actionable here; the caller retries on
+      // the next backoff tick. The old code bound `e` and never read it.
       setReconnecting(false);
       setReconnectAttempt(0);
     }

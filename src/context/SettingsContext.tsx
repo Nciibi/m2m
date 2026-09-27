@@ -329,7 +329,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           await invoke("clear_clipboard");
           // Also clear via web API as fallback
           try { await navigator.clipboard.writeText(""); } catch { /* noop */ }
-        } catch (e) {
+        } catch {
           // The user was told "clipboard auto-clear: 30s". If the clear fails,
           // a copied passphrase or fingerprint sits in the clipboard
           // indefinitely with no feedback at all. That is the worst possible
@@ -338,7 +338,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
       }, secs * 1000);
     }
-  }, []);
+    // `addToast` is not guaranteed referentially stable, and a stale copy here
+    // would surface the failure through a detached toast list.
+  }, [addToast]);
 
   // ── Security handlers ──
 
