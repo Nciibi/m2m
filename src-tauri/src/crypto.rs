@@ -1097,11 +1097,62 @@ impl Drop for SessionKeys {
     }
 }
 
+/// Fill `buf` with cryptographically secure random bytes.
+///
+/// ## Why this is not a bare `getrandom(...).expect(...)`
+///
+/// `getrandom` can fail transiently: on Linux the syscall returns `EAGAIN`
+/// when the kernel's entropy pool is not yet initialised (early boot, a VM
+/// resuming from a snapshot, a freshly-created container), and `EINTR` on a
+/// signal. Panicking on those turns a recoverable condition into a crash —
+/// and because `[profile.release]` sets `panic = "abort"`, it is an
+/// *unrecoverable process abort* with no unwinding, for a tool whose users
+/// may be in exactly those situations.
+///
+/// So transient conditions are retried, and only a genuinely unrecoverable
+/// failure is surfaced as an error. A silent fallback to weaker randomness
+/// would be far worse than either: a zero-filled key is catastrophic and
+/// undetectable after the fact.
+pub fn fill_random(buf: &mut [u8]) -> Result<(), CryptoError> {
+    const MAX_ATTEMPTS: u32 = 8;
+    let mut attempt = 0u32;
+    loop {
+        match getrandom::getrandom(buf) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                let transient = matches!(
+                    e.kind(),
+                    std::io::ErrorKind::Interrupted
+                        | std::io::ErrorKind::WouldBlock
+                        | std::io::ErrorKind::TimedOut
+                );
+                attempt += 1;
+                if transient && attempt < MAX_ATTEMPTS {
+                    tracing::warn!(
+                        error = %e,
+                        attempt,
+                        "OS entropy source not ready — retrying"
+                    );
+                    // Brief backoff so a spinning retry loop cannot itself
+                    // starve the entropy daemon we are waiting on.
+                    std::thread::sleep(std::time::Duration::from_millis(10 * u64::from(attempt)));
+                    continue;
+                }
+                return Err(CryptoError::RandomnessUnavailable(e.to_string()));
+            }
+        }
+    }
+}
+
 /// Generate cryptographically secure random bytes.
-pub fn random_bytes(len: usize) -> Vec<u8> {
+///
+/// Fails loudly rather than returning zeros: silently substituting a
+/// predictable buffer for a nonce, an invite nonce, or a content-encryption
+/// key would be a catastrophic and undetectable compromise.
+pub fn random_bytes(len: usize) -> Result<Vec<u8>, CryptoError> {
     let mut buf = vec![0u8; len];
-    getrandom::getrandom(&mut buf).expect("OS RNG unavailable");
-    buf
+    fill_random(&mut buf)?;
+    Ok(buf)
 }
 
 // ─── AEAD primitive (XChaCha20-Poly1305-IETF) ──────────────────────────────
