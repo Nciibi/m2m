@@ -8,15 +8,15 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() =
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save: vi.fn() }));
 
 const state = {
-  connection: null as any,
-  messages: [] as any[],
-  identity: null as any,
-  fileRequests: [] as any[],
+  connection: null as ConnectionInfo | null,
+  messages: [] as ChatMessage[],
+  identity: null as IdentityInfo | null,
+  fileRequests: [] as FileRequest[],
   activeConversationId: null as string | null,
   typingPeers: [] as string[],
   reconnecting: false,
   reconnectAttempt: 0,
-  toasts: [] as any[],
+  toasts: [] as ToastData[],
   setMessages: vi.fn(),
   handleSendMessage: vi.fn().mockResolvedValue({ id: "sent-msg-id" }),
   handleSendMessageWithTimer: vi.fn().mockResolvedValue({ id: "sent-msg-id" }),

@@ -8,17 +8,17 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undef
 
 // Shared mock state that tests can mutate
 const state = {
-  identity: null as any,
-  conversations: [] as any[],
+  identity: null as IdentityInfo | null,
+  conversations: [] as ConversationEntry[],
   generatedInvite: "",
   inviteToConnect: "",
   inviteValid: false,
   isConnecting: false,
   namingMyName: "",
   namingTheirName: "",
-  networkSettings: null as any,
+  networkSettings: null as NetworkSettings | null,
   privateMode: false,
-  toasts: [] as any[],
+  toasts: [] as ToastData[],
   handleGenerateInvite: vi.fn(),
   copyInvite: vi.fn(),
   handleConnect: vi.fn(),
@@ -31,8 +31,8 @@ const state = {
   removeToast: vi.fn(),
   addToast: vi.fn(),
   setView: vi.fn(),
-  discoveryConfig: null as any,
-  discoveredPeers: [] as any[],
+  discoveryConfig: null as DiscoveryConfig | null,
+  discoveredPeers: [] as DiscoveredPeer[],
 };
 
 vi.mock("../context/AppContext", () => ({

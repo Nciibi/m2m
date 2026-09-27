@@ -26,7 +26,7 @@ import { render } from "./setup";
  */
 
 const mockInvoke = vi.fn();
-vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: any[]) => mockInvoke(...a) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => mockInvoke(...a) }));
 
 const appState = {
   addToast: vi.fn(),
@@ -41,7 +41,7 @@ const appState = {
 };
 vi.mock("../context/AppContext", () => ({
   useApp: () => appState,
-  AppProvider: ({ children }: any) => children,
+  AppProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
 import { SettingsProvider, useSettings } from "../context/SettingsContext";

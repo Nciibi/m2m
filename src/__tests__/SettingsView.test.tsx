@@ -7,14 +7,14 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 // State for SettingsContext mock
 const settingsState = {
-  networkSettings: null as any,
+  networkSettings: null as NetworkSettings | null,
   publicIp: null as string | null,
   stunLoading: false,
-  networkDiagnostics: null as any,
-  stunConfig: null as any,
+  networkDiagnostics: null as NatTypeInfo | null,
+  stunConfig: null as StunConfig | null,
   stunServerInput: "",
   privateMode: false,
-  connectivityResult: null as any,
+  connectivityResult: null as ConnectivityStatus | null,
   openSettings: vi.fn(),
   handleStunDiscover: vi.fn(),
   handleAddStunServer: vi.fn(),
@@ -24,8 +24,8 @@ const settingsState = {
   handleConnectivityCheck: vi.fn(),
   handleTorToggle: vi.fn(),
   setStunServerInput: vi.fn(),
-  discoveryConfig: null as any,
-  discoveredPeers: [] as any[],
+  discoveryConfig: null as DiscoveryConfig | null,
+  discoveredPeers: [] as DiscoveredPeer[],
   handleLanToggle: vi.fn(),
   handleDhtToggle: vi.fn(),
   handleConnectDiscoveredPeer: vi.fn(),
@@ -34,8 +34,8 @@ const settingsState = {
 
 // State for AppContext mock
 const appState = {
-  identity: null as any,
-  toasts: [] as any[],
+  identity: null as IdentityInfo | null,
+  toasts: [] as ToastData[],
   removeToast: vi.fn(),
   addToast: vi.fn(),
   setView: vi.fn(),

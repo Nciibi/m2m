@@ -4,7 +4,7 @@ import { render } from "./setup";
 import userEvent from "@testing-library/user-event";
 
 const mockInvoke = vi.fn();
-vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: any[]) => mockInvoke(...args) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }));
 
 const appState = {
   addToast: vi.fn(),
@@ -83,7 +83,7 @@ const DEFAULT_SECURITY_CONFIG = {
  * Keying the mock on the command name makes the suite independent of how many
  * reads the provider performs, and of the order it performs them in.
  */
-function defaultInvoke(cmd: string, args?: any): any {
+function defaultInvoke(cmd: string, args?: unknown): unknown {
   switch (cmd) {
     case "get_security_config":
       return { ...DEFAULT_SECURITY_CONFIG };

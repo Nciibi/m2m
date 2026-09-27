@@ -5,15 +5,13 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 const mockInvoke = vi.fn();
-vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: any[]) => mockInvoke(...args) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }));
 // Capture the registered event handlers so a test can simulate a peer
 // connecting — the trust-anchor behaviour under test only applies once
 // `connection.peer_key_hex` is set.
-const { eventHandlers } = vi.hoisted(() => ({
-  eventHandlers: new Map<string, (e: any) => void>(),
-}));
+const { eventHandlers } = vi.hoisted(() => createEventHandlerRegistry());
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn((name: string, handler: (e: any) => void) => {
+  listen: vi.fn((name: string, handler: MockEventHandler) => {
     eventHandlers.set(name, handler);
     return Promise.resolve(() => eventHandlers.delete(name));
   }),
