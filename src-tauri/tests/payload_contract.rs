@@ -20,7 +20,7 @@
 
 use serde_json::{json, Value};
 
-use m2m::commands::{ChatMessage, ConnectionEvent, GroupEvent, MessageEvent};
+use m2m_lib::commands::{ChatMessage, ConnectionEvent, GroupEvent, MessageEvent};
 
 /// The complete set of keys serde emits for a `ChatMessage`.
 ///
