@@ -34,7 +34,22 @@ export default function ProgressBar({
 
   return (
     <div className="progress-container" style={style}>
-      <div className={classes}>
+      {/*
+        `role="progressbar"` plus the value attributes, so a file transfer's
+        progress is actually announced. The bar was previously a bare styled
+        `div` — completely invisible to a screen reader, which matters here
+        because a transfer can run for minutes and the user otherwise has no
+        way to know it is progressing (or has stalled).
+      */}
+      <div
+        className={classes}
+        role="progressbar"
+        aria-valuenow={Math.round(percent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label || "Progress"}
+        aria-busy={percent < 100}
+      >
         <div className="progress-bar__fill" style={{ width: `${percent}%` }} />
       </div>
       {showLabel && (

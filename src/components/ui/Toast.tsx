@@ -36,8 +36,12 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
           key={t.id}
           className={`toast toast--${t.type}`}
           onClick={() => onRemove(t.id)}
-          role="alert"
-          aria-live="assertive"
+          // Errors interrupt; informational toasts wait for a pause. Marking
+          // every toast `role="alert"` + `aria-live="assertive"` meant routine
+          // "Copied" / "Theme: dark" messages cut across whatever a screen
+          // reader was in the middle of saying.
+          role={t.type === "error" ? "alert" : "status"}
+          aria-live={t.type === "error" ? "assertive" : "polite"}
         >
           <span
             className="toast__progress"
