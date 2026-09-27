@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
@@ -14,6 +14,19 @@ function input(id: string): HTMLInputElement {
   const el = document.getElementById(id);
   if (!el) throw new Error(`no element with id ${id}`);
   return el as HTMLInputElement;
+}
+
+/**
+ * Set a controlled input's whole value at once.
+ *
+ * `user.type` is unreliable here: `Modal` focuses its first focusable element
+ * from a `requestAnimationFrame` callback, which can land mid-typing and
+ * swallow the remaining keystrokes (observed: a 28-character value arrived as
+ * "co"). `fireEvent.change` exercises the same onChange path deterministically,
+ * which is what this test is actually about.
+ */
+function fill(id: string, value: string) {
+  fireEvent.change(input(id), { target: { value } });
 }
 import { ConfirmDialog, DuressPassphraseDialog } from "../components/ui/ConfirmDialog";
 
@@ -143,8 +156,8 @@ describe("DuressPassphraseDialog", () => {
     render(<Host onSubmit={onSubmit} />);
     await user.click(screen.getByText("Set…"));
 
-    await user.type(input("duress-passphrase"), "short");
-    await user.type(input("duress-passphrase-confirm"), "short");
+    fill("duress-passphrase", "short");
+    fill("duress-passphrase-confirm", "short");
 
     // The confirm button must be disabled: the native prompt only enforced
     // this in Rust, *after* the user had already confirmed an irreversible act.
@@ -158,8 +171,8 @@ describe("DuressPassphraseDialog", () => {
     render(<Host onSubmit={onSubmit} />);
     await user.click(screen.getByText("Set…"));
 
-    await user.type(input("duress-passphrase"), "correct-horse-battery");
-    await user.type(input("duress-passphrase-confirm"), "correct-horse-batteru");
+    fill("duress-passphrase", "correct-horse-battery");
+    fill("duress-passphrase-confirm", "correct-horse-batteru");
 
     const alerts = screen.getAllByRole("alert").map((el) => el.textContent);
     expect(alerts.join(" ")).toMatch(/do not match/i);
@@ -174,8 +187,8 @@ describe("DuressPassphraseDialog", () => {
     await user.click(screen.getByText("Set…"));
 
     const value = "correct-horse-battery-staple";
-    await user.type(input("duress-passphrase"), value);
-    await user.type(input("duress-passphrase-confirm"), value);
+    fill("duress-passphrase", value);
+    fill("duress-passphrase-confirm", value);
     expect(input("duress-passphrase")).toHaveValue(value);
     expect(input("duress-passphrase-confirm")).toHaveValue(value);
     await user.click(screen.getByText("Wipe on this passphrase"));
@@ -190,9 +203,8 @@ describe("DuressPassphraseDialog", () => {
     await user.click(screen.getByText("Set…"));
 
     const value = "correct-horse-battery-staple";
-    const passphraseInput = input("duress-passphrase");
-    await user.type(passphraseInput, value);
-    await user.type(input("duress-passphrase-confirm"), value);
+    fill("duress-passphrase", value);
+    fill("duress-passphrase-confirm", value);
     await user.click(screen.getByText("Wipe on this passphrase"));
 
     // The dialog must NOT close on failure, and must not silently clear what
