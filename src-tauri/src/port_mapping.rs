@@ -1760,5 +1760,4 @@ mod upnp_security_tests {
     /// gateways) or too large (restoring the amplification it exists to stop).
     const _: () = assert!(MAX_HTTP_BODY > 0);
     const _: () = assert!(MAX_HTTP_BODY <= 1024 * 1024);
-    const _: () = assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
 }

@@ -1779,32 +1779,6 @@ impl MessageStore {
         result
     }
 
-    /// Legacy test-only edit path — content stored exactly as provided and
-    /// NOT crypto-shreddable. Production code MUST use [`edit_message_secure`].
-    #[cfg(test)]
-    pub fn edit_message(
-        &self,
-        message_id: &str,
-        conversation_id: &str,
-        expected_direction: &str,
-        new_content_encrypted: &[u8],
-        new_content_nonce: &[u8],
-    ) -> Result<bool, StorageError> {
-        let now = chrono::Utc::now().timestamp();
-        let changed = self.conn.execute(
-            "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2, edited_at = ?3
-             WHERE id = ?4 AND conversation_id = ?5 AND direction = ?6",
-            rusqlite::params![
-                new_content_encrypted,
-                new_content_nonce,
-                now,
-                message_id,
-                conversation_id,
-                expected_direction
-            ],
-        )?;
-        Ok(changed > 0)
-    }
 
     // ─── Message Deletion ─────────────────────────────
 

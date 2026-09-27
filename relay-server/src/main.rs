@@ -612,6 +612,14 @@ async fn main() {
 // the frame parser were exercised anywhere. The security-relevant properties
 // are covered below.
 
+// Compile-time invariants for the anti-DoS limits, so a bad edit fails the
+// build rather than shipping a bound that is too small (breaking legitimate
+// use) or too large (restoring the exhaustion it exists to prevent).
+const _: () = assert!(MAX_PENDING_REGISTRATIONS > 0);
+const _: () = assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
+const _: () = assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
+const _: () = assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
+
 #[cfg(test)]
 mod tests {
     use super::*;
