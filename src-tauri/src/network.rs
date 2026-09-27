@@ -274,39 +274,64 @@ pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
 /// Includes Slowloris protection: each bytes-read iteration has a 1s timeout
 /// instead of a single N-second timeout for the entire frame. An attacker
 /// sending 1 byte every 9 seconds will timeout after the first byte.
+///
+/// ## Allocation order (why this is split into three reads)
+///
+/// The frame body buffer is **not** allocated from the declared length up
+/// front. The sequence is:
+///
+/// 1. Read the 4-byte length prefix and apply the global [`MAX_FRAME_SIZE`]
+///    ceiling — a cheap reject with no allocation.
+/// 2. Read the 2-byte `version || packet_type` header.
+/// 3. Apply the per-type limit from [`protocol::max_frame_size_for`], which
+///    is orders of magnitude tighter for almost every packet type.
+/// 4. *Only then* allocate `frame_len` bytes and read the remainder.
+///
+/// Pre-fix, step 3 did not exist and step 4 happened immediately after step 1,
+/// so a 4-byte length prefix was enough to commit a 16 MiB zeroed allocation
+/// which the attacker could then hold open indefinitely by trickling bytes
+/// (each `read()` gets its own 1s budget, so the read never times out). With
+/// the 50-connection cap that is 800 MiB of committed memory from idle
+/// sockets.
 pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFrame, NetworkError> {
-    // ── Slowloris-resistant length prefix read ──
+    // ── Step 1: length prefix + global bound (no allocation) ──
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     read_exact_timeout(reader, &mut len_buf, "length prefix").await?;
 
     let frame_len = u32::from_be_bytes(len_buf);
     validate_frame_size(frame_len)?;
 
-    // ── Slowloris-resistant frame body read ──
-    let mut payload = vec![0u8; frame_len as usize];
-    read_exact_timeout(reader, &mut payload, "frame body").await?;
+    // ── Step 2: the 2-byte header, needed before we can bound the size ──
+    let mut header = [0u8; 2];
+    read_exact_timeout(reader, &mut header, "frame header").await?;
 
-    // Frame must carry at least version(1) + packet_type(1); anything less
-    // is garbage from an attacker, not a parseable frame. (Fuzzing found
+    // A frame must carry at least version(1) + packet_type(1). (Fuzzing found
     // the pre-fix version panicking on payload[0]/[1] for tiny frames.)
-    if payload.len() < 2 {
+    if frame_len < MIN_FRAME_SIZE {
         return Err(NetworkError::Protocol(
             protocol::ProtocolError::FrameTooSmall {
                 size: frame_len,
-                min: 2,
+                min: MIN_FRAME_SIZE,
             },
         ));
     }
 
-    // Parse version
-    let version = payload[0];
+    // Parse version before trusting the type byte.
+    let version = header[0];
     validate_version(version)?;
 
-    // Parse packet type
-    let packet_type = PacketType::from_byte(payload[1])?;
+    let packet_type = PacketType::from_byte(header[1])?;
 
-    // Extract body (everything after version + type)
-    let body = payload[2..].to_vec();
+    // ── Step 3: per-type bound, still before allocating ──
+    protocol::validate_frame_size_for(frame_len, packet_type)?;
+
+    // ── Step 4: allocate and read the remaining body ──
+    let body_len = frame_len as usize - 2;
+    let mut body = vec![0u8; body_len];
+    read_exact_timeout(reader, &mut body, "frame body").await?;
+
+    // The body we hand out excludes the version and type bytes.
+    let _ = version;
 
     Ok(RawFrame {
         version,
