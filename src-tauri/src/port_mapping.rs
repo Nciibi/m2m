@@ -1602,7 +1602,7 @@ mod upnp_security_tests {
         let err = validate_upnp_location("http://169.254.169.254/latest/meta-data/")
             .expect_err("the cloud metadata endpoint must be refused");
         assert!(
-            err.to_string().contains("not a local-network address"),
+            err.to_string().contains("metadata"),
             "unexpected error: {err}"
         );
     }
