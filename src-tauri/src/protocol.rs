@@ -1017,10 +1017,10 @@ mod protocol_tests {
     #[test]
     fn test_v02_is_rejected_because_its_aad_differs() {
         assert_eq!(PROTOCOL_VERSION, 0x03);
+        // v0x02 must not be accepted: its AEAD associated data differs.
         assert!(matches!(
             validate_version(0x02),
-            Err(ProtocolError::UnsupportedVersion(0x02)),
-            "v0x02 must not be accepted: its AEAD associated data differs from v0x03"
+            Err(ProtocolError::UnsupportedVersion(0x02))
         ));
     }
 
