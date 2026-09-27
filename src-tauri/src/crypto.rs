@@ -2461,7 +2461,7 @@ mod crypto_tests {
     /// "identity-key confusion" primitive.
     #[test]
     fn test_verify_signature_rejects_small_order_keys() {
-        let kp = IdentityKeypair::generate();
+        let kp = IdentityKeypair::generate().unwrap();
         let msg = b"authenticated message";
         let sig = kp.sign(msg);
 
@@ -2498,7 +2498,7 @@ mod crypto_tests {
     /// check must not have weakened the normal verification path.
     #[test]
     fn test_verify_signature_still_rejects_tampering() {
-        let kp = IdentityKeypair::generate();
+        let kp = IdentityKeypair::generate().unwrap();
         let msg = b"authenticated message";
         let sig = kp.sign(msg);
 
@@ -2512,7 +2512,7 @@ mod crypto_tests {
         assert!(verify_signature(&kp.public_key_bytes(), msg, &sig[..63]).is_err());
 
         // A different identity's key must not verify.
-        let other = IdentityKeypair::generate();
+        let other = IdentityKeypair::generate().unwrap();
         assert!(verify_signature(&other.public_key_bytes(), msg, &sig).is_err());
     }
 
