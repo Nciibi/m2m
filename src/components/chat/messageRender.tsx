@@ -11,7 +11,8 @@ export function renderMarkdown(content: string): ReactNode {
       return <code key={i} className="msg-code-inline">{p.slice(1, -1)}</code>;
     }
     // Bold **text** or __text__
-    let rendered: ReactNode = p;
+    // No initializer: both branches below assign, so the seed value was dead.
+    let rendered: ReactNode;
     const boldParts = p.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
     if (boldParts.length > 1) {
       rendered = boldParts.map((bp, j) => {

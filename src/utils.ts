@@ -23,8 +23,6 @@ export function estimateEntropy(passphrase: string): number {
   let entropy = len * Math.log2(poolSize);
 
   // ── 2. Pattern penalties ──
-  let penalty = 1.0;
-
   // 2a. Sequential characters (abc, 123, etc.)
   const seqPenalty = detectSequential(passphrase);
 
@@ -38,8 +36,7 @@ export function estimateEntropy(passphrase: string): number {
   const shortPenalty = len < 12 ? 0.5 : 1.0;
 
   // Apply the strongest penalty
-  penalty = Math.min(seqPenalty, repeatPenalty, kbPenalty, shortPenalty);
-  entropy *= penalty;
+  entropy *= Math.min(seqPenalty, repeatPenalty, kbPenalty, shortPenalty);
 
   // ── 3. NIST SP 800-63B floor ──
   const floor = len >= 12 ? 20.0 : len >= 8 ? 14.0 : 8.0;
