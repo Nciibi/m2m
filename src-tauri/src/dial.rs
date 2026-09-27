@@ -73,6 +73,10 @@ pub enum DialError {
     /// The connect exceeded its deadline and was cancelled.
     #[error("dial timed out after {0:?}")]
     TimedOut(Duration),
+
+    /// A LAN-only protocol (UPnP/NAT-PMP/PCP) was attempted while Tor is on.
+    #[error("LAN port mapping is disabled while Tor is enabled (would disclose the real IP)")]
+    TorLanUnsupported(SocketAddr),
 }
 
 /// Returns `true` when `ip` can never be reached over the public internet,
