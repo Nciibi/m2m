@@ -44,31 +44,6 @@ vi.mock("../context/AppContext", () => ({
   AppProvider: ({ children }: any) => children,
 }));
 
-const securityState = {
-  securityConfig: null as any,
-  scheduleClipboardClear: vi.fn(),
-};
-vi.mock("../context/SettingsContext", () => ({
-  useSettings: () => securityState,
-}));
-
-vi.mock("../context/ChatContext", () => ({
-  useChat: () => ({ handleDisconnect: vi.fn(), connection: null, messages: [], setMessages: vi.fn() }),
-}));
-
-vi.mock("../components/Sidebar", () => ({ default: () => null }));
-vi.mock("../components/ShortcutHelp", () => ({ default: () => null }));
-vi.mock("../components/FamilyTab", () => ({ default: () => null }));
-vi.mock("../components/chat/MessageBubble", () => ({ default: () => null }));
-vi.mock("../components/ErrorBoundary", () => ({ default: ({ children }: any) => children }));
-vi.mock("../views/SetupView", () => ({ default: () => null }));
-vi.mock("../views/HubView", () => ({ default: () => null }));
-vi.mock("../views/ChatView", () => ({ default: () => null }));
-vi.mock("../views/SettingsView", () => ({ default: () => null }));
-vi.mock("../views/VaultView", () => ({ default: () => null }));
-vi.mock("../views/GroupChatView", () => ({ default: () => null }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => {})) }));
-
 import { SettingsProvider, useSettings } from "../context/SettingsContext";
 
 const FULL_CONFIG = {
