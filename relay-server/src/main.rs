@@ -458,8 +458,16 @@ impl Drop for ConnectionSlot {
             }
         }
         drop(counts);
-        self.total
-            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        // Saturating, not `fetch_sub`: a plain fetch_sub wraps to usize::MAX if
+        // a slot is ever released without a matching increment, and the relay
+        // would then refuse every connection forever. Failing toward "capacity
+        // looks free" is the safe direction for a self-healing count; the
+        // `saturating_sub` above is the same idea for the per-IP map.
+        let _ = self
+            .total
+            .fetch_update(std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed, |v| {
+                Some(v.saturating_sub(1))
+            });
     }
 }
 
@@ -688,9 +696,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn frame_accepts_exactly_max_body() {
+    async fn frame_accepts_largest_legal_frame() {
         let (mut a, mut b) = tokio::io::duplex(1024 * 1024);
-        let body = vec![0x41u8; MAX_BODY_SIZE as usize];
+        // The declared length covers the type byte as well as the body, so the
+        // largest legal body is MAX_BODY_SIZE - 1.
+        let body = vec![0x41u8; MAX_BODY_SIZE as usize - 1];
         write_frame(&mut a, 0x01, &body).await.unwrap();
         let (msg_type, got) = read_frame(&mut b).await.unwrap();
         assert_eq!(msg_type, 0x01);
@@ -733,6 +743,9 @@ mod tests {
         let (counts, total) = new_counters();
         let ip: std::net::IpAddr = "10.0.0.1".parse().unwrap();
         {
+            // Mirror the accept loop: the slot is charged, then released.
+            *counts.lock().unwrap().entry(ip).or_insert(0) += 1;
+            total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let _slot = ConnectionSlot { ip, counts: counts.clone(), total: total.clone() };
             assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 1);
             assert_eq!(counts.lock().unwrap().get(&ip).copied(), Some(1));
@@ -749,6 +762,10 @@ mod tests {
             let counts = counts.clone();
             let total = total.clone();
             move || {
+                let mut m = counts.lock().unwrap();
+                *m.entry(ip).or_insert(0) += 1;
+                drop(m);
+                total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let _slot = ConnectionSlot { ip, counts, total };
                 panic!("simulated handler failure");
             }
@@ -767,6 +784,8 @@ mod tests {
         let (counts, total) = new_counters();
         for i in 0..500u16 {
             let ip: std::net::IpAddr = format!("10.1.{}.{}", i / 256, i % 256).parse().unwrap();
+            *counts.lock().unwrap().entry(ip).or_insert(0) += 1;
+            total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let _slot = ConnectionSlot { ip, counts: counts.clone(), total: total.clone() };
         }
         assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 0);
