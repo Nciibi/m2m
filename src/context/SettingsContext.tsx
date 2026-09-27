@@ -201,8 +201,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       await invoke("set_private_mode", { enabled: newVal });
       setPrivateMode(newVal);
-    } catch { /* noop */ }
-  }, [privateMode]);
+    } catch (e) {
+      // Private mode is what keeps the real IP out of invites. Silently
+      // failing to enable it would leave the user believing they are protected
+      // while their address is broadcast.
+      addToast("Failed to " + (newVal ? "enable" : "disable") + " private mode: " + e, "error");
+    }
+  }, [privateMode, addToast]);
 
   const handleConnectivityCheck = useCallback(async () => {
     try {
@@ -280,6 +285,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // ── Clipboard auto-clear helper ──
 
+  // Clear the pending clipboard timer on unmount, otherwise it fires
+  // `setState` after the provider is gone and a manual dismiss is followed by
+  // a redundant backend call.
+  useEffect(() => () => {
+    if (clipboardTimerRef.current) {
+      clearTimeout(clipboardTimerRef.current);
+      clipboardTimerRef.current = null;
+    }
+  }, []);
+
   const scheduleClipboardClear = useCallback((secs: number) => {
     if (clipboardTimerRef.current) {
       clearTimeout(clipboardTimerRef.current);
@@ -290,7 +305,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           await invoke("clear_clipboard");
           // Also clear via web API as fallback
           try { await navigator.clipboard.writeText(""); } catch { /* noop */ }
-        } catch { /* noop */ }
+        } catch (e) {
+          // The user was told "clipboard auto-clear: 30s". If the clear fails,
+          // a copied passphrase or fingerprint sits in the clipboard
+          // indefinitely with no feedback at all. That is the worst possible
+          // failure for this specific feature, so it is surfaced loudly.
+          addToast("Clipboard auto-clear FAILED — clear it manually", "error");
+        }
       }, secs * 1000);
     }
   }, []);
