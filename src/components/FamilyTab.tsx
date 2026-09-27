@@ -1,3 +1,4 @@
+import { useNow } from "../hooks/useNow";
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, Modal } from "./ui";
@@ -17,6 +18,9 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
   const [showAdd, setShowAdd] = useState(false);
   const [showUpdate, setShowUpdate] = useState<string | null>(null);
   const [updateInvite, setUpdateInvite] = useState("");
+  // Day-level granularity is plenty for an expiry badge, and it keeps a long
+  // family list from re-rendering every second.
+  const now = useNow(60_000);
 
   if (family.length === 0) {
     return (
