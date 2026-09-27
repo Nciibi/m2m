@@ -225,9 +225,12 @@ describe("ChatContext", () => {
     await waitFor(() => expect(eventHandlers.get("m2m://connection")).toBeDefined());
     act(() => {
       eventHandlers.get("m2m://connection")?.({
+        // A full 64-hex-char peer key: the payload validator rejects
+        // anything shorter, which is the point — a malformed key must never
+        // reach `setActiveConversationId` or a `load_messages` query.
         payload: {
           state: "established",
-          peer_key_hex: "aabbcc",
+          peer_key_hex: "a".repeat(64),
           peer_fingerprint: "AA:BB:CC",
           peer_verified: false,
         },
@@ -271,7 +274,7 @@ describe("ChatContext", () => {
     // And the peer was NOT marked verified.
     expect(screen.getByTestId("peer-verified")).not.toHaveTextContent("true");
     expect(mockInvoke).toHaveBeenCalledWith("verify_peer", {
-      peerKeyHex: "aabbcc",
+      peerKeyHex: "a".repeat(64),
     });
   });
 
