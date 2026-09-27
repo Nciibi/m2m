@@ -891,7 +891,17 @@ impl DoubleRatchet {
         };
 
         // ── Cap gap size: reject absurd message numbers before burning CPU ──
-        let gap = (message_number - tent_recv_num) as usize;
+        // `checked_sub` is belt-and-braces: the guards above already make an
+        // underflow unreachable, but with `overflow-checks = true` +
+        // `panic = "abort"` any future refactor that relaxes them would turn
+        // this into a remotely-triggerable process abort. Fail closed.
+        let gap = match message_number.checked_sub(tent_recv_num) {
+            Some(g) => g as usize,
+            None => scrub_and!(CryptoError::DoubleRatchetError(format!(
+                "message number {} is behind the receive counter {}",
+                message_number, tent_recv_num
+            ))),
+        };
         if gap > MAX_GAP_DERIVATION {
             scrub_and!(CryptoError::DoubleRatchetError(format!(
                 "message number {} is {} messages ahead — exceeds max gap derivation ({})",
