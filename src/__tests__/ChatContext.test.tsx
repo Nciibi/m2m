@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 
 const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: any[]) => mockInvoke(...args) }));
@@ -25,9 +26,12 @@ function TestConsumer() {
     copyInvite, handleVerify, handleSendFile, handleExportConversation,
     handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
   } = useChat();
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   return (
     <div>
       <span data-testid="connection-state">{connection?.state || "null"}</span>
+      <span data-testid="peer-verified">{String(connection?.peer_verified ?? "unset")}</span>
+      <span data-testid="verify-error">{verifyError ?? "none"}</span>
       <span data-testid="is-connecting">{String(isConnecting)}</span>
       <span data-testid="messages-count">{messages.length}</span>
       <span data-testid="conversations-count">{conversations.length}</span>
@@ -35,7 +39,16 @@ function TestConsumer() {
       <button onClick={handleGenerateInvite}>Generate Invite</button>
       <button onClick={() => setInviteToConnect("m2m://test")}>Set Invite</button>
       <button onClick={copyInvite}>Copy Invite</button>
-      <button onClick={handleVerify}>Verify</button>
+      <button onClick={async () => {
+        // Mirror what ChatView does: only report success once the backend has
+        // actually persisted the verification.
+        try {
+          await handleVerify();
+          setVerifyError(null);
+        } catch (e) {
+          setVerifyError(String(e));
+        }
+      }}>Verify</button>
       <button onClick={handleSendFile}>Send File</button>
       <button onClick={handleExportConversation}>Export</button>
       <button onClick={handleDeleteConversation}>Delete Conv</button>
@@ -193,5 +206,58 @@ describe("ChatContext", () => {
     mockInvoke.mockClear();
     await user.click(screen.getByText("Send Reaction"));
     expect(mockInvoke).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Trust-anchor regression.
+   *
+   * `handleVerify` used to swallow its own error, and ChatView did
+   * `await handleVerify(); addToast("Peer verified", "success")` — so a
+   * *failed* verification still showed a green success confirmation, and the
+   * badge silently stayed off. Reporting a peer as verified when the write
+   * failed is the single worst thing this UI can do: the entire trust model
+   * hangs off the user believing they checked a fingerprint.
+   */
+  it("handleVerify surfaces a backend failure instead of reporting success", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_muted_conversations") return [];
+      if (cmd === "verify_peer") throw new Error("key store is locked");
+      return undefined;
+    });
+
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    await user.click(screen.getByText("Verify"));
+
+    // The rejection propagated, so the caller knows not to claim success.
+    expect(screen.getByTestId("verify-error")).toHaveTextContent(/key store is locked/);
+    // And the peer was NOT marked verified.
+    expect(screen.getByTestId("peer-verified")).not.toHaveTextContent("true");
+  });
+
+  it("handleVerify marks the peer verified when the backend succeeds", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_muted_conversations") return [];
+      if (cmd === "verify_peer") return undefined;
+      return undefined;
+    });
+
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>
+    );
+
+    // No active connection yet, so handleVerify must refuse rather than
+    // silently succeed.
+    await user.click(screen.getByText("Verify"));
+    expect(screen.getByTestId("verify-error")).not.toHaveTextContent("none");
+    expect(screen.getByTestId("peer-verified")).not.toHaveTextContent("true");
   });
 });
