@@ -70,7 +70,7 @@ ul, ol {
 
 ::selection {
   background: var(--color-accent);
-  color: white;
+  color: var(--color-on-accent, white);
 }
 
 /* Focus-visible — only for keyboard nav, never on inputs/textarea/select */
@@ -79,8 +79,13 @@ ul, ol {
 }
 
 :focus-visible:not(input):not(textarea):not(select) {
+  /* The two-layer ring from the token, not a bare 2px outline. The inner band
+     separates the ring from the element and the outer band supplies the halo,
+     so the focus indicator stays visible on both the dark canvas and the light
+     accent surfaces — a single flat outline disappears against either. */
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }
 
 /* Screen-reader-only utility (live regions, labels for icon buttons) */

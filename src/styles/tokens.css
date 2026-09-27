@@ -70,6 +70,7 @@
   --color-success-bg: rgba(16, 185, 129, 0.1);
   --color-danger: #ef4444;
   --color-on-danger: var(--color-text-primary);
+  --color-on-accent: var(--color-text-inverse);
   --color-danger-glow: rgba(239, 68, 68, 0.2);
   --color-danger-bg: rgba(239, 68, 68, 0.1);
   --color-warning: #f59e0b;
