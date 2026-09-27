@@ -1220,34 +1220,31 @@ impl SenderKeyTentative {
     /// same frame cannot be replayed to obtain the plaintext a second time.
     /// Intermediate skipped keys are retained so genuinely delayed messages
     /// still decrypt.
-    pub fn commit(self, chain: &mut SenderKeyChain) {
-        let this = std::mem::ManuallyDrop::new(self);
-
-        if this.was_cached {
+    pub fn commit(mut self, chain: &mut SenderKeyChain) {
+        if self.was_cached {
             // Consume the cached key: a successfully decrypted message must
-            // not be replayable.
-            if let Some(mut consumed) = chain.cached_keys.remove(&this.message_number) {
+            // not be replayable. (Pre-fix, the cache-hit path returned a copy
+            // and left the entry in place, allowing unlimited replays.)
+            if let Some(mut consumed) = chain.cached_keys.remove(&self.message_number) {
                 consumed.drop_keys();
             }
         } else {
-            for (num, cached) in this.staged.iter() {
-                if *num == this.message_number {
-                    // Consumed on success — never insert it.
-                    continue;
+            // Move the intermediate keys into the live cache by value — the
+            // key for THIS message is skipped, because it is consumed now.
+            let staged = std::mem::take(&mut self.staged);
+            for (num, cached) in staged {
+                if num == self.message_number {
+                    let mut discard = cached;
+                    discard.drop_keys();
+                } else {
+                    chain.cached_keys.insert(num, cached);
                 }
-                chain.cached_keys.insert(*num, cached.clone_no_zeroize());
             }
         }
 
-        // SAFETY-free: `ManuallyDrop` suppresses the destructor, so the
-        // staged/committed bytes are handed off or dropped explicitly here.
-        // We zeroize what we are not installing.
-        unsafe {
-            // Take ownership of the vectors so we can zeroize them after use.
-            let staged = std::ptr::read(&this.staged);
-            drop(staged);
-            std::ptr::drop_in_place(std::ptr::addr_of_mut!(*this as *mut Self).cast::<SenderKeyTentative>());
-        }
+        chain.chain_key = self.chain_key;
+        chain.message_number = self.next_message_number;
+        // `self` drops here, scrubbing key, nonce, chain_key and any leftovers.
     }
 }
 
