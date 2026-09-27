@@ -96,6 +96,8 @@ function defaultInvoke(cmd: string, args?: any): any {
     case "get_muted_conversations":
     case "refresh_discovery":
       return [];
+    case "get_stun_servers":
+      return [];
     case "get_network_diagnostics":
       return { nat_type: "Unknown", stun_servers: [], consensus: false };
     case "get_stun_config":
@@ -115,7 +117,6 @@ function defaultInvoke(cmd: string, args?: any): any {
     case "set_private_mode":
     case "lock_vault":
     case "clear_clipboard":
-    case "refresh_discovery":
     case "set_tor_enabled":
       return undefined;
     default:
