@@ -225,18 +225,45 @@ impl Group {
             return Err("group message signature verification failed".to_string());
         }
 
-        // Derive message key from receiver chain
-        let chain = self
-            .receiver_chains
-            .get_mut(&data.sender_peer_key_hex)
-            .ok_or("no receiver chain for this sender")?;
+        // ── Derive the message key WITHOUT advancing the receiver chain ──
+        // The chain must not move until the AEAD tag verifies. Deriving in
+        // place let a forged frame with a large `message_number` desync the
+        // chain permanently, deafening every future message from this sender
+        // (H3-class bug, same shape as the one already fixed in the Double
+        // Ratchet). See `SenderKeyChain::tentative_message_key`.
+        let tentative = {
+            let chain = self
+                .receiver_chains
+                .get(&data.sender_peer_key_hex)
+                .ok_or("no receiver chain for this sender")?;
+            chain
+                .tentative_message_key(data.message_number)
+                .map_err(|e| format!("receiver key derivation failed: {e}"))?
+        };
 
-        let (nonce, msg_key) = chain
-            .peek_message_key(data.message_number)
-            .map_err(|e| format!("receiver key derivation failed: {e}"))?;
+        // ── Authenticate — still nothing committed ──
+        let plaintext = match crypto::aead_open_pub(
+            &tentative.key(),
+            &tentative.nonce(),
+            &data.ciphertext,
+            b"",
+        ) {
+            Ok(p) => p,
+            Err(_) => {
+                // `tentative` drops here, scrubbing every derived key. The
+                // receiver chain is exactly as it was.
+                return Err("group message decryption failed (AEAD open)".to_string());
+            }
+        };
 
-        let padded = crypto::aead_open_pub(&msg_key, &nonce, &data.ciphertext, b"")
-            .map_err(|_| "group message decryption failed (AEAD open)".to_string())?;
+        // ── Commit — the tag verified ──
+        {
+            let chain = self
+                .receiver_chains
+                .get_mut(&data.sender_peer_key_hex)
+                .ok_or("no receiver chain for this sender")?;
+            tentative.commit(chain);
+        }
 
         let plaintext = crypto::unpad_message_variable(&padded)
             .map_err(|e| format!("unpad failed: {e}"))?;
