@@ -484,6 +484,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // could therefore lose a message. Reading through refs removes the churn
   // entirely and closes the window.
   const notifPermissionRef = useRef(notifPermission);
+  // The 13 event listeners are registered once and must stay registered, so they
+  // cannot close over `t` directly: it is rebuilt on every locale change, which
+  // would tear down and re-register the whole bridge. Reading it through a ref
+  // gives the listeners live translations without any re-registration.
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const activeConversationIdRef = useRef(activeConversationId);
   const mutedConversationsRef = useRef(mutedConversations);
   useEffect(() => { notifPermissionRef.current = notifPermission; }, [notifPermission]);
@@ -647,7 +653,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // The backend sends ONLY `transfer_id` on this event — the old code read
       // a `filename` that is never present, so the toast always rendered with
       // an empty suffix.
-      addToast(t("toast.transferComplete", { filename: "" }), "success");
+      addToast(tRef.current("toast.transferComplete", { filename: "" }), "success");
     });
 
     const unlistenFileError = listen("m2m://transfer-error", (event) => {
@@ -658,8 +664,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       setTransfers((prev) => prev.filter((t) => t.transfer_id !== failed.transfer_id));
       addToast(
-        t("toast.transferFailed", {
-          err: failed.error || t("toast.transferFailedUnknown"),
+        tRef.current("toast.transferFailed", {
+          err: failed.error || tRef.current("toast.transferFailedUnknown"),
         }),
         "error",
       );
@@ -672,7 +678,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return;
       }
       setTransfers((prev) => prev.filter((t) => t.transfer_id !== cancelled.transfer_id));
-      addToast(t("toast.transferCancelled"), "warning");
+      addToast(tRef.current("toast.transferCancelled"), "warning");
     });
 
     const unlistenReaction = listen("m2m://reaction", (event) => {
