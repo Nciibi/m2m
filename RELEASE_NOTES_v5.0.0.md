@@ -139,10 +139,9 @@ the privacy rules the rest obeyed. In particular:
 | `cargo clippy --all-targets -- -D warnings` | clean |
 | `cargo fmt --check` | clean |
 | `tsc --noEmit` | clean |
-| `vitest` | 269 passed |
-| `eslint` | 0 errors, 22 warnings (budget: 23) |
+| `vitest` | 302 passed |
+| `eslint` | 0 errors, 10 warnings (budget: 10) |
 
-The 22 remaining warnings are React Compiler advisories
-(`set-state-in-effect`, `preserve-manual-memoization`) about render scheduling.
-None represent incorrect behaviour, and the lint budget is pinned to the current
-count so the number cannot regress.
+The 10 remaining warnings are all `set-state-in-effect` on genuine async
+loads, validation passes, and DOM side effects — none is derivable state. The
+lint budget is pinned to the current count so it cannot regress.
