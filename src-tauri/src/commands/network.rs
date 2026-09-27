@@ -1151,6 +1151,24 @@ async fn handle_incoming_text(
                     match decrypted {
                         Some(Ok(body)) => match &body {
                                 MessageBody::Text { id, content, timestamp, .. } => {
+                                    // Enforce the text cap on the way IN, not just
+                                    // on send. It was checked in `chat.rs` and on
+                                    // edit, but an established peer could post
+                                    // an arbitrarily large body that went straight
+                                    // to SQLite — bounded only by the frame cap,
+                                    // which the receive-loop rate limiter then
+                                    // still allows at 20 frames/s. Without this, a
+                                    // peer could fill the victim's disk.
+                                    if content.len() > crate::protocol::MAX_TEXT_MESSAGE_SIZE {
+                                        tracing::warn!(
+                                            peer = %peer_key_hex,
+                                            len = content.len(),
+                                            max = crate::protocol::MAX_TEXT_MESSAGE_SIZE,
+                                            "rejecting oversized inbound text message"
+                                        );
+                                        return;
+                                    }
+
                                     // Use sender's timestamp for consistent ordering.
                                     // Fall back to receiver's clock if timestamp is 0
                                     // (backward compat with older clients that don't send it).
