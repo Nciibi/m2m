@@ -12,6 +12,7 @@ import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
 import type {
+  ConnectionInfo,
   ConversationEntry,
   DiscoveredPeer,
   DiscoveryConfig,
@@ -505,7 +506,8 @@ function ChatsTab({
 interface NearbyTabProps {
   discoveryConfig: DiscoveryConfig | null;
   discoveredPeers: DiscoveredPeer[];
-  onConnect: (address: string) => void;
+  /** Resolves with the established connection, or null if none was made. */
+  onConnect: (address: string) => Promise<ConnectionInfo | null>;
   onRefresh: () => void;
   onOpenSettings: () => void;
   onOpenChat: (c: ConversationEntry) => void;
@@ -520,14 +522,19 @@ function NearbyTab({
     setConnecting(address);
     try {
       const info = await onConnect(address);
-      if (info?.peer_key_hex && onOpenChat) {
+      if (info?.peer_key_hex) {
         onOpenChat({
+          id: info.peer_key_hex,
           peer_key_hex: info.peer_key_hex,
-          is_online: true,
-          retention_policy: "none",
           display_name: null,
           peer_display_name: null,
-          id: info.peer_key_hex,
+          last_message_at: null,
+          last_message_preview: null,
+          message_count: 0,
+          is_online: true,
+          auto_delete_at: null,
+          retention_policy: "none",
+          created_at: 0,
         });
       }
     } catch {
