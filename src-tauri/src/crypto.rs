@@ -2337,7 +2337,7 @@ mod crypto_tests {
     fn test_rfc5869_a2_longer_inputs_sha256() {
         let ikm: Vec<u8> = (0u8..80).collect(); // 0x00..=0x4f
         let salt: Vec<u8> = (0x60u8..0xb0).collect(); // 0x60..=0xaf
-        let info: Vec<u8> = (0xb0u8..0x100).collect(); // 0xb0..=0xff
+        let info: Vec<u8> = (0xb0u8..=0xffu8).collect(); // 0xb0..=0xff
 
         let okm = hkdf(&salt, &ikm, &info, 82);
 
