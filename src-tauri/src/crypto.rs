@@ -2314,17 +2314,16 @@ mod crypto_tests {
     // home-grown HKDF had only self-consistency tests (comparing the function
     // against itself). A homemade KDF is exactly where a known-answer test
     // belongs; these vectors are from RFC 5869 Appendix A.
-
     /// RFC 5869 Appendix A.1 — basic test case, SHA-256.
+    ///
+    /// Note the crate helper's argument order: `hkdf(salt, ikm, info, len)`.
     #[test]
     fn test_rfc5869_a1_basic_sha256() {
-        let ikm = hex_to_32(
-            "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
-        );
-        let salt = hex_to_32("000102030405060708090a0b0c");
-        let info = hex_to_10("f0f1f2f3f4f5f6f7f8f9");
+        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+        let salt = hex_to_vec("000102030405060708090a0b0c");
+        let info = hex_to_vec("f0f1f2f3f4f5f6f7f8f9");
 
-        let okm = hkdf(&ikm, &salt, &info, 42);
+        let okm = hkdf(&salt, &ikm, &info, 42);
 
         assert_eq!(
             hex::encode(&okm),
@@ -2333,14 +2332,14 @@ mod crypto_tests {
         );
     }
 
-    /// RFC 5869 Appendix A.2 — longer inputs and outputs.
+    /// RFC 5869 Appendix A.2 — 80-byte IKM, 80-byte salt, 80-byte info, 82-byte OKM.
     #[test]
     fn test_rfc5869_a2_longer_inputs_sha256() {
-        let ikm: Vec<u8> = (0u8..80).collect();
-        let salt: Vec<u8> = (0u8..80).collect();
-        let info: Vec<u8> = (0xf0u8..0xfa).collect();
+        let ikm: Vec<u8> = (0u8..80).collect(); // 0x00..=0x4f
+        let salt: Vec<u8> = (0x60u8..0xb0).collect(); // 0x60..=0xaf
+        let info: Vec<u8> = (0xb0u8..0x100).collect(); // 0xb0..=0xff
 
-        let okm = hkdf(&ikm, &salt, &info, 82);
+        let okm = hkdf(&salt, &ikm, &info, 82);
 
         assert_eq!(
             hex::encode(&okm),
@@ -2354,11 +2353,15 @@ mod crypto_tests {
     }
 
     /// RFC 5869 Appendix A.3 — zero-length salt and info.
+    ///
+    /// Worth covering because an empty salt is the degenerate case: extract
+    /// HMACs with a zero-length key, which is where an implementation that
+    /// special-cases empty input tends to diverge.
     #[test]
     fn test_rfc5869_a3_zero_length_salt_and_info_sha256() {
-        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
 
-        let okm = hkdf(&ikm, b"", b"", 42);
+        let okm = hkdf(b"", &ikm, b"", 42);
 
         assert_eq!(
             hex::encode(&okm),
@@ -2367,18 +2370,16 @@ mod crypto_tests {
         );
     }
 
-    /// Helper: decode a hex string into a 32-byte array.
-    fn hex_to_32(s: &str) -> [u8; 32] {
-        let v = hex::decode(s).expect("hex");
-        v.try_into().expect("32 bytes")
+    /// Helper: decode a hex string into a byte vector.
+    fn hex_to_vec(s: &str) -> Vec<u8> {
+        hex::decode(s).expect("valid hex")
     }
+
+    /// Helper: decode a hex string into a 22-byte array (RFC A.1/A.3 IKM).
     fn hex_to_22(s: &str) -> [u8; 22] {
-        let v = hex::decode(s).expect("hex");
-        v.try_into().expect("22 bytes")
+        hex::decode(s).expect("valid hex").try_into().expect("22 bytes")
     }
-    fn hex_to_10(s: &str) -> [u8; 10] {
-        let v = hex::decode(s).expect("hex");
-        v.try_into().expect("10 bytes")
+
     }
 
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
