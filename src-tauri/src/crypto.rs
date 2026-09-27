@@ -1159,13 +1159,7 @@ pub fn fill_random(buf: &mut [u8]) {
         match getrandom::getrandom(buf) {
             Ok(()) => return,
             Err(e) => {
-                let transient = matches!(
-                    e.kind(),
-                    std::io::ErrorKind::Interrupted
-                        | std::io::ErrorKind::WouldBlock
-                        | std::io::ErrorKind::TimedOut
-                );
-                if !transient || attempt == MAX_RANDOM_ATTEMPTS {
+                if !is_transient_random_error(e) || attempt == MAX_RANDOM_ATTEMPTS {
                     panic!("{RANDOM_FATAL_MSG}\n\nUnderlying error: {e}");
                 }
                 // Backoff so a spinning retry loop cannot itself starve the
@@ -1185,6 +1179,38 @@ pub fn fill_random(buf: &mut [u8]) {
             }
         }
     }
+}
+
+/// Is this `getrandom` failure a condition that resolves on its own?
+///
+/// `getrandom::Error` is a bare `NonZeroU32` code rather than an
+/// `io::Error`, so the errno has to be interpreted here. The transient set is:
+///
+/// * `EAGAIN` (11) — the kernel entropy pool is not ready yet. The common
+///   case: early boot, a VM resuming from a snapshot, a fresh container.
+/// * `EINTR` (4) — a signal arrived. Always worth retrying.
+/// * `ETIMEDOUT` (110) — some platforms block waiting for a CSPRNG daemon
+///   (e.g. `getrandom(3)` on some BSDs) and this is the timeout path.
+///
+/// Everything else — `ENOSYS` (kernel too old for the syscall), `EPERM`,
+/// `EBADF` — is a permanent environment problem that retrying cannot fix, and
+/// burning two seconds on each of those just delays an honest error.
+#[cfg(unix)]
+fn is_transient_random_error(e: getrandom::Error) -> bool {
+    const EAGAIN: i32 = 11;
+    const EINTR: i32 = 4;
+    const ETIMEDOUT: i32 = 110;
+    match e.raw_os_error() {
+        Some(code) => matches!(code, EAGAIN | EINTR | ETIMEDOUT),
+        None => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn is_transient_random_error(_e: getrandom::Error) -> bool {
+    // The Windows path (BCryptGenRandom) does not have an entropy-pool warm-up
+    // failure mode, so there is nothing worth retrying.
+    false
 }
 
 /// Generate cryptographically secure random bytes.
