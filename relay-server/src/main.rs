@@ -340,13 +340,14 @@ async fn handle_register(
             return;
         }
         map.insert(
-        relay_id.clone(),
+            relay_id.clone(),
             Registration {
                 bridge_tx,
                 peer_addr,
                 created_at: Instant::now(),
             },
         );
+    }
 
     // Spawn the reader task — it owns the stream and waits for bridge or keepalive
     tokio::spawn(registration_reader(stream, relay_id.clone(), bridge_rx));
