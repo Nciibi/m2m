@@ -64,4 +64,5 @@
   --color-bg-sidebar: rgba(15, 23, 42, 0.04);
   --color-bg-right-panel: rgba(15, 23, 42, 0.03);
   --gradient-scrim-top: linear-gradient(to bottom, rgba(15, 23, 42, 0.06), transparent);
+  --color-on-danger: #ffffff;
 }
