@@ -179,9 +179,9 @@ describe("MessageBubble", () => {
     await userEvent.type(box, "keyboard save");
     await userEvent.keyboard("{Control>}{Enter}{/Control}");
     expect(onEditSave).toHaveBeenCalledWith("m1", "keyboard save");
-    // The rendered text comes from `message.content`, which the test does not
-    // update, so the original text reappears once edit mode closes.
-    expect(screen.getByDisplayValue("original")).not.toBeInTheDocument();
+    // Edit mode closed (no textarea remains), and the rendered text comes from
+    // `message.content`, which this test does not update.
+    expect(screen.queryByDisplayValue("original")).not.toBeInTheDocument();
     expect(screen.getByText("original")).toBeInTheDocument();
   });
 
