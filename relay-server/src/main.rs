@@ -52,7 +52,12 @@ const PER_BYTE_TIMEOUT: Duration = Duration::from_secs(1);
 const FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_BODY_SIZE: u32 = 65536;
 const DEFAULT_PORT: u16 = 3478;
-const READER_IDLE_TIMEOUT: Duration = Duration::from_secs(300); // 5 min
+/// Reader idle timeout, in seconds. Kept as a plain `u64` so the compile-time
+/// invariant below can compare it — `Duration`'s ordering impls are not `const`,
+/// so a `const` assertion on two `Duration` values is a hard compile error
+/// (E0015). The `Duration` is derived from this.
+const READER_IDLE_TIMEOUT_SECS: u64 = 300; // 5 min
+const READER_IDLE_TIMEOUT: Duration = Duration::from_secs(READER_IDLE_TIMEOUT_SECS);
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Maximum concurrent connections from a single IP address.
@@ -79,7 +84,8 @@ const MAX_PENDING_REGISTRATIONS: usize = 1024;
 /// with no cap, no idle timeout and no byte budget. Since bridged connections
 /// are the long-lived, valuable ones, an idle timeout is what keeps a single
 /// registration from becoming free server capacity.
-const BRIDGE_IDLE_TIMEOUT: Duration = Duration::from_secs(600); // 10 min
+const BRIDGE_IDLE_TIMEOUT_SECS: u64 = 600; // 10 min
+const BRIDGE_IDLE_TIMEOUT: Duration = Duration::from_secs(BRIDGE_IDLE_TIMEOUT_SECS);
 
 /// A registered peer awaiting a bridge connection.
 ///
@@ -618,14 +624,9 @@ async fn main() {
 const _: () = assert!(MAX_PENDING_REGISTRATIONS > 0);
 const _: () = assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
 const _: () = assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
-// Compared as `u64` seconds rather than as `Duration`: `Duration`'s ordering
-// impls are not `const`, so a `const` assertion on two `Duration` values fails
-// with E0015. `Duration::as_secs` is not const either, so the seconds are
-// spelled out here and the runtime test below re-checks the `Duration`s
-// themselves, keeping both forms covered.
-const BRIDGE_IDLE_TIMEOUT_SECS: u64 = 600;
-const _: () = assert!(BRIDGE_IDLE_TIMEOUT_SECS > READER_IDLE_TIMEOUT.as_secs() as u64
-    || BRIDGE_IDLE_TIMEOUT_SECS == 600);
+// A bridge must outlive its reader, or a bridged connection is torn down before
+// the reader that feeds it is ever considered idle.
+const _: () = assert!(BRIDGE_IDLE_TIMEOUT_SECS > READER_IDLE_TIMEOUT_SECS);
 
 #[cfg(test)]
 mod tests {
