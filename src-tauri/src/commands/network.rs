@@ -337,6 +337,16 @@ pub async fn start_listening(
     tokio::spawn(async move {
         while let Some((stream, peer_addr)) = rx.recv().await {
             let ip = peer_addr.ip();
+
+            // Reap expired per-IP windows before checking. Without this the
+            // limiter's map grows one entry per source IP forever, since
+            // `check()` inserts an entry even for addresses it then rejects.
+            // Only re-accepts pay the (tiny) O(entries) cost.
+            let reaped = state_clone.connection_limiter.reap();
+            if reaped > 0 {
+                tracing::debug!(reaped, "reaped expired per-IP rate limit entries");
+            }
+
             let allowed = state_clone.connection_limiter.check(ip);
 
             if allowed {
