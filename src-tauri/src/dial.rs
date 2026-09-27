@@ -172,9 +172,11 @@ pub async fn dial_with_timeout(
 
     let connect = async {
         if tor::is_enabled() {
-            // `tor::connect` is Tor-only; call the direct socket ourselves
-            // otherwise so the two branches cannot drift apart.
-            tor::connect_via_socks(addr).await.map_err(DialError::Io)
+            // `connect_via_socks` is unconditional; the branch above this is
+            // what selects it, so the two cannot silently diverge.
+            tor::connect_via_socks(addr)
+                .await
+                .map_err(|e| DialError::Dial(e.to_string()))
         } else {
             TcpStream::connect(addr).await.map_err(DialError::Io)
         }
