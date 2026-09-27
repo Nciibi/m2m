@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, ToastContainer, OnScreenKeyboard } from "../components/ui";
 import { LockIcon, UnlockIcon, EyeIcon, EyeOffIcon, CheckIcon } from "../components/ui/Icons";
@@ -16,7 +16,6 @@ export default function VaultView() {
   const [loading, setLoading] = useState(false);
   const [showTips, setShowTips] = useState(false);
   const [shaking, setShaking] = useState(false);
-  const [strength, setStrength] = useState({ percent: 0, bits: 0, label: "", cls: "" });
   const [createMode, setCreateMode] = useState(false);
   // On-screen keyboard state + which field it targets ("main" | "confirm").
   const [oskOpen, setOskOpen] = useState(false);
@@ -25,7 +24,14 @@ export default function VaultView() {
   const isFirstTime = !vaultInitialized;
   const showConfirm = isFirstTime || createMode;
 
-  useEffect(() => {
+  // Derived during render rather than stored in state and filled by an effect.
+  //
+  // This is a pure function of `passphrase`, so holding it in state was
+  // duplicated truth: every render showed the *previous* keystroke's strength
+  // until the effect ran, and typing in a passphr_toggle field or clearing it
+  // left the bar briefly out of step with the input. useMemo also avoids
+  // re-estimating entropy for unrelated re-renders.
+  const strength = useMemo(() => {
     const entropy = estimateEntropy(passphrase);
     let percent: number, label: string, cls: string;
     if (passphrase.length === 0) { percent = 0; label = ""; cls = ""; }
@@ -34,7 +40,7 @@ export default function VaultView() {
     else if (entropy < 60) { percent = 65; label = "Fair"; cls = "fair"; }
     else if (entropy < 80) { percent = 85; label = "Strong"; cls = "strong"; }
     else { percent = 100; label = "Very Strong"; cls = "very-strong"; }
-    setStrength({ percent, bits: Math.round(entropy), label, cls });
+    return { percent, bits: Math.round(entropy), label, cls };
   }, [passphrase]);
 
   const fail = (msg: string) => {
