@@ -7,6 +7,14 @@ const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: any[]) => mockInvoke(...a) }));
 
 import { render } from "./setup";
+
+/** The dialog's inputs are addressed by id: `getByLabelText` also matches the
+ *  dialog's own `aria-label`, which contains the same phrase. */
+function input(id: string): HTMLInputElement {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`no element with id ${id}`);
+  return el as HTMLInputElement;
+}
 import { ConfirmDialog, DuressPassphraseDialog } from "../components/ui/ConfirmDialog";
 
 /**
@@ -135,8 +143,8 @@ describe("DuressPassphraseDialog", () => {
     render(<Host onSubmit={onSubmit} />);
     await user.click(screen.getByText("Set…"));
 
-    await user.type(screen.getByLabelText(/duress passphrase/i), "short");
-    await user.type(screen.getByLabelText(/^confirm$/i), "short");
+    await user.type(input("duress-passphrase"), "short");
+    await user.type(input("duress-passphrase-confirm"), "short");
 
     // The confirm button must be disabled: the native prompt only enforced
     // this in Rust, *after* the user had already confirmed an irreversible act.
@@ -150,8 +158,8 @@ describe("DuressPassphraseDialog", () => {
     render(<Host onSubmit={onSubmit} />);
     await user.click(screen.getByText("Set…"));
 
-    await user.type(screen.getByLabelText(/duress passphrase/i), "correct-horse-battery");
-    await user.type(screen.getByLabelText(/^confirm$/i), "correct-horse-batteru");
+    await user.type(input("duress-passphrase"), "correct-horse-battery");
+    await user.type(input("duress-passphrase-confirm"), "correct-horse-batteru");
 
     expect(screen.getByRole("alert")).toHaveTextContent(/do not match/i);
     expect(screen.getByText("Wipe on this passphrase").closest("button")).toBeDisabled();
@@ -165,8 +173,8 @@ describe("DuressPassphraseDialog", () => {
     await user.click(screen.getByText("Set…"));
 
     const value = "correct-horse-battery-staple";
-    await user.type(screen.getByLabelText(/duress passphrase/i), value);
-    await user.type(screen.getByLabelText(/^confirm$/i), value);
+    await user.type(input("duress-passphrase"), value);
+    await user.type(input("duress-passphrase-confirm"), value);
     await user.click(screen.getByText("Wipe on this passphrase"));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(value));
@@ -179,9 +187,9 @@ describe("DuressPassphraseDialog", () => {
     await user.click(screen.getByText("Set…"));
 
     const value = "correct-horse-battery-staple";
-    const input = screen.getByLabelText(/duress passphrase/i);
+    const passphraseInput = input("duress-passphrase");
     await user.type(input, value);
-    await user.type(screen.getByLabelText(/^confirm$/i), value);
+    await user.type(input("duress-passphrase-confirm"), value);
     await user.click(screen.getByText("Wipe on this passphrase"));
 
     // The dialog must NOT close on failure, and must not silently clear what
@@ -190,7 +198,7 @@ describe("DuressPassphraseDialog", () => {
     await waitFor(() =>
       expect(screen.getByText(/too similar/i)).toBeInTheDocument(),
     );
-    expect(input).toHaveValue(value);
+    expect(passphraseInput).toHaveValue(value);
   });
 
   it("does not use a native dialog", async () => {
