@@ -256,6 +256,12 @@ pub struct ReconnectAttemptEvent {
     pub state: String, // "attempting", "success", "failed"
 }
 
+/// Per-attempt TCP connect deadline for [`attempt_reconnect`].
+///
+/// A black-holed address must not block the reconnect command indefinitely;
+/// without this the backoff loop could never reach its next attempt.
+const RECONNECT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
 /// Attempt to reconnect to a peer whose connection dropped.
 /// Uses exponential backoff (1s, 2s, 4s, ..., 30s cap, max 5 attempts).
 /// The user must explicitly call this — no auto-reconnect.
@@ -290,8 +296,17 @@ pub async fn attempt_reconnect(
             state: "attempting".to_string(),
         });
 
-        // Try direct TCP connection to the last-known address
-        match tokio::net::TcpStream::connect(&info.peer_address_hint).await {
+        // Try direct TCP connection to the last-known address.
+        // Routed through the Tor-aware chokepoint (so a reconnect under Tor
+        // does not expose the real IP) and given a bounded deadline, since
+        // this used to await an unbounded connect and could hang the command
+        // forever against a black-holed address.
+        let hint: std::net::SocketAddr = info
+            .peer_address_hint
+            .parse()
+            .map_err(|e| format!("invalid peer address hint: {e}"))?;
+
+        match crate::dial::dial_with_timeout(hint, RECONNECT_CONNECT_TIMEOUT).await {
             Ok(mut stream) => {
                 // ── Real cryptographic handshake before claiming success (M4) ──
                 let expected_peer_pub: [u8; 32] = hex::decode(&info.peer_key_hex)
