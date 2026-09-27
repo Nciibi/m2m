@@ -997,6 +997,93 @@ mod protocol_tests {
         ));
     }
 
+    // ─── Per-type frame size limits ─────────────────────────────
+    //
+    // The point of these caps is that the reader learns the packet type from a
+    // 2-byte header and can therefore reject an over-large declaration BEFORE
+    // allocating the body. Without them, a 4-byte length prefix alone forced a
+    // 16 MiB allocation that an attacker could hold open by trickling bytes.
+
+    #[test]
+    fn test_per_type_limits_are_tighter_than_global() {
+        // The heavy types may legitimately approach the global ceiling...
+        assert!(max_frame_size_for(PacketType::FileTransferChunk) > 256 * 1024);
+        // ...but everything else must be far below it.
+        for pt in [
+            PacketType::Heartbeat,
+            PacketType::HeartbeatAck,
+            PacketType::Disconnect,
+            PacketType::Error,
+            PacketType::TypingIndicator,
+            PacketType::TypingIndicatorClear,
+        ] {
+            assert!(
+                max_frame_size_for(pt) <= 16 * 1024,
+                "{pt:?} should be capped far below the global ceiling, got {}",
+                max_frame_size_for(pt)
+            );
+        }
+    }
+
+    #[test]
+    fn test_oversized_heartbeat_rejected_by_type_cap() {
+        // A heartbeat is ~30 bytes. A 900 KiB one is an attack, and would be
+        // under the global 1 MiB ceiling, so only the per-type cap catches it.
+        let declared = 900 * 1024;
+        assert!(
+            validate_frame_size(declared).is_ok(),
+            "under the global ceiling, so the cheap first gate passes"
+        );
+        assert!(
+            validate_frame_size_for(declared, PacketType::Heartbeat).is_err(),
+            "the per-type cap must reject it before allocation"
+        );
+    }
+
+    #[test]
+    fn test_per_type_cap_still_applies_global_bounds() {
+        // Below MIN_FRAME_SIZE is rejected regardless of type.
+        assert!(validate_frame_size_for(0, PacketType::Heartbeat).is_err());
+        assert!(validate_frame_size_for(1, PacketType::Heartbeat).is_err());
+        // Above the global ceiling is rejected regardless of type.
+        assert!(validate_frame_size_for(u32::MAX, PacketType::FileTransferChunk).is_err());
+    }
+
+    #[test]
+    fn test_every_packet_type_has_a_sane_limit() {
+        // Guards against a new PacketType silently getting a generous cap:
+        // every type must be at least large enough for a minimal frame.
+        for byte in 0u8..=0xFF {
+            if let Ok(pt) = PacketType::from_byte(byte) {
+                let cap = max_frame_size_for(pt);
+                assert!(
+                    cap >= MIN_FRAME_SIZE,
+                    "{pt:?} cap {cap} is below the minimum frame size"
+                );
+                assert!(
+                    cap <= MAX_FRAME_SIZE,
+                    "{pt:?} cap {cap} exceeds the global ceiling {MAX_FRAME_SIZE}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_file_chunk_and_text_caps_accommodate_real_payloads() {
+        // A maximum-size text message plus padding must fit its frame.
+        let text_cap = max_frame_size_for(PacketType::EncryptedMessage);
+        assert!(
+            text_cap as usize >= MAX_TEXT_MESSAGE_SIZE * 2 + 64,
+            "text frame cap {text_cap} too small for a padded {MAX_TEXT_MESSAGE_SIZE}-byte message"
+        );
+        // A maximum-size file chunk must fit its frame.
+        let chunk_cap = max_frame_size_for(PacketType::FileTransferChunk) as usize;
+        assert!(
+            chunk_cap >= MAX_FILE_CHUNK_SIZE + 1024,
+            "chunk frame cap {chunk_cap} too small for a {MAX_FILE_CHUNK_SIZE}-byte chunk"
+        );
+    }
+
     // ─── build_frame structure ──────────────────────────────────
 
     #[test]
