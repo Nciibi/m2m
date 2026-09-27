@@ -2472,7 +2472,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "m2m"
-version = "4.0.0"
+version = "5.0.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -2511,7 +2511,7 @@ dependencies = [
 
 [[package]]
 name = "m2m-relay"
-version = "3.6.21"
+version = "5.0.0"
 dependencies = [
  "hex",
  "rand 0.9.4",
