@@ -943,13 +943,16 @@ fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
     })?;
 
     // Must look like a local gateway.
-    let is_local = ip.is_loopback()
-        || ip.is_private()
-        || ip.is_link_local()
-        || (match ip {
-            IpAddr::V6(v6) => (v6.segments()[0] & 0xfe00) == 0xfc00,
-            IpAddr::V4(_) => false,
-        });
+    let is_local = match ip {
+        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local(),
+        IpAddr::V6(v6) => {
+            v6.is_loopback()
+                // Unique local address, fc00::/7.
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                // Link-local, fe80::/10.
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
+    };
     if !is_local {
         return Err(PortMapError::Upnp(format!(
             "UPnP LOCATION host {ip} is not a local-network address; refusing to \
