@@ -641,7 +641,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault,
-    handleClearClipboard, scheduleClipboardClear,
+    handleClearClipboard, scheduleClipboardClear, setPanicHotkeyArmed,
   ]);
 
   return (
