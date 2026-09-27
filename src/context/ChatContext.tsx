@@ -110,11 +110,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [connection?.peer_key_hex]);
 
   const handleVerify = useCallback(async () => {
-    if (!connection?.peer_key_hex) return;
-    try {
-      await invoke("verify_peer", { peerKeyHex: connection.peer_key_hex });
-      setConnection({ ...connection, peer_verified: true });
-    } catch { /* noop */ }
+    if (!connection?.peer_key_hex) {
+      throw new Error("No active peer to verify");
+    }
+    // Let failures propagate.
+    //
+    // This used to swallow the error, and the caller in ChatView does
+    // `await handleVerify(); addToast("Peer verified", "success")` — so a
+    // failed verification still showed a green "Peer verified" confirmation.
+    // That is a false trust confirmation on the one interaction that anchors
+    // the user's trust model, and the single worst place in the app to lie.
+    await invoke("verify_peer", { peerKeyHex: connection.peer_key_hex });
+    setConnection({ ...connection, peer_verified: true });
   }, [connection]);
 
   const handleDisconnect = useCallback(async () => {
