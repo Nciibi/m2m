@@ -976,7 +976,7 @@ fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
     const METADATA_ADDRS: &[(std::net::Ipv4Addr, std::net::Ipv6Addr)] = &[
         (
             std::net::Ipv4Addr::new(169, 254, 169, 254),
-            "fd00:ec2::254".parse::<std::net::Ipv6Addr>().unwrap(),
+            std::net::Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254),
         ),
         (
             std::net::Ipv4Addr::new(100, 100, 100, 200),
