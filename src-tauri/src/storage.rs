@@ -1779,7 +1779,6 @@ impl MessageStore {
         result
     }
 
-
     // ─── Message Deletion ─────────────────────────────
 
     /// Soft-delete a message (mark as deleted so peers see a placeholder)
