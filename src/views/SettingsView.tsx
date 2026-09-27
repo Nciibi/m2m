@@ -165,7 +165,7 @@ export default function SettingsView() {
               <Button size="xs" variant="secondary" onClick={async () => {
                 addToast("Testing Tor…", "info");
                 try {
-                  const result = await invoke<any>("check_connectivity");
+                  const result = await invoke<ConnectivityStatus>("check_connectivity");
                   const torOk = result?.tor_reachable ?? result?.tor ?? false;
                   addToast(torOk ? "Tor ✓" : "Tor not reachable via current proxy", torOk ? "success" : "warning");
                 } catch (e) {
@@ -456,7 +456,7 @@ export default function SettingsView() {
             <div className="stun-server-list">
               {(stunConfig?.servers || []).map((srv, i) => {
                 // Find health info from diagnostics
-                const diagServer = networkDiagnostics?.stun_servers?.find((d: any) => srv.includes(d.server) || d.server.includes(srv));
+                const diagServer = networkDiagnostics?.stun_servers?.find((d) => srv.includes(d.server) || d.server.includes(srv));
                 const isHealthy = diagServer?.reachable;
                 return (
                 <div key={i} className="stun-server-item">

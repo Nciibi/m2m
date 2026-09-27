@@ -1,3 +1,4 @@
+import type { ThemePreference } from "../types";
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
@@ -52,7 +53,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const prefs = await invoke<any>("get_theme_preference");
+        const prefs = await invoke<ThemePreference>("get_theme_preference");
         const themeMode = typeof prefs === "string" ? prefs : prefs?.theme;
         const accent = typeof prefs === "object" && prefs?.accent_color ? prefs.accent_color : null;
         const validThemes: ThemeMode[] = ["light", "dark", "system"];

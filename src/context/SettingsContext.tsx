@@ -7,6 +7,7 @@ import { useT } from "../i18n/I18nContext";
 import type {
   CaptureCapability,
   ConnectionInfo,
+  ConnectivityStatus,
   DiscoveredPeer,
   DiscoveryConfig,
   NatTypeInfo,
@@ -24,7 +25,7 @@ interface SettingsContextValue {
   stunServerInput: string;
   setStunServerInput: (v: string) => void;
   privateMode: boolean;
-  connectivityResult: any;
+  connectivityResult: ConnectivityStatus | null;
   openSettings: () => Promise<void>;
   handleStunDiscover: () => Promise<void>;
   handleAddStunServer: () => Promise<void>;
@@ -83,7 +84,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [stunConfig, setStunConfig] = useState<StunConfig | null>(null);
   const [stunServerInput, setStunServerInput] = useState("");
   const [privateMode, setPrivateMode] = useState(false);
-  const [connectivityResult, setConnectivityResult] = useState<any>(null);
+  const [connectivityResult, setConnectivityResult] = useState<ConnectivityStatus | null>(null);
   // Discovery state
   const [discoveryConfig, setDiscoveryConfig] = useState<DiscoveryConfig | null>(null);
   const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
@@ -229,7 +230,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const handleConnectivityCheck = useCallback(async () => {
     try {
-      setConnectivityResult(await invoke<any>("check_connectivity"));
+      setConnectivityResult(await invoke<ConnectivityStatus>("check_connectivity"));
       setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics"));
     } catch (e) {
       addToast("Connectivity check failed: " + e, "error");

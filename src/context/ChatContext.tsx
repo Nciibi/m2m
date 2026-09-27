@@ -417,8 +417,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ─── Invite validation effect ───
   useEffect(() => {
     if (inviteToConnect.length > 30) {
-      invoke<any>("validate_invite", { inviteStr: inviteToConnect })
-        .then((info) => { if (info.valid) setInviteValid(true); })
+      invoke<InviteInfo>("validate_invite", { inviteStr: inviteToConnect })
+        .then((info) => { if (info?.valid) setInviteValid(true); })
         .catch(() => setInviteValid(false));
     } else {
       setInviteValid(false);

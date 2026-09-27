@@ -157,6 +157,48 @@ export interface TransferProgress {
   estimated_remaining_secs: number;
 }
 
+/**
+ * Health of one configured STUN server.
+ *
+ * Mirrors `stun::StunServerHealth`. `rtt_ms` is `null` when the probe did not
+ * complete, which is why it is nullable rather than `0`.
+ */
+export interface StunServerHealth {
+  server: string;
+  reachable: boolean;
+  rtt_ms: number | null;
+  error: string | null;
+}
+
+/**
+ * Result of `check_connectivity`.
+ *
+ * Mirrors `stun::ConnectivityStatus`. `public_addr` and `host_addrs` are the
+ * user's own addresses, so anything rendering this must treat it as sensitive.
+ */
+export interface ConnectivityStatus {
+  reachable: boolean;
+  nat_type: string;
+  public_addr: string | null;
+  host_addrs: string[];
+  behind_symmetric_nat: boolean;
+}
+
+/** Result of `validate_invite`. Mirrors `commands::InviteInfo`. */
+export interface InviteInfo {
+  fingerprint: string;
+  address_hint: string;
+  expires_at: number;
+  one_time: boolean;
+  valid: boolean;
+}
+
+/** Persisted theme preference. Mirrors `commands::ThemePreference`. */
+export interface ThemePreference {
+  theme: string;
+  accent_color: string;
+}
+
 export interface NatTypeInfo {
   nat_type: string;
   stun_servers: Array<{
