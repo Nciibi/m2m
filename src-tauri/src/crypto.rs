@@ -194,22 +194,25 @@ pub fn verify_signature(
     }
     let sig = Signature::from_slice(signature).map_err(|_| CryptoError::SignatureInvalid)?;
 
-    // Reject small-order / identity verification keys.
+    // Reject small-order / identity verification keys and small-order
+    // signature `R` components.
     //
     // `ed25519-dalek` 2.x validates the *encoding* of a public key (it rejects
-    // non-canonical sign bits and y >= p) but deliberately does not reject
-    // points of small order, leaving that to the caller because the right
-    // answer is protocol-dependent. libsodium >= 1.0.18 DOES reject them in
-    // `crypto_sign_verify_detached`, so accepting them here is a regression
-    // against this module's own stated libsodium-compatibility contract
-    // (see the module header).
+    // non-canonical sign bits and y >= p) but deliberately leaves small-order
+    // rejection to the caller, because the right answer is protocol-dependent.
+    // libsodium >= 1.0.18 DOES reject them in `crypto_sign_verify_detached`, so
+    // accepting them here is a regression against this module's own stated
+    // libsodium-compatibility contract (see the module header).
     //
-    // A small-order key lets an attacker craft a signature that verifies
-    // against many distinct public keys at once, which is the standard
-    // "identity-key confusion" primitive. Exploitability here is limited —
-    // every call site either verifies against a key from an authenticated
-    // source or fails closed on `peer_identity_pub != expected_peer_pub` —
-    // but the check is free and removes a whole class of surprise.
+    // A small-order key lets an attacker craft one signature that verifies
+    // against many distinct public keys at once — the standard
+    // "identity-key confusion" primitive. Exploitability here is limited: every
+    // call site either verifies against a key from an authenticated source, or
+    // fails closed on `peer_identity_pub != expected_peer_pub`. But the check
+    // is free and removes a whole class of surprise.
+    //
+    // `verify_strict` (not `verify`) additionally rejects a small-order `R` in
+    // the signature, matching libsodium's behaviour exactly.
     let vk_bytes = vk.to_bytes();
     if !ct_eq(&vk_bytes, public_key) {
         // The supplied bytes were non-canonical; `from_bytes` accepted them
@@ -217,11 +220,11 @@ pub fn verify_signature(
         // against a key the caller did not name.
         return Err(CryptoError::SignatureInvalid);
     }
-    if vk.is_small_order() || vk == ed25519_dalek::VerifyingKey::default() {
+    if vk.is_weak() {
         return Err(CryptoError::SignatureInvalid);
     }
 
-    vk.verify(message, &sig)
+    vk.verify_strict(message, &sig)
         .map_err(|_| CryptoError::SignatureInvalid)
 }
 
