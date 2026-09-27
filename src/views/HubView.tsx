@@ -11,7 +11,15 @@ import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
-import type { FamilyMember } from "../types";
+import type {
+  ConversationEntry,
+  DiscoveredPeer,
+  DiscoveryConfig,
+  FamilyMember,
+  IdentityInfo,
+  NetworkSettings,
+  SecurityConfig,
+} from "../types";
 import { hashToColor, formatTime } from "../utils";
 
 export default function HubView() {
