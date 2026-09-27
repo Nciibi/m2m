@@ -578,9 +578,20 @@ pub async fn start_listener(
 }
 
 /// Send a disconnect packet with reason (works with any AsyncWrite).
-/// NOTE: heartbeats are NOT sent here — they are encrypted at the session
-/// layer (`Session::send_heartbeat`) so observers can't use them as a
-/// plaintext liveness oracle.
+///
+/// ## Plaintext only
+///
+/// This is a **low-level** helper for use *before* a session exists (e.g.
+/// rejecting a handshake) or when the session is already unusable. An
+/// established session must send its disconnect through
+/// [`crate::session::Session::send_encrypted_typed`] instead — see
+/// `disconnect_peer`.
+///
+/// A plaintext `Disconnect` is forgeable: a 14-byte frame injected into an
+/// established TCP stream tears the session down, and the relay server is a
+/// full MITM for relayed connections, so any relay operator could kill any
+/// relayed session on demand. The receive loop correspondingly refuses to
+/// honour a `Disconnect` it cannot decrypt.
 pub async fn send_disconnect<W: AsyncWrite + Unpin>(
     writer: &mut W,
     reason: protocol::DisconnectReason,
