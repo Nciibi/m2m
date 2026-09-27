@@ -868,11 +868,38 @@ pub async fn disconnect_peer(
     let mut conns = state.connections.write().await;
     if let Some(conn_arc) = conns.remove(&peer_key_hex) {
         let mut conn = conn_arc.lock().await;
-        let _ = network::send_disconnect(
-            &mut conn.write_half,
-            protocol::DisconnectReason::UserInitiated,
-        )
-        .await;
+        // Send the disconnect ENCRYPTED. A plaintext 0x30 frame is forgeable:
+        // 14 bytes injected into an established TCP stream tear the session
+        // down, and the relay is a full MITM for relayed connections. The
+        // receive loop only honours a disconnect it can decrypt, so sending it
+        // in the clear would also be silently ignored.
+        let msg = protocol::DisconnectMessage {
+            reason: protocol::DisconnectReason::UserInitiated,
+        };
+        match protocol::serialize(&msg) {
+            Ok(body) => {
+                if let Err(e) = conn
+                    .session
+                    .send_encrypted_typed(
+                        &mut conn.write_half,
+                        PacketType::Disconnect,
+                        &body,
+                    )
+                    .await
+                {
+                    // A session that cannot encrypt is already broken; fall
+                    // back to plaintext so the peer still learns why, and log
+                    // it rather than failing the user-facing command.
+                    tracing::debug!(error = %e, "encrypted disconnect failed; sending plaintext");
+                    let _ = network::send_disconnect(
+                        &mut conn.write_half,
+                        protocol::DisconnectReason::UserInitiated,
+                    )
+                    .await;
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "failed to serialize disconnect"),
+        }
     }
     Ok(())
 }
