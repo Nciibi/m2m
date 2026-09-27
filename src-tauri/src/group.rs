@@ -863,11 +863,11 @@ mod group_tests {
         .unwrap();
 
         // Save old initial chain key
-        let old_key = gm.get_group("g1").unwrap().our_initial_chain_key.clone();
+        let old_key = gm.get_group("g1").unwrap().our_initial_chain_key;
 
         let _ = gm.remove_member("g1", "bob", "alice");
 
-        let new_key = gm.get_group("g1").unwrap().our_initial_chain_key.clone();
+        let new_key = gm.get_group("g1").unwrap().our_initial_chain_key;
         assert!(old_key != new_key, "sender key should rotate after removal");
     }
 
@@ -922,7 +922,7 @@ mod group_tests {
         // Bob needs to receive Alice's sender key to decrypt
         {
             let group = gm.get_group_mut("g1").unwrap();
-            let init_key = group.our_initial_chain_key.clone().unwrap();
+            let init_key = group.our_initial_chain_key.unwrap();
             let verify_key = group.our_verification_key.unwrap();
             // Bob stores Alice's receiver chain (simulating receiving the bundle)
             group.store_receiver_key("alice", &init_key, &verify_key);
@@ -988,7 +988,7 @@ mod group_tests {
         .unwrap();
         {
             let group = gm.get_group_mut("g1").unwrap();
-            let init_key = group.our_initial_chain_key.clone().unwrap();
+            let init_key = group.our_initial_chain_key.unwrap();
             let verify_key = group.our_verification_key.unwrap();
             group.store_receiver_key("alice", &init_key, &verify_key);
         }
@@ -1030,7 +1030,7 @@ mod group_tests {
         };
         {
             let g = gm.get_group("g1").unwrap();
-            let sk = g.our_signing_key.clone().unwrap();
+            let sk = g.our_signing_key.unwrap();
             forged.signature = sign_group_message(&sk, &sign_data).unwrap();
         }
         assert!(
@@ -1089,7 +1089,7 @@ mod group_tests {
         .unwrap();
         {
             let g = gm.get_group_mut("g1").unwrap();
-            let k = g.our_initial_chain_key.clone().unwrap();
+            let k = g.our_initial_chain_key.unwrap();
             let v = g.our_verification_key.unwrap();
             g.store_receiver_key("alice", &k, &v);
         }
@@ -1109,7 +1109,7 @@ mod group_tests {
         };
         {
             let g = gm.get_group("g1").unwrap();
-            let sk = g.our_signing_key.clone().unwrap();
+            let sk = g.our_signing_key.unwrap();
             forged.signature = sign_group_message(&sk, &sign_data).unwrap();
         }
 
@@ -1147,7 +1147,7 @@ mod group_tests {
         .unwrap();
         {
             let g = gm.get_group_mut("g1").unwrap();
-            let k = g.our_initial_chain_key.clone().unwrap();
+            let k = g.our_initial_chain_key.unwrap();
             let v = g.our_verification_key.unwrap();
             g.store_receiver_key("alice", &k, &v);
         }
@@ -1190,7 +1190,7 @@ mod group_tests {
         .unwrap();
         {
             let g = gm.get_group_mut("g1").unwrap();
-            let k = g.our_initial_chain_key.clone().unwrap();
+            let k = g.our_initial_chain_key.unwrap();
             let v = g.our_verification_key.unwrap();
             g.store_receiver_key("alice", &k, &v);
         }
@@ -1257,7 +1257,7 @@ mod group_tests {
         // Bob stores Alice's key
         {
             let group = gm.get_group_mut("g1").unwrap();
-            let init_key = group.our_initial_chain_key.clone().unwrap();
+            let init_key = group.our_initial_chain_key.unwrap();
             let verify_key = group.our_verification_key.unwrap();
             group.store_receiver_key("alice", &init_key, &verify_key);
         }

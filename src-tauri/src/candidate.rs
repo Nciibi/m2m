@@ -122,7 +122,7 @@ pub fn gather_host_candidates() -> Vec<NetworkCandidate> {
         .collect();
 
     // Sort by priority descending
-    candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+    candidates.sort_by_key(|c| std::cmp::Reverse(c.priority));
     candidates
 }
 
@@ -149,7 +149,7 @@ pub fn gather_ipv6_candidates() -> Vec<NetworkCandidate> {
         })
         .collect();
 
-    candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+    candidates.sort_by_key(|c| std::cmp::Reverse(c.priority));
     candidates
 }
 

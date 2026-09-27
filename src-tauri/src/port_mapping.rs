@@ -1709,7 +1709,6 @@ mod upnp_security_tests {
     /// allocation failure aborts the process under `panic = "abort"`.
     #[tokio::test]
     async fn test_http_body_bounds_are_enforced() {
-        use tokio::io::AsyncReadExt;
 
         // (a) A hostile Content-Length.
         let mut evil = Vec::new();

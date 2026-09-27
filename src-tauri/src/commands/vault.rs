@@ -584,7 +584,7 @@ pub async fn create_vault_account(
 
     Ok(IdentityInfo {
         fingerprint,
-        public_key_hex: hex::encode(&pub_bytes),
+        public_key_hex: hex::encode(pub_bytes),
         has_identity: true,
     })
 }
@@ -749,7 +749,7 @@ pub async fn connect_family_member(
                 let mut all = host_candidates;
                 all.extend(ipv6_candidates);
                 all.extend(reflexive_candidates);
-                all.sort_by(|a, b| b.priority.cmp(&a.priority));
+                all.sort_by_key(|c| std::cmp::Reverse(c.priority));
                 let our_candidates: Vec<crate::protocol::WireCandidate> = all
                     .iter()
                     .map(|c| crate::protocol::WireCandidate {

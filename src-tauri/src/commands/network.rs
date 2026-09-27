@@ -806,7 +806,7 @@ pub async fn connect_to_peer(
     let mut all = host_candidates;
     all.extend(ipv6_candidates);
     all.extend(reflexive_candidates);
-    all.sort_by(|a, b| b.priority.cmp(&a.priority));
+    all.sort_by_key(|c| std::cmp::Reverse(c.priority));
     let our_candidates: Vec<WireCandidate> = all
         .iter()
         .map(|c| WireCandidate {
@@ -2348,7 +2348,7 @@ async fn handle_sync_frame(
                             drop(conn);
                             let _ = conn_arc;
                             drop(conns);
-                            crate::sync::handle_sync_payload(&state, &peer_key_hex, &payload).await;
+                            crate::sync::handle_sync_payload(state, &peer_key_hex, &payload).await;
                         }
                     }
                     Err(e) => {

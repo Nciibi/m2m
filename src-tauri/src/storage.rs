@@ -728,6 +728,11 @@ pub struct MessageStore {
 /// AAD domain for message content ciphertext (must match commands::util::AAD_MSG_STORE).
 const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
 /// AAD domain for wrapped content keys — distinct from every other domain.
+/// Canonical definition of the per-message content-key AAD.
+///
+/// Do not re-declare this elsewhere: a second copy of a domain separator is a
+/// silent-drift hazard, because divergence would let a wrapped content key be
+/// accepted in the wrong domain.
 const AAD_MSG_CEK: &[u8] = b"m2m-msg-cek-v1";
 /// AAD domain for reaction text (messages.db reactions table).
 const AAD_REACTION: &[u8] = b"m2m-reaction-v1";

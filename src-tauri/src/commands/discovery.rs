@@ -208,7 +208,7 @@ pub async fn get_discovered_peers(
     }
 
     // Sort by last_seen descending (most recent first)
-    peers.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+    peers.sort_by_key(|p| std::cmp::Reverse(p.last_seen));
 
     Ok(peers)
 }
@@ -255,7 +255,7 @@ pub async fn connect_discovered_peer(
     let mut all = host_candidates;
     all.extend(ipv6_candidates);
     all.extend(reflexive_candidates);
-    all.sort_by(|a, b| b.priority.cmp(&a.priority));
+    all.sort_by_key(|c| std::cmp::Reverse(c.priority));
     let our_candidates: Vec<crate::protocol::WireCandidate> = all
         .iter()
         .map(|c| crate::protocol::WireCandidate {

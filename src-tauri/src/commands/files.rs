@@ -803,6 +803,10 @@ async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_i
             .unwrap_or_default()
             .as_secs();
 
+        // `.max(1)` guarantees a non-zero divisor, and the `speed > 0` guard
+        // covers the zero case — hence the manual checks rather than
+        // `checked_div`. Documented here so the two are not "simplified" into
+        // a divide-by-zero.
         let elapsed = now.saturating_sub(t.created_at).max(1);
         let bytes_completed = t.chunks_acked as u64 * protocol::MAX_FILE_CHUNK_SIZE as u64;
         let speed = bytes_completed / elapsed; // bytes/sec
