@@ -232,10 +232,9 @@ async fn dht_recv(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), DhtError> {
 /// Connect to a DHT node and exchange a ping/pong to verify it's alive.
 async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
     let start = std::time::Instant::now();
-    let mut stream = time::timeout(DHT_CONNECT_TIMEOUT, TcpStream::connect(addr))
+    let mut stream = crate::dial::dial_with_timeout(addr, DHT_CONNECT_TIMEOUT)
         .await
-        .map_err(|_| DhtError::Timeout)?
-        .map_err(DhtError::Io)?;
+        .map_err(dial_err)?;
 
     dht_send(&mut stream, DHT_PING, &[]).await?;
 
@@ -282,10 +281,9 @@ pub async fn announce_to_node(
     ephemeral_id: &[u8; 32],
     listen_addr: SocketAddr,
 ) -> Result<(), DhtError> {
-    let mut stream = time::timeout(DHT_CONNECT_TIMEOUT, TcpStream::connect(node_addr))
+    let mut stream = crate::dial::dial_with_timeout(node_addr, DHT_CONNECT_TIMEOUT)
         .await
-        .map_err(|_| DhtError::Timeout)?
-        .map_err(DhtError::Io)?;
+        .map_err(dial_err)?;
 
     let body = build_announce_body(ephemeral_id, listen_addr);
     dht_send(&mut stream, DHT_ANNOUNCE, &body).await?;
@@ -427,10 +425,9 @@ pub async fn lookup_peer(
         let addr = node.address;
         let body_clone = body.clone();
         handles.push(tokio::spawn(async move {
-            let mut stream = time::timeout(DHT_CONNECT_TIMEOUT, TcpStream::connect(addr))
+            let mut stream = crate::dial::dial_with_timeout(addr, DHT_CONNECT_TIMEOUT)
                 .await
-                .map_err(|_| DhtError::Timeout)?
-                .map_err(DhtError::Io)?;
+                .map_err(dial_err)?;
 
             dht_send(&mut stream, DHT_FIND_NODE, &body_clone).await?;
 
