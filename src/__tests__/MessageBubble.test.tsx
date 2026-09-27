@@ -80,7 +80,11 @@ describe("MessageBubble", () => {
     const onReact = vi.fn();
     render(<MessageBubble message={msg()} onReact={onReact} />);
     await userEvent.click(screen.getByLabelText("Toggle reaction picker"));
-    await userEvent.click(screen.getByRole("button", { name: /React \+/ }));
+    // The picker button and a rendered reaction chip share the accessible name
+    // "React <emoji>", so the count is text content, not part of the name.
+    const chip = screen.getByRole("button", { name: "React 👍" });
+    expect(chip).toHaveTextContent("👍 1");
+    await userEvent.click(chip);
     expect(onReact).toHaveBeenCalledWith("m1", "👍");
   });
 
@@ -140,7 +144,9 @@ describe("MessageBubble", () => {
         onReact={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: /2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "React 👍" })).toHaveTextContent(
+      "👍 2",
+    );
   });
 
   // ── Edit ───────────────────────────────────────────────────────────────
@@ -173,7 +179,10 @@ describe("MessageBubble", () => {
     await userEvent.type(box, "keyboard save");
     await userEvent.keyboard("{Control>}{Enter}{/Control}");
     expect(onEditSave).toHaveBeenCalledWith("m1", "keyboard save");
-    expect(screen.getByText("keyboard save")).toBeInTheDocument();
+    // The rendered text comes from `message.content`, which the test does not
+    // update, so the original text reappears once edit mode closes.
+    expect(screen.getByDisplayValue("original")).not.toBeInTheDocument();
+    expect(screen.getByText("original")).toBeInTheDocument();
   });
 
   it("cancels an edit without saving", async () => {
@@ -207,32 +216,66 @@ describe("MessageBubble", () => {
     expect(screen.getByText("edited")).toBeInTheDocument();
   });
 
-  it("shows the read badge only for a read outgoing message", () => {
-    const { rerender } = render(<MessageBubble message={msg({ direction: "sent" })} />);
-    expect(screen.queryByTitle(/^Read /)).not.toBeInTheDocument();
-    rerender(
-      <MessageBubble message={msg({ direction: "sent", read_at: 1_700_000_100 })} />,
+  // The read badge marks a *received* message that has been read locally.
+  it("shows the read badge for a read received message", () => {
+    render(
+      <MessageBubble
+        message={msg({ direction: "received", read_at: 1_700_000_100 })}
+      />,
     );
     expect(screen.getByTitle(/^Read /)).toBeInTheDocument();
   });
 
-  it("does not show a read badge on an incoming message", () => {
-    render(<MessageBubble message={msg({ direction: "received", read_at: 1 })} />);
+  it("shows no read badge while a received message is unread", () => {
+    render(<MessageBubble message={msg({ direction: "received", read_at: null })} />);
+    expect(screen.queryByTitle(/^Read /)).not.toBeInTheDocument();
+  });
+
+  it("shows no read badge on an outgoing message", () => {
+    render(
+      <MessageBubble
+        message={msg({ direction: "sent", read_at: 1_700_000_100 })}
+      />,
+    );
+    expect(screen.queryByTitle(/^Read /)).not.toBeInTheDocument();
+  });
+
+  it("shows no read badge on a deleted message", () => {
+    render(
+      <MessageBubble
+        message={msg({ direction: "received", read_at: 1, deleted: true })}
+      />,
+    );
     expect(screen.queryByTitle(/^Read /)).not.toBeInTheDocument();
   });
 
   it("shows the delivery status only for outgoing messages", () => {
-    const { rerender } = render(
+    const { container, rerender } = render(
       <MessageBubble message={msg({ direction: "sent" })} msgStatus="delivered" />,
     );
-    expect(screen.getByTitle(/delivered/i)).toBeInTheDocument();
+    expect(container.querySelector(".msg-status--delivered")).toBeInTheDocument();
     rerender(
       <MessageBubble
         message={msg({ direction: "received" })}
         msgStatus="delivered"
       />,
     );
-    expect(screen.queryByTitle(/delivered/i)).not.toBeInTheDocument();
+    expect(container.querySelector(".msg-status--delivered")).not.toBeInTheDocument();
+  });
+
+  it("shows no status when msgStatus is absent", () => {
+    const { container } = render(<MessageBubble message={msg({ direction: "sent" })} />);
+    expect(container.querySelector(".msg-status")).not.toBeInTheDocument();
+  });
+
+  it("shows no status on a deleted outgoing message", () => {
+    const { container } = render(
+      <MessageBubble
+        message={msg({ direction: "sent", deleted: true })}
+        msgStatus="delivered"
+      />,
+    );
+    expect(container.querySelector(".msg-status")).not.toBeInTheDocument();
   });
 
   // ── Markdown ───────────────────────────────────────────────────────────
