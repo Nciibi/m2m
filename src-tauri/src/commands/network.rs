@@ -3107,6 +3107,8 @@ pub fn spawn_receive_loop(
         // and owned by this receive loop, so it resets when the peer
         // reconnects and cannot be shared or manipulated across peers.
         let frame_limiter = network::FrameRateLimiter::new();
+        // Consecutive over-budget frames; reset by any accepted frame.
+        let mut rate_limit_strikes: u32 = 0;
 
         loop {
             // Read a frame from the peer's read half
@@ -3150,15 +3152,36 @@ pub fn spawn_receive_loop(
             // A breach is treated as fatal for the connection: once a peer is
             // demonstrably over budget, continuing to serve it would just
             // mean the attacker picks which frames get processed.
+            //
+            // A breach is not immediately fatal. The token bucket already
+            // tolerated a full second of burst, so one breach means a full
+            // second over budget — strong evidence of a flood — but dropping an
+            // established session on the first one makes a false positive
+            // expensive. The frame is dropped either way; only a *sustained*
+            // breach (MAX_INBOUND_RATE_LIMIT_STRIKES) ends the connection.
             match frame_limiter.check(frame.body.len()) {
-                network::RateLimitVerdict::Allowed => {}
+                network::RateLimitVerdict::Allowed => {
+                    // A single accepted frame clears the strike counter, so
+                    // the peer must be continuously over budget to be dropped.
+                    rate_limit_strikes = 0;
+                }
                 verdict @ (network::RateLimitVerdict::TooManyFrames
                 | network::RateLimitVerdict::TooManyBytes) => {
+                    rate_limit_strikes += 1;
                     tracing::warn!(
                         peer = %peer_key_hex,
                         bytes = frame.body.len(),
                         ?verdict,
-                        "inbound rate limit exceeded — dropping connection"
+                        strike = rate_limit_strikes,
+                        of = network::MAX_INBOUND_RATE_LIMIT_STRIKES,
+                        "inbound rate limit exceeded — frame dropped"
+                    );
+                    if rate_limit_strikes < network::MAX_INBOUND_RATE_LIMIT_STRIKES {
+                        continue;
+                    }
+                    tracing::warn!(
+                        peer = %peer_key_hex,
+                        "sustained rate limiting — dropping connection"
                     );
                     let _ = app_handle.emit(
                         "m2m://connection",
