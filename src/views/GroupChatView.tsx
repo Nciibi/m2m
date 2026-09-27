@@ -1,3 +1,4 @@
+import { errorMessage } from "../utils";
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -85,7 +86,7 @@ export default function GroupChatView() {
       setCreateMembers("");
       addToast("Group created!", "success");
     } catch (e) {
-      addToast("Failed to create group: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
+      addToast("Failed to create group: " + (errorMessage(e) || "unknown"), "error");
     }
   };
 
@@ -108,7 +109,7 @@ export default function GroupChatView() {
       setMessages((prev) => [...prev, msg]);
       setText("");
     } catch (e) {
-      addToast("Failed to send: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
+      addToast("Failed to send: " + (errorMessage(e) || "unknown"), "error");
     } finally {
       setSending(false);
     }

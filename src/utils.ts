@@ -149,3 +149,25 @@ export const DEFAULT_STUN_SERVERS: readonly string[] = [
   "stun.cloudflare.com:3478",
   "stun.nextcloud.com:3478",
 ];
+
+/**
+ * Extract a human-readable message from an unknown thrown value.
+ *
+ * Tauri command rejections arrive as a bare string (the `Err(String)` side of
+ * `Result<T, String>`), while in-process throws are `Error` instances. A
+ * `catch (e: any)` was used to read `e.message` off both — which is exactly
+ * the unsound access this helper replaces, and it silently yielded `undefined`
+ * for the string case.
+ *
+ * Returning a non-empty string means the caller can always render something,
+ * rather than showing "undefined" to a user.
+ */
+export function errorMessage(e: unknown, fallback = "Unknown error"): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message || fallback;
+  if (e && typeof e === "object" && "message" in e) {
+    const m = (e as { message: unknown }).message;
+    if (typeof m === "string" && m) return m;
+  }
+  return fallback;
+}

@@ -1,3 +1,4 @@
+import { errorMessage } from "../utils";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, ToastContainer } from "../components/ui";
@@ -90,7 +91,7 @@ export default function SetupView() {
           {step < STEPS.length - 1 ? (
             <Button onClick={goNext}>{step === 0 ? "Get Started" : "Next"}</Button>
           ) : (
-            <Button onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err) { addToast(typeof err === "string" ? err : "Failed to finalize setup", "error"); } }}>
+            <Button onClick={async () => { try { await invoke("set_first_run_complete"); window.location.reload(); } catch (err) { addToast(errorMessage(err, "Failed to finalize setup"), "error"); } }}>
               Start Messaging
             </Button>
           )}
