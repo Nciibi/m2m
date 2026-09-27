@@ -211,6 +211,15 @@ pub fn parse_dht_message(data: &[u8]) -> Result<(u8, &[u8]), DhtError> {
     let _len = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
     let msg_type = data[4];
     let body = &data[5..];
+    // The declared length covers the type byte plus the body, so it must be at
+    // least 1. Without this guard `_len - 1` underflows for a declared length
+    // of 0 — and because `[profile.release]` sets both `overflow-checks = true`
+    // and `panic = "abort"`, that is a process abort, not a catchable error.
+    // The fuzz-regression suite previously fed only `999` and `u32::MAX`,
+    // never `0`, so it reported false confidence on exactly this input.
+    if _len == 0 {
+        return Err(DhtError::BadResponse("declared length of zero".into()));
+    }
     if body.len() as u32 != _len - 1 {
         return Err(DhtError::BadResponse("length mismatch".into()));
     }
