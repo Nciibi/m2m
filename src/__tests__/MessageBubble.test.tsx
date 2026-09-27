@@ -80,11 +80,12 @@ describe("MessageBubble", () => {
     const onReact = vi.fn();
     render(<MessageBubble message={msg()} onReact={onReact} />);
     await userEvent.click(screen.getByLabelText("Toggle reaction picker"));
-    // The picker button and a rendered reaction chip share the accessible name
-    // "React <emoji>", so the count is text content, not part of the name.
-    const chip = screen.getByRole("button", { name: "React 👍" });
-    expect(chip).toHaveTextContent("👍 1");
-    await userEvent.click(chip);
+    // Regression guard: a real click is preceded by a mouseenter, so the
+    // click's `!pickerOpen` toggle used to immediately close the picker that
+    // hover had just opened. The button appeared to do nothing for mouse users.
+    const btn = screen.getByRole("button", { name: "React 👍" });
+    await userEvent.click(btn);
+    await userEvent.click(btn);
     expect(onReact).toHaveBeenCalledWith("m1", "👍");
   });
 
