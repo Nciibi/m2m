@@ -1358,7 +1358,7 @@ impl SenderKeyChain {
         let mut target: Option<([u8; 24], [u8; 32])> = None;
 
         while num <= message_number {
-            let out = hkdf(&chain_key, b"", SENDER_MSG_KEY_INFO, 56);
+            let mut out = hkdf(&chain_key, b"", SENDER_MSG_KEY_INFO, 56);
             let mut nonce = [0u8; 24];
             let mut key = [0u8; 32];
             nonce.copy_from_slice(&out[..24]);
@@ -1371,7 +1371,7 @@ impl SenderKeyChain {
                 staged.push((num, CachedSenderKey { nonce, key }));
             }
 
-            let next = hkdf(&chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
+            let mut next = hkdf(&chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
             chain_key.zeroize();
             chain_key.copy_from_slice(&next);
             next.zeroize();
