@@ -530,7 +530,7 @@ async fn handle_relay_incoming_with_frame(
     } // identity borrow dropped here
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
-    let peer_fingerprint = session.fingerprint_or_compute();
+    let peer_fingerprint = session.peer_fingerprint();
 
     // ── Contact allowlist gate (H5) ──
     // This path previously omitted the gate entirely, so a user who enabled
