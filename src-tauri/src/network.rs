@@ -138,7 +138,7 @@ impl FrameRateLimiter {
     /// a flood of rejected frames cannot itself starve the byte budget and
     /// cause *accepted* traffic to be throttled.
     pub fn check(&self, bytes: usize) -> RateLimitVerdict {
-        if bucket_denied(self.frames.check()) {
+        if denied(self.frames.check()) {
             return RateLimitVerdict::TooManyFrames;
         }
         // A frame larger than the whole per-second budget can never be
@@ -148,7 +148,7 @@ impl FrameRateLimiter {
         // not free — it still costs a read syscall and a dispatch).
         let cost = std::num::NonZeroU32::new(bytes.clamp(1, self.byte_budget as usize) as u32)
             .expect("clamped into 1..=byte_budget, so non-zero");
-        if bucket_denied(self.bytes.check_n(cost)) {
+        if denied(self.bytes.check_n(cost)) {
             return RateLimitVerdict::TooManyBytes;
         }
         RateLimitVerdict::Allowed
