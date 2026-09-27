@@ -611,7 +611,7 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncWriteExt;
 
     // ── constant_time_eq / verify_auth ────────────────────────────
 
