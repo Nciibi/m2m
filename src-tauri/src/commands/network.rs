@@ -866,16 +866,18 @@ pub async fn connect_to_peer(
 
             if frame.packet_type == protocol::PacketType::X3DHHandshakeInit {
                 let xkp = x25519_kp.ok_or("X25519 key not initialized for X3DH")?;
-                let spk_lock = state.active_signed_prekey.read().await;
-                let spk = spk_lock.as_ref()
-                    .ok_or("no signed prekey available for X3DH responder handshake")?;
-                let opk_lock = state.active_one_time_prekey.read().await;
-                session
-                    .handshake_as_responder_x3dh(
-                        &mut stream, kp, xkp, spk, opk_lock.as_ref(), &frame, our_candidates,
-                    )
-                    .await
-                    .map_err(|e| format!("X3DH responder handshake failed: {e}"))?;
+                // Same consume-on-use prekey handling as the direct inbound
+                // path — shared so the two cannot drift.
+                x3dh_responder_handshake_consume_opk(
+                    &state,
+                    &mut session,
+                    &mut stream,
+                    kp,
+                    xkp,
+                    &frame,
+                    our_candidates.clone(),
+                )
+                .await?;
             } else if frame.packet_type == protocol::PacketType::HandshakeInit {
                 let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
                 session
