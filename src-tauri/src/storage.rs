@@ -70,10 +70,13 @@ pub fn ensure_data_dir() -> Result<PathBuf, StorageError> {
 /// Each account's identity secret is wrapped under its OWN passphrase.
 #[derive(Debug, Clone)]
 pub struct AccountRow {
-    pub id: i64,
+    // The `id` rowid is deliberately not mirrored: nothing reads it, and
+    // selecting it shifted every column index below by one for no benefit.
     pub public_key: Vec<u8>,
     pub encrypted_private_key: Vec<u8>,
     pub private_key_nonce: Vec<u8>,
+    /// Free-text account label ("Main", "Imported", …). Written on import; the
+    /// hook a future multi-account picker would key off.
     pub label: Option<String>,
 }
 
@@ -357,16 +360,15 @@ impl KeyStore {
 
     pub fn list_accounts(&self) -> Result<Vec<AccountRow>, StorageError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, public_key, encrypted_private_key, private_key_nonce, label
+            "SELECT public_key, encrypted_private_key, private_key_nonce, label
                  FROM accounts ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(AccountRow {
-                id: row.get(0)?,
-                public_key: row.get(1)?,
-                encrypted_private_key: row.get(2)?,
-                private_key_nonce: row.get(3)?,
-                label: row.get(4)?,
+                public_key: row.get(0)?,
+                encrypted_private_key: row.get(1)?,
+                private_key_nonce: row.get(2)?,
+                label: row.get(3)?,
             })
         })?;
         let mut out: Vec<AccountRow> = Vec::new();
@@ -374,13 +376,6 @@ impl KeyStore {
             out.push(row.map_err(StorageError::Database)?);
         }
         Ok(out)
-    }
-
-    pub fn count_accounts(&self) -> Result<i64, StorageError> {
-        let n: i64 = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM accounts", [], |r| r.get(0))?;
-        Ok(n)
     }
 
     /// Insert a brand-new account (fresh identity wrapped under its own passphrase).
