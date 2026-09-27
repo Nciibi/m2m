@@ -61,7 +61,7 @@ export default function VaultView() {
       }
       setPassphrase("");
       setPassphraseConfirm("");
-    } catch (e: any) {
+    } catch (e) {
       const msg = typeof e === "string"
         ? e
         : e?.message || (createMode ? "Account creation failed." : "Unlock failed. Check your passphrase.");

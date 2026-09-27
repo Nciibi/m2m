@@ -105,7 +105,7 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
                   <Button size="xs" onClick={async () => {
                     try {
                       await onConnect(m.public_key_hex);
-                    } catch (e: any) {
+                    } catch (e) {
                       if (e?.toString().includes("CANNOT_REACH")) {
                         setShowUpdate(m.public_key_hex);
                       }

@@ -84,7 +84,7 @@ export default function GroupChatView() {
       setCreateName("");
       setCreateMembers("");
       addToast("Group created!", "success");
-    } catch (e: any) {
+    } catch (e) {
       addToast("Failed to create group: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
     }
   };
@@ -107,7 +107,7 @@ export default function GroupChatView() {
       });
       setMessages((prev) => [...prev, msg]);
       setText("");
-    } catch (e: any) {
+    } catch (e) {
       addToast("Failed to send: " + (typeof e === "string" ? e : e?.message || "unknown"), "error");
     } finally {
       setSending(false);
