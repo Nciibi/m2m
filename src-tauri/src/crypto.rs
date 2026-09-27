@@ -1160,6 +1160,97 @@ impl Drop for SenderKeyChain {
     }
 }
 
+/// A message key derived but **not yet committed** to a [`SenderKeyChain`].
+///
+/// This mirrors the Double Ratchet's [`TentativeReceive`]. The problem it
+/// solves: `peek_message_key` used to mutate the chain (advancing
+/// `chain_key`, bumping `message_number`, filling `cached_keys`) *before* the
+/// caller authenticated the ciphertext. A forged frame claiming a large
+/// `message_number` therefore advanced the chain up to `max_cache` steps and
+/// the AEAD open then failed — leaving the chain permanently desynced, so
+/// every future message from that sender was undecryptable and the group had
+/// to be torn down. One hostile group member could deafen all the others.
+///
+/// With this type, derivation takes `&self` and touches nothing. State is
+/// installed only by [`SenderKeyTentative::commit`], which the caller must
+/// reach only after the AEAD tag has verified.
+pub struct SenderKeyTentative {
+    nonce: [u8; 24],
+    key: [u8; 32],
+    /// The message number this key belongs to.
+    message_number: u64,
+    /// Chain key to install on commit (unchanged for a cache hit).
+    chain_key: [u8; 32],
+    /// `message_number` to install on commit.
+    next_message_number: u64,
+    /// Intermediate keys to add to the cache, for the derive-forward path.
+    staged: Vec<(u64, CachedSenderKey)>,
+    /// Whether this key was already present in the cache before derivation.
+    /// Only in that case does commit need to *remove* the entry; for the
+    /// derive-forward path the entry is simply never inserted.
+    was_cached: bool,
+}
+
+impl Drop for SenderKeyTentative {
+    fn drop(&mut self) {
+        self.key.zeroize();
+        self.nonce.zeroize();
+        self.chain_key.zeroize();
+        for (_, k) in self.staged.iter_mut() {
+            k.drop_keys();
+        }
+    }
+}
+
+impl SenderKeyTentative {
+    /// The derived nonce.
+    pub fn nonce(&self) -> [u8; 24] {
+        self.nonce
+    }
+
+    /// The derived AEAD key.
+    pub fn key(&self) -> [u8; 32] {
+        self.key
+    }
+
+    /// Install this derivation into `chain`.
+    ///
+    /// **Only call this after the AEAD tag has verified.** A successful
+    /// decryption also *consumes* the key: it is removed from the cache so the
+    /// same frame cannot be replayed to obtain the plaintext a second time.
+    /// Intermediate skipped keys are retained so genuinely delayed messages
+    /// still decrypt.
+    pub fn commit(self, chain: &mut SenderKeyChain) {
+        let this = std::mem::ManuallyDrop::new(self);
+
+        if this.was_cached {
+            // Consume the cached key: a successfully decrypted message must
+            // not be replayable.
+            if let Some(mut consumed) = chain.cached_keys.remove(&this.message_number) {
+                consumed.drop_keys();
+            }
+        } else {
+            for (num, cached) in this.staged.iter() {
+                if *num == this.message_number {
+                    // Consumed on success — never insert it.
+                    continue;
+                }
+                chain.cached_keys.insert(*num, cached.clone_no_zeroize());
+            }
+        }
+
+        // SAFETY-free: `ManuallyDrop` suppresses the destructor, so the
+        // staged/committed bytes are handed off or dropped explicitly here.
+        // We zeroize what we are not installing.
+        unsafe {
+            // Take ownership of the vectors so we can zeroize them after use.
+            let staged = std::ptr::read(&this.staged);
+            drop(staged);
+            std::ptr::drop_in_place(std::ptr::addr_of_mut!(*this as *mut Self).cast::<SenderKeyTentative>());
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct CachedSenderKey {
     nonce: [u8; 24],
@@ -1170,6 +1261,15 @@ impl CachedSenderKey {
     fn drop_keys(&mut self) {
         self.key.zeroize();
         self.nonce.zeroize();
+    }
+
+    /// Produce an independent copy for insertion into the live cache,
+    /// transferring the secret rather than sharing a reference.
+    fn clone_no_zeroize(&self) -> CachedSenderKey {
+        CachedSenderKey {
+            nonce: self.nonce,
+            key: self.key,
+        }
     }
 }
 
