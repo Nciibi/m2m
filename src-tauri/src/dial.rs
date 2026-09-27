@@ -188,6 +188,43 @@ pub fn tor_enabled() -> bool {
     tor::is_enabled()
 }
 
+/// Dial an address that only makes sense on the local network, and **refuse
+/// when Tor is enabled**.
+///
+/// Used by the LAN-only protocols — UPnP/IGD, NAT-PMP and PCP — which talk to
+/// the user's own router. Two reasons these must not run under Tor:
+///
+/// 1. **They are meaningless over Tor.** Tor cannot reach `192.168.0.1`, so
+///    the attempt would simply fail.
+/// 2. **They are an IP-disclosure primitive.** Requesting a port mapping tells
+///    the ISP's upstream NAT — and therefore anyone watching it — that this
+///    host wants to be reachable inbound. Combined with a Tor-routed peer
+///    connection it also defeats the point of Tor: the peer reaches you
+///    directly, so the exit node's IP is irrelevant.
+///
+/// Returning an error (rather than silently skipping) lets callers surface
+/// "port forwarding was skipped because Tor is enabled" to the user, instead
+/// of quietly leaving them without a direct path.
+pub async fn dial_lan_only(addr: SocketAddr, timeout: Duration) -> Result<TcpStream, DialError> {
+    if tor::is_enabled() {
+        tracing::warn!(
+            target = %addr,
+            "skipping LAN port mapping because Tor is enabled \
+             (requesting a port mapping would disclose the real IP)"
+        );
+        return Err(DialError::TorLanUnsupported(addr));
+    }
+    dial_with_timeout(addr, timeout).await
+}
+
+/// True when LAN port mapping (UPnP/NAT-PMP/PCP) may be attempted.
+///
+/// Invite generation uses this to omit port-mapped candidates entirely under
+/// Tor, rather than producing an invite whose candidates are all unreachable.
+pub fn lan_port_mapping_allowed() -> bool {
+    !tor::is_enabled()
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
