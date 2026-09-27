@@ -22,10 +22,21 @@ export default function GroupChatView() {
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createMembers, setCreateMembers] = useState("");
+  // Distinguishes "the backend says I have no groups" from "the load failed".
+  // Both leave `groups` empty, so without this the user is shown "No groups yet"
+  // when the store is in fact locked or unreadable — which reads as data loss
+  // rather than as an error, and there is no way to tell the two apart.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const loadGroups = useCallback(async () => {
-    try { setGroups(await invoke<GroupInfo[]>("list_groups")); } catch { /* noop */ }
-  }, []);
+    try {
+      setGroups(await invoke<GroupInfo[]>("list_groups"));
+      setLoadFailed(false);
+    } catch (e) {
+      setLoadFailed(true);
+      addToast("Could not load groups: " + errorMessage(e), "error");
+    }
+  }, [addToast]);
 
   const loadMessages = useCallback(async (groupId: string) => {
     try {
@@ -164,8 +175,23 @@ export default function GroupChatView() {
           {groups.length === 0 ? (
             <div className="conv-empty">
               <GroupsIcon size={48} color="var(--color-text-muted)" />
-              <p className="conv-empty__title">No groups yet</p>
-              <p className="conv-empty__desc">Create a group to start an encrypted group conversation.</p>
+              {loadFailed ? (
+                <>
+                  <p className="conv-empty__title">Could not load groups</p>
+                  <p className="conv-empty__desc">
+                    Your groups could not be read. This is not the same as having
+                    no groups — retry before concluding anything.
+                  </p>
+                  <Button variant="secondary" size="sm" onClick={loadGroups}>
+                    Retry
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="conv-empty__title">No groups yet</p>
+                  <p className="conv-empty__desc">Create a group to start an encrypted group conversation.</p>
+                </>
+              )}
             </div>
           ) : (
             groups.map((g) => (
