@@ -1700,10 +1700,30 @@ mod upnp_security_tests {
         assert!(err.to_string().contains("exceeds"), "unexpected: {err}");
 
         // (b) A hostile chunk size in a chunked response.
-        let mut evil2 = Vec::new();
-        evil2.extend_from_slice(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
-        evil2.extend_from_slice(b"100000000\r\n"); // 268 MB chunk
-        let mut rd2 = &evil2[..];
+        //
+        // Driven over a duplex stream with the headers and the chunk header
+        // written separately, because the reader's header loop reads up to
+        // 4096 bytes at a time: if the chunk header arrives in the same read it
+        // is already part of the buffered body and the chunk-size path is never
+        // reached. The streaming case is the one that matters.
+        let (mut wr, mut rd2) = tokio::io::duplex(4096);
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            let _ = wr
+                .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+                .await;
+            let _ = wr.flush().await;
+            // Give the reader a moment to finish the header pass, then send an
+            // absurd chunk size.
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let _ = wr.write_all(b"100000000\r\n").await; // 268 MB
+            let _ = wr.flush().await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                wr.write_all(b"AAAA"),
+            )
+            .await;
+        });
         let err2 = read_http_response_body(&mut rd2)
             .await
             .expect_err("an oversized chunk size must be refused");
