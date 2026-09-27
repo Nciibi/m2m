@@ -127,8 +127,12 @@ export function asChatMessage(v: unknown): ChatMessage | null {
   // Requiring a 64-char key here rejected every direct message, so the chat
   // listener dropped 100% of 1:1 traffic. The test fixtures all supplied a
   // group-style key, which is exactly why the suite stayed green.
-  if (!isString(m.sender_peer_key_hex)) return null;
-  if (m.sender_peer_key_hex !== "" && !isPeerKeyHex(m.sender_peer_key_hex)) return null;
+  // It is also `#[serde(default)]` on the Rust side, so the field may be absent
+  // from the payload entirely; an absent key means the same as empty.
+  if (m.sender_peer_key_hex !== undefined && m.sender_peer_key_hex !== null) {
+    if (!isString(m.sender_peer_key_hex)) return null;
+    if (m.sender_peer_key_hex !== "" && !isPeerKeyHex(m.sender_peer_key_hex)) return null;
+  }
 
   // `reactions` becomes object keys AND visible labels, so both the key and
   // the values are bounded.
