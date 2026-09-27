@@ -80,6 +80,13 @@ pub struct AccountRow {
     pub label: Option<String>,
 }
 
+/// Stored X25519 identity material: `(public_key, encrypted_secret, nonce)`.
+///
+/// The secret is AEAD-sealed under the vault storage key; the public half is
+/// plain (it is not secret) but is *unauthenticated*, so it must be
+/// cross-checked against the secret before use.
+pub type X25519KeyMaterial = ([u8; 32], Vec<u8>, Vec<u8>);
+
 /// A family member - a peer the user has explicitly saved as a persistent contact.
 /// Stored in the `family` table, separate from the ephemeral `peers` table.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -219,8 +226,12 @@ impl KeyStore {
     }
 
     /// Load the stored X25519 key material.
-    /// Returns (public_key, encrypted_secret, nonce).
-    pub fn load_x25519_key(&self) -> Result<([u8; 32], Vec<u8>, Vec<u8>), StorageError> {
+    ///
+    /// Returns `X25519KeyMaterial` = `(public_key, encrypted_secret, nonce)`.
+    /// The public half is stored as *unauthenticated plaintext* in `vault_meta`;
+    /// `X25519IdentityKeypair::from_bytes` re-derives and cross-checks it, so a
+    /// substituted value is rejected rather than loaded.
+    pub fn load_x25519_key(&self) -> Result<X25519KeyMaterial, StorageError> {
         let pub_hex: String = self
             .conn
             .query_row(
@@ -3181,12 +3192,11 @@ mod tests {
             .upsert_reaction("m-1", "legacy", &hex::encode(peer), false, "conv-r", None)
             .unwrap();
         let legacy_map = store.get_reactions(&["m-1".to_string()], None).unwrap();
-        assert_eq!(
+        assert!(
             legacy_map["m-1"]
                 .iter()
-                .find(|(r, _, _)| r == "legacy")
-                .is_some(),
-            true
+                .any(|(r, _, _)| r == "legacy"),
+            "expected the legacy 'legacy' reaction to be present"
         );
     }
 

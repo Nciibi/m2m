@@ -547,7 +547,7 @@ impl AppState {
         let mut all_candidates = host_candidates;
         all_candidates.extend(ipv6_candidates);
         all_candidates.extend(reflexive_candidates);
-        all_candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+        all_candidates.sort_by_key(|c| std::cmp::Reverse(c.priority));
 
         {
             let mut cand = self.candidates.write().await;

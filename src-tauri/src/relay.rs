@@ -504,7 +504,7 @@ async fn handle_relay_incoming_with_frame(
         let mut all = host_candidates;
         all.extend(ipv6_candidates);
         all.extend(reflexive_candidates);
-        all.sort_by(|a, b| b.priority.cmp(&a.priority));
+        all.sort_by_key(|c| std::cmp::Reverse(c.priority));
         let wire_candidates: Vec<WireCandidate> = all
             .iter()
             .map(|c| WireCandidate {
