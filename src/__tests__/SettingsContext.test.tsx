@@ -53,11 +53,81 @@ function TestConsumer() {
   );
 }
 
+/// Full default `SecurityConfig`, matching the Rust struct.
+const DEFAULT_SECURITY_CONFIG = {
+  screen_capture_protection: false,
+  clipboard_clear_secs: 0,
+  idle_lock_secs: 0,
+  require_known_contact: false,
+  capture_process_detection: false,
+  blur_on_focus_loss: false,
+  air_gap_mode: false,
+  ephemeral_mode: false,
+  send_batching_ms: 0,
+  cover_typing_traffic: false,
+  panic_hotkey_enabled: false,
+};
+
+/**
+ * Command-aware default mock.
+ *
+ * The suite previously queued responses positionally with
+ * `mockResolvedValueOnce`. That is brittle in a way that has already bitten:
+ * `SettingsProvider` now fetches the persisted security config on mount (a
+ * security control, not a UI nicety — without it the panic-wipe hotkey, the
+ * idle auto-lock and the focus-loss blur are all inert until the user happens
+ * to open Settings), so the mount-time call consumed the first queued response
+ * and every subsequent test got someone else's value.
+ *
+ * Keying the mock on the command name makes the suite independent of how many
+ * reads the provider performs, and of the order it performs them in.
+ */
+function defaultInvoke(cmd: string, args?: any): any {
+  switch (cmd) {
+    case "get_security_config":
+      return { ...DEFAULT_SECURITY_CONFIG };
+    case "set_security_config":
+      return { ...(args?.config ?? DEFAULT_SECURITY_CONFIG) };
+    case "get_discovery_config":
+      return { lan_enabled: false, dht_enabled: false };
+    case "set_discovery_config":
+      return args?.config ?? { lan_enabled: false, dht_enabled: false };
+    case "get_discovered_peers":
+    case "get_muted_conversations":
+      return [];
+    case "get_network_diagnostics":
+      return { nat_type: "Unknown", stun_servers: [], consensus: false };
+    case "get_stun_config":
+      return { servers: [], private_mode: false };
+    case "set_stun_servers":
+      return undefined;
+    case "get_capture_capability":
+      return { supported: false, reason: "test" };
+    case "is_duress_configured":
+      return false;
+    case "get_network_settings":
+      return { public_ip: null };
+    case "check_connectivity":
+      return { reachable: true };
+    case "discover_public_ip":
+      return "203.0.113.1";
+    case "set_private_mode":
+    case "lock_vault":
+    case "clear_clipboard":
+    case "refresh_discovery":
+    case "set_tor_enabled":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
 describe("SettingsContext", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     appState.addToast.mockClear();
     appState.setView.mockClear();
+    mockInvoke.mockImplementation(defaultInvoke);
   });
 
   it("provides default values", () => {
@@ -76,8 +146,6 @@ describe("SettingsContext", () => {
 
   it("handleStunDiscover calls Tauri invoke", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValueOnce("203.0.113.1");
-    mockInvoke.mockResolvedValueOnce({ nat_type: "RestrictedCone", stun_servers: [] });
 
     render(
       <SettingsProvider>
@@ -118,9 +186,6 @@ describe("SettingsContext", () => {
 
   it("handleConnectivityCheck calls Tauri invoke", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue({ reachable: true });
-    mockInvoke.mockResolvedValueOnce({ reachable: true });
-    mockInvoke.mockResolvedValueOnce({ nat_type: "FullCone", stun_servers: [] });
 
     render(
       <SettingsProvider>
@@ -151,8 +216,6 @@ describe("SettingsContext", () => {
   it("handleLanToggle calls set_discovery_config with lan_enabled: true", async () => {
     const user = userEvent.setup();
     // handleLanToggle uses hardcoded default {lan: false, dht: false} when null
-    mockInvoke.mockResolvedValueOnce({ lan_enabled: true, dht_enabled: false });
-    mockInvoke.mockResolvedValueOnce([]);
 
     render(
       <SettingsProvider>
@@ -169,8 +232,6 @@ describe("SettingsContext", () => {
   it("handleDhtToggle calls set_discovery_config with dht_enabled: true", async () => {
     const user = userEvent.setup();
     // handleDhtToggle uses hardcoded default {lan: false, dht: false} when null
-    mockInvoke.mockResolvedValueOnce({ lan_enabled: false, dht_enabled: true });
-    mockInvoke.mockResolvedValueOnce([]);
 
     render(
       <SettingsProvider>
