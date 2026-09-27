@@ -167,7 +167,7 @@ pub async fn connect_sync_device(
     _my_name: String,
 ) -> Result<crate::commands::ConnectionInfo, String> {
     // Parse the invite string
-    let _token_str = _invite_str
+    let sync_token = _invite_str
         .strip_prefix("m2m-sync://")
         .ok_or("invalid sync invite format")?;
 
