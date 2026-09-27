@@ -185,12 +185,16 @@ impl PortMapper {
                 }
             }
             "pcp" => {
-                if let Err(e) = pcp_remove_tcp(mapping.internal_port, mapping.external_addr.port()).await {
+                if let Err(e) =
+                    pcp_remove_tcp(mapping.internal_port, mapping.external_addr.port()).await
+                {
                     tracing::warn!(error = %e, "PCP remove failed");
                 }
             }
             "upnp-igd" => {
-                if let Err(e) = upnp_remove_tcp(mapping.internal_port, mapping.external_addr.port()).await {
+                if let Err(e) =
+                    upnp_remove_tcp(mapping.internal_port, mapping.external_addr.port()).await
+                {
                     tracing::warn!(error = %e, "UPnP remove failed");
                 }
             }
@@ -212,9 +216,7 @@ impl PortMapper {
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(());
 
         // Compute renewal interval as 75% of the granted lifetime.
-        let interval = Duration::from_secs(
-            (mapping.lifetime_secs as f64 * 0.75) as u64,
-        );
+        let interval = Duration::from_secs((mapping.lifetime_secs as f64 * 0.75) as u64);
 
         // Don't bother renewing if the lifetime is ridiculously short.
         if interval < Duration::from_secs(30) {
@@ -273,7 +275,10 @@ impl PortMapper {
                             upnp_map_tcp(mapping.internal_port, mapping.lifetime_secs).await
                         }
                         other => {
-                            tracing::warn!(protocol = other, "don't know how to renew this mapping");
+                            tracing::warn!(
+                                protocol = other,
+                                "don't know how to renew this mapping"
+                            );
                             break;
                         }
                     };
@@ -411,9 +416,14 @@ async fn discover_gateway_fallback() -> Option<IpAddr> {
     };
 
     let common: &[[u8; 4]] = &[
-        [192, 168, 0, 1], [192, 168, 1, 1], [192, 168, 1, 254],
-        [10, 0, 0, 1], [10, 0, 1, 1], [172, 16, 0, 1],
-        [192, 168, 0, 254], [10, 0, 0, 138],
+        [192, 168, 0, 1],
+        [192, 168, 1, 1],
+        [192, 168, 1, 254],
+        [10, 0, 0, 1],
+        [10, 0, 1, 1],
+        [172, 16, 0, 1],
+        [192, 168, 0, 254],
+        [10, 0, 0, 138],
     ];
 
     let candidates: Vec<Ipv4Addr> = if let IpAddr::V4(v4) = local_ip {
@@ -430,7 +440,10 @@ async fn discover_gateway_fallback() -> Option<IpAddr> {
         }
         list
     } else {
-        common.iter().map(|o| Ipv4Addr::new(o[0], o[1], o[2], o[3])).collect()
+        common
+            .iter()
+            .map(|o| Ipv4Addr::new(o[0], o[1], o[2], o[3]))
+            .collect()
     };
 
     for gw in &candidates {
@@ -469,9 +482,7 @@ const NAT_PMP_SUCCESS: u16 = 0;
 const NAT_PMP_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Send a NAT-PMP public-address request and return the WAN IP.
-async fn nat_pmp_public_address(
-    gateway: &SocketAddr,
-) -> Result<IpAddr, PortMapError> {
+async fn nat_pmp_public_address(gateway: &SocketAddr) -> Result<IpAddr, PortMapError> {
     let sock = UdpSocket::bind("0.0.0.0:0").await?;
     sock.connect(gateway).await?;
 
@@ -490,11 +501,17 @@ async fn nat_pmp_public_address(
         return Err(PortMapError::NatPmp(format!("short response: {} bytes", n)));
     }
     if buf[1] != NAT_PMP_RESP | NAT_PMP_OP_PUBADDR {
-        return Err(PortMapError::NatPmp(format!("unexpected opcode: {}", buf[1])));
+        return Err(PortMapError::NatPmp(format!(
+            "unexpected opcode: {}",
+            buf[1]
+        )));
     }
     let result = u16::from_be_bytes([buf[2], buf[3]]);
     if result != NAT_PMP_SUCCESS {
-        return Err(PortMapError::NatPmp(format!("public-address error: result={}", result)));
+        return Err(PortMapError::NatPmp(format!(
+            "public-address error: result={}",
+            result
+        )));
     }
     let ip_bytes: [u8; 4] = [buf[8], buf[9], buf[10], buf[11]];
     Ok(IpAddr::V4(Ipv4Addr::from(ip_bytes)))
@@ -516,8 +533,8 @@ async fn nat_pmp_map_tcp(
     let mut req = [0u8; 12];
     req[0] = NAT_PMP_VERSION;
     req[1] = NAT_PMP_OP_MAP_TCP;
-    req[4..6].copy_from_slice(&internal_port.to_be_bytes());  // internal port
-    // external port = 0 means "let the router choose"
+    req[4..6].copy_from_slice(&internal_port.to_be_bytes()); // internal port
+                                                             // external port = 0 means "let the router choose"
     req[8..12].copy_from_slice(&lifetime_secs.to_be_bytes());
     sock.send(&req).await?;
 
@@ -531,7 +548,10 @@ async fn nat_pmp_map_tcp(
         return Err(PortMapError::NatPmp(format!("short response: {} bytes", n)));
     }
     if buf[1] != NAT_PMP_RESP | NAT_PMP_OP_MAP_TCP {
-        return Err(PortMapError::NatPmp(format!("unexpected opcode: {}", buf[1])));
+        return Err(PortMapError::NatPmp(format!(
+            "unexpected opcode: {}",
+            buf[1]
+        )));
     }
     let result = u16::from_be_bytes([buf[2], buf[3]]);
     if result != NAT_PMP_SUCCESS {
@@ -546,7 +566,11 @@ async fn nat_pmp_map_tcp(
     // Get the router's WAN IP via a separate public-address request.
     let public_ip = nat_pmp_public_address(&gw).await?;
 
-    tracing::debug!(ext_port = ext_port, lifetime = mapped_lifetime, "NAT-PMP mapping granted");
+    tracing::debug!(
+        ext_port = ext_port,
+        lifetime = mapped_lifetime,
+        "NAT-PMP mapping granted"
+    );
 
     Ok(PortMapping {
         protocol: "nat-pmp",
@@ -584,7 +608,10 @@ async fn nat_pmp_remove_tcp(external_port: u16) -> Result<(), PortMapError> {
     }
     let result = u16::from_be_bytes([buf[2], buf[3]]);
     if result != NAT_PMP_SUCCESS {
-        return Err(PortMapError::NatPmp(format!("remove failed: result={}", result)));
+        return Err(PortMapError::NatPmp(format!(
+            "remove failed: result={}",
+            result
+        )));
     }
     Ok(())
 }
@@ -640,7 +667,11 @@ const PCP_OFF_INT_PORT: usize = 30;
 const PCP_OFF_EXT_PORT: usize = 32;
 const PCP_OFF_EXT_IP: usize = 34;
 
-fn build_pcp_map_request(lifetime_secs: u32, internal_port: u16, external_port: u16) -> [u8; PCP_MAP_REQUEST_SIZE] {
+fn build_pcp_map_request(
+    lifetime_secs: u32,
+    internal_port: u16,
+    external_port: u16,
+) -> [u8; PCP_MAP_REQUEST_SIZE] {
     let mut req = [0u8; PCP_MAP_REQUEST_SIZE];
     req[0] = PCP_VERSION;
     req[PCP_OFF_OP] = PCP_OP_MAP;
@@ -697,10 +728,7 @@ async fn pcp_map_tcp(
         buf[PCP_OFF_LIFETIME + 2],
         buf[PCP_OFF_LIFETIME + 3],
     ]);
-    let external_port = u16::from_be_bytes([
-        buf[PCP_OFF_EXT_PORT],
-        buf[PCP_OFF_EXT_PORT + 1],
-    ]);
+    let external_port = u16::from_be_bytes([buf[PCP_OFF_EXT_PORT], buf[PCP_OFF_EXT_PORT + 1]]);
     let ext_ip = IpAddr::V4(Ipv4Addr::new(
         buf[PCP_OFF_EXT_IP],
         buf[PCP_OFF_EXT_IP + 1],
@@ -723,10 +751,7 @@ async fn pcp_map_tcp(
 }
 
 /// Remove a PCP mapping by requesting lifetime=0.
-async fn pcp_remove_tcp(
-    internal_port: u16,
-    external_port: u16,
-) -> Result<(), PortMapError> {
+async fn pcp_remove_tcp(internal_port: u16, external_port: u16) -> Result<(), PortMapError> {
     let gateway = match discover_gateway().await {
         Some(g) => g,
         None => return Err(PortMapError::NoGateway),
@@ -841,7 +866,9 @@ async fn upnp_discover() -> Result<UpnpService, PortMapError> {
         let resp = String::from_utf8_lossy(&buf[..n]);
 
         // Look for the LOCATION header which points to the device description XML.
-        if resp.contains("InternetGatewayDevice") || resp.contains("urn:schemas-upnp-org:device:InternetGatewayDevice") {
+        if resp.contains("InternetGatewayDevice")
+            || resp.contains("urn:schemas-upnp-org:device:InternetGatewayDevice")
+        {
             for line in resp.lines() {
                 let lower = line.to_lowercase();
                 if lower.starts_with("location:") {
@@ -857,9 +884,8 @@ async fn upnp_discover() -> Result<UpnpService, PortMapError> {
         }
     }
 
-    let location = location_url.ok_or_else(|| {
-        PortMapError::Upnp("no UPnP IGD device found on the network".into())
-    })?;
+    let location = location_url
+        .ok_or_else(|| PortMapError::Upnp("no UPnP IGD device found on the network".into()))?;
 
     // ── SSRF guard: only follow a LOCATION that points at a private gateway ──
     //
@@ -902,14 +928,11 @@ fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
     }
     // Only plain HTTP. An IGD never needs TLS, and accepting `https` would mean
     // trusting a certificate on a device that has no identity story.
-    let rest = url.strip_prefix("http://").ok_or_else(|| {
-        PortMapError::Upnp("UPnP LOCATION must be a plain http:// URL".into())
-    })?;
+    let rest = url
+        .strip_prefix("http://")
+        .ok_or_else(|| PortMapError::Upnp("UPnP LOCATION must be a plain http:// URL".into()))?;
     // Authority ends at the first '/', '?' or '#'.
-    let authority = rest
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or("");
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     if authority.is_empty() {
         return Err(PortMapError::Upnp("UPnP LOCATION has no host".into()));
     }
@@ -921,9 +944,9 @@ fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
     }
     // IPv6 literals are bracketed: [::1]:80
     let (host, _port) = if let Some(after_bracket) = authority.strip_prefix('[') {
-        let end = after_bracket.find(']').ok_or_else(|| {
-            PortMapError::Upnp("malformed IPv6 in UPnP LOCATION".into())
-        })?;
+        let end = after_bracket
+            .find(']')
+            .ok_or_else(|| PortMapError::Upnp("malformed IPv6 in UPnP LOCATION".into()))?;
         (&after_bracket[..end], &after_bracket[end + 1..])
     } else {
         match authority.rsplit_once(':') {
@@ -1195,8 +1218,8 @@ fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
     // Match opening tag: <tagName> or <ns:tagName> or <tagName > (with attributes).
     let _open_patterns = [
         format!("<{}>", tag_name),
-        format!("<{} ", tag_name),  // with attribute(s)
-        format!("<{}:", tag_name),  // wait, that's backward — ns:tag, not tag:ns
+        format!("<{} ", tag_name), // with attribute(s)
+        format!("<{}:", tag_name), // wait, that's backward — ns:tag, not tag:ns
     ];
     // Actually, namespace prefix is prefix:tag, so we need <prefix:tagName>
     // Let me use a different approach: find </tagName> and work backwards.
@@ -1216,7 +1239,8 @@ fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
         let remaining = &xml[content_start..];
 
         // Find closing tag.
-        let close_pos = remaining.find(&close_marker)
+        let close_pos = remaining
+            .find(&close_marker)
             .or_else(|| remaining.find(&also_close))?;
         let content = remaining[..close_pos].trim();
         return Some(content.to_string());
@@ -1228,14 +1252,12 @@ fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
 /// Fetch and parse a UPnP device description XML to find the
 /// WANIPConnection service's control URL.
 async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapError> {
-    let sock_addr: SocketAddr = location_url
-        .parse()
-        .or_else(|_| {
-            let (host, port) = parse_url_host_port(location_url)?;
-            format!("{}:{}", host, port)
-                .parse()
-                .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))
-        })?;
+    let sock_addr: SocketAddr = location_url.parse().or_else(|_| {
+        let (host, port) = parse_url_host_port(location_url)?;
+        format!("{}:{}", host, port)
+            .parse()
+            .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))
+    })?;
 
     let mut stream = crate::dial::dial_lan_only(sock_addr, Duration::from_secs(5))
         .await
@@ -1269,16 +1291,19 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
     // and namespace prefixes like <ns:controlURL>.
     extract_xml_tag(&body, "serviceType")
         .and_then(|t| {
-            if t.contains("WANIPConnection") { Some(()) } else { None }
+            if t.contains("WANIPConnection") {
+                Some(())
+            } else {
+                None
+            }
         })
         .ok_or_else(|| {
             PortMapError::Upnp("WANIPConnection service not found in device description".into())
         })?;
 
-    let control_url = extract_xml_tag(&body, "controlURL")
-        .ok_or_else(|| {
-            PortMapError::Upnp("controlURL not found in WANIPConnection service".into())
-        })?;
+    let control_url = extract_xml_tag(&body, "controlURL").ok_or_else(|| {
+        PortMapError::Upnp("controlURL not found in WANIPConnection service".into())
+    })?;
 
     // Resolve relative URLs against the base URL.
     if control_url.starts_with('/') {
@@ -1352,8 +1377,7 @@ async fn upnp_map_tcp(
     if status_code == 200 {
         // Success — get the external IP from the gateway via UPnP
         // GetExternalIPAddress, or fall back to the local IP.
-        let public_ip = gateway_wan_ip_via_upnp(&service).await
-            .unwrap_or(client_ip);
+        let public_ip = gateway_wan_ip_via_upnp(&service).await.unwrap_or(client_ip);
 
         tracing::info!(
             internal = internal_port,
@@ -1371,7 +1395,10 @@ async fn upnp_map_tcp(
     } else if status_code == 500 && resp_str.contains("ConflictInMappingEntry") {
         Err(PortMapError::Upnp("port already mapped (conflict)".into()))
     } else if status_code == 500 {
-        Err(PortMapError::Upnp(format!("SOAP error: {}", truncate_safe(&resp_str, 200))))
+        Err(PortMapError::Upnp(format!(
+            "SOAP error: {}",
+            truncate_safe(&resp_str, 200)
+        )))
     } else {
         Err(PortMapError::Upnp(format!(
             "unexpected HTTP status {}: {}",
@@ -1382,14 +1409,10 @@ async fn upnp_map_tcp(
 }
 
 /// Remove a UPnP TCP port mapping.
-async fn upnp_remove_tcp(
-    _internal_port: u16,
-    external_port: u16,
-) -> Result<(), PortMapError> {
+async fn upnp_remove_tcp(_internal_port: u16, external_port: u16) -> Result<(), PortMapError> {
     let service = upnp_discover().await?;
 
-    let body = SOAP_DELETE_PORT
-        .replace("{external_port}", &external_port.to_string());
+    let body = SOAP_DELETE_PORT.replace("{external_port}", &external_port.to_string());
 
     let content_type = "text/xml; charset=\"utf-8\"";
     let soap_action = "\"urn:schemas-upnp-org:service:WANIPConnection:1#DeletePortMapping\"";
@@ -1485,7 +1508,9 @@ async fn gateway_wan_ip_via_upnp(service: &UpnpService) -> Result<IpAddr, PortMa
         }
     }
 
-    Err(PortMapError::Upnp("could not parse external IP from UPnP response".into()))
+    Err(PortMapError::Upnp(
+        "could not parse external IP from UPnP response".into(),
+    ))
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1566,10 +1591,7 @@ mod port_mapping_tests {
             extract_host("http://192.168.1.1:5000/ctl/conn"),
             Some("192.168.1.1:5000")
         );
-        assert_eq!(
-            extract_host("http://192.168.1.1/upnp"),
-            Some("192.168.1.1")
-        );
+        assert_eq!(extract_host("http://192.168.1.1/upnp"), Some("192.168.1.1"));
     }
 
     #[test]
@@ -1642,13 +1664,13 @@ mod upnp_security_tests {
     #[test]
     fn test_ssrf_blocks_https_and_parser_confusion() {
         for url in [
-            "https://192.168.1.1/desc.xml",   // TLS on a device with no identity story
-            "ftp://192.168.1.1/desc.xml",    // wrong scheme
-            "file:///etc/passwd",            // local file read
-            "http://user@8.8.8.8/desc.xml",  // userinfo confusion
+            "https://192.168.1.1/desc.xml", // TLS on a device with no identity story
+            "ftp://192.168.1.1/desc.xml",   // wrong scheme
+            "file:///etc/passwd",           // local file read
+            "http://user@8.8.8.8/desc.xml", // userinfo confusion
             "http://192.168.1.1@8.8.8.8/",  // userinfo confusion
-            "http://",                       // no host
-            "",                              // empty
+            "http://",                      // no host
+            "",                             // empty
         ] {
             assert!(
                 validate_upnp_location(url).is_err(),
@@ -1718,11 +1740,8 @@ mod upnp_security_tests {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             let _ = wr.write_all(b"100000000\r\n").await; // 268 MB
             let _ = wr.flush().await;
-            let _ = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                wr.write_all(b"AAAA"),
-            )
-            .await;
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), wr.write_all(b"AAAA"))
+                .await;
         });
         let err2 = read_http_response_body(&mut rd2)
             .await
@@ -1742,6 +1761,9 @@ mod upnp_security_tests {
     #[test]
     fn test_body_limit_is_bounded() {
         assert!(MAX_HTTP_BODY > 0);
-        assert!(MAX_HTTP_BODY <= 1024 * 1024, "a UPnP description is never this large");
+        assert!(
+            MAX_HTTP_BODY <= 1024 * 1024,
+            "a UPnP description is never this large"
+        );
     }
 }

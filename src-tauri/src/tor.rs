@@ -11,9 +11,9 @@
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use thiserror::Error;
 use tokio::net::TcpStream;
 use tokio_socks::tcp::Socks5Stream;
-use thiserror::Error;
 
 /// Default Tor SOCKS5 proxy address.
 pub const TOR_PROXY_ADDR: &str = "127.0.0.1:9050";

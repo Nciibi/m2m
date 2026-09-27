@@ -17,10 +17,10 @@
 mod candidate;
 mod capture_monitor;
 mod commands;
-pub mod dial;
-mod duress;
 pub mod crypto;
 pub mod dht;
+pub mod dial;
+mod duress;
 mod ephemeral_id;
 mod group;
 mod hole_punch;
@@ -42,15 +42,15 @@ mod session;
 mod state;
 mod storage;
 mod stun;
-mod tor;
 mod sync;
+mod tor;
 mod window_security;
 
-use std::sync::Arc;
 use state::AppState;
+use std::sync::Arc;
 
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 
 /// Disable crash dumps for this process (military-grade checklist: minidumps
@@ -91,7 +91,10 @@ fn disable_crash_dumps() {
             fn setrlimit(resource: i32, rlim: *const RLimit) -> i32;
         }
         const RLIMIT_CORE: i32 = 4; // Linux & macOS value
-        let limit = RLimit { rlim_cur: 0, rlim_max: 0 };
+        let limit = RLimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
         let ret = unsafe { setrlimit(RLIMIT_CORE, &limit) };
         if ret != 0 {
             tracing::warn!("failed to set RLIMIT_CORE=0 — core dumps may still be written");

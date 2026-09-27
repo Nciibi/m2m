@@ -28,7 +28,6 @@ use sha2::Digest;
 use x25519_dalek::{PublicKey as XPub, StaticSecret as XSec};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-
 use thiserror::Error;
 
 /// Maximum size of data that can be encrypted in a single operation (16 MiB).
@@ -95,7 +94,9 @@ impl IdentityKeypair {
     pub fn generate() -> Result<Self, CryptoError> {
         let mut seed = [0u8; 32];
         getrandom::getrandom(&mut seed).map_err(|_| CryptoError::KeyDerivationFailed)?;
-        Ok(Self { signing: SigningKey::from_bytes(&seed) })
+        Ok(Self {
+            signing: SigningKey::from_bytes(&seed),
+        })
     }
 
     /// Reconstruct from existing key bytes.
@@ -116,7 +117,9 @@ impl IdentityKeypair {
 
     /// Deterministically derive a keypair from a 32-byte Ed25519 seed.
     pub fn from_seed(seed: &[u8; 32]) -> Result<Self, CryptoError> {
-        Ok(Self { signing: SigningKey::from_bytes(seed) })
+        Ok(Self {
+            signing: SigningKey::from_bytes(seed),
+        })
     }
 
     /// Sign a message with this identity key.
@@ -314,20 +317,14 @@ impl X25519IdentityKeypair {
 
     /// Lock the secret's pages into RAM (call once stored in state).
     pub fn lock_memory(&self) {
-        if !crate::secure_key::lock_range(
-            self.secret_key.as_ptr() as *const std::ffi::c_void,
-            32,
-        ) {
+        if !crate::secure_key::lock_range(self.secret_key.as_ptr() as *const std::ffi::c_void, 32) {
             tracing::warn!("X25519 secret mlock failed — swap protection unavailable");
         }
     }
 
     /// Unlock pages previously locked via [`lock_memory`].
     pub fn unlock_memory(&self) {
-        crate::secure_key::unlock_range(
-            self.secret_key.as_ptr() as *const std::ffi::c_void,
-            32,
-        );
+        crate::secure_key::unlock_range(self.secret_key.as_ptr() as *const std::ffi::c_void, 32);
     }
 }
 
@@ -354,8 +351,8 @@ impl Drop for X25519IdentityKeypair {
 /// HKDF-Extract: PRK = HMAC-SHA256(salt, IKM)
 pub(crate) fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
     use hmac::Mac;
-    let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(salt)
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        hmac::Hmac::<sha2::Sha256>::new_from_slice(salt).expect("HMAC accepts any key length");
     mac.update(ikm);
     let result = mac.finalize();
     result.into_bytes().into()
@@ -376,8 +373,8 @@ pub(crate) fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8>
     let mut result = Vec::with_capacity(length);
     let mut t: Vec<u8> = Vec::new();
     for i in 1..=n as u8 {
-        let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(prk)
-            .expect("HMAC accepts any key length");
+        let mut mac =
+            hmac::Hmac::<sha2::Sha256>::new_from_slice(prk).expect("HMAC accepts any key length");
         mac.update(&t);
         mac.update(info);
         mac.update(&[i]);
@@ -428,32 +425,38 @@ impl EphemeralKeypair {
     /// public-key order so both sides agree without signaling. Old legacy
     /// sessions (pre-X3DH) will no longer interop across this version
     /// boundary — acceptable because there is no installed base.
-    pub fn client_session_keys(
-        &self,
-        server_pk: &[u8; 32],
-    ) -> Result<SessionKeys, CryptoError> {
+    pub fn client_session_keys(&self, server_pk: &[u8; 32]) -> Result<SessionKeys, CryptoError> {
         let shared = self.diffie_hellman(server_pk)?;
         let (k_lo, k_hi) = kx_derive(&self.public_key, server_pk, &shared);
         // Initiator: own TX is one of the two, mirrored on the responder.
         if self.public_key.as_slice() <= server_pk.as_slice() {
-            Ok(SessionKeys { tx_key: k_lo, rx_key: k_hi })
+            Ok(SessionKeys {
+                tx_key: k_lo,
+                rx_key: k_hi,
+            })
         } else {
-            Ok(SessionKeys { tx_key: k_hi, rx_key: k_lo })
+            Ok(SessionKeys {
+                tx_key: k_hi,
+                rx_key: k_lo,
+            })
         }
     }
 
     /// Perform key exchange as the server (responder).
-    pub fn server_session_keys(
-        &self,
-        client_pk: &[u8; 32],
-    ) -> Result<SessionKeys, CryptoError> {
+    pub fn server_session_keys(&self, client_pk: &[u8; 32]) -> Result<SessionKeys, CryptoError> {
         let shared = self.diffie_hellman(client_pk)?;
         let (k_lo, k_hi) = kx_derive(&self.public_key, client_pk, &shared);
         // Responder mirrors the initiator's assignment exactly.
         if self.public_key.as_slice() <= client_pk.as_slice() {
-            Ok(SessionKeys { rx_key: k_hi, tx_key: k_lo })
+            Ok(SessionKeys {
+                rx_key: k_hi,
+                tx_key: k_lo,
+            })
         } else {
-            Ok(SessionKeys { rx_key: k_lo, tx_key: k_hi })
+            Ok(SessionKeys {
+                rx_key: k_lo,
+                tx_key: k_hi,
+            })
         }
     }
 }
@@ -463,7 +466,11 @@ impl EphemeralKeypair {
 /// key_owned_by_higher_pk); each side then maps them to rx/tx by comparing
 /// public keys — no role signaling needed and both sides agree.
 fn kx_derive(our_pk: &[u8; 32], their_pk: &[u8; 32], shared: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-    let (lo, hi) = if our_pk <= their_pk { (our_pk, their_pk) } else { (their_pk, our_pk) };
+    let (lo, hi) = if our_pk <= their_pk {
+        (our_pk, their_pk)
+    } else {
+        (their_pk, our_pk)
+    };
     let mut ikm = Vec::with_capacity(96);
     ikm.extend_from_slice(shared);
     ikm.extend_from_slice(lo);
@@ -490,8 +497,8 @@ impl Drop for EphemeralKeypair {
 pub struct PrekeyBundle {
     pub identity_key: [u8; 32],            // IK: X25519 identity public key
     pub signed_prekey: [u8; 32],           // SPK: X25519 signed prekey public
-    pub signed_prekey_sig: Vec<u8>,         // Ed25519 signature(SPK) — verify before use
-    pub one_time_prekey: Option<[u8; 32]>,  // OPK: optional X25519 one-time prekey
+    pub signed_prekey_sig: Vec<u8>,        // Ed25519 signature(SPK) — verify before use
+    pub one_time_prekey: Option<[u8; 32]>, // OPK: optional X25519 one-time prekey
 }
 
 /// Output of X3DH key agreement.
@@ -501,8 +508,8 @@ pub struct PrekeyBundle {
 /// by `DoubleRatchet::new`.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct X3DHSessionKeys {
-    pub root_key: [u8; 32],   // Root key for Double Ratchet
-    pub chain_key: [u8; 32],  // Initial chain key
+    pub root_key: [u8; 32],  // Root key for Double Ratchet
+    pub chain_key: [u8; 32], // Initial chain key
 }
 
 /// Compute X3DH shared secret as the INITIATOR (Alice).
@@ -512,9 +519,9 @@ pub struct X3DHSessionKeys {
 ///
 /// Caller MUST verify `bundle.signed_prekey_sig` with the peer's Ed25519 key first.
 pub fn x3dh_initiate(
-    our_identity: &X25519IdentityKeypair,  // IK_A
-    our_ephemeral: &EphemeralKeypair,      // EK_A
-    their_bundle: &PrekeyBundle,           // IK_B, SPK_B, [OPK_B]
+    our_identity: &X25519IdentityKeypair, // IK_A
+    our_ephemeral: &EphemeralKeypair,     // EK_A
+    their_bundle: &PrekeyBundle,          // IK_B, SPK_B, [OPK_B]
 ) -> Result<X3DHSessionKeys, CryptoError> {
     // DH1 = DH(IK_A, SPK_B)
     let mut dh1 = our_identity.diffie_hellman(&their_bundle.signed_prekey)?;
@@ -551,21 +558,29 @@ pub fn x3dh_initiate(
     dh2.zeroize();
     dh3.zeroize();
 
-    Ok(X3DHSessionKeys { root_key, chain_key })
+    Ok(X3DHSessionKeys {
+        root_key,
+        chain_key,
+    })
 }
 
 /// Compute X3DH shared secret as the RESPONDER (Bob).
 ///
 /// SK = DH(SPK_B, IK_A) || DH(IK_B, EK_A) || DH(SPK_B, EK_A) || [DH(OPK_B, EK_A)]
 pub fn x3dh_respond(
-    our_identity: &X25519IdentityKeypair,      // IK_B
-    our_signed_prekey: &EphemeralKeypair,       // SPK_B (must have secret key)
+    our_identity: &X25519IdentityKeypair,           // IK_B
+    our_signed_prekey: &EphemeralKeypair,           // SPK_B (must have secret key)
     our_one_time_prekey: Option<&EphemeralKeypair>, // OPK_B (optional)
-    their_ephemeral: &[u8; 32],                // EK_A
-    their_identity: &[u8; 32],                 // IK_A
+    their_ephemeral: &[u8; 32],                     // EK_A
+    their_identity: &[u8; 32],                      // IK_A
 ) -> Result<X3DHSessionKeys, CryptoError> {
-    x3dh_respond_raw(our_identity, our_signed_prekey, our_one_time_prekey,
-                     their_ephemeral, their_identity)
+    x3dh_respond_raw(
+        our_identity,
+        our_signed_prekey,
+        our_one_time_prekey,
+        their_ephemeral,
+        their_identity,
+    )
 }
 
 fn x3dh_respond_raw(
@@ -610,7 +625,10 @@ fn x3dh_respond_raw(
     dh2.zeroize();
     dh3.zeroize();
 
-    Ok(X3DHSessionKeys { root_key, chain_key })
+    Ok(X3DHSessionKeys {
+        root_key,
+        chain_key,
+    })
 }
 
 // ─── Double Ratchet ───────────────────────────────────────────────────────────
@@ -820,7 +838,8 @@ impl DoubleRatchet {
             ratchet_pub = Some(new_pub);
         }
 
-        let send_chain = self.send_chain_key
+        let send_chain = self
+            .send_chain_key
             .ok_or(CryptoError::DoubleRatchetError("no send chain key".into()))?;
 
         let (msg_key, next_chain) = Self::derive_message_key(&send_chain);
@@ -1002,9 +1021,7 @@ impl DoubleRatchet {
 
         let mut tent_chain = match tent_chain_opt {
             Some(c) => c,
-            None => scrub_and!(CryptoError::DoubleRatchetError(
-                "no recv chain key".into(),
-            )),
+            None => scrub_and!(CryptoError::DoubleRatchetError("no recv chain key".into(),)),
         };
 
         // ── Cap gap size: reject absurd message numbers before burning CPU ──
@@ -1111,7 +1128,9 @@ impl DoubleRatchet {
 
     /// Check if we should perform a DH ratchet (based on message count).
     pub fn should_ratchet(&self, interval: u64) -> bool {
-        interval > 0 && self.send_message_number > 0 && self.send_message_number.is_multiple_of(interval)
+        interval > 0
+            && self.send_message_number > 0
+            && self.send_message_number.is_multiple_of(interval)
     }
 }
 
@@ -1324,20 +1343,29 @@ fn aead_seal(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[u8]) -> 
     cipher
         .encrypt(
             chacha20poly1305::XNonce::from_slice(nonce),
-            Payload { msg: plaintext, aad },
+            Payload {
+                msg: plaintext,
+                aad,
+            },
         )
         .expect("AEAD encryption cannot fail for valid key/nonce lengths")
 }
 
-fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
-    -> Result<Vec<u8>, CryptoError>
-{
+fn aead_open(
+    key: &[u8; 32],
+    nonce: &[u8; 24],
+    ciphertext: &[u8],
+    aad: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     use chacha20poly1305::KeyInit;
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
     cipher
         .decrypt(
             chacha20poly1305::XNonce::from_slice(nonce),
-            Payload { msg: ciphertext, aad },
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
         )
         .map_err(|_| CryptoError::DecryptionFailed)
 }
@@ -1349,9 +1377,12 @@ pub fn aead_seal_pub(key: &[u8; 32], nonce: &[u8; 24], plaintext: &[u8], aad: &[
 }
 
 /// Inverse of [`aead_seal_pub`]; fails on tag mismatch or bad lengths.
-pub fn aead_open_pub(key: &[u8; 32], nonce: &[u8; 24], ciphertext: &[u8], aad: &[u8])
-    -> Result<Vec<u8>, CryptoError>
-{
+pub fn aead_open_pub(
+    key: &[u8; 32],
+    nonce: &[u8; 24],
+    ciphertext: &[u8],
+    aad: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     if key.len() != 32 || nonce.len() != 24 {
         return Err(CryptoError::InvalidKeyLength);
     }
@@ -1372,7 +1403,12 @@ pub(crate) mod golden {
         super::aead_seal(key, nonce, pt, aad)
     }
 
-    pub fn aead_open(key: &[u8; 32], nonce: &[u8; 24], ct: &[u8], aad: &[u8]) -> Result<Vec<u8>, ()> {
+    pub fn aead_open(
+        key: &[u8; 32],
+        nonce: &[u8; 24],
+        ct: &[u8],
+        aad: &[u8],
+    ) -> Result<Vec<u8>, ()> {
         super::aead_open(key, nonce, ct, aad).map_err(|_| ())
     }
 }
@@ -1684,14 +1720,11 @@ pub fn generate_sender_signing_keypair() -> ([u8; 64], [u8; 32]) {
 }
 
 /// Sign a group message with the sender's Ed25519 signing key.
-pub fn sign_group_message(
-    signing_key: &[u8; 64],
-    data: &[u8],
-) -> Result<Vec<u8>, CryptoError> {
+pub fn sign_group_message(signing_key: &[u8; 64], data: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let mut pk = [0u8; 32];
     pk.copy_from_slice(&signing_key[32..]);
-    let kp = IdentityKeypair::from_bytes(&pk, signing_key)
-        .map_err(|_| CryptoError::InvalidKeyLength)?;
+    let kp =
+        IdentityKeypair::from_bytes(&pk, signing_key).map_err(|_| CryptoError::InvalidKeyLength)?;
     Ok(kp.sign(data))
 }
 
@@ -1719,10 +1752,10 @@ pub fn init() -> Result<(), CryptoError> {
 /// Short messages are padded aggressively, long messages less so.
 /// File chunks get minimal padding (they're already close to chunk size).
 const PADDING_TIERS: &[(usize, usize)] = &[
-    (64, 1024),      // ≤64 bytes → pad to 1KB (aggressive)
-    (256, 2048),     // ≤256 bytes → pad to 2KB
-    (1024, 4096),    // ≤1KB → pad to 4KB
-    (4096, 8192),    // ≤4KB → pad to 8KB
+    (64, 1024),          // ≤64 bytes → pad to 1KB (aggressive)
+    (256, 2048),         // ≤256 bytes → pad to 2KB
+    (1024, 4096),        // ≤1KB → pad to 4KB
+    (4096, 8192),        // ≤4KB → pad to 8KB
     (usize::MAX, 16384), // >4KB → pad to 16KB
 ];
 
@@ -1781,10 +1814,7 @@ pub fn unpad_message_variable(padded: &[u8]) -> Result<Vec<u8>, CryptoError> {
     if padded.len() < 2 {
         return Err(CryptoError::DecryptionFailed);
     }
-    let pad_len = u16::from_be_bytes([
-        padded[padded.len() - 2],
-        padded[padded.len() - 1],
-    ]) as usize;
+    let pad_len = u16::from_be_bytes([padded[padded.len() - 2], padded[padded.len() - 1]]) as usize;
     if pad_len + 2 > padded.len() {
         return Err(CryptoError::DecryptionFailed);
     }
@@ -1834,16 +1864,23 @@ mod crypto_tests {
         for input in test_cases {
             let padded = pad_message_variable(input);
             let unpadded = unpad_message_variable(&padded).unwrap();
-            assert_eq!(input, &unpadded[..], "roundtrip failed for len={}", input.len());
+            assert_eq!(
+                input,
+                &unpadded[..],
+                "roundtrip failed for len={}",
+                input.len()
+            );
             // Verify padding meets block alignment
             // padded = input + pad_bytes + [pad_len as u16]
             // total should be input.len() + pad_len + 2
-            let pad_len = u16::from_be_bytes([
-                padded[padded.len() - 2],
-                padded[padded.len() - 1],
-            ]) as usize;
-            assert_eq!(padded.len(), input.len() + pad_len + 2,
-                "padding length mismatch for len={}", input.len());
+            let pad_len =
+                u16::from_be_bytes([padded[padded.len() - 2], padded[padded.len() - 1]]) as usize;
+            assert_eq!(
+                padded.len(),
+                input.len() + pad_len + 2,
+                "padding length mismatch for len={}",
+                input.len()
+            );
         }
     }
 
@@ -1856,12 +1893,20 @@ mod crypto_tests {
         let long = pad_message_variable(b"hello world this is a longer message");
         // Both should produce the same total length (2 + pad_len + 2 == 35 + pad_len' + 2)
         // since both round up to the same 1024-byte block.
-        assert_eq!(short.len(), long.len(),
+        assert_eq!(
+            short.len(),
+            long.len(),
             "messages in same tier should produce same padded length: {} vs {}",
-            short.len(), long.len());
+            short.len(),
+            long.len()
+        );
         // The padded length should be a multiple of the tier block size (1024).
-        assert_eq!(short.len() % 1024, 0,
-            "padded length {} not aligned to block 1024", short.len());
+        assert_eq!(
+            short.len() % 1024,
+            0,
+            "padded length {} not aligned to block 1024",
+            short.len()
+        );
     }
 
     #[test]
@@ -1923,7 +1968,10 @@ mod crypto_tests {
 
         keys.ratchet_tx();
         assert_ne!(keys.tx_key, old_tx, "tx key must change after ratchet");
-        assert_eq!(keys.rx_key, old_rx, "rx key must NOT change when ratcheting tx");
+        assert_eq!(
+            keys.rx_key, old_rx,
+            "rx key must NOT change when ratcheting tx"
+        );
 
         keys.ratchet_rx();
         assert_ne!(keys.rx_key, old_rx, "rx key must change after ratchet");
@@ -1996,10 +2044,13 @@ mod crypto_tests {
 
         let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
         let bob_out = x3dh_respond(
-            &ik_bob, &spk, None,
+            &ik_bob,
+            &spk,
+            None,
             &ek_alice.public_key_bytes(),
             &ik_alice.public_key_bytes(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(alice_out.root_key, bob_out.root_key);
         assert_eq!(alice_out.chain_key, bob_out.chain_key);
@@ -2023,10 +2074,13 @@ mod crypto_tests {
 
         let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
         let bob_out = x3dh_respond(
-            &ik_bob, &spk, Some(&opk),
+            &ik_bob,
+            &spk,
+            Some(&opk),
             &ek_alice.public_key_bytes(),
             &ik_alice.public_key_bytes(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(alice_out.root_key, bob_out.root_key);
         assert_eq!(alice_out.chain_key, bob_out.chain_key);
@@ -2050,10 +2104,13 @@ mod crypto_tests {
 
         let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
         let bob_out = x3dh_respond(
-            &ik_bob, &spk, None,
+            &ik_bob,
+            &spk,
+            None,
             &ek_alice.public_key_bytes(),
             &ik_alice.public_key_bytes(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_ne!(alice_out.root_key, bob_out.root_key);
     }
@@ -2076,10 +2133,13 @@ mod crypto_tests {
 
         let alice_out = x3dh_initiate(&ik_alice, &ek_alice, &bundle).unwrap();
         let bob_out = x3dh_respond(
-            &ik_bob, &wrong_spk, None,
+            &ik_bob,
+            &wrong_spk,
+            None,
             &ek_alice.public_key_bytes(),
             &ik_alice.public_key_bytes(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_ne!(alice_out.root_key, bob_out.root_key);
         assert_ne!(alice_out.chain_key, bob_out.chain_key);
@@ -2101,9 +2161,14 @@ mod crypto_tests {
         };
 
         let alice = x3dh_initiate(&ik_alice, &ek_alice, &bundle_no_opk).unwrap();
-        let bob = x3dh_respond(&ik_bob, &spk, None,
+        let bob = x3dh_respond(
+            &ik_bob,
+            &spk,
+            None,
             &ek_alice.public_key_bytes(),
-            &ik_alice.public_key_bytes()).unwrap();
+            &ik_alice.public_key_bytes(),
+        )
+        .unwrap();
         assert_eq!(alice.root_key, bob.root_key);
         assert_eq!(alice.chain_key, bob.chain_key);
     }
@@ -2144,9 +2209,14 @@ mod crypto_tests {
             true,
         );
 
-        let bob_x3dh = x3dh_respond(&ik_bob, &spk, None,
+        let bob_x3dh = x3dh_respond(
+            &ik_bob,
+            &spk,
+            None,
             &ek_alice.public_key_bytes(),
-            &ik_alice.public_key_bytes()).unwrap();
+            &ik_alice.public_key_bytes(),
+        )
+        .unwrap();
         let bob_dr = DoubleRatchet::new(
             X3DHSessionKeys {
                 root_key: bob_x3dh.root_key,
@@ -2165,19 +2235,24 @@ mod crypto_tests {
         let (mut alice, _bob) = make_dr_pair();
         let plaintext = b"Hello, Double Ratchet!";
         let aad = [PacketType::EncryptedMessage.to_byte()];
-        let (ratchet_key, msg_num, nonce, ciphertext) = alice
-            .encrypt(plaintext, &aad, false)
-            .unwrap();
+        let (ratchet_key, msg_num, nonce, ciphertext) =
+            alice.encrypt(plaintext, &aad, false).unwrap();
 
         // Verify the returned values are consistent
         assert!(ratchet_key.is_none(), "no ratchet requested");
         assert_eq!(msg_num, 0, "first message should have number 0");
         assert_eq!(nonce.len(), 24, "XChaCha20-Poly1305 nonce is 24 bytes");
         assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
-        assert_ne!(ciphertext, plaintext, "ciphertext should differ from plaintext");
+        assert_ne!(
+            ciphertext, plaintext,
+            "ciphertext should differ from plaintext"
+        );
 
         // Verify chain advanced
-        assert_eq!(alice.send_message_number, 1, "send message number should advance");
+        assert_eq!(
+            alice.send_message_number, 1,
+            "send message number should advance"
+        );
     }
 
     #[test]
@@ -2186,10 +2261,10 @@ mod crypto_tests {
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
         for msg in [b"msg 1", b"msg 2", b"msg 3"] {
-            let (ratchet_key, msg_num, nonce, ciphertext) = alice
-                .encrypt(msg, &aad, false)
-                .unwrap();
-            let decrypted = bob.decrypt(&ciphertext, &nonce, &aad, msg_num, ratchet_key.as_ref())
+            let (ratchet_key, msg_num, nonce, ciphertext) =
+                alice.encrypt(msg, &aad, false).unwrap();
+            let decrypted = bob
+                .decrypt(&ciphertext, &nonce, &aad, msg_num, ratchet_key.as_ref())
                 .unwrap();
             assert_eq!(&decrypted, msg);
         }
@@ -2215,17 +2290,35 @@ mod crypto_tests {
         let (mut alice, mut bob) = make_dr_pair();
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
-        let results: Vec<_> = (0..3).map(|i| {
-            alice.encrypt(format!("msg {}", i).as_bytes(), &aad, false).unwrap()
-        }).collect();
+        let results: Vec<_> = (0..3)
+            .map(|i| {
+                alice
+                    .encrypt(format!("msg {}", i).as_bytes(), &aad, false)
+                    .unwrap()
+            })
+            .collect();
 
         // result = (rk, msg_num, nonce, ciphertext)
-        let d0 = bob.decrypt(&results[0].3, &results[0].2, &aad,
-                            results[0].1, results[0].0.as_ref()).unwrap();
+        let d0 = bob
+            .decrypt(
+                &results[0].3,
+                &results[0].2,
+                &aad,
+                results[0].1,
+                results[0].0.as_ref(),
+            )
+            .unwrap();
         assert_eq!(&d0, b"msg 0");
 
-        let d2 = bob.decrypt(&results[2].3, &results[2].2, &aad,
-                            results[2].1, results[2].0.as_ref()).unwrap();
+        let d2 = bob
+            .decrypt(
+                &results[2].3,
+                &results[2].2,
+                &aad,
+                results[2].1,
+                results[2].0.as_ref(),
+            )
+            .unwrap();
         assert_eq!(&d2, b"msg 2");
     }
 
@@ -2239,7 +2332,8 @@ mod crypto_tests {
             let (rk, msg_num, nonce, ciphertext) = alice
                 .encrypt(format!("msg {}", i).as_bytes(), &aad, do_ratchet)
                 .unwrap();
-            let decrypted = bob.decrypt(&ciphertext, &nonce, &aad, msg_num, rk.as_ref())
+            let decrypted = bob
+                .decrypt(&ciphertext, &nonce, &aad, msg_num, rk.as_ref())
                 .unwrap();
             assert_eq!(&decrypted, format!("msg {}", i).as_bytes());
         }
@@ -2264,18 +2358,16 @@ mod crypto_tests {
             chain_key: [0xBB; 32],
         };
         // Responder role: send_chain_key = None.
-        let mut dr = DoubleRatchet::new(
-            x3dh,
-            EphemeralKeypair::generate(),
-            [0xCC; 32],
-            false,
-        );
+        let mut dr = DoubleRatchet::new(x3dh, EphemeralKeypair::generate(), [0xCC; 32], false);
         let aad = [PacketType::EncryptedMessage.to_byte()];
         // Pre-fix this returned "no send chain key", making the responder's
         // FIRST outbound message in any X3DH session impossible. The forced
         // DH ratchet must now establish the send chain (rk present).
         let (rk, _num, _n, _c) = dr.encrypt(b"test", &aad, false).unwrap();
-        assert!(rk.is_some(), "first responder send must carry a new ratchet key");
+        assert!(
+            rk.is_some(),
+            "first responder send must carry a new ratchet key"
+        );
     }
 
     #[test]
@@ -2285,12 +2377,7 @@ mod crypto_tests {
             root_key: [0xAA; 32],
             chain_key: [0xBB; 32],
         };
-        let mut dr = DoubleRatchet::new(
-            x3dh,
-            EphemeralKeypair::generate(),
-            [0xCC; 32],
-            true,
-        );
+        let mut dr = DoubleRatchet::new(x3dh, EphemeralKeypair::generate(), [0xCC; 32], true);
         let aad = [PacketType::EncryptedMessage.to_byte()];
         let result = dr.decrypt(b"ciphertext", b"nonce", &aad, 0, None);
         assert!(result.is_err());
@@ -2333,10 +2420,15 @@ mod crypto_tests {
 
         // Attacker-injected frame: bogus DH key, claims to start a new chain.
         let nonce = vec![0x11u8; 24];
-        assert!(
-            bob.decrypt(b"forged ciphertext", &nonce, &aad, 0, Some(&fake_ratchet_pub))
-                .is_err()
-        );
+        assert!(bob
+            .decrypt(
+                b"forged ciphertext",
+                &nonce,
+                &aad,
+                0,
+                Some(&fake_ratchet_pub)
+            )
+            .is_err());
 
         // Genuine ratcheted message from Alice must still decrypt fine.
         let (rk, num1, n1, c1) = alice.encrypt(b"after attack", &aad, true).unwrap();
@@ -2359,20 +2451,30 @@ mod crypto_tests {
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
         let sent: Vec<_> = (0..3)
-            .map(|i| alice.encrypt(format!("delayed {}", i).as_bytes(), &aad, false).unwrap())
+            .map(|i| {
+                alice
+                    .encrypt(format!("delayed {}", i).as_bytes(), &aad, false)
+                    .unwrap()
+            })
             .collect();
 
         // Deliver 0 and 2 — message 1's key is now cached.
-        bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref()).unwrap();
-        bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref()).unwrap();
+        bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref())
+            .unwrap();
+        bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref())
+            .unwrap();
 
         // Corrupted attempt for the delayed message 1 must fail...
         let mut corrupt = sent[1].3.clone();
         corrupt[0] ^= 0xFF;
-        assert!(bob.decrypt(&corrupt, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).is_err());
+        assert!(bob
+            .decrypt(&corrupt, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref())
+            .is_err());
 
         // ...and the cached key must survive for the genuine frame.
-        let decrypted = bob.decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).unwrap();
+        let decrypted = bob
+            .decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref())
+            .unwrap();
         assert_eq!(&decrypted, b"delayed 1");
     }
 
@@ -2401,7 +2503,10 @@ mod crypto_tests {
         }
 
         // The genuine frame still decrypts — the guard rejected, not corrupted.
-        assert_eq!(&bob.decrypt(&c, &n, &aad, num, rk.as_ref()).unwrap(), b"payload");
+        assert_eq!(
+            &bob.decrypt(&c, &n, &aad, num, rk.as_ref()).unwrap(),
+            b"payload"
+        );
     }
 
     /// The skipped-key cache path calls the same helper and must be equally
@@ -2412,23 +2517,32 @@ mod crypto_tests {
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
         let sent: Vec<_> = (0..3)
-            .map(|i| alice.encrypt(format!("msg {}", i).as_bytes(), &aad, false).unwrap())
+            .map(|i| {
+                alice
+                    .encrypt(format!("msg {}", i).as_bytes(), &aad, false)
+                    .unwrap()
+            })
             .collect();
 
         // Deliver 0 and 2 → message 1's key is cached as a skipped key.
-        bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref()).unwrap();
-        bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref()).unwrap();
+        bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref())
+            .unwrap();
+        bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref())
+            .unwrap();
 
         // A malformed-nonce replay of the cached message must fail cleanly and
         // leave the cached key intact for the real frame.
-        assert!(bob.decrypt(&sent[1].3, &[0u8; 5], &aad, sent[1].1, sent[1].0.as_ref()).is_err());
+        assert!(bob
+            .decrypt(&sent[1].3, &[0u8; 5], &aad, sent[1].1, sent[1].0.as_ref())
+            .is_err());
         assert!(
             bob.skipped_keys.contains_key(&sent[1].1),
             "a rejected (bad-nonce) attempt must not consume the cached key"
         );
 
-        let decrypted =
-            bob.decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).unwrap();
+        let decrypted = bob
+            .decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref())
+            .unwrap();
         assert_eq!(&decrypted, b"msg 1");
     }
 
@@ -2454,7 +2568,10 @@ mod crypto_tests {
 
         // The session is unharmed and continues to work.
         let (rk, num, nonce, ct) = alice.encrypt(b"after", &aad, true).unwrap();
-        assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(), b"after");
+        assert_eq!(
+            &bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(),
+            b"after"
+        );
     }
 
     /// Regression: `X25519IdentityKeypair::from_bytes` used to trust the
@@ -2533,16 +2650,40 @@ mod crypto_tests {
         let small_order: [[u8; 32]; 8] = [
             // identity (y = 1)
             [
-                0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0,
+                0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
             ],
             [0; 32],
-            [0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
-            [0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
-            [0xee, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
-            [0xcd, 0xeb, 0x75, 0x57, 0x7a, 0xb1, 0x0b, 0x85, 0x5e, 0x0a, 0xb6, 0x57, 0x62, 0xc1, 0x21, 0x7d, 0x1e, 0x01, 0x5c, 0x89, 0x47, 0x9d, 0x2a, 0xd4, 0xa4, 0x0c, 0x81, 0xf5, 0x47, 0x74, 0x05, 0x1c],
-            [0x2c, 0x14, 0x8a, 0xa8, 0x85, 0x6f, 0x4e, 0x48, 0x5e, 0x37, 0x4f, 0xae, 0x4a, 0xf7, 0xad, 0x5f, 0x22, 0x1c, 0xa6, 0x4b, 0xed, 0x0d, 0x63, 0x14, 0xf0, 0xfd, 0x5c, 0x22, 0x6b, 0x7e, 0xbd, 0x24],
-            [0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
+            [
+                0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0x7f,
+            ],
+            [
+                0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0x7f,
+            ],
+            [
+                0xee, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0x7f,
+            ],
+            [
+                0xcd, 0xeb, 0x75, 0x57, 0x7a, 0xb1, 0x0b, 0x85, 0x5e, 0x0a, 0xb6, 0x57, 0x62, 0xc1,
+                0x21, 0x7d, 0x1e, 0x01, 0x5c, 0x89, 0x47, 0x9d, 0x2a, 0xd4, 0xa4, 0x0c, 0x81, 0xf5,
+                0x47, 0x74, 0x05, 0x1c,
+            ],
+            [
+                0x2c, 0x14, 0x8a, 0xa8, 0x85, 0x6f, 0x4e, 0x48, 0x5e, 0x37, 0x4f, 0xae, 0x4a, 0xf7,
+                0xad, 0x5f, 0x22, 0x1c, 0xa6, 0x4b, 0xed, 0x0d, 0x63, 0x14, 0xf0, 0xfd, 0x5c, 0x22,
+                0x6b, 0x7e, 0xbd, 0x24,
+            ],
+            [
+                0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0x7f,
+            ],
         ];
 
         for (i, key) in small_order.iter().enumerate() {
@@ -2646,7 +2787,10 @@ mod crypto_tests {
 
     /// Helper: decode a hex string into a 22-byte array (RFC A.1/A.3 IKM).
     fn hex_to_22(s: &str) -> [u8; 22] {
-        hex::decode(s).expect("valid hex").try_into().expect("22 bytes")
+        hex::decode(s)
+            .expect("valid hex")
+            .try_into()
+            .expect("22 bytes")
     }
 
     /// The `DRHeader` travels in cleartext, so folding it into the AEAD's
@@ -2698,7 +2842,10 @@ mod crypto_tests {
         {
             let (mut alice, mut bob) = make_dr_pair();
             let (_, num, nonce, ct) = alice.encrypt(b"payload", &aad, false).unwrap();
-            assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, None).unwrap(), b"payload");
+            assert_eq!(
+                &bob.decrypt(&ct, &nonce, &aad, num, None).unwrap(),
+                b"payload"
+            );
         }
 
         // Replay the same ciphertext under a different message number.
@@ -2710,7 +2857,10 @@ mod crypto_tests {
                 "a rewritten message number must be rejected"
             );
             // The genuine frame is unaffected.
-            assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, None).unwrap(), b"payload");
+            assert_eq!(
+                &bob.decrypt(&ct, &nonce, &aad, num, None).unwrap(),
+                b"payload"
+            );
         }
     }
 
@@ -2721,41 +2871,78 @@ mod crypto_tests {
     // proving wire format, DB ciphertext, and signatures stay identical.
 
     /// Fixed-input AEAD ciphertext captured from libsodium XChaCha20-Poly1305-IETF.
-    const GOLDEN_AEAD_CT: [u8; 43] = [193, 206, 201, 199, 160, 206, 171, 164, 151, 8, 132, 48, 103, 91, 138, 209, 163, 249, 123, 214, 226, 198, 36, 217, 205, 56, 230, 196, 38, 124, 39, 152, 10, 188, 125, 4, 44, 110, 140, 117, 24, 229, 4]; // libsodium-captured
+    const GOLDEN_AEAD_CT: [u8; 43] = [
+        193, 206, 201, 199, 160, 206, 171, 164, 151, 8, 132, 48, 103, 91, 138, 209, 163, 249, 123,
+        214, 226, 198, 36, 217, 205, 56, 230, 196, 38, 124, 39, 152, 10, 188, 125, 4, 44, 110, 140,
+        117, 24, 229, 4,
+    ]; // libsodium-captured
     /// Ed25519 public key derived from GOLDEN_SEED (libsodium).
-    const GOLDEN_ED_PUB: [u8; 32] = [3, 161, 7, 191, 243, 206, 16, 190, 29, 112, 221, 24, 231, 75, 192, 153, 103, 228, 214, 48, 155, 165, 13, 95, 29, 220, 134, 100, 18, 85, 49, 184]; // libsodium-captured
+    const GOLDEN_ED_PUB: [u8; 32] = [
+        3, 161, 7, 191, 243, 206, 16, 190, 29, 112, 221, 24, 231, 75, 192, 153, 103, 228, 214, 48,
+        155, 165, 13, 95, 29, 220, 134, 100, 18, 85, 49, 184,
+    ]; // libsodium-captured
     /// Ed25519 detached signature over b"m2m golden message" with GOLDEN_SEED key.
-    const GOLDEN_ED_SIG: [u8; 64] = [198, 233, 112, 99, 236, 203, 64, 230, 223, 187, 49, 32, 1, 107, 230, 149, 210, 6, 19, 251, 188, 43, 220, 1, 59, 172, 16, 77, 5, 168, 153, 155, 35, 66, 154, 19, 98, 115, 28, 124, 141, 191, 127, 60, 38, 15, 35, 71, 159, 227, 196, 149, 160, 136, 15, 15, 63, 138, 20, 0, 190, 83, 91, 0]; // libsodium-captured
+    const GOLDEN_ED_SIG: [u8; 64] = [
+        198, 233, 112, 99, 236, 203, 64, 230, 223, 187, 49, 32, 1, 107, 230, 149, 210, 6, 19, 251,
+        188, 43, 220, 1, 59, 172, 16, 77, 5, 168, 153, 155, 35, 66, 154, 19, 98, 115, 28, 124, 141,
+        191, 127, 60, 38, 15, 35, 71, 159, 227, 196, 149, 160, 136, 15, 15, 63, 138, 20, 0, 190,
+        83, 91, 0,
+    ]; // libsodium-captured
     /// X25519 shared secret for GOLDEN_X_SCALAR — GOLDEN_X_POINT (libsodium).
-    const GOLDEN_X25519_SHARED: [u8; 32] = [177, 42, 42, 212, 203, 150, 77, 92, 253, 252, 123, 110, 38, 38, 230, 27, 52, 208, 38, 25, 223, 160, 78, 184, 24, 178, 184, 3, 222, 60, 165, 112]; // libsodium-captured
+    const GOLDEN_X25519_SHARED: [u8; 32] = [
+        177, 42, 42, 212, 203, 150, 77, 92, 253, 252, 123, 110, 38, 38, 230, 27, 52, 208, 38, 25,
+        223, 160, 78, 184, 24, 178, 184, 3, 222, 60, 165, 112,
+    ]; // libsodium-captured
 
-    const GOLDEN_SEED: [u8; 32] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31];
+    const GOLDEN_SEED: [u8; 32] = [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31,
+    ];
     const GOLDEN_AEAD_KEY: [u8; 32] = [0x42u8; 32];
     const GOLDEN_AEAD_NONCE: [u8; 24] = [
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+        0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
     ];
     const GOLDEN_AEAD_AAD: &[u8] = b"m2m-golden-aad";
     const GOLDEN_AEAD_PT: &[u8] = b"M2M golden vector plaintext";
 
-
     #[test]
     fn test_golden_vectors_post_migration() {
         let kp = IdentityKeypair::from_seed(&GOLDEN_SEED).unwrap();
-        assert_eq!(kp.public_key_bytes(), GOLDEN_ED_PUB, "Ed25519 public key mismatch");
-        assert_eq!(kp.sign(b"m2m golden message"), GOLDEN_ED_SIG, "Ed25519 signature mismatch");
+        assert_eq!(
+            kp.public_key_bytes(),
+            GOLDEN_ED_PUB,
+            "Ed25519 public key mismatch"
+        );
+        assert_eq!(
+            kp.sign(b"m2m golden message"),
+            GOLDEN_ED_SIG,
+            "Ed25519 signature mismatch"
+        );
 
         let scalar: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0xA5);
         let point: [u8; 32] = core::array::from_fn(|i| (i as u8) ^ 0x5A);
-        assert_eq!(golden::x25519_raw(&scalar, &point), GOLDEN_X25519_SHARED, "X25519 shared mismatch");
+        assert_eq!(
+            golden::x25519_raw(&scalar, &point),
+            GOLDEN_X25519_SHARED,
+            "X25519 shared mismatch"
+        );
 
-        let ct = golden::aead_seal(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, GOLDEN_AEAD_PT, GOLDEN_AEAD_AAD);
+        let ct = golden::aead_seal(
+            &GOLDEN_AEAD_KEY,
+            &GOLDEN_AEAD_NONCE,
+            GOLDEN_AEAD_PT,
+            GOLDEN_AEAD_AAD,
+        );
         assert_eq!(ct.len(), GOLDEN_AEAD_CT.len());
-        assert!(ct.iter().zip(GOLDEN_AEAD_CT.iter()).all(|(a, b)| a == b), "AEAD ciphertext mismatch");
+        assert!(
+            ct.iter().zip(GOLDEN_AEAD_CT.iter()).all(|(a, b)| a == b),
+            "AEAD ciphertext mismatch"
+        );
 
         // And the decrypt direction opens the libsodium-produced ciphertext.
-        let pt = golden::aead_open(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, &ct, GOLDEN_AEAD_AAD).unwrap();
+        let pt =
+            golden::aead_open(&GOLDEN_AEAD_KEY, &GOLDEN_AEAD_NONCE, &ct, GOLDEN_AEAD_AAD).unwrap();
         assert_eq!(pt, GOLDEN_AEAD_PT);
     }
 
@@ -2763,22 +2950,21 @@ mod crypto_tests {
     #[test]
     fn test_rfc8032_ed25519_vector() {
         let seed: [u8; 32] = [
-            0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4,
-            0x92, 0xec, 0x2c, 0xc4, 0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19,
-            0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60,
+            0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec,
+            0x2c, 0xc4, 0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03,
+            0x1c, 0xae, 0x7f, 0x60,
         ];
         let expected_pub: [u8; 32] = [
-            0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7, 0xd5, 0x4b, 0xfe, 0xd3,
-            0xc9, 0x64, 0x07, 0x3a, 0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25,
-            0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
+            0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7, 0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64,
+            0x07, 0x3a, 0x0e, 0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25, 0xaf, 0x02, 0x1a, 0x68,
+            0xf7, 0x07, 0x51, 0x1a,
         ];
         let expected_sig: [u8; 64] = [
-            0xe5, 0x56, 0x43, 0x00, 0xc3, 0x60, 0xac, 0x72, 0x90, 0x86, 0xe2, 0xcc,
-            0x80, 0x6e, 0x82, 0x8a, 0x84, 0x87, 0x7f, 0x1e, 0xb8, 0xe5, 0xd9, 0x74,
-            0xd8, 0x73, 0xe0, 0x65, 0x22, 0x49, 0x01, 0x55, 0x5f, 0xb8, 0x82, 0x15,
-            0x90, 0xa3, 0x3b, 0xac, 0xc6, 0x1e, 0x39, 0x70, 0x1c, 0xf9, 0xb4, 0x6b,
-            0xd2, 0x5b, 0xf5, 0xf0, 0x59, 0x5b, 0xbe, 0x24, 0x65, 0x51, 0x41, 0x43,
-            0x8e, 0x7a, 0x10, 0x0b,
+            0xe5, 0x56, 0x43, 0x00, 0xc3, 0x60, 0xac, 0x72, 0x90, 0x86, 0xe2, 0xcc, 0x80, 0x6e,
+            0x82, 0x8a, 0x84, 0x87, 0x7f, 0x1e, 0xb8, 0xe5, 0xd9, 0x74, 0xd8, 0x73, 0xe0, 0x65,
+            0x22, 0x49, 0x01, 0x55, 0x5f, 0xb8, 0x82, 0x15, 0x90, 0xa3, 0x3b, 0xac, 0xc6, 0x1e,
+            0x39, 0x70, 0x1c, 0xf9, 0xb4, 0x6b, 0xd2, 0x5b, 0xf5, 0xf0, 0x59, 0x5b, 0xbe, 0x24,
+            0x65, 0x51, 0x41, 0x43, 0x8e, 0x7a, 0x10, 0x0b,
         ];
         let kp = IdentityKeypair::from_seed(&seed).unwrap();
         assert_eq!(kp.public_key_bytes(), expected_pub);
@@ -2790,19 +2976,19 @@ mod crypto_tests {
     #[test]
     fn test_rfc7748_x25519_vector() {
         let scalar: [u8; 32] = [
-            0xa5, 0x46, 0xe3, 0x6b, 0xf0, 0x52, 0x7c, 0x9d, 0x3b, 0x16, 0x15, 0x4b,
-            0x82, 0x46, 0x5e, 0xdd, 0x62, 0x14, 0x4c, 0x0a, 0xc1, 0xfc, 0x5a, 0x18,
-            0x50, 0x6a, 0x22, 0x44, 0xba, 0x44, 0x9a, 0xc4,
+            0xa5, 0x46, 0xe3, 0x6b, 0xf0, 0x52, 0x7c, 0x9d, 0x3b, 0x16, 0x15, 0x4b, 0x82, 0x46,
+            0x5e, 0xdd, 0x62, 0x14, 0x4c, 0x0a, 0xc1, 0xfc, 0x5a, 0x18, 0x50, 0x6a, 0x22, 0x44,
+            0xba, 0x44, 0x9a, 0xc4,
         ];
         let point: [u8; 32] = [
-            0xe6, 0xdb, 0x68, 0x67, 0x58, 0x30, 0x30, 0xdb, 0x35, 0x94, 0xc1, 0xa4,
-            0x24, 0xb1, 0x5f, 0x7c, 0x72, 0x66, 0x24, 0xec, 0x26, 0xb3, 0x35, 0x3b,
-            0x10, 0xa9, 0x03, 0xa6, 0xd0, 0xab, 0x1c, 0x4c,
+            0xe6, 0xdb, 0x68, 0x67, 0x58, 0x30, 0x30, 0xdb, 0x35, 0x94, 0xc1, 0xa4, 0x24, 0xb1,
+            0x5f, 0x7c, 0x72, 0x66, 0x24, 0xec, 0x26, 0xb3, 0x35, 0x3b, 0x10, 0xa9, 0x03, 0xa6,
+            0xd0, 0xab, 0x1c, 0x4c,
         ];
         let expected: [u8; 32] = [
-            0xc3, 0xda, 0x55, 0x37, 0x9d, 0xe9, 0xc6, 0x90, 0x8e, 0x94, 0xea, 0x4d,
-            0xf2, 0x8d, 0x08, 0x4f, 0x32, 0xec, 0xcf, 0x03, 0x49, 0x1c, 0x71, 0xf7,
-            0x54, 0xb4, 0x07, 0x55, 0x77, 0xa2, 0x85, 0x52,
+            0xc3, 0xda, 0x55, 0x37, 0x9d, 0xe9, 0xc6, 0x90, 0x8e, 0x94, 0xea, 0x4d, 0xf2, 0x8d,
+            0x08, 0x4f, 0x32, 0xec, 0xcf, 0x03, 0x49, 0x1c, 0x71, 0xf7, 0x54, 0xb4, 0x07, 0x55,
+            0x77, 0xa2, 0x85, 0x52,
         ];
         assert_eq!(golden::x25519_raw(&scalar, &point), expected);
     }

@@ -55,9 +55,7 @@ pub async fn set_relay_config(
 
 /// Get the current relay connection state (for frontend diagnostics).
 #[tauri::command]
-pub async fn get_relay_state(
-    state: State<'_, Arc<AppState>>,
-) -> Result<RelayState, String> {
+pub async fn get_relay_state(state: State<'_, Arc<AppState>>) -> Result<RelayState, String> {
     let relay_state = state.relay_state.read().await;
     Ok(relay_state.clone())
 }

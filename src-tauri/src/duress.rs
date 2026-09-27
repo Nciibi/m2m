@@ -53,17 +53,29 @@ pub fn register(key_store: &KeyStore, passphrase: &str) -> Result<(), String> {
     let key = derive_storage_key_from_passphrase(passphrase, &salt)
         .map_err(|e| format!("duress hash derivation failed: {e}"))?;
     let now = chrono::Utc::now().timestamp().to_string();
-    key_store.set_meta(META_DURESS_SALT, &hex::encode(salt)).map_err(|e| e.to_string())?;
-    key_store.set_meta(META_DURESS_HASH, &hex::encode(key.as_bytes())).map_err(|e| e.to_string())?;
-    key_store.set_meta(META_DURESS_SET_AT, &now).map_err(|e| e.to_string())?;
+    key_store
+        .set_meta(META_DURESS_SALT, &hex::encode(salt))
+        .map_err(|e| e.to_string())?;
+    key_store
+        .set_meta(META_DURESS_HASH, &hex::encode(key.as_bytes()))
+        .map_err(|e| e.to_string())?;
+    key_store
+        .set_meta(META_DURESS_SET_AT, &now)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 /// Remove the duress registration.
 pub fn clear(key_store: &KeyStore) -> Result<(), String> {
-    key_store.set_meta(META_DURESS_HASH, "").map_err(|e| e.to_string())?;
-    key_store.set_meta(META_DURESS_SALT, "").map_err(|e| e.to_string())?;
-    key_store.set_meta(META_DURESS_SET_AT, "").map_err(|e| e.to_string())?;
+    key_store
+        .set_meta(META_DURESS_HASH, "")
+        .map_err(|e| e.to_string())?;
+    key_store
+        .set_meta(META_DURESS_SALT, "")
+        .map_err(|e| e.to_string())?;
+    key_store
+        .set_meta(META_DURESS_SET_AT, "")
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 

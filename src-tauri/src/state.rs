@@ -52,12 +52,12 @@ pub struct PeerConnection {
 /// Transfer state machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TransferState {
-    Pending,         // Waiting for accept (sender) / awaiting chunks (receiver)
-    Transferring,    // Chunks actively flowing
-    Paused,          // User-initiated pause
-    Completed,       // File fully transferred and verified
-    Failed,          // Irrecoverable error (disconnect, hash mismatch)
-    Cancelled,       // User-initiated cancel or peer cancelled
+    Pending,      // Waiting for accept (sender) / awaiting chunks (receiver)
+    Transferring, // Chunks actively flowing
+    Paused,       // User-initiated pause
+    Completed,    // File fully transferred and verified
+    Failed,       // Irrecoverable error (disconnect, hash mismatch)
+    Cancelled,    // User-initiated cancel or peer cancelled
 }
 
 impl std::fmt::Display for TransferState {
@@ -109,8 +109,7 @@ pub struct OutgoingFileTransfer {
     pub last_activity_at: u64,
 }
 
-impl OutgoingFileTransfer {
-}
+impl OutgoingFileTransfer {}
 
 /// State for an in-progress file transfer (receiving side).
 ///
@@ -161,8 +160,7 @@ pub struct IncomingFileTransfer {
     pub error: Option<String>,
 }
 
-impl IncomingFileTransfer {
-}
+impl IncomingFileTransfer {}
 
 /// Transfer queue with concurrency limits.
 ///
@@ -204,12 +202,13 @@ impl TransferQueue {
 
     /// Try to start the next queued transfer. Returns the transfer_id if one was started.
     pub fn dequeue(&mut self) -> Option<String> {
-        if !self.can_start() { return None; }
+        if !self.can_start() {
+            return None;
+        }
         let id = self.queue.pop_front()?;
         self.active.insert(id.clone());
         Some(id)
     }
-
 }
 
 /// A port forwarding rule the user configured manually on their router.
@@ -487,7 +486,9 @@ impl AppState {
     /// DHT announce, Tor/portal checks).
     pub async fn ensure_not_air_gapped(&self) -> Result<(), String> {
         if self.security_config.read().await.air_gap_mode {
-            return Err("air-gap mode is enabled — this internet-facing operation is blocked".to_string());
+            return Err(
+                "air-gap mode is enabled — this internet-facing operation is blocked".to_string(),
+            );
         }
         Ok(())
     }
@@ -539,8 +540,7 @@ impl AppState {
         }
 
         // Update candidates from STUN results
-        let reflexive_candidates =
-            crate::candidate::gather_reflexive_candidates(&multi);
+        let reflexive_candidates = crate::candidate::gather_reflexive_candidates(&multi);
         let host_candidates = crate::candidate::gather_host_candidates();
         let ipv6_candidates = crate::candidate::gather_ipv6_candidates();
 

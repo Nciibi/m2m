@@ -13,13 +13,10 @@
 use std::collections::HashMap;
 
 use crate::crypto::{
-    self, derive_receiver_chain, generate_sender_key_pair,
-    generate_sender_signing_keypair, sign_group_message,
-    verify_group_message_signature, SenderKeyChain,
+    self, derive_receiver_chain, generate_sender_key_pair, generate_sender_signing_keypair,
+    sign_group_message, verify_group_message_signature, SenderKeyChain,
 };
-use crate::protocol::{
-    GroupEncryptedMessageData, GroupSenderKeyData,
-};
+use crate::protocol::{GroupEncryptedMessageData, GroupSenderKeyData};
 
 /// Role a member holds in a group.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -107,12 +104,7 @@ impl Drop for Group {
 impl Group {
     /// Create a new group as the admin/creator.
     /// Generates our Sender Key chain and signing key.
-    pub fn new(
-        group_id: String,
-        name: String,
-        created_at: u64,
-        our_peer_key_hex: String,
-    ) -> Self {
+    pub fn new(group_id: String, name: String, created_at: u64, our_peer_key_hex: String) -> Self {
         // Generate sender key pair for ourselves
         let (sending_chain, initial_chain_key) = generate_sender_key_pair();
         let (signing_key, verification_key) = generate_sender_signing_keypair();
@@ -205,10 +197,7 @@ impl Group {
 
     /// Decrypt a group message from another member.
     /// Uses the receiver chain for that sender to derive the message key.
-    pub fn decrypt_message(
-        &mut self,
-        data: &GroupEncryptedMessageData,
-    ) -> Result<Vec<u8>, String> {
+    pub fn decrypt_message(&mut self, data: &GroupEncryptedMessageData) -> Result<Vec<u8>, String> {
         // Verify signature first
         let verification_key = self
             .verification_keys
@@ -265,8 +254,8 @@ impl Group {
             tentative.commit(chain);
         }
 
-        let plaintext = crypto::unpad_message_variable(&plaintext)
-            .map_err(|e| format!("unpad failed: {e}"))?;
+        let plaintext =
+            crypto::unpad_message_variable(&plaintext).map_err(|e| format!("unpad failed: {e}"))?;
 
         Ok(plaintext)
     }
@@ -289,9 +278,7 @@ impl Group {
     /// Rotate our own Sender Key (after member removal).
     /// Generates a new sending chain + signing keypair.
     /// Returns the new initial chain key and verification key to distribute.
-    pub fn rotate_own_sender_key(
-        &mut self,
-    ) -> Result<([u8; 32], [u8; 32]), String> {
+    pub fn rotate_own_sender_key(&mut self) -> Result<([u8; 32], [u8; 32]), String> {
         let (sending_chain, initial_chain_key) = generate_sender_key_pair();
         let (signing_key, verification_key) = generate_sender_signing_keypair();
         self.our_sending_chain = Some(sending_chain);
@@ -327,9 +314,7 @@ impl Group {
 /// Ed25519 identity within a specific group. The private `signing_key` field
 /// is deliberately excluded — it must always be None under model v2.
 pub fn sender_key_bundle_sign_bytes(data: &GroupSenderKeyData) -> Vec<u8> {
-    let mut b = Vec::with_capacity(
-        8 + data.group_id.len() + data.sender_peer_key_hex.len() + 64,
-    );
+    let mut b = Vec::with_capacity(8 + data.group_id.len() + data.sender_peer_key_hex.len() + 64);
     b.extend_from_slice(b"M2M-GSK2");
     b.extend_from_slice(data.group_id.as_bytes());
     b.extend_from_slice(data.sender_peer_key_hex.as_bytes());
@@ -416,10 +401,7 @@ impl GroupManager {
         _our_peer_key_hex: &str,
         added_at: u64,
     ) -> Result<Vec<GroupSenderKeyData>, String> {
-        let group = self
-            .groups
-            .get_mut(group_id)
-            .ok_or("group not found")?;
+        let group = self.groups.get_mut(group_id).ok_or("group not found")?;
 
         if group.is_member(new_member_key_hex) {
             return Err("member already in group".to_string());
@@ -508,10 +490,7 @@ impl GroupManager {
         removed_key_hex: &str,
         our_peer_key_hex: &str,
     ) -> Result<Vec<(String, GroupSenderKeyData)>, String> {
-        let group = self
-            .groups
-            .get_mut(group_id)
-            .ok_or("group not found")?;
+        let group = self.groups.get_mut(group_id).ok_or("group not found")?;
 
         // Verify we're admin
         if !group.is_admin(our_peer_key_hex) {
@@ -557,15 +536,8 @@ impl GroupManager {
     }
 
     /// Handle a member leaving voluntarily.
-    pub fn leave_group(
-        &mut self,
-        group_id: &str,
-        leaving_key_hex: &str,
-    ) -> Result<(), String> {
-        let group = self
-            .groups
-            .get_mut(group_id)
-            .ok_or("group not found")?;
+    pub fn leave_group(&mut self, group_id: &str, leaving_key_hex: &str) -> Result<(), String> {
+        let group = self.groups.get_mut(group_id).ok_or("group not found")?;
 
         let pos = group
             .members
@@ -622,7 +594,9 @@ impl GroupManager {
             .get_mut(&data.group_id)
             .ok_or("group not found")?;
 
-        let is_new = !group.verification_keys.contains_key(&data.sender_peer_key_hex)
+        let is_new = !group
+            .verification_keys
+            .contains_key(&data.sender_peer_key_hex)
             && !group.is_member(&data.sender_peer_key_hex);
 
         group.store_receiver_key(
@@ -670,10 +644,7 @@ impl GroupManager {
 
     /// Update group name.
     pub fn update_group_name(&mut self, group_id: &str, new_name: &str) -> Result<(), String> {
-        let group = self
-            .groups
-            .get_mut(group_id)
-            .ok_or("group not found")?;
+        let group = self.groups.get_mut(group_id).ok_or("group not found")?;
         group.name = new_name.to_string();
         Ok(())
     }
@@ -744,7 +715,10 @@ mod group_tests {
         // members generate their own keys locally).
         assert_eq!(bundles.len(), 2);
         for (_, b) in &bundles {
-            assert!(b.signing_key.is_none(), "private keys must never be shipped");
+            assert!(
+                b.signing_key.is_none(),
+                "private keys must never be shipped"
+            );
         }
 
         let group = gm.get_group("group-1").unwrap();
@@ -958,9 +932,7 @@ mod group_tests {
         let plaintext = b"Hello group!";
         let encrypted = {
             let group = gm.get_group_mut("g1").unwrap();
-            group
-                .encrypt_message("alice", plaintext)
-                .unwrap()
+            group.encrypt_message("alice", plaintext).unwrap()
         };
 
         // Bob (via receiver chain) decrypts
@@ -1006,7 +978,14 @@ mod group_tests {
     #[test]
     fn test_forged_high_message_number_does_not_desync_receiver_chain() {
         let mut gm = make_group_manager();
-        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        gm.create_group(
+            "g1".into(),
+            "G".into(),
+            100,
+            "alice".into(),
+            &["bob".into()],
+        )
+        .unwrap();
         {
             let group = gm.get_group_mut("g1").unwrap();
             let init_key = group.our_initial_chain_key.clone().unwrap();
@@ -1020,7 +999,10 @@ mod group_tests {
             g.encrypt_message("alice", b"hello 0").unwrap()
         };
         assert_eq!(
-            gm.get_group_mut("g1").unwrap().decrypt_message(&genuine).unwrap(),
+            gm.get_group_mut("g1")
+                .unwrap()
+                .decrypt_message(&genuine)
+                .unwrap(),
             b"hello 0"
         );
 
@@ -1052,7 +1034,10 @@ mod group_tests {
             forged.signature = sign_group_message(&sk, &sign_data).unwrap();
         }
         assert!(
-            gm.get_group_mut("g1").unwrap().decrypt_message(&forged).is_err(),
+            gm.get_group_mut("g1")
+                .unwrap()
+                .decrypt_message(&forged)
+                .is_err(),
             "forged frame must be rejected"
         );
 
@@ -1079,7 +1064,10 @@ mod group_tests {
             g.encrypt_message("alice", b"hello 1").unwrap()
         };
         assert_eq!(
-            gm.get_group_mut("g1").unwrap().decrypt_message(&next).unwrap(),
+            gm.get_group_mut("g1")
+                .unwrap()
+                .decrypt_message(&next)
+                .unwrap(),
             b"hello 1",
             "a rejected forgery must not desync the receiver chain"
         );
@@ -1091,7 +1079,14 @@ mod group_tests {
     #[test]
     fn test_absurd_gap_rejected_without_deriving() {
         let mut gm = make_group_manager();
-        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        gm.create_group(
+            "g1".into(),
+            "G".into(),
+            100,
+            "alice".into(),
+            &["bob".into()],
+        )
+        .unwrap();
         {
             let g = gm.get_group_mut("g1").unwrap();
             let k = g.our_initial_chain_key.clone().unwrap();
@@ -1118,7 +1113,11 @@ mod group_tests {
             forged.signature = sign_group_message(&sk, &sign_data).unwrap();
         }
 
-        assert!(gm.get_group_mut("g1").unwrap().decrypt_message(&forged).is_err());
+        assert!(gm
+            .get_group_mut("g1")
+            .unwrap()
+            .decrypt_message(&forged)
+            .is_err());
         assert_eq!(
             gm.get_group("g1")
                 .unwrap()
@@ -1138,7 +1137,14 @@ mod group_tests {
     #[test]
     fn test_group_message_replay_after_success_is_rejected() {
         let mut gm = make_group_manager();
-        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        gm.create_group(
+            "g1".into(),
+            "G".into(),
+            100,
+            "alice".into(),
+            &["bob".into()],
+        )
+        .unwrap();
         {
             let g = gm.get_group_mut("g1").unwrap();
             let k = g.our_initial_chain_key.clone().unwrap();
@@ -1151,13 +1157,19 @@ mod group_tests {
             g.encrypt_message("alice", b"secret").unwrap()
         };
         assert_eq!(
-            gm.get_group_mut("g1").unwrap().decrypt_message(&msg).unwrap(),
+            gm.get_group_mut("g1")
+                .unwrap()
+                .decrypt_message(&msg)
+                .unwrap(),
             b"secret"
         );
 
         // Same frame again — the key was consumed, so this must fail.
         assert!(
-            gm.get_group_mut("g1").unwrap().decrypt_message(&msg).is_err(),
+            gm.get_group_mut("g1")
+                .unwrap()
+                .decrypt_message(&msg)
+                .is_err(),
             "an already-decrypted group message must not be replayable"
         );
     }
@@ -1168,7 +1180,14 @@ mod group_tests {
     #[test]
     fn test_out_of_order_group_delivery_still_works() {
         let mut gm = make_group_manager();
-        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        gm.create_group(
+            "g1".into(),
+            "G".into(),
+            100,
+            "alice".into(),
+            &["bob".into()],
+        )
+        .unwrap();
         {
             let g = gm.get_group_mut("g1").unwrap();
             let k = g.our_initial_chain_key.clone().unwrap();
@@ -1179,13 +1198,20 @@ mod group_tests {
         let frames: Vec<_> = {
             let g = gm.get_group_mut("g1").unwrap();
             (0..3)
-                .map(|i| g.encrypt_message("alice", format!("m{i}").as_bytes()).unwrap())
+                .map(|i| {
+                    g.encrypt_message("alice", format!("m{i}").as_bytes())
+                        .unwrap()
+                })
                 .collect()
         };
 
         // Deliver 0, then 2 (caching 1's key), then the delayed 1.
         for i in [0usize, 2, 1] {
-            let out = gm.get_group_mut("g1").unwrap().decrypt_message(&frames[i]).unwrap();
+            let out = gm
+                .get_group_mut("g1")
+                .unwrap()
+                .decrypt_message(&frames[i])
+                .unwrap();
             assert_eq!(out, format!("m{i}").as_bytes());
         }
     }
@@ -1259,8 +1285,14 @@ mod group_tests {
     ) -> (GroupSenderKeyData, [u8; 32]) {
         let mut gm = make_group_manager();
         let owner_hex = hex::encode(owner_id.public_key_bytes());
-        gm.create_group(group_id.to_string(), "G".to_string(), 1, owner_hex.clone(), &[])
-            .unwrap();
+        gm.create_group(
+            group_id.to_string(),
+            "G".to_string(),
+            1,
+            owner_hex.clone(),
+            &[],
+        )
+        .unwrap();
         let mut bundle = {
             let g = gm.get_group(group_id).unwrap();
             g.own_sender_bundle().unwrap()
@@ -1278,12 +1310,21 @@ mod group_tests {
         let bob_hex = hex::encode(bob_id.public_key_bytes());
 
         let mut gm_alice = make_group_manager();
-        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex.clone(), &[])
+        gm_alice
+            .create_group("g".to_string(), "G".to_string(), 1, alice_hex.clone(), &[])
             .unwrap();
 
         // Bob joins with his own keys and announces a signed bundle.
         let mut gm_bob = make_group_manager();
-        gm_bob.join_group("g".to_string(), "G".to_string(), 1, bob_hex.clone(), false, &[alice_hex.clone()])
+        gm_bob
+            .join_group(
+                "g".to_string(),
+                "G".to_string(),
+                1,
+                bob_hex.clone(),
+                false,
+                &[alice_hex.clone()],
+            )
             .unwrap();
         let mut bundle = {
             let g = gm_bob.get_group("g").unwrap();
@@ -1294,18 +1335,25 @@ mod group_tests {
 
         let receipt = gm_alice.handle_sender_key(&bundle, &alice_hex, &bob_id.public_key_bytes());
         assert_eq!(receipt.unwrap(), SenderKeyReceipt::NewMember);
-        assert!(gm_alice.get_group("g").unwrap().verification_keys.contains_key(&bob_hex));
+        assert!(gm_alice
+            .get_group("g")
+            .unwrap()
+            .verification_keys
+            .contains_key(&bob_hex));
     }
 
     #[test]
     fn test_unsigned_bundle_rejected() {
         let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let alice_hex = hex::encode(alice_id.public_key_bytes());
-        let (mut bundle, bob_pub) = make_signed_bundle(&crate::crypto::IdentityKeypair::generate().unwrap(), "g");
+        let (mut bundle, bob_pub) =
+            make_signed_bundle(&crate::crypto::IdentityKeypair::generate().unwrap(), "g");
         bundle.signature = Vec::new(); // strip signature
 
         let mut gm_alice = make_group_manager();
-        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[]).unwrap();
+        gm_alice
+            .create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[])
+            .unwrap();
         assert!(gm_alice.handle_sender_key(&bundle, "", &bob_pub).is_err());
     }
 
@@ -1321,23 +1369,32 @@ mod group_tests {
         bundle.signature = mallory_id.sign(&sender_key_bundle_sign_bytes(&bundle));
 
         let mut gm_alice = make_group_manager();
-        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[]).unwrap();
+        gm_alice
+            .create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[])
+            .unwrap();
         // Claimed sender != transport peer → rejected.
-        assert!(gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes()).is_err());
+        assert!(gm_alice
+            .handle_sender_key(&bundle, "", &bob_id.public_key_bytes())
+            .is_err());
         // Even if transport peer == claimed sender, the signature is under the
         // WRONG identity key → still rejected.
-        assert!(gm_alice.handle_sender_key(&bundle, "", &mallory_id.public_key_bytes()).is_err());
+        assert!(gm_alice
+            .handle_sender_key(&bundle, "", &mallory_id.public_key_bytes())
+            .is_err());
     }
 
     #[test]
     fn test_private_key_material_bundle_rejected() {
         let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let alice_hex = hex::encode(alice_id.public_key_bytes());
-        let (mut bundle, bob_pub) = make_signed_bundle(&crate::crypto::IdentityKeypair::generate().unwrap(), "g");
+        let (mut bundle, bob_pub) =
+            make_signed_bundle(&crate::crypto::IdentityKeypair::generate().unwrap(), "g");
         bundle.signing_key = Some(vec![0u8; 64]); // private key material
 
         let mut gm_alice = make_group_manager();
-        gm_alice.create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[]).unwrap();
+        gm_alice
+            .create_group("g".to_string(), "G".to_string(), 1, alice_hex, &[])
+            .unwrap();
         assert!(gm_alice.handle_sender_key(&bundle, "", &bob_pub).is_err());
     }
 
@@ -1346,10 +1403,26 @@ mod group_tests {
         let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let alice_hex = hex::encode(alice_id.public_key_bytes());
         let mut gm_bob = make_group_manager();
-        let b1 = gm_bob.join_group("g".to_string(), "G".to_string(), 1,
-            "bob".to_string(), false, &[alice_hex.clone()]).unwrap();
-        let b2 = gm_bob.join_group("g".to_string(), "G".to_string(), 2,
-            "bob".to_string(), false, &[alice_hex]).unwrap();
+        let b1 = gm_bob
+            .join_group(
+                "g".to_string(),
+                "G".to_string(),
+                1,
+                "bob".to_string(),
+                false,
+                &[alice_hex.clone()],
+            )
+            .unwrap();
+        let b2 = gm_bob
+            .join_group(
+                "g".to_string(),
+                "G".to_string(),
+                2,
+                "bob".to_string(),
+                false,
+                &[alice_hex],
+            )
+            .unwrap();
         // Re-joining is idempotent: same chain key returned, no new keys.
         assert_eq!(b1.chain_key, b2.chain_key);
         assert!(b1.signing_key.is_none() && b2.signing_key.is_none());

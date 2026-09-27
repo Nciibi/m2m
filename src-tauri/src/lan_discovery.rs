@@ -86,7 +86,7 @@ impl LanDiscoveryState {
     pub fn new() -> Self {
         Self {
             peers: HashMap::new(),
-            enabled: false,  // ⚠️ OFF by default — privacy first
+            enabled: false, // ⚠️ OFF by default — privacy first
         }
     }
 
@@ -118,10 +118,7 @@ pub enum LanDiscoveryError {
 /// handshake after connection.
 ///
 /// Total: 1 + 2 + 32 + 8 = 43 bytes
-fn build_announcement(
-    listen_port: u16,
-    session_token: &[u8; 32],
-) -> Vec<u8> {
+fn build_announcement(listen_port: u16, session_token: &[u8; 32]) -> Vec<u8> {
     let timestamp = now_unix_secs();
 
     let mut packet = Vec::with_capacity(1 + 2 + 32 + 8);
@@ -138,10 +135,7 @@ fn build_announcement(
 /// The packet contains an ephemeral session token, NOT a permanent
 /// identity key. No signature verification needed — the token has
 /// no linkable meaning. Identity is established during X3DH.
-fn parse_announcement(
-    packet: &[u8],
-    sender: SocketAddr,
-) -> Option<LanPeer> {
+fn parse_announcement(packet: &[u8], sender: SocketAddr) -> Option<LanPeer> {
     if packet.len() != 43 {
         tracing::trace!(len = packet.len(), "ignoring LAN packet with wrong length");
         return None;
@@ -167,8 +161,14 @@ fn parse_announcement(
 
     // Timestamp
     let timestamp = u64::from_be_bytes([
-        packet[offset], packet[offset + 1], packet[offset + 2], packet[offset + 3],
-        packet[offset + 4], packet[offset + 5], packet[offset + 6], packet[offset + 7],
+        packet[offset],
+        packet[offset + 1],
+        packet[offset + 2],
+        packet[offset + 3],
+        packet[offset + 4],
+        packet[offset + 5],
+        packet[offset + 6],
+        packet[offset + 7],
     ]);
 
     // Reject stale timestamps (more than 5 minutes old)
@@ -215,11 +215,13 @@ pub async fn start(
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))
         .map_err(LanDiscoveryError::Io)?;
 
-    socket.set_read_timeout(Some(Duration::from_secs(5)))
+    socket
+        .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(LanDiscoveryError::Io)?;
 
     // Join the multicast group
-    let _ = socket.join_multicast_v4(&MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED)
+    let _ = socket
+        .join_multicast_v4(&MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED)
         .map_err(LanDiscoveryError::Io);
 
     let socket = Arc::new(socket);
@@ -310,10 +312,7 @@ pub async fn start(
 
             match socket_announcer.send_to(
                 &packet,
-                SocketAddr::new(
-                    IpAddr::V4(MULTICAST_ADDR),
-                    MULTICAST_PORT,
-                ),
+                SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT),
             ) {
                 Ok(n) => {
                     tracing::trace!(bytes = n, "LAN announcement sent");
@@ -433,6 +432,10 @@ mod lan_discovery_tests {
         let packet_b = build_announcement(1111, &token_b);
 
         // Same port, different tokens — packets should differ in the token section
-        assert_ne!(packet_a[3..35], packet_b[3..35], "different tokens should produce different packets");
+        assert_ne!(
+            packet_a[3..35],
+            packet_b[3..35],
+            "different tokens should produce different packets"
+        );
     }
 }

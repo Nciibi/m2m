@@ -50,12 +50,23 @@ pub enum Role {
 
 #[derive(Debug, Clone)]
 pub enum Strategy {
-    DirectTcp { peer: SocketAddr },
-    Ipv6Direct { peer: SocketAddr },
-    PortMapped { peer: SocketAddr },
+    DirectTcp {
+        peer: SocketAddr,
+    },
+    Ipv6Direct {
+        peer: SocketAddr,
+    },
+    PortMapped {
+        peer: SocketAddr,
+    },
     #[allow(dead_code)]
-    TcpHolePunch { peer: SocketAddr },
-    TcpRelay { peer: SocketAddr, relay_id: String },
+    TcpHolePunch {
+        peer: SocketAddr,
+    },
+    TcpRelay {
+        peer: SocketAddr,
+        relay_id: String,
+    },
 }
 
 impl Strategy {
@@ -151,8 +162,8 @@ impl ConnectionManager {
         }
 
         // ── Build strategy list ──
-        let mut simple = Vec::new();   // DirectTcp / Ipv6Direct / PortMapped
-        let mut punch = Vec::new();    // TcpHolePunch
+        let mut simple = Vec::new(); // DirectTcp / Ipv6Direct / PortMapped
+        let mut punch = Vec::new(); // TcpHolePunch
         let mut relay_list = Vec::new(); // TcpRelay (addr, relay_id)
 
         for c in peer_candidates {
@@ -167,7 +178,10 @@ impl ConnectionManager {
                         if rid.is_empty() {
                             tracing::warn!(target = %addr, "relay candidate missing relay_id — skipping");
                         } else {
-                            relay_list.push(Strategy::TcpRelay { peer: addr, relay_id: rid });
+                            relay_list.push(Strategy::TcpRelay {
+                                peer: addr,
+                                relay_id: rid,
+                            });
                         }
                     }
                     _ => {}
@@ -175,9 +189,7 @@ impl ConnectionManager {
             }
         }
 
-        let total = simple.len()
-            + if punch.is_empty() { 0 } else { 1 }
-            + relay_list.len();
+        let total = simple.len() + if punch.is_empty() { 0 } else { 1 } + relay_list.len();
         if total == 0 {
             return Err(ConnectionError::NoCandidates);
         }
@@ -207,7 +219,9 @@ impl ConnectionManager {
 
         // Collect results. First success wins; log failures but keep going.
         let mut last_error = ConnectionError::AllFailed(total);
-        while let Ok(Some(result)) = time::timeout_at(time::Instant::from(deadline), set.join_next()).await {
+        while let Ok(Some(result)) =
+            time::timeout_at(time::Instant::from(deadline), set.join_next()).await
+        {
             match result {
                 // Task returned Ok value (a strategy result or error).
                 Ok(task_result) => {
@@ -358,7 +372,11 @@ async fn race_accept_or_connect(
             let connect = async {
                 let result = connect_sequential(&peer_candidates).await;
                 tracing::info!(
-                    outcome = if result.is_ok() { "succeeded" } else { "failed" },
+                    outcome = if result.is_ok() {
+                        "succeeded"
+                    } else {
+                        "failed"
+                    },
                     "hole-punch connect leg finished"
                 );
                 result
@@ -473,8 +491,16 @@ mod hole_punch_tests {
     #[test]
     fn test_with_structured_candidates() {
         let candidates = vec![
-            WireCandidate { address: "192.168.1.5:54321".into(), candidate_type: 0, relay_id: None },
-            WireCandidate { address: "5.6.7.8:9876".into(), candidate_type: 1, relay_id: None },
+            WireCandidate {
+                address: "192.168.1.5:54321".into(),
+                candidate_type: 0,
+                relay_id: None,
+            },
+            WireCandidate {
+                address: "5.6.7.8:9876".into(),
+                candidate_type: 1,
+                relay_id: None,
+            },
         ];
         let c = extract_candidates_from_invite("1.2.3.4:12345", &candidates);
         assert_eq!(c.len(), 3);
@@ -485,16 +511,53 @@ mod hole_punch_tests {
 
     #[test]
     fn test_strategy_names() {
-        assert_eq!(Strategy::DirectTcp { peer: "0.0.0.0:0".parse().unwrap() }.name(), "host");
-        assert_eq!(Strategy::Ipv6Direct { peer: "0.0.0.0:0".parse().unwrap() }.name(), "ipv6");
-        assert_eq!(Strategy::PortMapped { peer: "0.0.0.0:0".parse().unwrap() }.name(), "port-mapped");
-        assert_eq!(Strategy::TcpHolePunch { peer: "0.0.0.0:0".parse().unwrap() }.name(), "srflx");
-        assert_eq!(Strategy::TcpRelay { peer: "0.0.0.0:0".parse().unwrap(), relay_id: "test".into() }.name(), "relay");
+        assert_eq!(
+            Strategy::DirectTcp {
+                peer: "0.0.0.0:0".parse().unwrap()
+            }
+            .name(),
+            "host"
+        );
+        assert_eq!(
+            Strategy::Ipv6Direct {
+                peer: "0.0.0.0:0".parse().unwrap()
+            }
+            .name(),
+            "ipv6"
+        );
+        assert_eq!(
+            Strategy::PortMapped {
+                peer: "0.0.0.0:0".parse().unwrap()
+            }
+            .name(),
+            "port-mapped"
+        );
+        assert_eq!(
+            Strategy::TcpHolePunch {
+                peer: "0.0.0.0:0".parse().unwrap()
+            }
+            .name(),
+            "srflx"
+        );
+        assert_eq!(
+            Strategy::TcpRelay {
+                peer: "0.0.0.0:0".parse().unwrap(),
+                relay_id: "test".into()
+            }
+            .name(),
+            "relay"
+        );
     }
 
     #[test]
     fn test_error_display() {
-        assert_eq!(format!("{}", ConnectionError::NoCandidates), "no candidates supplied");
-        assert_eq!(format!("{}", ConnectionError::AllFailed(3)), "all 3 strategy(ies) failed");
+        assert_eq!(
+            format!("{}", ConnectionError::NoCandidates),
+            "no candidates supplied"
+        );
+        assert_eq!(
+            format!("{}", ConnectionError::AllFailed(3)),
+            "all 3 strategy(ies) failed"
+        );
     }
 }

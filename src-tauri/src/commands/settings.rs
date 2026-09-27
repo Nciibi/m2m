@@ -59,11 +59,10 @@ pub async fn set_theme_preference(
 
 /// Discover the public IP address using enhanced STUN (parallel queries + consensus).
 #[tauri::command]
-pub async fn discover_public_ip(
-    state: State<'_, Arc<AppState>>,
-) -> Result<String, String> {
+pub async fn discover_public_ip(state: State<'_, Arc<AppState>>) -> Result<String, String> {
     state.ensure_not_air_gapped().await?;
-    let result = state.refresh_stun()
+    let result = state
+        .refresh_stun()
         .await
         .map_err(|e| format!("STUN discovery failed: {e}"))?;
 
@@ -88,9 +87,7 @@ pub async fn discover_public_ip(
 
 /// Get the current STUN configuration.
 #[tauri::command]
-pub async fn get_stun_config(
-    state: State<'_, Arc<AppState>>,
-) -> Result<stun::StunConfig, String> {
+pub async fn get_stun_config(state: State<'_, Arc<AppState>>) -> Result<stun::StunConfig, String> {
     let config = state.stun_config.read().await;
     Ok(config.clone())
 }
@@ -249,10 +246,7 @@ pub async fn get_network_settings(
 
 /// Enable or disable Tor routing.
 #[tauri::command]
-pub async fn set_tor_enabled(
-    state: State<'_, Arc<AppState>>,
-    enabled: bool,
-) -> Result<(), String> {
+pub async fn set_tor_enabled(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
     // Air-gap mode: Tor traffic is internet-facing by definition.
     if enabled {
         state.ensure_not_air_gapped().await?;

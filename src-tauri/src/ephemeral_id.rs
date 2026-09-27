@@ -85,13 +85,13 @@ impl NetworkMonitor {
     ) -> bool {
         let local_changed = match (self.last_local_ip, current_local_ip) {
             (Some(old), Some(new)) => old != new,
-            (None, Some(_)) => true,  // First time seeing a local IP
+            (None, Some(_)) => true, // First time seeing a local IP
             _ => false,
         };
 
         let public_changed = match (self.last_public_ip, current_public_ip) {
             (Some(old), Some(new)) => old != new,
-            (None, Some(_)) => true,  // First time seeing a public IP
+            (None, Some(_)) => true, // First time seeing a public IP
             _ => false,
         };
 
@@ -130,7 +130,10 @@ mod ephemeral_id_tests {
     #[test]
     fn test_fresh_id_should_not_rotate() {
         let id = EphemeralPeerId::generate();
-        assert!(!id.should_rotate(), "a brand new ID should not need rotation");
+        assert!(
+            !id.should_rotate(),
+            "a brand new ID should not need rotation"
+        );
     }
 
     #[test]

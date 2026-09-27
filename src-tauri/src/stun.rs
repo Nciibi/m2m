@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 /// M2M — STUN Module (RFC 8489 Compliant)
 ///
 /// Enterprise-grade STUN client with:
@@ -10,10 +11,9 @@
 /// - Host candidate discovery
 use std::net::SocketAddr;
 use std::time::Duration;
+use thiserror::Error;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 // ─── Defaults ───────────────────────────────────────────────────────────────
 
@@ -108,7 +108,10 @@ pub struct StunConfig {
 impl Default for StunConfig {
     fn default() -> Self {
         Self {
-            servers: DEFAULT_STUN_SERVERS.iter().map(|s| (*s).to_string()).collect(),
+            servers: DEFAULT_STUN_SERVERS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
             timeout_secs: 5,
             private_mode: false,
         }
@@ -262,7 +265,9 @@ pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResul
         for r in &results {
             *ip_counts.entry(r.public_addr.ip()).or_insert(0) += 1;
         }
-        let (winning_ip, _count) = ip_counts.into_iter().max_by_key(|&(_, c)| c)
+        let (winning_ip, _count) = ip_counts
+            .into_iter()
+            .max_by_key(|&(_, c)| c)
             .unwrap_or((std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0));
         // Return the first result matching the winning IP.
         results
@@ -306,9 +311,7 @@ async fn query_single_server(
     // to 0.0.0.0 fails because it explicitly requests IPv4.
     let socket = match UdpSocket::bind("0.0.0.0:0").await {
         Ok(s) => s,
-        Err(_) => UdpSocket::bind("[::]:0")
-            .await
-            .map_err(StunError::Io)?,
+        Err(_) => UdpSocket::bind("[::]:0").await.map_err(StunError::Io)?,
     };
 
     // Socket timeout is handled entirely by the outer tokio::time::timeout
@@ -335,10 +338,8 @@ async fn query_single_server(
         .map_err(StunError::Io)?;
 
     // ── Parse and validate response ──
-    parse_binding_response(&buf[..len], &transaction_id).map_err(|_| {
-        StunError::InvalidResponse {
-            server: server.to_string(),
-        }
+    parse_binding_response(&buf[..len], &transaction_id).map_err(|_| StunError::InvalidResponse {
+        server: server.to_string(),
     })
 }
 
@@ -419,10 +420,7 @@ fn crc32(data: &[u8]) -> u32 {
     !crc
 }
 
-fn parse_binding_response(
-    data: &[u8],
-    expected_txn: &[u8; 12],
-) -> Result<SocketAddr, StunError> {
+fn parse_binding_response(data: &[u8], expected_txn: &[u8; 12]) -> Result<SocketAddr, StunError> {
     // ── Validation ──
     if data.len() < 20 {
         return Err(StunError::InvalidResponse {
@@ -545,14 +543,13 @@ fn parse_xor_mapped_address(
 
     let family = data[1];
     // Port XOR with the high 16 bits of the magic cookie (RFC 8489 §15.2)
-    let x_port =
-        u16::from_be_bytes([data[2], data[3]]) ^ (STUN_MAGIC_COOKIE >> 16) as u16;
+    let x_port = u16::from_be_bytes([data[2], data[3]]) ^ (STUN_MAGIC_COOKIE >> 16) as u16;
 
     match family {
         0x01 => {
             // IPv4: XOR with the full 32-bit magic cookie
-            let x_addr = u32::from_be_bytes([data[4], data[5], data[6], data[7]])
-                ^ STUN_MAGIC_COOKIE;
+            let x_addr =
+                u32::from_be_bytes([data[4], data[5], data[6], data[7]]) ^ STUN_MAGIC_COOKIE;
             let ip = std::net::Ipv4Addr::from(x_addr);
             Ok(SocketAddr::new(std::net::IpAddr::V4(ip), x_port))
         }
@@ -684,7 +681,9 @@ pub fn classify_nat(result: &StunMultiResult) -> NatType {
         let is_private = match first.ip() {
             std::net::IpAddr::V4(v4) => {
                 let o = v4.octets();
-                o[0] == 10 || (o[0] == 172 && o[1] >= 16 && o[1] <= 31) || (o[0] == 192 && o[1] == 168)
+                o[0] == 10
+                    || (o[0] == 172 && o[1] >= 16 && o[1] <= 31)
+                    || (o[0] == 192 && o[1] == 168)
             }
             std::net::IpAddr::V6(_) => false,
         };
@@ -759,8 +758,10 @@ mod tests {
         ];
 
         // Expected result
-        let expected =
-            SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 1)), 32853);
+        let expected = SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 1)),
+            32853,
+        );
 
         // Build a minimal valid STUN response
         let mut response = Vec::with_capacity(32);
@@ -779,7 +780,7 @@ mod tests {
         response.extend_from_slice(&8u16.to_be_bytes()); // attribute length
         response.push(0x00); // padding
         response.push(0x01); // family = IPv4
-        // Port XOR (32853 ^ 0x2112 = ?)
+                             // Port XOR (32853 ^ 0x2112 = ?)
         let x_port = 32853u16 ^ (STUN_MAGIC_COOKIE >> 16) as u16;
         response.extend_from_slice(&x_port.to_be_bytes());
         // IPv4 XOR (192.0.2.1 ^ magic_cookie)
@@ -795,7 +796,11 @@ mod tests {
     fn test_rfc5769_ipv4_xor_mapped_address() {
         let (response, txn, expected) = build_rfc5769_sample_response();
         let result = parse_binding_response(&response, &txn);
-        assert!(result.is_ok(), "RFC 5769 IPv4 test vector should parse: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "RFC 5769 IPv4 test vector should parse: {:?}",
+            result.err()
+        );
         assert_eq!(result.unwrap(), expected);
     }
 
@@ -833,7 +838,10 @@ mod tests {
     #[test]
     fn test_default_config_valid() {
         let config = StunConfig::default();
-        assert!(!config.servers.is_empty(), "default config must have servers");
+        assert!(
+            !config.servers.is_empty(),
+            "default config must have servers"
+        );
         assert!(config.timeout_secs >= 1, "timeout must be reasonable");
     }
 
@@ -961,10 +969,7 @@ mod tests {
     /// Build a valid Binding-Success response, optionally with a trailing
     /// FINGERPRINT. `with_fingerprint = true` computes the correct CRC;
     /// `false` omits the attribute entirely.
-    fn build_response_with_fingerprint(
-        txn: [u8; 12],
-        with_fingerprint: bool,
-    ) -> Vec<u8> {
+    fn build_response_with_fingerprint(txn: [u8; 12], with_fingerprint: bool) -> Vec<u8> {
         let mut msg: Vec<u8> = Vec::with_capacity(48);
         msg.extend_from_slice(&BINDING_RESPONSE_SUCCESS.to_be_bytes());
         // Length covers the attributes only (XOR-MAPPED-ADDRESS 12 bytes,

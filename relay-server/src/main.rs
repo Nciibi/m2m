@@ -96,7 +96,9 @@ struct Registration {
 
 /// Generic over the transport so the codec can be unit-tested against an
 /// in-memory duplex stream instead of requiring a real socket.
-async fn read_frame<S: tokio::io::AsyncRead + Unpin>(stream: &mut S) -> Result<(u8, Vec<u8>), String> {
+async fn read_frame<S: tokio::io::AsyncRead + Unpin>(
+    stream: &mut S,
+) -> Result<(u8, Vec<u8>), String> {
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     let mut pos = 0;
     while pos < LENGTH_PREFIX_SIZE {
@@ -337,12 +339,7 @@ async fn handle_register(
                 "registration table full — rejecting"
             );
             drop(map);
-            let _ = send_error(
-                &mut stream,
-                5,
-                "relay at capacity — try again later",
-            )
-            .await;
+            let _ = send_error(&mut stream, 5, "relay at capacity — try again later").await;
             return;
         }
         map.insert(
@@ -463,11 +460,11 @@ impl Drop for ConnectionSlot {
         // would then refuse every connection forever. Failing toward "capacity
         // looks free" is the safe direction for a self-healing count; the
         // `saturating_sub` above is the same idea for the per-IP map.
-        let _ = self
-            .total
-            .fetch_update(std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed, |v| {
-                Some(v.saturating_sub(1))
-            });
+        let _ = self.total.fetch_update(
+            std::sync::atomic::Ordering::Relaxed,
+            std::sync::atomic::Ordering::Relaxed,
+            |v| Some(v.saturating_sub(1)),
+        );
     }
 }
 
@@ -488,14 +485,11 @@ async fn main() {
 
     let auth_token = std::env::var("RELAY_AUTH_TOKEN").unwrap_or_default();
 
-    let addr: SocketAddr = format!("0.0.0.0:{port}")
-        .parse()
-        .expect("invalid address");
+    let addr: SocketAddr = format!("0.0.0.0:{port}").parse().expect("invalid address");
 
     let listener = TcpListener::bind(addr).await.expect("failed to bind");
 
-    let state: Arc<RwLock<HashMap<String, Registration>>> =
-        Arc::new(RwLock::new(HashMap::new()));
+    let state: Arc<RwLock<HashMap<String, Registration>>> = Arc::new(RwLock::new(HashMap::new()));
 
     tracing::info!(
         address = %addr,
@@ -519,7 +513,11 @@ async fn main() {
             });
             let removed = before - state.len();
             if removed > 0 {
-                tracing::info!(removed, remaining = state.len(), "cleaned up expired registrations");
+                tracing::info!(
+                    removed,
+                    remaining = state.len(),
+                    "cleaned up expired registrations"
+                );
             }
         }
     });
@@ -579,11 +577,17 @@ async fn main() {
                             // Handle unknown types before moving stream.
                             if msg_type != 0x01 && msg_type != 0x02 {
                                 tracing::warn!(peer = %peer_addr, msg_type, "unknown request type");
-                                let _ = send_error(&mut stream, 6, &format!("unknown type {msg_type}")).await;
+                                let _ =
+                                    send_error(&mut stream, 6, &format!("unknown type {msg_type}"))
+                                        .await;
                             } else {
                                 match msg_type {
-                                    0x01 => handle_register(stream, peer_addr, body, state, &auth).await,
-                                    0x02 => handle_connect(stream, peer_addr, body, state, &auth).await,
+                                    0x01 => {
+                                        handle_register(stream, peer_addr, body, state, &auth).await
+                                    }
+                                    0x02 => {
+                                        handle_connect(stream, peer_addr, body, state, &auth).await
+                                    }
                                     _ => unreachable!(),
                                 }
                             }
@@ -746,7 +750,11 @@ mod tests {
             // Mirror the accept loop: the slot is charged, then released.
             *counts.lock().unwrap().entry(ip).or_insert(0) += 1;
             total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let _slot = ConnectionSlot { ip, counts: counts.clone(), total: total.clone() };
+            let _slot = ConnectionSlot {
+                ip,
+                counts: counts.clone(),
+                total: total.clone(),
+            };
             assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 1);
             assert_eq!(counts.lock().unwrap().get(&ip).copied(), Some(1));
         }
@@ -786,10 +794,17 @@ mod tests {
             let ip: std::net::IpAddr = format!("10.1.{}.{}", i / 256, i % 256).parse().unwrap();
             *counts.lock().unwrap().entry(ip).or_insert(0) += 1;
             total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let _slot = ConnectionSlot { ip, counts: counts.clone(), total: total.clone() };
+            let _slot = ConnectionSlot {
+                ip,
+                counts: counts.clone(),
+                total: total.clone(),
+            };
         }
         assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 0);
-        assert!(counts.lock().unwrap().is_empty(), "per-IP map must not leak entries");
+        assert!(
+            counts.lock().unwrap().is_empty(),
+            "per-IP map must not leak entries"
+        );
     }
 
     // ── registration cap ──────────────────────────────────────────
@@ -817,7 +832,10 @@ mod tests {
         assert_eq!(state.read().await.len(), MAX_PENDING_REGISTRATIONS);
 
         let at_capacity = state.read().await.len() >= MAX_PENDING_REGISTRATIONS;
-        assert!(at_capacity, "the cap must be reached at MAX_PENDING_REGISTRATIONS");
+        assert!(
+            at_capacity,
+            "the cap must be reached at MAX_PENDING_REGISTRATIONS"
+        );
     }
 
     #[test]

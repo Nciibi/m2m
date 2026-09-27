@@ -44,7 +44,11 @@ struct CaptureTool {
 
 macro_rules! tool {
     ($display:expr, $exact:expr, $contains:expr) => {
-        CaptureTool { display: $display, match_exact: $exact, match_contains: $contains }
+        CaptureTool {
+            display: $display,
+            match_exact: $exact,
+            match_contains: $contains,
+        }
     };
 }
 
@@ -71,8 +75,16 @@ static KNOWN_CAPTURE_TOOLS: &[CaptureTool] = &[
     tool!("Loom", &["loom", "loom.exe"], &[]),
     tool!("FlashBack", &[], &["flashback"]),
     // ── OS built-in capture ──
-    tool!("Snipping Tool", &[], &["snippingtool", "screenclippinghost", "screensketch"]),
-    tool!("macOS Screenshot (Cmd+Shift+5)", &[], &["screencaptureui", "screenshotserver"]),
+    tool!(
+        "Snipping Tool",
+        &[],
+        &["snippingtool", "screenclippinghost", "screensketch"]
+    ),
+    tool!(
+        "macOS Screenshot (Cmd+Shift+5)",
+        &[],
+        &["screencaptureui", "screenshotserver"]
+    ),
     tool!("QuickTime Player", &["quicktime player"], &[]),
     // ── CLI / generic encoders commonly used for screen grabbing ──
     tool!("ffmpeg (possible screen grab)", &["ffmpeg"], &[]),
@@ -148,12 +160,15 @@ pub fn start_monitor(state: Arc<crate::state::AppState>, app_handle: AppHandle) 
             if !enabled {
                 if !last_active.is_empty() {
                     // Toggle was switched off while tools were flagged.
-                    let _ = app_handle.emit("m2m://capture-warning", serde_json::json!({ "active": [] }));
+                    let _ = app_handle
+                        .emit("m2m://capture-warning", serde_json::json!({ "active": [] }));
                 }
                 break;
             }
 
-            let detected = tokio::task::spawn_blocking(scan_live).await.unwrap_or_default();
+            let detected = tokio::task::spawn_blocking(scan_live)
+                .await
+                .unwrap_or_default();
             if detected != last_active {
                 tracing::info!(detected = ?detected, "capture software set changed");
                 let _ = app_handle.emit(

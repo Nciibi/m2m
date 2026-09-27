@@ -46,7 +46,9 @@ pub fn platform_capability() -> CaptureCapability {
     #[cfg(target_os = "linux")]
     {
         if std::env::var("WAYLAND_DISPLAY").is_ok()
-            || std::env::var("XDG_SESSION_TYPE").map(|v| v == "wayland").unwrap_or(false)
+            || std::env::var("XDG_SESSION_TYPE")
+                .map(|v| v == "wayland")
+                .unwrap_or(false)
         {
             CaptureCapability {
                 level: "partial",
@@ -61,7 +63,10 @@ pub fn platform_capability() -> CaptureCapability {
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
-        CaptureCapability { level: "unsupported", note: "Unsupported platform." }
+        CaptureCapability {
+            level: "unsupported",
+            note: "Unsupported platform.",
+        }
     }
 }
 
@@ -99,9 +104,7 @@ fn apply_to_window(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), S
         let user32 = libloading::Library::new("user32.dll")
             .map_err(|e| format!("failed to load user32.dll: {e}"))?;
 
-        let func: libloading::Symbol<
-            unsafe extern "system" fn(isize, u32) -> i32,
-        > = user32
+        let func: libloading::Symbol<unsafe extern "system" fn(isize, u32) -> i32> = user32
             .get(b"SetWindowDisplayAffinity\0")
             .map_err(|e| format!("failed to find SetWindowDisplayAffinity: {e}"))?;
 
@@ -152,9 +155,9 @@ mod mac_ffi {
 
 #[cfg(target_os = "macos")]
 fn apply_to_window(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    use mac_ffi::{msg_send_id, msg_send_ulong, sel};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use std::ffi::c_void;
-    use mac_ffi::{msg_send_id, msg_send_ulong, sel};
 
     let handle = window
         .window_handle()
@@ -184,18 +187,27 @@ fn apply_to_window(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), S
         if enabled {
             msg_send_ulong(ns_window, sel("setSharingType:"), NS_WINDOW_SHARING_NONE);
         } else {
-            msg_send_ulong(ns_window, sel("setSharingType:"), NS_WINDOW_SHARING_READ_WRITE);
+            msg_send_ulong(
+                ns_window,
+                sel("setSharingType:"),
+                NS_WINDOW_SHARING_READ_WRITE,
+            );
         }
     }
 
-    tracing::info!(enabled, "macOS screen capture protection applied (sharingType)");
+    tracing::info!(
+        enabled,
+        "macOS screen capture protection applied (sharingType)"
+    );
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn apply_to_window(_window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
     let on_wayland = std::env::var("WAYLAND_DISPLAY").is_ok()
-        || std::env::var("XDG_SESSION_TYPE").map(|v| v == "wayland").unwrap_or(false);
+        || std::env::var("XDG_SESSION_TYPE")
+            .map(|v| v == "wayland")
+            .unwrap_or(false);
 
     if !enabled {
         tracing::debug!("Linux screen capture protection disabled (was best-effort at most)");

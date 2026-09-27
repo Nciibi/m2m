@@ -142,14 +142,12 @@ impl RelayConfig {
 }
 
 /// Current relay connection state (for frontend diagnostics).
-#[derive(Debug, Clone, serde::Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, serde::Serialize, Default)]
 pub struct RelayState {
     pub connected: bool,
     pub relay_id: Option<String>,
     pub error: Option<String>,
 }
-
 
 // ─── Frame I/O ─────────────────────────────────────────────────────────────────
 
@@ -266,7 +264,10 @@ async fn expect_relay_response<R: AsyncReadExt + Unpin>(
 /// incoming relay connections.
 pub async fn register(config: &RelayConfig) -> Result<(TcpStream, String), RelayError> {
     let relay_addr = config.socket_addr().ok_or_else(|| {
-        RelayError::Config(format!("invalid relay address: {}:{}", config.host, config.port))
+        RelayError::Config(format!(
+            "invalid relay address: {}:{}",
+            config.host, config.port
+        ))
     })?;
 
     tracing::info!(relay = %relay_addr, "connecting to relay server");
@@ -288,7 +289,9 @@ pub async fn register(config: &RelayConfig) -> Result<(TcpStream, String), Relay
     let body = expect_relay_response(&mut stream, RelayResponse::Registered).await?;
 
     if body.is_empty() {
-        return Err(RelayError::Protocol("REGISTERED response missing relay_id".into()));
+        return Err(RelayError::Protocol(
+            "REGISTERED response missing relay_id".into(),
+        ));
     }
 
     let id_len = body[0] as usize;
@@ -502,11 +505,14 @@ async fn handle_relay_incoming_with_frame(
         all.extend(ipv6_candidates);
         all.extend(reflexive_candidates);
         all.sort_by(|a, b| b.priority.cmp(&a.priority));
-        let wire_candidates: Vec<WireCandidate> = all.iter().map(|c| WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-            relay_id: None,
-        }).collect();
+        let wire_candidates: Vec<WireCandidate> = all
+            .iter()
+            .map(|c| WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+                relay_id: None,
+            })
+            .collect();
 
         // Update state with gathered candidates
         {
@@ -515,9 +521,17 @@ async fn handle_relay_incoming_with_frame(
         }
 
         // Same handshake flow as handle_incoming_connection
-        let x25519_pub = state.x25519_identity.read().await
-            .as_ref().map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
-        if let Err(e) = session.handshake_as_responder(&mut stream, kp, &frame, wire_candidates, x25519_pub).await {
+        let x25519_pub = state
+            .x25519_identity
+            .read()
+            .await
+            .as_ref()
+            .map(|k| k.public_key_bytes())
+            .unwrap_or([0u8; 32]);
+        if let Err(e) = session
+            .handshake_as_responder(&mut stream, kp, &frame, wire_candidates, x25519_pub)
+            .await
+        {
             tracing::warn!(error = %e, "relay handshake failed for incoming connection");
             let _ = network::send_error(
                 &mut stream,
@@ -537,20 +551,14 @@ async fn handle_relay_incoming_with_frame(
     // `require_known_contact` could still be connected to, messaged, and have
     // the stranger persisted into their key store by routing through a relay.
     // The direct-TCP path applies the same check via the same function.
-    if let Err(reason) =
-        crate::commands::network::check_contact_gate(&state, &peer_key_hex).await
-    {
+    if let Err(reason) = crate::commands::network::check_contact_gate(&state, &peer_key_hex).await {
         tracing::warn!(
             peer = %peer_key_hex,
             fingerprint = %peer_fingerprint,
             "relay connection rejected: {reason} (allowlist enabled)"
         );
-        let _ = network::send_error(
-            &mut stream,
-            protocol::ErrorCode::HandshakeFailed,
-            reason,
-        )
-        .await;
+        let _ =
+            network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
         return;
     }
 
@@ -579,16 +587,22 @@ async fn handle_relay_incoming_with_frame(
             );
             return;
         }
-        conns.insert(peer_key_hex.clone(), Arc::new(tokio::sync::Mutex::new(conn)));
+        conns.insert(
+            peer_key_hex.clone(),
+            Arc::new(tokio::sync::Mutex::new(conn)),
+        );
     }
 
     // Notify frontend
-    let _ = app_handle.emit("m2m://connection", crate::commands::ConnectionEvent {
-        peer_key_hex: peer_key_hex.clone(),
-        state: "established".to_string(),
-        peer_fingerprint: Some(peer_fingerprint.clone()),
-        peer_verified: false,
-    });
+    let _ = app_handle.emit(
+        "m2m://connection",
+        crate::commands::ConnectionEvent {
+            peer_key_hex: peer_key_hex.clone(),
+            state: "established".to_string(),
+            peer_fingerprint: Some(peer_fingerprint.clone()),
+            peer_verified: false,
+        },
+    );
 
     tracing::info!(peer = %peer_key_hex, "peer connected via relay");
 
@@ -634,10 +648,14 @@ mod tests {
         });
 
         // Write REGISTER
-        write_relay_frame(&mut client, RelayRequest::Register as u8, b"").await.unwrap();
+        write_relay_frame(&mut client, RelayRequest::Register as u8, b"")
+            .await
+            .unwrap();
 
         // Read REGISTERED response
-        let body = expect_relay_response(&mut client, RelayResponse::Registered).await.unwrap();
+        let body = expect_relay_response(&mut client, RelayResponse::Registered)
+            .await
+            .unwrap();
         let id_len = body[0] as usize;
         let relay_id = String::from_utf8_lossy(&body[1..=id_len]).to_string();
         assert_eq!(relay_id, "test123");
@@ -661,9 +679,13 @@ mod tests {
                 .unwrap();
         });
 
-        write_relay_frame(&mut client, RelayRequest::Connect as u8, &[7, b'p', b'e', b'e', b'r', b'1', b'2', b'3'])
-            .await
-            .unwrap();
+        write_relay_frame(
+            &mut client,
+            RelayRequest::Connect as u8,
+            &[7, b'p', b'e', b'e', b'r', b'1', b'2', b'3'],
+        )
+        .await
+        .unwrap();
 
         expect_relay_response(&mut client, RelayResponse::Connected)
             .await
@@ -679,14 +701,22 @@ mod tests {
         tokio::spawn(async move {
             let _ = read_relay_frame(&mut server).await.unwrap();
             // Send ERROR response
-            write_relay_frame(&mut server, RelayResponse::Error as u8, &[1, b'u', b'n', b'k', b'n', b'o', b'w', b'n'])
-                .await
-                .unwrap();
-        });
-
-        write_relay_frame(&mut client, RelayRequest::Connect as u8, &[4, b't', b'e', b's', b't'])
+            write_relay_frame(
+                &mut server,
+                RelayResponse::Error as u8,
+                &[1, b'u', b'n', b'k', b'n', b'o', b'w', b'n'],
+            )
             .await
             .unwrap();
+        });
+
+        write_relay_frame(
+            &mut client,
+            RelayRequest::Connect as u8,
+            &[4, b't', b'e', b's', b't'],
+        )
+        .await
+        .unwrap();
 
         let err = expect_relay_response(&mut client, RelayResponse::Connected).await;
         assert!(err.is_err());
@@ -728,7 +758,9 @@ mod tests {
         let (mut a, mut b) = duplex(65536);
 
         // Write a frame from a
-        write_relay_frame(&mut a, 0x42, b"hello relay").await.unwrap();
+        write_relay_frame(&mut a, 0x42, b"hello relay")
+            .await
+            .unwrap();
 
         // Read it at b
         let frame = read_relay_frame(&mut b).await.unwrap();

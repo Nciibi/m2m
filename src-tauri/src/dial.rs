@@ -287,8 +287,14 @@ mod dial_tests {
         assert!(!is_non_tor_routable(v4("8.8.8.8")));
         assert!(!is_non_tor_routable(v4("1.1.1.1")));
         assert!(!is_non_tor_routable(v4("45.33.32.156")));
-        assert!(!is_non_tor_routable(v4("172.32.0.1")), "just outside 172.16/12");
-        assert!(!is_non_tor_routable(v4("100.128.0.1")), "just outside 100.64/10");
+        assert!(
+            !is_non_tor_routable(v4("172.32.0.1")),
+            "just outside 172.16/12"
+        );
+        assert!(
+            !is_non_tor_routable(v4("100.128.0.1")),
+            "just outside 100.64/10"
+        );
         assert!(!is_non_tor_routable(v6("2001:4860:4860::8888")));
         assert!(!is_non_tor_routable(v6("2606:4700:4700::1111")));
     }
@@ -301,7 +307,10 @@ mod dial_tests {
         assert!(is_non_tor_routable(v4("192.0.2.1")), "TEST-NET-1");
         assert!(is_non_tor_routable(v4("198.51.100.1")), "TEST-NET-2");
         assert!(is_non_tor_routable(v4("203.0.113.1")), "TEST-NET-3");
-        assert!(is_non_tor_routable(v4("198.18.0.1")), "benchmarking, RFC 2544");
+        assert!(
+            is_non_tor_routable(v4("198.18.0.1")),
+            "benchmarking, RFC 2544"
+        );
     }
 
     /// `::1` is an "IPv4-compatible" address that `to_ipv4()` maps to
@@ -386,8 +395,8 @@ mod dial_tests {
 
         let mut stack = vec![src_root.clone()];
         while let Some(dir) = stack.pop() {
-            let entries = std::fs::read_dir(&dir)
-                .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()));
+            let entries =
+                std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display()));
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
                 if path.is_dir() {

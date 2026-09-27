@@ -122,7 +122,12 @@ fn generate_relay_id() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u32;
-    let bytes = [ts as u8, (ts >> 8) as u8, (ts >> 16) as u8, (ts >> 24) as u8];
+    let bytes = [
+        ts as u8,
+        (ts >> 8) as u8,
+        (ts >> 16) as u8,
+        (ts >> 24) as u8,
+    ];
     hex::encode(bytes)
 }
 
@@ -319,14 +324,11 @@ async fn main() {
 
     let auth_token = std::env::var("RELAY_AUTH_TOKEN").unwrap_or_default();
 
-    let addr: SocketAddr = format!("0.0.0.0:{port}")
-        .parse()
-        .expect("invalid address");
+    let addr: SocketAddr = format!("0.0.0.0:{port}").parse().expect("invalid address");
 
     let listener = TcpListener::bind(addr).await.expect("failed to bind");
 
-    let state: Arc<RwLock<HashMap<String, Registration>>> =
-        Arc::new(RwLock::new(HashMap::new()));
+    let state: Arc<RwLock<HashMap<String, Registration>>> = Arc::new(RwLock::new(HashMap::new()));
 
     tracing::info!(
         address = %addr,
@@ -350,7 +352,11 @@ async fn main() {
             });
             let removed = before - state.len();
             if removed > 0 {
-                tracing::info!(removed, remaining = state.len(), "cleaned up expired registrations");
+                tracing::info!(
+                    removed,
+                    remaining = state.len(),
+                    "cleaned up expired registrations"
+                );
             }
         }
     });
@@ -369,11 +375,15 @@ async fn main() {
                             // Handle unknown types before moving stream.
                             if msg_type != 0x01 && msg_type != 0x02 {
                                 tracing::warn!(peer = %peer_addr, msg_type, "unknown request type");
-                                let _ = send_error(&mut stream, 6, &format!("unknown type {msg_type}")).await;
+                                let _ =
+                                    send_error(&mut stream, 6, &format!("unknown type {msg_type}"))
+                                        .await;
                                 return;
                             }
                             match msg_type {
-                                0x01 => handle_register(stream, peer_addr, body, state, &auth).await,
+                                0x01 => {
+                                    handle_register(stream, peer_addr, body, state, &auth).await
+                                }
                                 0x02 => handle_connect(stream, peer_addr, body, state).await,
                                 _ => unreachable!(),
                             }

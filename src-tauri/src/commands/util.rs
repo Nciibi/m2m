@@ -133,11 +133,21 @@ pub fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
     }
 
     let mut pool_size = 0u32;
-    if has_lower { pool_size += 26; }
-    if has_upper { pool_size += 26; }
-    if has_digit { pool_size += 10; }
-    if has_special { pool_size += 32; }
-    if has_unicode { pool_size += 100; }
+    if has_lower {
+        pool_size += 26;
+    }
+    if has_upper {
+        pool_size += 26;
+    }
+    if has_digit {
+        pool_size += 10;
+    }
+    if has_special {
+        pool_size += 32;
+    }
+    if has_unicode {
+        pool_size += 100;
+    }
 
     if pool_size == 0 || len == 0 {
         return 0.0;
@@ -161,7 +171,8 @@ pub fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
 
     // 2d. Common substitutions (detect if most characters are
     //     from a single class with a few substitutions)
-    let sub_penalty = detect_substitution_penalty(&has_lower, &has_upper, &has_digit, &has_special, len);
+    let sub_penalty =
+        detect_substitution_penalty(&has_lower, &has_upper, &has_digit, &has_special, len);
 
     // 2e. Short-length penalty (< 12 chars)
     let short_penalty = if len < 12 { 0.5 } else { 1.0 };
@@ -179,7 +190,13 @@ pub fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
     // For truly random 8-char passwords, NIST gives ~18 bits.
     // Our floor ensures even severely-penalized passphrases
     // get a minimum estimate based on brute-force difficulty.
-    let floor = if len >= 12 { 20.0 } else if len >= 8 { 14.0 } else { 8.0 };
+    let floor = if len >= 12 {
+        20.0
+    } else if len >= 8 {
+        14.0
+    } else {
+        8.0
+    };
     entropy = entropy.max(floor).min(128.0); // cap at 128 bits
 
     entropy
@@ -312,14 +329,18 @@ fn detect_keyboard_penalty(passphrase: &str) -> f64 {
 /// Penalty for passphrases that look like a base word with substitutions.
 /// If most chars come from one class with a few from another, reduce entropy.
 fn detect_substitution_penalty(
-    has_lower: &bool, has_upper: &bool, has_digit: &bool, has_special: &bool, len: usize,
+    has_lower: &bool,
+    has_upper: &bool,
+    has_digit: &bool,
+    has_special: &bool,
+    len: usize,
 ) -> f64 {
     let classes = [*has_lower, *has_upper, *has_digit, *has_special];
     let active_count = classes.iter().filter(|&&c| c).count();
 
     if active_count <= 1 {
         // Single-class passphrase — weak, especially if short
-        return 0.6
+        return 0.6;
     }
 
     // If only 2 classes active and one is dominant (e.g., lowercase + few digits):
@@ -335,19 +356,24 @@ fn detect_substitution_penalty(
 /// Returns a `StorageKey` which is locked in physical RAM (mlock/VirtualLock)
 /// and automatically zeroized on drop.
 /// The `salt` should be unique per identity (we use the public key).
-pub fn derive_storage_key_from_passphrase(passphrase: &str, salt: &[u8]) -> Result<crate::secure_key::StorageKey, String> {
-    use argon2::{Argon2, Algorithm, Version, Params};
+pub fn derive_storage_key_from_passphrase(
+    passphrase: &str,
+    salt: &[u8],
+) -> Result<crate::secure_key::StorageKey, String> {
+    use argon2::{Algorithm, Argon2, Params, Version};
 
     let params = Params::new(
         65536, // 64 MiB memory
         3,     // 3 iterations
         4,     // 4 parallelism lanes
         Some(32),
-    ).map_err(|e| format!("argon2 params error: {e}"))?;
+    )
+    .map_err(|e| format!("argon2 params error: {e}"))?;
 
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut key = [0u8; 32];
-    argon.hash_password_into(passphrase.as_bytes(), salt, &mut key)
+    argon
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
         .map_err(|e| format!("argon2 hash failed: {e}"))?;
     Ok(crate::secure_key::StorageKey::new(key))
 }
@@ -388,7 +414,13 @@ pub fn crypto_encrypt_storage(
     let nonce_bytes = crate::crypto::random_bytes(24);
     let nonce = chacha20poly1305::XNonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, chacha20poly1305::aead::Payload { msg: plaintext, aad })
+        .encrypt(
+            nonce,
+            chacha20poly1305::aead::Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .map_err(|_| "encryption failed".to_string())?;
     Ok((nonce_bytes, ciphertext))
 }
@@ -408,8 +440,13 @@ pub fn crypto_decrypt_storage(
     }
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
     cipher
-        .decrypt(chacha20poly1305::XNonce::from_slice(nonce_bytes),
-                 chacha20poly1305::aead::Payload { msg: ciphertext, aad })
+        .decrypt(
+            chacha20poly1305::XNonce::from_slice(nonce_bytes),
+            chacha20poly1305::aead::Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|_| "decryption failed".to_string())
 }
 
@@ -437,19 +474,28 @@ mod entropy_tests {
     fn test_diceware_phrase_high_entropy() {
         // Five random diceware words should score 60+ bits
         let e = estimate_passphrase_entropy("correct-horse-battery-staple-clock");
-        assert!(e >= 40.0, "diceware phrase should score >= 40 bits, got {e}");
+        assert!(
+            e >= 40.0,
+            "diceware phrase should score >= 40 bits, got {e}"
+        );
     }
 
     #[test]
     fn test_short_passphrase_low_entropy() {
         let e = estimate_passphrase_entropy("abc123");
-        assert!(e < 30.0, "short simple passphrase should score < 30 bits, got {e}");
+        assert!(
+            e < 30.0,
+            "short simple passphrase should score < 30 bits, got {e}"
+        );
     }
 
     #[test]
     fn test_single_word_low_entropy() {
         let e = estimate_passphrase_entropy("password");
-        assert!(e < 25.0, "single common word should score < 25 bits, got {e}");
+        assert!(
+            e < 25.0,
+            "single common word should score < 25 bits, got {e}"
+        );
     }
 
     #[test]
@@ -457,13 +503,19 @@ mod entropy_tests {
         let e = estimate_passphrase_entropy("abcdefgh12345678");
         // Sequential characters should be penalized
         let base_entropy = estimate_passphrase_entropy("xzhfmkqg94736281"); // random-looking
-        assert!(e < base_entropy, "sequential passphrase {e} should be lower than random {base_entropy}");
+        assert!(
+            e < base_entropy,
+            "sequential passphrase {e} should be lower than random {base_entropy}"
+        );
     }
 
     #[test]
     fn test_repeating_penalty() {
         let e = estimate_passphrase_entropy("aaaabbbbcccc");
-        assert!(e < 30.0, "repeating pattern should score < 30 bits, got {e}");
+        assert!(
+            e < 30.0,
+            "repeating pattern should score < 30 bits, got {e}"
+        );
     }
 
     #[test]
@@ -475,7 +527,10 @@ mod entropy_tests {
     #[test]
     fn test_unicode_mixed_high_entropy() {
         let e = estimate_passphrase_entropy("κρυπτό-密码-パスワード-123!");
-        assert!(e >= 40.0, "unicode passphrase should score >= 40 bits, got {e}");
+        assert!(
+            e >= 40.0,
+            "unicode passphrase should score >= 40 bits, got {e}"
+        );
     }
 
     #[test]
@@ -494,7 +549,10 @@ mod entropy_tests {
     #[test]
     fn test_strong_passphrase_high_score() {
         let e = estimate_passphrase_entropy("kX9#mP2$vL8@nR5&jW3!");
-        assert!(e >= 60.0, "strong passphrase should score >= 60 bits, got {e}");
+        assert!(
+            e >= 60.0,
+            "strong passphrase should score >= 60 bits, got {e}"
+        );
     }
 }
 

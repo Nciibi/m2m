@@ -250,9 +250,7 @@ pub fn validate_version(version: u8) -> Result<(), ProtocolError> {
         return Err(ProtocolError::ReservedVersion(version));
     }
     if version == PROTOCOL_VERSION_LEGACY {
-        tracing::warn!(
-            "peer using legacy protocol version 0x01 — consider upgrading"
-        );
+        tracing::warn!("peer using legacy protocol version 0x01 — consider upgrading");
         return Ok(());
     }
     if version != PROTOCOL_VERSION {
@@ -348,10 +346,7 @@ pub fn max_frame_size_for(packet_type: PacketType) -> u32 {
 /// Applied after the 2-byte header is read but before the body buffer is
 /// allocated, so an attacker cannot make the client reserve memory by
 /// declaring an enormous frame of a type that has no legitimate use for one.
-pub fn validate_frame_size_for(
-    size: u32,
-    packet_type: PacketType,
-) -> Result<(), ProtocolError> {
+pub fn validate_frame_size_for(size: u32, packet_type: PacketType) -> Result<(), ProtocolError> {
     // The global bounds still apply.
     validate_frame_size(size)?;
     let max = max_frame_size_for(packet_type);
@@ -487,10 +482,7 @@ impl Drop for MessageBody {
 /// Rejects oversized files, absurd chunk counts, and inconsistent
 /// size/chunk combinations. Returns the inferred chunk stride
 /// (sender's chunk size) on success.
-pub fn validate_transfer_request(
-    total_size: u64,
-    total_chunks: u32,
-) -> Result<u64, &'static str> {
+pub fn validate_transfer_request(total_size: u64, total_chunks: u32) -> Result<u64, &'static str> {
     if total_size > MAX_FILE_SIZE {
         return Err("file exceeds maximum transfer size");
     }
@@ -936,7 +928,11 @@ mod protocol_tests {
         for &(byte, expected) in valid {
             let parsed = PacketType::from_byte(byte).unwrap();
             assert_eq!(parsed, expected, "from_byte(0x{byte:02X}) failed");
-            assert_eq!(parsed.to_byte(), byte, "to_byte() roundtrip failed for 0x{byte:02X}");
+            assert_eq!(
+                parsed.to_byte(),
+                byte,
+                "to_byte() roundtrip failed for 0x{byte:02X}"
+            );
         }
     }
 
@@ -961,17 +957,35 @@ mod protocol_tests {
     #[test]
     fn test_reserved_versions_rejected() {
         // 0x00, 0xFE, 0xFF are reserved
-        assert!(matches!(validate_version(0x00), Err(ProtocolError::ReservedVersion(0x00))));
-        assert!(matches!(validate_version(0xFE), Err(ProtocolError::ReservedVersion(0xFE))));
-        assert!(matches!(validate_version(0xFF), Err(ProtocolError::ReservedVersion(0xFF))));
+        assert!(matches!(
+            validate_version(0x00),
+            Err(ProtocolError::ReservedVersion(0x00))
+        ));
+        assert!(matches!(
+            validate_version(0xFE),
+            Err(ProtocolError::ReservedVersion(0xFE))
+        ));
+        assert!(matches!(
+            validate_version(0xFF),
+            Err(ProtocolError::ReservedVersion(0xFF))
+        ));
     }
 
     #[test]
     fn test_unsupported_version_rejected() {
         // Anything that's not reserved and not a known version
-        assert!(matches!(validate_version(0x10), Err(ProtocolError::UnsupportedVersion(0x10))));
-        assert!(matches!(validate_version(0x03), Err(ProtocolError::UnsupportedVersion(0x03))));
-        assert!(matches!(validate_version(0xFD), Err(ProtocolError::UnsupportedVersion(0xFD))));
+        assert!(matches!(
+            validate_version(0x10),
+            Err(ProtocolError::UnsupportedVersion(0x10))
+        ));
+        assert!(matches!(
+            validate_version(0x03),
+            Err(ProtocolError::UnsupportedVersion(0x03))
+        ));
+        assert!(matches!(
+            validate_version(0xFD),
+            Err(ProtocolError::UnsupportedVersion(0xFD))
+        ));
     }
 
     #[test]
@@ -1003,7 +1017,10 @@ mod protocol_tests {
     fn test_frame_size_zero_rejected() {
         assert!(matches!(
             validate_frame_size(0),
-            Err(ProtocolError::FrameTooSmall { size: 0, min: MIN_FRAME_SIZE })
+            Err(ProtocolError::FrameTooSmall {
+                size: 0,
+                min: MIN_FRAME_SIZE
+            })
         ));
     }
 
@@ -1411,8 +1428,14 @@ mod protocol_tests {
         assert_eq!(decoded.transfer_id, "v1-xfer");
         assert_eq!(decoded.total_chunks, 1);
         // New fields get defaults
-        assert!(decoded.chunk_hashes.is_empty(), "v1 request should have no chunk_hashes");
-        assert_eq!(decoded.file_transfer_version, 0, "v1 request should have version 0");
+        assert!(
+            decoded.chunk_hashes.is_empty(),
+            "v1 request should have no chunk_hashes"
+        );
+        assert_eq!(
+            decoded.file_transfer_version, 0,
+            "v1 request should have version 0"
+        );
     }
 
     #[test]
@@ -1433,8 +1456,16 @@ mod protocol_tests {
             timestamp: 1719446400,
             signature: vec![0xCC; 64],
             candidates: vec![
-                WireCandidate { address: "192.168.1.5:12345".to_string(), candidate_type: 0, relay_id: None },
-                WireCandidate { address: "1.2.3.4:54321".to_string(), candidate_type: 1, relay_id: None },
+                WireCandidate {
+                    address: "192.168.1.5:12345".to_string(),
+                    candidate_type: 0,
+                    relay_id: None,
+                },
+                WireCandidate {
+                    address: "1.2.3.4:54321".to_string(),
+                    candidate_type: 1,
+                    relay_id: None,
+                },
             ],
         };
         let bytes = serialize(&init).unwrap();

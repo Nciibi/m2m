@@ -1,4 +1,3 @@
-
 /// M2M — Network Module
 ///
 /// TCP transport with length-prefixed framing, connection state machine,
@@ -14,8 +13,8 @@ use std::time::{Duration, Instant};
 use dashmap::DashMap;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
 use tokio::net::tcp::OwnedReadHalf;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio::time;
 
@@ -278,9 +277,9 @@ impl ConnectionLimiter {
         // concurrent checks on other shards are unaffected.
         self.per_ip.retain(|_ip, window| {
             // An empty window, or one whose oldest entry has aged out, is dead.
-            let alive = window.back().is_some_and(|&t| {
-                now.duration_since(t) < self.window_duration
-            });
+            let alive = window
+                .back()
+                .is_some_and(|&t| now.duration_since(t) < self.window_duration);
             if !alive {
                 removed += 1;
             }
@@ -331,9 +330,7 @@ pub fn sanitize_filename(filename: &str) -> Option<String> {
     // Filter to safe characters only — no path separators, no control chars.
     let sanitized: String = filename
         .chars()
-        .filter(|c| {
-            matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' | ' ')
-        })
+        .filter(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' | ' '))
         .collect();
 
     let sanitized = sanitized.trim().to_string();
@@ -370,7 +367,10 @@ pub enum NetworkError {
     #[error("protocol error: {0}")]
     Protocol(#[from] protocol::ProtocolError),
     #[error("connection in invalid state: {0}")]
-    #[expect(dead_code, reason = "Reserved error variant for invalid connection states")]
+    #[expect(
+        dead_code,
+        reason = "Reserved error variant for invalid connection states"
+    )]
     InvalidState(String),
     // Now constructed by `FrameRateLimiter`, so the dead-code expectation no
     // longer applies.
@@ -434,7 +434,9 @@ pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
             Err(_) => {
                 tracing::warn!(
                     "Slowloris detected: read timeout on {} (progress: {}/{})",
-                    label, read_pos, buf.len()
+                    label,
+                    read_pos,
+                    buf.len()
                 );
                 return Err(NetworkError::ReadTimeout);
             }
@@ -466,7 +468,9 @@ pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
 /// (each `read()` gets its own 1s budget, so the read never times out). With
 /// the 50-connection cap that is 800 MiB of committed memory from idle
 /// sockets.
-pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(reader: &mut R) -> Result<RawFrame, NetworkError> {
+pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(
+    reader: &mut R,
+) -> Result<RawFrame, NetworkError> {
     // ── Step 1: length prefix + global bound (no allocation) ──
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     read_exact_timeout(reader, &mut len_buf, "length prefix").await?;
@@ -629,7 +633,10 @@ mod network_tests {
     fn test_sanitize_valid_filenames() {
         assert_eq!(sanitize_filename("report.pdf"), Some("report.pdf".into()));
         assert_eq!(sanitize_filename("my file.txt"), Some("my file.txt".into()));
-        assert_eq!(sanitize_filename("archive_2024-01.tar"), Some("archive_2024-01.tar".into()));
+        assert_eq!(
+            sanitize_filename("archive_2024-01.tar"),
+            Some("archive_2024-01.tar".into())
+        );
     }
 
     #[test]
@@ -647,7 +654,10 @@ mod network_tests {
     #[test]
     fn test_sanitize_path_traversal_unix() {
         // Path separators are stripped, dots remain but the result is just "etcpasswd"
-        assert_eq!(sanitize_filename("../../../etc/passwd"), Some("......etcpasswd".into()));
+        assert_eq!(
+            sanitize_filename("../../../etc/passwd"),
+            Some("......etcpasswd".into())
+        );
         // The key assertion: no path separators survive
         let result = sanitize_filename("../../../etc/passwd").unwrap();
         assert!(!result.contains('/'));
@@ -696,7 +706,10 @@ mod network_tests {
     #[test]
     fn test_sanitize_preserves_extensions() {
         assert_eq!(sanitize_filename("photo.jpg"), Some("photo.jpg".into()));
-        assert_eq!(sanitize_filename("backup.tar.gz"), Some("backup.tar.gz".into()));
+        assert_eq!(
+            sanitize_filename("backup.tar.gz"),
+            Some("backup.tar.gz".into())
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -708,7 +721,10 @@ mod network_tests {
         let limiter = ConnectionLimiter::new();
         let ip: IpAddr = "10.0.0.1".parse().unwrap();
         for _ in 0..MAX_CONNECTIONS_PER_IP {
-            assert!(limiter.check(ip), "should allow connections under per-IP limit");
+            assert!(
+                limiter.check(ip),
+                "should allow connections under per-IP limit"
+            );
         }
     }
 
@@ -721,7 +737,10 @@ mod network_tests {
             assert!(limiter.check(ip));
         }
         // The next one should be rejected
-        assert!(!limiter.check(ip), "should reject connections over per-IP limit");
+        assert!(
+            !limiter.check(ip),
+            "should reject connections over per-IP limit"
+        );
     }
 
     #[test]
@@ -735,7 +754,10 @@ mod network_tests {
             limiter.check(ip1);
         }
         // IP2 should still be accepted
-        assert!(limiter.check(ip2), "different IPs should have independent limits");
+        assert!(
+            limiter.check(ip2),
+            "different IPs should have independent limits"
+        );
     }
 
     #[test]
@@ -775,7 +797,9 @@ mod network_tests {
         let (mut writer, mut reader) = tokio::io::duplex(65536);
 
         let body = b"test payload data";
-        write_frame(&mut writer, PacketType::EncryptedMessage, body).await.unwrap();
+        write_frame(&mut writer, PacketType::EncryptedMessage, body)
+            .await
+            .unwrap();
 
         let frame = read_frame_impl(&mut reader).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::EncryptedMessage);
@@ -786,7 +810,9 @@ mod network_tests {
     async fn test_write_read_empty_frame() {
         let (mut writer, mut reader) = tokio::io::duplex(65536);
 
-        write_frame(&mut writer, PacketType::Heartbeat, &[]).await.unwrap();
+        write_frame(&mut writer, PacketType::Heartbeat, &[])
+            .await
+            .unwrap();
 
         let frame = read_frame_impl(&mut reader).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::Heartbeat);
@@ -797,9 +823,15 @@ mod network_tests {
     async fn test_write_read_multiple_frames() {
         let (mut writer, mut reader) = tokio::io::duplex(65536);
 
-        write_frame(&mut writer, PacketType::Heartbeat, &[]).await.unwrap();
-        write_frame(&mut writer, PacketType::EncryptedMessage, b"msg1").await.unwrap();
-        write_frame(&mut writer, PacketType::Disconnect, b"bye").await.unwrap();
+        write_frame(&mut writer, PacketType::Heartbeat, &[])
+            .await
+            .unwrap();
+        write_frame(&mut writer, PacketType::EncryptedMessage, b"msg1")
+            .await
+            .unwrap();
+        write_frame(&mut writer, PacketType::Disconnect, b"bye")
+            .await
+            .unwrap();
 
         let f1 = read_frame_impl(&mut reader).await.unwrap();
         assert_eq!(f1.packet_type, PacketType::Heartbeat);
@@ -829,7 +861,9 @@ mod network_tests {
 
         // 256 KB payload (within MAX_FRAME_SIZE)
         let body = vec![0xAB; 256 * 1024];
-        write_frame(&mut writer, PacketType::FileTransferChunk, &body).await.unwrap();
+        write_frame(&mut writer, PacketType::FileTransferChunk, &body)
+            .await
+            .unwrap();
 
         let frame = read_frame_impl(&mut reader).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::FileTransferChunk);
@@ -850,16 +884,25 @@ mod network_tests {
 
         // Fill per-IP quota to the limit
         for _ in 0..MAX_CONNECTIONS_PER_IP {
-            assert!(limiter.check(ip), "should allow connections up to per-IP limit");
+            assert!(
+                limiter.check(ip),
+                "should allow connections up to per-IP limit"
+            );
         }
         // Verify the quota is full
-        assert!(!limiter.check(ip), "should reject connection over per-IP limit");
+        assert!(
+            !limiter.check(ip),
+            "should reject connection over per-IP limit"
+        );
 
         // Wait for the window to expire (1s window + 1s margin)
         std::thread::sleep(window + Duration::from_secs(1));
 
         // After the window expires, old entries are drained and new connections allowed
-        assert!(limiter.check(ip), "window expired — new connection should be allowed");
+        assert!(
+            limiter.check(ip),
+            "window expired — new connection should be allowed"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -971,7 +1014,10 @@ mod network_tests {
             RateLimitVerdict::TooManyBytes,
             "an absurd length must be charged maximally, not wrapped small"
         );
-        assert_eq!(limiter.check(u32::MAX as usize), RateLimitVerdict::TooManyBytes);
+        assert_eq!(
+            limiter.check(u32::MAX as usize),
+            RateLimitVerdict::TooManyBytes
+        );
     }
 
     /// A zero-byte body must not panic on the `NonZeroU32` conversion.
@@ -998,12 +1044,21 @@ mod network_tests {
 
         // Fill IPv6 loopback quota
         for _ in 0..MAX_CONNECTIONS_PER_IP {
-            assert!(limiter.check(ip_loopback), "IPv6 loopback should be allowed up to limit");
+            assert!(
+                limiter.check(ip_loopback),
+                "IPv6 loopback should be allowed up to limit"
+            );
         }
-        assert!(!limiter.check(ip_loopback), "IPv6 loopback should hit per-IP limit");
+        assert!(
+            !limiter.check(ip_loopback),
+            "IPv6 loopback should hit per-IP limit"
+        );
 
         // A different IPv6 address has its own quota
-        assert!(limiter.check(ip_unique), "different IPv6 address should be independent");
+        assert!(
+            limiter.check(ip_unique),
+            "different IPv6 address should be independent"
+        );
     }
 
     #[test]
@@ -1033,13 +1088,21 @@ mod network_tests {
         // Frame: [4B length=2] [1B version=0x00] [1B type=0x10]
         let len = (2u32).to_be_bytes();
         writer.write_all(&len).await.unwrap();
-        writer.write_all(&[0x00, PacketType::EncryptedMessage.to_byte()]).await.unwrap();
+        writer
+            .write_all(&[0x00, PacketType::EncryptedMessage.to_byte()])
+            .await
+            .unwrap();
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(
-            result,
-            Err(NetworkError::Protocol(protocol::ProtocolError::ReservedVersion(0x00)))
-        ), "expected ReservedVersion(0x00)");
+        assert!(
+            matches!(
+                result,
+                Err(NetworkError::Protocol(
+                    protocol::ProtocolError::ReservedVersion(0x00)
+                ))
+            ),
+            "expected ReservedVersion(0x00)"
+        );
     }
 
     #[tokio::test]
@@ -1049,13 +1112,21 @@ mod network_tests {
         // Craft a frame with unsupported version 0xFC
         let len = (2u32).to_be_bytes();
         writer.write_all(&len).await.unwrap();
-        writer.write_all(&[0xFC, PacketType::EncryptedMessage.to_byte()]).await.unwrap();
+        writer
+            .write_all(&[0xFC, PacketType::EncryptedMessage.to_byte()])
+            .await
+            .unwrap();
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(
-            result,
-            Err(NetworkError::Protocol(protocol::ProtocolError::UnsupportedVersion(0xFC)))
-        ), "expected UnsupportedVersion(0xFC)");
+        assert!(
+            matches!(
+                result,
+                Err(NetworkError::Protocol(
+                    protocol::ProtocolError::UnsupportedVersion(0xFC)
+                ))
+            ),
+            "expected UnsupportedVersion(0xFC)"
+        );
     }
 
     #[tokio::test]
@@ -1068,10 +1139,15 @@ mod network_tests {
         writer.write_all(&[PROTOCOL_VERSION, 0xFF]).await.unwrap();
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(
-            result,
-            Err(NetworkError::Protocol(protocol::ProtocolError::UnknownPacketType(0xFF)))
-        ), "expected UnknownPacketType(0xFF)");
+        assert!(
+            matches!(
+                result,
+                Err(NetworkError::Protocol(
+                    protocol::ProtocolError::UnknownPacketType(0xFF)
+                ))
+            ),
+            "expected UnknownPacketType(0xFF)"
+        );
     }
 
     #[tokio::test]
@@ -1084,10 +1160,15 @@ mod network_tests {
         writer.write_all(&len).await.unwrap();
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(
-            result,
-            Err(NetworkError::Protocol(protocol::ProtocolError::FrameTooLarge { .. }))
-        ), "expected FrameTooLarge");
+        assert!(
+            matches!(
+                result,
+                Err(NetworkError::Protocol(
+                    protocol::ProtocolError::FrameTooLarge { .. }
+                ))
+            ),
+            "expected FrameTooLarge"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1103,8 +1184,10 @@ mod network_tests {
         writer.write_all(&[0x00, 0x01]).await.unwrap();
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(result, Err(NetworkError::ReadTimeout)),
-            "expected ReadTimeout from incomplete length prefix");
+        assert!(
+            matches!(result, Err(NetworkError::ReadTimeout)),
+            "expected ReadTimeout from incomplete length prefix"
+        );
     }
 
     #[tokio::test]
@@ -1118,8 +1201,10 @@ mod network_tests {
         writer.write_all(&[0xAA]).await.unwrap();
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(result, Err(NetworkError::ReadTimeout)),
-            "expected ReadTimeout from incomplete body");
+        assert!(
+            matches!(result, Err(NetworkError::ReadTimeout)),
+            "expected ReadTimeout from incomplete body"
+        );
     }
 
     #[tokio::test]
@@ -1132,7 +1217,9 @@ mod network_tests {
         drop(writer); // Simulate peer closing the connection
 
         let result = read_frame_impl(&mut reader).await;
-        assert!(matches!(result, Err(NetworkError::PeerClosed)),
-            "expected PeerClosed after writer drop during body read");
+        assert!(
+            matches!(result, Err(NetworkError::PeerClosed)),
+            "expected PeerClosed after writer drop during body read"
+        );
     }
 }

@@ -60,7 +60,8 @@ pub async fn set_discovery_config(
     config: DiscoveryConfig,
 ) -> Result<DiscoveryConfig, String> {
     // Air-gap mode: both LAN multicast and DHT announce leak presence.
-    if (config.lan_enabled || config.dht_enabled) && state.security_config.read().await.air_gap_mode {
+    if (config.lan_enabled || config.dht_enabled) && state.security_config.read().await.air_gap_mode
+    {
         return Err("air-gap mode is enabled — peer discovery is blocked".to_string());
     }
     // ── LAN Discovery ──
@@ -78,7 +79,9 @@ pub async fn set_discovery_config(
         let cancel_clone = lan_cancel.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = lan_discovery::start(listen_addr, lan_state_clone, eid, cancel_clone).await {
+            if let Err(e) =
+                lan_discovery::start(listen_addr, lan_state_clone, eid, cancel_clone).await
+            {
                 tracing::warn!(error = %e, "LAN discovery failed to start");
             }
         });
@@ -125,7 +128,14 @@ pub async fn set_discovery_config(
         let cancel_clone = dht_cancel.clone();
 
         tokio::spawn(async move {
-            dht::announce_loop(dht_state_clone, eid, network_monitor, listen_addr, cancel_clone).await;
+            dht::announce_loop(
+                dht_state_clone,
+                eid,
+                network_monitor,
+                listen_addr,
+                cancel_clone,
+            )
+            .await;
         });
 
         {
@@ -187,10 +197,7 @@ pub async fn get_discovered_peers(
     if let Some(ref dht_state_arc) = *state.dht_state.read().await {
         let dht = dht_state_arc.read().await;
         for (_, peer) in dht.peers.iter() {
-            let addr = peer
-                .connect_addr
-                .map(|a| a.to_string())
-                .unwrap_or_default();
+            let addr = peer.connect_addr.map(|a| a.to_string()).unwrap_or_default();
             peers.push(DiscoveredPeer {
                 id_hex: hex::encode(peer.peer_id),
                 address: addr,
@@ -223,9 +230,7 @@ pub async fn connect_discovered_peer(
         .map_err(|e| format!("invalid address: {e}"))?;
 
     let identity = state.identity.read().await;
-    let kp = identity
-        .as_ref()
-        .ok_or("identity not initialized")?;
+    let kp = identity.as_ref().ok_or("identity not initialized")?;
 
     // Connect via the Tor-aware chokepoint: a DHT-discovered peer is
     // third-party, so this path must not reveal the real IP under Tor.
@@ -271,7 +276,13 @@ pub async fn connect_discovered_peer(
     let expected_peer_pub = [0u8; 32];
 
     session
-        .handshake_as_initiator(&mut stream, kp, &expected_peer_pub, our_candidates, x25519_pub)
+        .handshake_as_initiator(
+            &mut stream,
+            kp,
+            &expected_peer_pub,
+            our_candidates,
+            x25519_pub,
+        )
         .await
         .map_err(|e| format!("handshake failed: {e}"))?;
 
@@ -282,12 +293,7 @@ pub async fn connect_discovered_peer(
     let message_store = state.message_store.lock().await;
     let is_known = message_store
         .as_ref()
-        .map(|ms| {
-            ms.get_conversation(&peer_key_hex)
-                .ok()
-                .flatten()
-                .is_some()
-        })
+        .map(|ms| ms.get_conversation(&peer_key_hex).ok().flatten().is_some())
         .unwrap_or(false);
     drop(message_store);
 
@@ -310,16 +316,22 @@ pub async fn connect_discovered_peer(
 
     {
         let mut conns = state.connections.write().await;
-        conns.insert(peer_key_hex.clone(), Arc::new(tokio::sync::Mutex::new(conn)));
+        conns.insert(
+            peer_key_hex.clone(),
+            Arc::new(tokio::sync::Mutex::new(conn)),
+        );
     }
 
     // Emit connection event to frontend
-    let _ = app_handle.emit("m2m://connection", ConnectionEvent {
-        peer_key_hex: peer_key_hex.clone(),
-        state: "established".to_string(),
-        peer_fingerprint: Some(peer_fingerprint.clone()),
-        peer_verified: false,
-    });
+    let _ = app_handle.emit(
+        "m2m://connection",
+        ConnectionEvent {
+            peer_key_hex: peer_key_hex.clone(),
+            state: "established".to_string(),
+            peer_fingerprint: Some(peer_fingerprint.clone()),
+            peer_verified: false,
+        },
+    );
 
     // Upsert peer in key store
     if let Some(peer_key_bytes) = util::decode_peer_key_logged(&peer_key_hex) {

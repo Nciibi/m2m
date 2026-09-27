@@ -77,7 +77,12 @@ pub fn create_invite(
     }
 
     let (x25519_pub, spk, spk_sig, opk) = match prekey_bundle {
-        Some(b) => (b.identity_key, b.signed_prekey, b.signed_prekey_sig.clone(), b.one_time_prekey),
+        Some(b) => (
+            b.identity_key,
+            b.signed_prekey,
+            b.signed_prekey_sig.clone(),
+            b.one_time_prekey,
+        ),
         None => ([0u8; 32], [0u8; 32], vec![], None),
     };
     let payload = InvitePayload {
@@ -133,9 +138,9 @@ pub fn create_invite(
 /// 8. Validate address hint
 pub fn validate_invite(invite_str: &str) -> Result<SignedInvite, IdentityError> {
     // Step 0: Check prefix
-    let encoded = invite_str.strip_prefix(INVITE_PREFIX).ok_or_else(|| {
-        IdentityError::InviteFormatInvalid("missing m2m:// prefix".to_string())
-    })?;
+    let encoded = invite_str
+        .strip_prefix(INVITE_PREFIX)
+        .ok_or_else(|| IdentityError::InviteFormatInvalid("missing m2m:// prefix".to_string()))?;
 
     if invite_str.len() > MAX_INVITE_LENGTH {
         return Err(IdentityError::InviteFormatInvalid(
@@ -180,8 +185,7 @@ pub fn validate_invite(invite_str: &str) -> Result<SignedInvite, IdentityError> 
     }
 
     // Step 7: Verify signature
-    let payload_bytes =
-        protocol::serialize(&signed.payload)?;
+    let payload_bytes = protocol::serialize(&signed.payload)?;
     crypto::verify_signature(
         &signed.payload.identity_pub,
         &payload_bytes,
@@ -253,7 +257,8 @@ mod tests {
     fn test_one_time_flag_preserved() {
         init();
         let identity = make_identity();
-        let invite_str = create_invite(&identity, "1.2.3.4:5678", 3600, true, vec![], None).unwrap();
+        let invite_str =
+            create_invite(&identity, "1.2.3.4:5678", 3600, true, vec![], None).unwrap();
         let parsed = validate_invite(&invite_str).unwrap();
         assert!(is_one_time(&parsed));
     }
@@ -263,10 +268,26 @@ mod tests {
         init();
         let identity = make_identity();
         let candidates = vec![
-            protocol::WireCandidate { address: "10.0.0.1:9000".to_string(), candidate_type: 0, relay_id: None },
-            protocol::WireCandidate { address: "1.2.3.4:9001".to_string(), candidate_type: 1, relay_id: None },
+            protocol::WireCandidate {
+                address: "10.0.0.1:9000".to_string(),
+                candidate_type: 0,
+                relay_id: None,
+            },
+            protocol::WireCandidate {
+                address: "1.2.3.4:9001".to_string(),
+                candidate_type: 1,
+                relay_id: None,
+            },
         ];
-        let invite_str = create_invite(&identity, "5.6.7.8:9000", 3600, false, candidates.clone(), None).unwrap();
+        let invite_str = create_invite(
+            &identity,
+            "5.6.7.8:9000",
+            3600,
+            false,
+            candidates.clone(),
+            None,
+        )
+        .unwrap();
         let parsed = validate_invite(&invite_str).unwrap();
         assert_eq!(parsed.payload.candidates.len(), 2);
         assert_eq!(parsed.payload.candidates[0].address, "10.0.0.1:9000");
@@ -390,7 +411,10 @@ mod tests {
         payload.address_hint = "999.999.999.999:9999".to_string();
         let _payload_bytes = protocol::serialize(&payload).unwrap();
         let wrong_sig = vec![0xCC; 64]; // bogus signature
-        let bad_signed = protocol::SignedInvite { payload, signature: wrong_sig };
+        let bad_signed = protocol::SignedInvite {
+            payload,
+            signature: wrong_sig,
+        };
         let bad_bytes = protocol::serialize(&bad_signed).unwrap();
         let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bad_bytes);
         let bad_str = format!("{}{}", protocol::INVITE_PREFIX, encoded);
@@ -438,7 +462,14 @@ mod tests {
     fn test_validity_too_large_rejected() {
         init();
         let identity = make_identity();
-        let result = create_invite(&identity, "1.2.3.4:5678", MAX_INVITE_VALIDITY_SECS + 1, false, vec![], None);
+        let result = create_invite(
+            &identity,
+            "1.2.3.4:5678",
+            MAX_INVITE_VALIDITY_SECS + 1,
+            false,
+            vec![],
+            None,
+        );
         assert!(matches!(result, Err(IdentityError::InviteValidityTooLarge)));
     }
 
@@ -477,17 +508,29 @@ mod tests {
         init();
         let identity = make_identity();
         // Create an invite with a large payload (many candidates) to approach the limit
-        let many_candidates: Vec<protocol::WireCandidate> = (0..20).map(|i| {
-            protocol::WireCandidate {
+        let many_candidates: Vec<protocol::WireCandidate> = (0..20)
+            .map(|i| protocol::WireCandidate {
                 address: format!("10.0.{}.{}:9000", i / 256, i % 256),
                 candidate_type: 0,
                 relay_id: None,
-            }
-        }).collect();
-        let result = create_invite(&identity, "1.2.3.4:5678", 3600, false, many_candidates, None);
+            })
+            .collect();
+        let result = create_invite(
+            &identity,
+            "1.2.3.4:5678",
+            3600,
+            false,
+            many_candidates,
+            None,
+        );
         // Should either succeed or fail with format error if too big
         match result {
-            Ok(invite) => assert!(invite.len() <= MAX_INVITE_LENGTH, "invite {} exceeds max {}", invite.len(), MAX_INVITE_LENGTH),
+            Ok(invite) => assert!(
+                invite.len() <= MAX_INVITE_LENGTH,
+                "invite {} exceeds max {}",
+                invite.len(),
+                MAX_INVITE_LENGTH
+            ),
             Err(IdentityError::InviteFormatInvalid(_)) => {} // also acceptable
             Err(e) => panic!("unexpected error: {e}"),
         }
@@ -497,12 +540,14 @@ mod tests {
     fn test_is_one_time_and_listener_flags() {
         init();
         let identity = make_identity();
-        let one_time_str = create_invite(&identity, "1.2.3.4:5678", 3600, true, vec![], None).unwrap();
+        let one_time_str =
+            create_invite(&identity, "1.2.3.4:5678", 3600, true, vec![], None).unwrap();
         let parsed_one_time = validate_invite(&one_time_str).unwrap();
         assert!(is_one_time(&parsed_one_time));
         assert!(is_listener(&parsed_one_time));
 
-        let normal_str = create_invite(&identity, "1.2.3.4:5678", 3600, false, vec![], None).unwrap();
+        let normal_str =
+            create_invite(&identity, "1.2.3.4:5678", 3600, false, vec![], None).unwrap();
         let parsed_normal = validate_invite(&normal_str).unwrap();
         assert!(!is_one_time(&parsed_normal));
         assert!(is_listener(&parsed_normal));

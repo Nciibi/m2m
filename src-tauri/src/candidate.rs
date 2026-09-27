@@ -1,11 +1,11 @@
+use crate::local_addr;
+use crate::stun;
 /// M2M — Candidate Module
 ///
 /// ICE-Lite candidate types and gathering logic.
 /// Provides structured network candidates (host, server-reflexive)
 /// with prioritization for ICE-Lite connectivity establishment.
 use serde::{Deserialize, Serialize};
-use crate::local_addr;
-use crate::stun;
 
 // ─── Candidate Types ────────────────────────────────────────────────────────
 
@@ -155,9 +155,7 @@ pub fn gather_ipv6_candidates() -> Vec<NetworkCandidate> {
 
 /// Gather server-reflexive candidates from STUN results.
 /// Maps each STUN result to a candidate with type=ServerReflexive.
-pub fn gather_reflexive_candidates(
-    multi_result: &stun::StunMultiResult,
-) -> Vec<NetworkCandidate> {
+pub fn gather_reflexive_candidates(multi_result: &stun::StunMultiResult) -> Vec<NetworkCandidate> {
     let base = local_addr::gather_host_candidates()
         .first()
         .map(|a| a.to_string());
@@ -182,4 +180,3 @@ pub fn gather_reflexive_candidates(
         })
         .collect()
 }
-

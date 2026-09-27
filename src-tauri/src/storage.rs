@@ -61,8 +61,7 @@ fn resolve_base_dir() -> Result<PathBuf, StorageError> {
 /// Ensure the data directory exists.
 pub fn ensure_data_dir() -> Result<PathBuf, StorageError> {
     let dir = data_dir()?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| StorageError::DirCreationFailed(e.to_string()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| StorageError::DirCreationFailed(e.to_string()))?;
     Ok(dir)
 }
 
@@ -172,7 +171,10 @@ impl KeyStore {
             return Err(StorageError::PathError("invalid meta key".into()));
         }
         self.conn.execute(
-            &format!("INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('{}', ?1)", key),
+            &format!(
+                "INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('{}', ?1)",
+                key
+            ),
             params![value],
         )?;
         Ok(())
@@ -216,21 +218,30 @@ impl KeyStore {
     /// Load the stored X25519 key material.
     /// Returns (public_key, encrypted_secret, nonce).
     pub fn load_x25519_key(&self) -> Result<([u8; 32], Vec<u8>, Vec<u8>), StorageError> {
-        let pub_hex: String = self.conn.query_row(
-            "SELECT value FROM vault_meta WHERE key = 'x25519_pub'",
-            [],
-            |row| row.get(0),
-        ).map_err(|_| StorageError::KeyNotFound)?;
-        let enc_hex: String = self.conn.query_row(
-            "SELECT value FROM vault_meta WHERE key = 'x25519_enc'",
-            [],
-            |row| row.get(0),
-        ).map_err(|_| StorageError::KeyNotFound)?;
-        let nonce_hex: String = self.conn.query_row(
-            "SELECT value FROM vault_meta WHERE key = 'x25519_nonce'",
-            [],
-            |row| row.get(0),
-        ).map_err(|_| StorageError::KeyNotFound)?;
+        let pub_hex: String = self
+            .conn
+            .query_row(
+                "SELECT value FROM vault_meta WHERE key = 'x25519_pub'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| StorageError::KeyNotFound)?;
+        let enc_hex: String = self
+            .conn
+            .query_row(
+                "SELECT value FROM vault_meta WHERE key = 'x25519_enc'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| StorageError::KeyNotFound)?;
+        let nonce_hex: String = self
+            .conn
+            .query_row(
+                "SELECT value FROM vault_meta WHERE key = 'x25519_nonce'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| StorageError::KeyNotFound)?;
 
         let pub_bytes = hex::decode(&pub_hex).map_err(|_| StorageError::KeyNotFound)?;
         let enc_bytes = hex::decode(&enc_hex).map_err(|_| StorageError::KeyNotFound)?;
@@ -263,11 +274,9 @@ impl KeyStore {
     /// Load only the public key (no decryption needed).
     pub fn load_public_key(&self) -> Result<Vec<u8>, StorageError> {
         self.conn
-            .query_row(
-                "SELECT public_key FROM identity WHERE id = 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT public_key FROM identity WHERE id = 1", [], |row| {
+                row.get(0)
+            })
             .map_err(|_| StorageError::KeyNotFound)
     }
 
@@ -337,72 +346,74 @@ impl KeyStore {
 
     /// Migrate a legacy single-identity row into `accounts` (idempotent).
     pub fn migrate_legacy_identity_to_account(&self) -> Result<(), StorageError> {
-            self.conn.execute(
+        self.conn.execute(
                 "INSERT OR IGNORE INTO accounts (public_key, encrypted_private_key, private_key_nonce, label, created_at)
                  SELECT public_key, encrypted_private_key, private_key_nonce, 'Main', created_at
                  FROM identity WHERE id = 1",
                 [],
             )?;
-            Ok(())
-        }
+        Ok(())
+    }
 
-        pub fn list_accounts(&self) -> Result<Vec<AccountRow>, StorageError> {
-            let mut stmt = self.conn.prepare(
-                "SELECT id, public_key, encrypted_private_key, private_key_nonce, label
+    pub fn list_accounts(&self) -> Result<Vec<AccountRow>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, public_key, encrypted_private_key, private_key_nonce, label
                  FROM accounts ORDER BY created_at ASC",
-            )?;
-            let rows = stmt.query_map([], |row| {
-                Ok(AccountRow {
-                    id: row.get(0)?,
-                    public_key: row.get(1)?,
-                    encrypted_private_key: row.get(2)?,
-                    private_key_nonce: row.get(3)?,
-                    label: row.get(4)?,
-                })
-            })?;
-            let mut out: Vec<AccountRow> = Vec::new();
-            for row in rows {
-                out.push(row.map_err(StorageError::Database)?);
-            }
-            Ok(out)
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(AccountRow {
+                id: row.get(0)?,
+                public_key: row.get(1)?,
+                encrypted_private_key: row.get(2)?,
+                private_key_nonce: row.get(3)?,
+                label: row.get(4)?,
+            })
+        })?;
+        let mut out: Vec<AccountRow> = Vec::new();
+        for row in rows {
+            out.push(row.map_err(StorageError::Database)?);
         }
+        Ok(out)
+    }
 
-        pub fn count_accounts(&self) -> Result<i64, StorageError> {
-            let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM accounts", [], |r| r.get(0))?;
-            Ok(n)
-        }
+    pub fn count_accounts(&self) -> Result<i64, StorageError> {
+        let n: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM accounts", [], |r| r.get(0))?;
+        Ok(n)
+    }
 
-        /// Insert a brand-new account (fresh identity wrapped under its own passphrase).
-        pub fn insert_account(
-            &self,
-            public_key: &[u8],
-            encrypted_private_key: &[u8],
-            nonce: &[u8],
-            label: Option<&str>,
-            created_at: i64,
-        ) -> Result<i64, StorageError> {
-            self.conn.execute(
+    /// Insert a brand-new account (fresh identity wrapped under its own passphrase).
+    pub fn insert_account(
+        &self,
+        public_key: &[u8],
+        encrypted_private_key: &[u8],
+        nonce: &[u8],
+        label: Option<&str>,
+        created_at: i64,
+    ) -> Result<i64, StorageError> {
+        self.conn.execute(
                 "INSERT INTO accounts (public_key, encrypted_private_key, private_key_nonce, label, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![public_key, encrypted_private_key, nonce, label, created_at],
             )?;
-            Ok(self.conn.last_insert_rowid())
-        }
+        Ok(self.conn.last_insert_rowid())
+    }
 
-        /// Refresh an existing account's wrapped secret key (e.g. after re-encryption).
-        pub fn update_account_private_key(
-            &self,
-            public_key: &[u8],
-            encrypted_private_key: &[u8],
-            nonce: &[u8],
-        ) -> Result<(), StorageError> {
-            self.conn.execute(
-                "UPDATE accounts SET encrypted_private_key = ?2, private_key_nonce = ?3
+    /// Refresh an existing account's wrapped secret key (e.g. after re-encryption).
+    pub fn update_account_private_key(
+        &self,
+        public_key: &[u8],
+        encrypted_private_key: &[u8],
+        nonce: &[u8],
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE accounts SET encrypted_private_key = ?2, private_key_nonce = ?3
                  WHERE public_key = ?1",
-                params![public_key, encrypted_private_key, nonce],
-            )?;
-            Ok(())
-        }
+            params![public_key, encrypted_private_key, nonce],
+        )?;
+        Ok(())
+    }
 
     /// Add or update a known peer.
     pub fn upsert_peer(
@@ -452,7 +463,13 @@ impl KeyStore {
         let result = self.conn.execute(
             "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![public_key.as_slice(), nickname_stored, now, expires_at, address_stored],
+            params![
+                public_key.as_slice(),
+                nickname_stored,
+                now,
+                expires_at,
+                address_stored
+            ],
         );
 
         match result {
@@ -464,7 +481,10 @@ impl KeyStore {
                 last_address: last_address.map(|s| s.to_string()),
             }),
             Err(SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation => {
-                Err(StorageError::Database(rusqlite::Error::SqliteFailure(e, Some("peer already in family".to_string()))))
+                Err(StorageError::Database(rusqlite::Error::SqliteFailure(
+                    e,
+                    Some("peer already in family".to_string()),
+                )))
             }
             Err(e) => Err(StorageError::Database(e)),
         }
@@ -498,9 +518,13 @@ impl KeyStore {
         let mut members = Vec::new();
         for row in rows {
             let mut m = row?;
-            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string());
+            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)
+                .unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(addr) = &m.last_address {
-                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string()));
+                m.last_address = Some(
+                    open_meta_value(key, addr, AAD_FAMILY)
+                        .unwrap_or_else(|_| "[encrypted]".to_string()),
+                );
             }
             members.push(m);
         }
@@ -549,7 +573,11 @@ impl KeyStore {
         // Update the existing row's key and address
         self.conn.execute(
             "UPDATE family SET public_key = ?1, last_address = ?2 WHERE public_key = ?3",
-            params![new_public_key.as_slice(), address_stored, old_public_key.as_slice()],
+            params![
+                new_public_key.as_slice(),
+                address_stored,
+                old_public_key.as_slice()
+            ],
         )?;
 
         // Read back the updated row
@@ -569,9 +597,13 @@ impl KeyStore {
         });
         match result {
             Ok(mut m) => {
-                m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string());
+                m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)
+                    .unwrap_or_else(|_| "[encrypted]".to_string());
                 if let Some(addr) = &m.last_address {
-                    m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string()));
+                    m.last_address = Some(
+                        open_meta_value(key, addr, AAD_FAMILY)
+                            .unwrap_or_else(|_| "[encrypted]".to_string()),
+                    );
                 }
                 Ok(m)
             }
@@ -626,9 +658,13 @@ impl KeyStore {
         let mut members = Vec::new();
         for row in rows {
             let mut m = row?;
-            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string());
+            m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)
+                .unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(addr) = &m.last_address {
-                m.last_address = Some(open_meta_value(key, addr, AAD_FAMILY).unwrap_or_else(|_| "[encrypted]".to_string()));
+                m.last_address = Some(
+                    open_meta_value(key, addr, AAD_FAMILY)
+                        .unwrap_or_else(|_| "[encrypted]".to_string()),
+                );
             }
             members.push(m);
         }
@@ -659,11 +695,16 @@ impl KeyStore {
         self.conn.execute(
             "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![public_key, nickname_stored, added_at, expires_at, address_stored],
+            rusqlite::params![
+                public_key,
+                nickname_stored,
+                added_at,
+                expires_at,
+                address_stored
+            ],
         )?;
         Ok(())
     }
-
 }
 
 /// The message store: holds chat history (optional).
@@ -699,14 +740,21 @@ const AAD_TRANSFER: &[u8] = b"m2m-transfer-v1";
 pub const WRAPPED_CEK_LEN: usize = 24 + 32 + 16;
 
 /// Encrypt plaintext under `key`; returns (nonce, ciphertext).
-fn seal_msg(key: &[u8; 32], plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
+fn seal_msg(
+    key: &[u8; 32],
+    plaintext: &[u8],
+    aad: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
     use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
     let nonce_bytes = crate::crypto::random_bytes(24);
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key));
     let ct = cipher
         .encrypt(
             chacha20poly1305::XNonce::from_slice(&nonce_bytes),
-            chacha20poly1305::aead::Payload { msg: plaintext, aad },
+            chacha20poly1305::aead::Payload {
+                msg: plaintext,
+                aad,
+            },
         )
         .map_err(|_| StorageError::EncryptionFailed)?;
     Ok((nonce_bytes, ct))
@@ -722,7 +770,10 @@ fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Resu
     cipher
         .decrypt(
             chacha20poly1305::XNonce::from_slice(nonce),
-            chacha20poly1305::aead::Payload { msg: ciphertext, aad },
+            chacha20poly1305::aead::Payload {
+                msg: ciphertext,
+                aad,
+            },
         )
         .map_err(|_| ())
 }
@@ -741,19 +792,30 @@ fn open_msg(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> Resu
 const ENC_PREFIX: &str = "enc1:";
 
 /// Encrypt a UTF-8 metadata value into its storage envelope.
-fn seal_meta_value(key: Option<&crate::secure_key::StorageKey>, plaintext: &str, aad: &[u8])
-    -> Result<String, StorageError>
-{
-    let Some(k) = key else { return Ok(plaintext.to_string()) };
+fn seal_meta_value(
+    key: Option<&crate::secure_key::StorageKey>,
+    plaintext: &str,
+    aad: &[u8],
+) -> Result<String, StorageError> {
+    let Some(k) = key else {
+        return Ok(plaintext.to_string());
+    };
     let (nonce, ct) = seal_msg(k.as_bytes(), plaintext.as_bytes(), aad)?;
-    Ok(format!("{}{}:{}", ENC_PREFIX, hex::encode(nonce), hex::encode(ct)))
+    Ok(format!(
+        "{}{}:{}",
+        ENC_PREFIX,
+        hex::encode(nonce),
+        hex::encode(ct)
+    ))
 }
 
 /// Decrypt a metadata value written by [`seal_meta_value`].
 /// Plaintext (legacy) values pass through unchanged.
-fn open_meta_value(key: Option<&crate::secure_key::StorageKey>, stored: &str, aad: &[u8])
-    -> Result<String, StorageError>
-{
+fn open_meta_value(
+    key: Option<&crate::secure_key::StorageKey>,
+    stored: &str,
+    aad: &[u8],
+) -> Result<String, StorageError> {
     let Some(rest) = stored.strip_prefix(ENC_PREFIX) else {
         return Ok(stored.to_string());
     };
@@ -763,8 +825,8 @@ fn open_meta_value(key: Option<&crate::secure_key::StorageKey>, stored: &str, aa
     let ct = parts.next().unwrap_or_default();
     let nonce = hex::decode(nonce).map_err(|_| StorageError::DecryptionFailed)?;
     let ct = hex::decode(ct).map_err(|_| StorageError::DecryptionFailed)?;
-    let pt = open_msg(k.as_bytes(), &nonce, &ct, aad)
-        .map_err(|_| StorageError::DecryptionFailed)?;
+    let pt =
+        open_msg(k.as_bytes(), &nonce, &ct, aad).map_err(|_| StorageError::DecryptionFailed)?;
     String::from_utf8(pt).map_err(|_| StorageError::DecryptionFailed)
 }
 
@@ -796,8 +858,13 @@ impl MessageStore {
             return Err(StorageError::KeyNotFound);
         }
         let mut cek = [0u8; 32];
-        let pt = open_msg(storage_key.as_bytes(), &wrapped[..24], &wrapped[24..], AAD_MSG_CEK)
-            .map_err(|_| StorageError::KeyNotFound)?;
+        let pt = open_msg(
+            storage_key.as_bytes(),
+            &wrapped[..24],
+            &wrapped[24..],
+            AAD_MSG_CEK,
+        )
+        .map_err(|_| StorageError::KeyNotFound)?;
         if pt.len() != 32 {
             return Err(StorageError::KeyNotFound);
         }
@@ -824,10 +891,13 @@ impl MessageStore {
                     .map_err(|_| StorageError::KeyNotFound)?;
                 Ok(pt)
             }
-            None => {
-                open_msg(storage_key.as_bytes(), stored_nonce, stored_content, AAD_MSG_STORE)
-                    .map_err(|_| StorageError::KeyNotFound)
-            }
+            None => open_msg(
+                storage_key.as_bytes(),
+                stored_nonce,
+                stored_content,
+                AAD_MSG_STORE,
+            )
+            .map_err(|_| StorageError::KeyNotFound),
         }
     }
     /// Open or create the message store.
@@ -886,16 +956,25 @@ impl MessageStore {
             .collect();
 
         if !existing_columns.contains(&"last_message_at".to_string()) {
-            conn.execute("ALTER TABLE conversations ADD COLUMN last_message_at INTEGER", [])?;
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN last_message_at INTEGER",
+                [],
+            )?;
         }
         if !existing_columns.contains(&"display_name".to_string()) {
             conn.execute("ALTER TABLE conversations ADD COLUMN display_name TEXT", [])?;
         }
         if !existing_columns.contains(&"peer_display_name".to_string()) {
-            conn.execute("ALTER TABLE conversations ADD COLUMN peer_display_name TEXT", [])?;
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN peer_display_name TEXT",
+                [],
+            )?;
         }
         if !existing_columns.contains(&"auto_delete_at".to_string()) {
-            conn.execute("ALTER TABLE conversations ADD COLUMN auto_delete_at INTEGER", [])?;
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN auto_delete_at INTEGER",
+                [],
+            )?;
         }
         if !existing_columns.contains(&"retention_policy".to_string()) {
             conn.execute(
@@ -904,10 +983,16 @@ impl MessageStore {
             )?;
         }
         if !existing_columns.contains(&"is_favorite".to_string()) {
-            conn.execute("ALTER TABLE conversations ADD COLUMN is_favorite INTEGER DEFAULT 0", [])?;
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN is_favorite INTEGER DEFAULT 0",
+                [],
+            )?;
         }
         if !existing_columns.contains(&"archived".to_string()) {
-            conn.execute("ALTER TABLE conversations ADD COLUMN archived INTEGER DEFAULT 0", [])?;
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN archived INTEGER DEFAULT 0",
+                [],
+            )?;
         }
         Ok(())
     }
@@ -926,7 +1011,10 @@ impl MessageStore {
             conn.execute("ALTER TABLE messages ADD COLUMN edited_at INTEGER", [])?;
         }
         if !existing_columns.contains(&"deleted".to_string()) {
-            conn.execute("ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0", [])?;
+            conn.execute(
+                "ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
         }
         if !existing_columns.contains(&"expires_at".to_string()) {
             conn.execute("ALTER TABLE messages ADD COLUMN expires_at INTEGER", [])?;
@@ -935,7 +1023,10 @@ impl MessageStore {
             // Crypto-shredding (H7): per-message content key, wrapped under
             // the vault storage key. Nullable — legacy rows are encrypted
             // directly under the vault key and decrypt via fallback.
-            conn.execute("ALTER TABLE messages ADD COLUMN content_key_wrapped BLOB", [])?;
+            conn.execute(
+                "ALTER TABLE messages ADD COLUMN content_key_wrapped BLOB",
+                [],
+            )?;
         }
         // Create indexes that depend on the columns above (expires_at, read_at).
         // These are CREATE INDEX IF NOT EXISTS so they're idempotent on re-run.
@@ -943,7 +1034,7 @@ impl MessageStore {
             "CREATE INDEX IF NOT EXISTS idx_messages_expires_at
                 ON messages(expires_at);
              CREATE INDEX IF NOT EXISTS idx_messages_read_status
-                ON messages(conversation_id, direction, read_at);"
+                ON messages(conversation_id, direction, read_at);",
         )?;
         // Run group table migrations
         Self::migrate_group_tables(conn)?;
@@ -983,7 +1074,7 @@ impl MessageStore {
                 FOREIGN KEY (group_id) REFERENCES groups(group_id)
             );
             CREATE INDEX IF NOT EXISTS idx_group_messages_group
-                ON group_messages(group_id, timestamp);"
+                ON group_messages(group_id, timestamp);",
         )?;
         Ok(())
     }
@@ -1220,20 +1311,23 @@ impl MessageStore {
              AND timestamp < ?3
              ORDER BY timestamp DESC LIMIT ?4",
         )?;
-        let rows = stmt.query_map(params![conversation_id, now, before_timestamp, limit], |row| {
-            Ok(StoredMessage {
-                id: row.get(0)?,
-                direction: row.get(1)?,
-                content_encrypted: row.get(2)?,
-                content_nonce: row.get(3)?,
-                timestamp: row.get(4)?,
-                read_at: row.get(5)?,
-                edited_at: row.get(6)?,
-                deleted: row.get::<_, i64>(7)? != 0,
-                expires_at: row.get(8)?,
-                content_key_wrapped: row.get(9)?,
-            })
-        })?;
+        let rows = stmt.query_map(
+            params![conversation_id, now, before_timestamp, limit],
+            |row| {
+                Ok(StoredMessage {
+                    id: row.get(0)?,
+                    direction: row.get(1)?,
+                    content_encrypted: row.get(2)?,
+                    content_nonce: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    read_at: row.get(5)?,
+                    edited_at: row.get(6)?,
+                    deleted: row.get::<_, i64>(7)? != 0,
+                    expires_at: row.get(8)?,
+                    content_key_wrapped: row.get(9)?,
+                })
+            },
+        )?;
         let mut messages = Vec::new();
         for row in rows {
             messages.push(row?);
@@ -1274,7 +1368,8 @@ impl MessageStore {
                 display_name: row.get(4)?,
                 peer_display_name: row.get(5)?,
                 auto_delete_at: row.get(6)?,
-                retention_policy: row.get::<_, Option<String>>(7)?
+                retention_policy: row
+                    .get::<_, Option<String>>(7)?
                     .unwrap_or_else(|| "none".to_string()),
                 message_count: row.get(8)?,
                 is_favorite: row.get::<_, Option<bool>>(9)?,
@@ -1333,11 +1428,14 @@ impl MessageStore {
     /// Toggle the favorite status of a conversation. Returns the new value.
     pub fn toggle_favorite(&self, peer_key_hex: &str) -> Result<bool, StorageError> {
         // Get current value
-        let current: bool = self.conn.query_row(
-            "SELECT COALESCE(is_favorite, 0) FROM conversations WHERE id = ?1",
-            params![peer_key_hex],
-            |row| row.get(0),
-        ).unwrap_or(false);
+        let current: bool = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(is_favorite, 0) FROM conversations WHERE id = ?1",
+                params![peer_key_hex],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
         let new_val = !current;
         self.conn.execute(
             "UPDATE conversations SET is_favorite = ?1 WHERE id = ?2",
@@ -1348,11 +1446,14 @@ impl MessageStore {
 
     /// Toggle the archive status of a conversation. Returns the new value.
     pub fn toggle_archive(&self, peer_key_hex: &str) -> Result<bool, StorageError> {
-        let current: bool = self.conn.query_row(
-            "SELECT COALESCE(archived, 0) FROM conversations WHERE id = ?1",
-            params![peer_key_hex],
-            |row| row.get(0),
-        ).unwrap_or(false);
+        let current: bool = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(archived, 0) FROM conversations WHERE id = ?1",
+                params![peer_key_hex],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
         let new_val = !current;
         self.conn.execute(
             "UPDATE conversations SET archived = ?1 WHERE id = ?2",
@@ -1395,7 +1496,8 @@ impl MessageStore {
                 display_name: row.get(4)?,
                 peer_display_name: row.get(5)?,
                 auto_delete_at: row.get(6)?,
-                retention_policy: row.get::<_, Option<String>>(7)?
+                retention_policy: row
+                    .get::<_, Option<String>>(7)?
                     .unwrap_or_else(|| "none".to_string()),
                 message_count: row.get(8)?,
                 is_favorite: row.get::<_, Option<bool>>(9)?,
@@ -1442,7 +1544,9 @@ impl MessageStore {
     /// cannot linger in `messages.db-wal` (H7 companion to secure_delete).
     fn wal_checkpoint_truncate(&self) -> Result<(), StorageError> {
         self.conn
-            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get::<_, i64>(0))
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .map_err(StorageError::Database)?;
         Ok(())
     }
@@ -1486,10 +1590,9 @@ impl MessageStore {
                 "SELECT rowid, reaction FROM reactions
                  WHERE message_id = ?1 AND peer_key_hex = ?2",
             )?;
-            let rows = stmt.query_map(
-                rusqlite::params![message_id, peer_key_hex],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
-            )?;
+            let rows = stmt.query_map(rusqlite::params![message_id, peer_key_hex], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })?;
             let matched: Vec<i64> = rows
                 .filter_map(|r| r.ok())
                 .filter(|(_, stored)| {
@@ -1518,10 +1621,9 @@ impl MessageStore {
                     "SELECT rowid, reaction FROM reactions
                      WHERE message_id = ?1 AND peer_key_hex = ?2",
                 )?;
-                let rows = stmt.query_map(
-                    rusqlite::params![message_id, peer_key_hex],
-                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
-                )?;
+                let rows = stmt.query_map(rusqlite::params![message_id, peer_key_hex], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })?;
                 rows.filter_map(|r| r.ok())
                     .filter(|(_, stored)| {
                         open_meta_value(key, stored, AAD_REACTION)
@@ -1578,7 +1680,9 @@ impl MessageStore {
         if message_ids.is_empty() {
             return Ok(ReactionsMap::new());
         }
-        let placeholders: Vec<String> = message_ids.iter().enumerate()
+        let placeholders: Vec<String> = message_ids
+            .iter()
+            .enumerate()
             .map(|(i, _)| format!("?{}", i + 1))
             .collect();
         let sql = format!(
@@ -1587,7 +1691,8 @@ impl MessageStore {
             placeholders.join(",")
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let params: Vec<&dyn rusqlite::types::ToSql> = message_ids.iter()
+        let params: Vec<&dyn rusqlite::types::ToSql> = message_ids
+            .iter()
             .map(|s| s as &dyn rusqlite::types::ToSql)
             .collect();
         let rows = stmt.query_map(params.as_slice(), |row| {
@@ -1657,7 +1762,15 @@ impl MessageStore {
                 "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2,
                         content_key_wrapped = ?3, edited_at = ?4
                  WHERE id = ?5 AND conversation_id = ?6 AND direction = ?7",
-                rusqlite::params![ciphertext, nonce, wrapped, now, message_id, conversation_id, expected_direction],
+                rusqlite::params![
+                    ciphertext,
+                    nonce,
+                    wrapped,
+                    now,
+                    message_id,
+                    conversation_id,
+                    expected_direction
+                ],
             )?;
             Ok(changed > 0)
         })();
@@ -1681,7 +1794,14 @@ impl MessageStore {
         let changed = self.conn.execute(
             "UPDATE messages SET content_encrypted = ?1, content_nonce = ?2, edited_at = ?3
              WHERE id = ?4 AND conversation_id = ?5 AND direction = ?6",
-            rusqlite::params![new_content_encrypted, new_content_nonce, now, message_id, conversation_id, expected_direction],
+            rusqlite::params![
+                new_content_encrypted,
+                new_content_nonce,
+                now,
+                message_id,
+                conversation_id,
+                expected_direction
+            ],
         )?;
         Ok(changed > 0)
     }
@@ -1708,7 +1828,12 @@ impl MessageStore {
         let changed = self.conn.execute(
             "UPDATE messages SET deleted = 1, content_key_wrapped = ?4
              WHERE id = ?1 AND conversation_id = ?2 AND direction = ?3",
-            rusqlite::params![message_id, conversation_id, expected_direction, vec![0u8; WRAPPED_CEK_LEN]],
+            rusqlite::params![
+                message_id,
+                conversation_id,
+                expected_direction,
+                vec![0u8; WRAPPED_CEK_LEN]
+            ],
         )?;
         Ok(changed > 0)
     }
@@ -1734,7 +1859,6 @@ impl MessageStore {
         self.wal_checkpoint_truncate()?;
         Ok(count as u32)
     }
-
 }
 
 /// A stored message row.
@@ -1861,28 +1985,26 @@ impl MessageStore {
             "SELECT peer_key_hex, display_name, role, added_at
              FROM group_members WHERE group_id = ?1 ORDER BY added_at",
         )?;
-        let members = stmt.query_map(params![group_id], |row| {
-            Ok(super::group::GroupMember {
-                peer_key_hex: row.get(0)?,
-                display_name: row.get(1)?,
-                role: match row.get::<_, String>(2)?.as_str() {
-                    "admin" => super::group::GroupRole::Admin,
-                    _ => super::group::GroupRole::Member,
-                },
-                added_at: row.get::<_, i64>(3)? as u64,
-            })
-        })?
-        .filter_map(|r| r.ok())
-        .collect();
+        let members = stmt
+            .query_map(params![group_id], |row| {
+                Ok(super::group::GroupMember {
+                    peer_key_hex: row.get(0)?,
+                    display_name: row.get(1)?,
+                    role: match row.get::<_, String>(2)?.as_str() {
+                        "admin" => super::group::GroupRole::Admin,
+                        _ => super::group::GroupRole::Member,
+                    },
+                    added_at: row.get::<_, i64>(3)? as u64,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(members)
     }
 
     /// Load a single group record (without members).
     #[allow(dead_code)]
-    pub fn load_group(
-        &self,
-        group_id: &str,
-    ) -> Result<Option<super::group::Group>, StorageError> {
+    pub fn load_group(&self, group_id: &str) -> Result<Option<super::group::Group>, StorageError> {
         let result = self.conn.query_row(
             "SELECT group_id, group_name, created_at, our_role, last_message_at, last_message_preview
              FROM groups WHERE group_id = ?1",
@@ -1897,9 +2019,8 @@ impl MessageStore {
         match result {
             Ok((gid, name, created_at, _role, last_msg_at, last_preview)) => {
                 let members = self.load_group_members(&gid)?;
-                let mut group = super::group::Group::new(
-                    gid, name, created_at as u64, String::new(),
-                );
+                let mut group =
+                    super::group::Group::new(gid, name, created_at as u64, String::new());
                 group.members = members;
                 group.last_message_at = last_msg_at.unwrap_or(0) as u64;
                 group.last_message_preview = last_preview;
@@ -1912,27 +2033,26 @@ impl MessageStore {
 
     /// List all groups with summary info.
     #[allow(dead_code)]
-    pub fn list_groups(
-        &self,
-    ) -> Result<Vec<super::group::GroupSummary>, StorageError> {
+    pub fn list_groups(&self) -> Result<Vec<super::group::GroupSummary>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT g.group_id, g.group_name, g.created_at,
                     COALESCE(g.last_message_at, 0), g.last_message_preview,
                     (SELECT COUNT(*) FROM group_members WHERE group_id = g.group_id) as member_count
              FROM groups g ORDER BY COALESCE(g.last_message_at, 0) DESC",
         )?;
-        let groups = stmt.query_map([], |row| {
-            Ok(super::group::GroupSummary {
-                group_id: row.get(0)?,
-                group_name: row.get(1)?,
-                created_at: row.get::<_, i64>(2)? as u64,
-                last_message_at: row.get::<_, i64>(3)? as u64,
-                last_message_preview: row.get(4)?,
-                member_count: row.get::<_, i64>(5)? as u32,
-            })
-        })?
-        .filter_map(|r| r.ok())
-        .collect();
+        let groups = stmt
+            .query_map([], |row| {
+                Ok(super::group::GroupSummary {
+                    group_id: row.get(0)?,
+                    group_name: row.get(1)?,
+                    created_at: row.get::<_, i64>(2)? as u64,
+                    last_message_at: row.get::<_, i64>(3)? as u64,
+                    last_message_preview: row.get(4)?,
+                    member_count: row.get::<_, i64>(5)? as u32,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(groups)
     }
 
@@ -1942,19 +2062,13 @@ impl MessageStore {
             "DELETE FROM group_members WHERE group_id = ?1",
             params![group_id],
         )?;
-        self.conn.execute(
-            "DELETE FROM groups WHERE group_id = ?1",
-            params![group_id],
-        )?;
+        self.conn
+            .execute("DELETE FROM groups WHERE group_id = ?1", params![group_id])?;
         Ok(())
     }
 
     /// Update group metadata.
-    pub fn update_group_name(
-        &self,
-        group_id: &str,
-        new_name: &str,
-    ) -> Result<(), StorageError> {
+    pub fn update_group_name(&self, group_id: &str, new_name: &str) -> Result<(), StorageError> {
         self.conn.execute(
             "UPDATE groups SET group_name = ?1 WHERE group_id = ?2",
             params![new_name, group_id],
@@ -2079,11 +2193,7 @@ impl MessageStore {
 
     /// Mark a group message as edited.
     #[allow(dead_code)]
-    pub fn edit_group_message(
-        &self,
-        message_id: &str,
-        edited_at: i64,
-    ) -> Result<(), StorageError> {
+    pub fn edit_group_message(&self, message_id: &str, edited_at: i64) -> Result<(), StorageError> {
         self.conn.execute(
             "UPDATE group_messages SET edited_at = ?1 WHERE id = ?2",
             params![edited_at, message_id],
@@ -2093,10 +2203,7 @@ impl MessageStore {
 
     /// Soft-delete a group message.
     #[allow(dead_code)]
-    pub fn delete_group_message(
-        &self,
-        message_id: &str,
-    ) -> Result<(), StorageError> {
+    pub fn delete_group_message(&self, message_id: &str) -> Result<(), StorageError> {
         self.conn.execute(
             "UPDATE group_messages SET deleted = 1 WHERE id = ?1",
             params![message_id],
@@ -2276,12 +2383,19 @@ impl TransferStore {
         let mut transfers = Vec::new();
         for row in rows {
             let mut t = row?;
-            t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string());
+            t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER)
+                .unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(p) = &t.local_path {
-                t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
+                t.local_path = Some(
+                    open_meta_value(key, p, AAD_TRANSFER)
+                        .unwrap_or_else(|_| "[encrypted]".to_string()),
+                );
             }
             if let Some(e) = &t.error {
-                t.error = Some(open_meta_value(key, e, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
+                t.error = Some(
+                    open_meta_value(key, e, AAD_TRANSFER)
+                        .unwrap_or_else(|_| "[encrypted]".to_string()),
+                );
             }
             transfers.push(t);
         }
@@ -2319,12 +2433,19 @@ impl TransferStore {
         });
         match result {
             Ok(mut t) => {
-                t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string());
+                t.filename = open_meta_value(key, &t.filename, AAD_TRANSFER)
+                    .unwrap_or_else(|_| "[encrypted]".to_string());
                 if let Some(p) = &t.local_path {
-                    t.local_path = Some(open_meta_value(key, p, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
+                    t.local_path = Some(
+                        open_meta_value(key, p, AAD_TRANSFER)
+                            .unwrap_or_else(|_| "[encrypted]".to_string()),
+                    );
                 }
                 if let Some(e) = &t.error {
-                    t.error = Some(open_meta_value(key, e, AAD_TRANSFER).unwrap_or_else(|_| "[encrypted]".to_string()));
+                    t.error = Some(
+                        open_meta_value(key, e, AAD_TRANSFER)
+                            .unwrap_or_else(|_| "[encrypted]".to_string()),
+                    );
                 }
                 Ok(Some(t))
             }
@@ -2336,10 +2457,8 @@ impl TransferStore {
     /// Delete a transfer record.
     #[cfg(test)]
     pub fn delete_transfer(&self, transfer_id: &str) -> Result<(), StorageError> {
-        self.conn.execute(
-            "DELETE FROM transfers WHERE id = ?1",
-            params![transfer_id],
-        )?;
+        self.conn
+            .execute("DELETE FROM transfers WHERE id = ?1", params![transfer_id])?;
         Ok(())
     }
 }
@@ -2374,7 +2493,9 @@ mod tests {
         let nonce = vec![0xCC; 24];
         let created = 1719446400i64;
 
-        store.store_identity(&pub_key, &enc_pk, &nonce, created).unwrap();
+        store
+            .store_identity(&pub_key, &enc_pk, &nonce, created)
+            .unwrap();
 
         let (loaded_pub, loaded_enc, loaded_nonce) = store.load_identity().unwrap();
         assert_eq!(loaded_pub, pub_key);
@@ -2385,8 +2506,12 @@ mod tests {
     #[test]
     fn test_store_identity_overwrite() {
         let store = mem_keystore();
-        store.store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000).unwrap();
-        store.store_identity(&[0xDD; 32], &[0xEE; 64], &[0xFF; 24], 2000).unwrap();
+        store
+            .store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000)
+            .unwrap();
+        store
+            .store_identity(&[0xDD; 32], &[0xEE; 64], &[0xFF; 24], 2000)
+            .unwrap();
 
         let (pub_key, enc_pk, nonce) = store.load_identity().unwrap();
         assert_eq!(pub_key, vec![0xDD; 32]);
@@ -2397,7 +2522,9 @@ mod tests {
     #[test]
     fn test_store_and_load_public_key() {
         let store = mem_keystore();
-        store.store_identity(&[0x11; 32], &[0x22; 64], &[0x33; 24], 1000).unwrap();
+        store
+            .store_identity(&[0x11; 32], &[0x22; 64], &[0x33; 24], 1000)
+            .unwrap();
 
         let pk = store.load_public_key().unwrap();
         assert_eq!(pk, vec![0x11; 32]);
@@ -2412,7 +2539,9 @@ mod tests {
     #[test]
     fn test_has_identity_true_after_store() {
         let store = mem_keystore();
-        store.store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000).unwrap();
+        store
+            .store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000)
+            .unwrap();
         assert!(store.has_identity().unwrap());
     }
 
@@ -2447,7 +2576,9 @@ mod tests {
     #[test]
     fn test_upsert_peer_new() {
         let store = mem_keystore();
-        store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Alice")).unwrap();
+        store
+            .upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Alice"))
+            .unwrap();
 
         // Verify via has_identity (peers table is separate)
         // We can't directly query, but upsert should succeed without error.
@@ -2458,9 +2589,13 @@ mod tests {
     #[test]
     fn test_upsert_peer_update_alias() {
         let store = mem_keystore();
-        store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Alice")).unwrap();
+        store
+            .upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Alice"))
+            .unwrap();
         // Upsert again with new alias — should update, not error
-        store.upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Bob")).unwrap();
+        store
+            .upsert_peer(&[0x11; 32], "A1B2:C3D4", Some("Bob"))
+            .unwrap();
     }
 
     /// H5: is_known_peer must reflect the peers table — unknown keys are
@@ -2468,10 +2603,16 @@ mod tests {
     #[test]
     fn test_is_known_peer() {
         let store = mem_keystore();
-        assert!(!store.is_known_peer(&[0x42; 32]).unwrap(), "empty store: peer must be unknown");
+        assert!(
+            !store.is_known_peer(&[0x42; 32]).unwrap(),
+            "empty store: peer must be unknown"
+        );
 
         store.upsert_peer(&[0x42; 32], "AAAA:BBBB", None).unwrap();
-        assert!(store.is_known_peer(&[0x42; 32]).unwrap(), "upserted peer must be known");
+        assert!(
+            store.is_known_peer(&[0x42; 32]).unwrap(),
+            "upserted peer must be known"
+        );
 
         // A different key stays unknown.
         assert!(!store.is_known_peer(&[0x43; 32]).unwrap());
@@ -2480,8 +2621,12 @@ mod tests {
     #[test]
     fn test_update_encrypted_private_key() {
         let store = mem_keystore();
-        store.store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000).unwrap();
-        store.update_encrypted_private_key(&[0xDD; 64], &[0xEE; 24]).unwrap();
+        store
+            .store_identity(&[0xAA; 32], &[0xBB; 64], &[0xCC; 24], 1000)
+            .unwrap();
+        store
+            .update_encrypted_private_key(&[0xDD; 64], &[0xEE; 24])
+            .unwrap();
 
         let (_, enc_pk, nonce) = store.load_identity().unwrap();
         assert_eq!(enc_pk, vec![0xDD; 64]);
@@ -2497,9 +2642,17 @@ mod tests {
         let peer_id = vec![0xAA; 32];
 
         store.ensure_conversation(conv_id, &peer_id).unwrap();
-        store.store_message(
-            "msg-001", conv_id, "sent", &[0x01; 32], &[0x02; 24], 1000, false,
-        ).unwrap();
+        store
+            .store_message(
+                "msg-001",
+                conv_id,
+                "sent",
+                &[0x01; 32],
+                &[0x02; 24],
+                1000,
+                false,
+            )
+            .unwrap();
 
         let messages = store.load_messages(conv_id, 10).unwrap();
         assert_eq!(messages.len(), 1);
@@ -2516,10 +2669,17 @@ mod tests {
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
 
         for i in 0..5 {
-            store.store_message(
-                &format!("msg-{:03}", i), "conv-001", "received",
-                &[i as u8; 32], &[0xBB; 24], 1000 + i, true,
-            ).unwrap();
+            store
+                .store_message(
+                    &format!("msg-{:03}", i),
+                    "conv-001",
+                    "received",
+                    &[i as u8; 32],
+                    &[0xBB; 24],
+                    1000 + i,
+                    true,
+                )
+                .unwrap();
         }
 
         let messages = store.load_messages("conv-001", 10).unwrap();
@@ -2536,10 +2696,17 @@ mod tests {
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
 
         for i in 0..10 {
-            store.store_message(
-                &format!("msg-{:03}", i), "conv-001", "sent",
-                &[i as u8; 32], &[0xBB; 24], 1000 + i, true,
-            ).unwrap();
+            store
+                .store_message(
+                    &format!("msg-{:03}", i),
+                    "conv-001",
+                    "sent",
+                    &[i as u8; 32],
+                    &[0xBB; 24],
+                    1000 + i,
+                    true,
+                )
+                .unwrap();
         }
 
         let limited = store.load_messages("conv-001", 3).unwrap();
@@ -2556,9 +2723,23 @@ mod tests {
         store.ensure_conversation("conv-a", &[0x11; 32]).unwrap();
         store.ensure_conversation("conv-b", &[0x22; 32]).unwrap();
 
-        store.store_message("m1", "conv-a", "sent", &[0x01; 32], &[0x02; 24], 1000, true).unwrap();
-        store.store_message("m2", "conv-a", "sent", &[0x03; 32], &[0x04; 24], 2000, true).unwrap();
-        store.store_message("m3", "conv-b", "received", &[0x05; 32], &[0x06; 24], 1500, true).unwrap();
+        store
+            .store_message("m1", "conv-a", "sent", &[0x01; 32], &[0x02; 24], 1000, true)
+            .unwrap();
+        store
+            .store_message("m2", "conv-a", "sent", &[0x03; 32], &[0x04; 24], 2000, true)
+            .unwrap();
+        store
+            .store_message(
+                "m3",
+                "conv-b",
+                "received",
+                &[0x05; 32],
+                &[0x06; 24],
+                1500,
+                true,
+            )
+            .unwrap();
 
         let convos = store.list_conversations().unwrap();
         assert_eq!(convos.len(), 2);
@@ -2588,7 +2769,17 @@ mod tests {
     fn test_delete_conversation_cascade() {
         let store = mem_messagestore();
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
-        store.store_message("msg-001", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000, true).unwrap();
+        store
+            .store_message(
+                "msg-001",
+                "conv-001",
+                "sent",
+                &[0x01; 32],
+                &[0x02; 24],
+                1000,
+                true,
+            )
+            .unwrap();
 
         // Verify it exists
         assert!(store.get_conversation("conv-001").unwrap().is_some());
@@ -2606,8 +2797,28 @@ mod tests {
     fn test_export_conversation_messages() {
         let store = mem_messagestore();
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
-        store.store_message("m1", "conv-001", "sent", &[0x01; 32], &[0x02; 24], 1000, true).unwrap();
-        store.store_message("m2", "conv-001", "received", &[0x03; 32], &[0x04; 24], 2000, true).unwrap();
+        store
+            .store_message(
+                "m1",
+                "conv-001",
+                "sent",
+                &[0x01; 32],
+                &[0x02; 24],
+                1000,
+                true,
+            )
+            .unwrap();
+        store
+            .store_message(
+                "m2",
+                "conv-001",
+                "received",
+                &[0x03; 32],
+                &[0x04; 24],
+                2000,
+                true,
+            )
+            .unwrap();
 
         let exported = store.export_conversation_messages("conv-001").unwrap();
         assert_eq!(exported.len(), 2);
@@ -2628,7 +2839,9 @@ mod tests {
         let store = mem_messagestore();
         store.ensure_conversation("conv-001", &[0xAA; 32]).unwrap();
 
-        store.set_conversation_retention("conv-001", "auto_delete", Some(86400)).unwrap();
+        store
+            .set_conversation_retention("conv-001", "auto_delete", Some(86400))
+            .unwrap();
         let conv = store.get_conversation("conv-001").unwrap().unwrap();
         assert_eq!(conv.retention_policy, "auto_delete");
         assert!(conv.auto_delete_at.is_some());
@@ -2648,10 +2861,18 @@ mod tests {
         let store = mem_transferstore();
         let key = test_key();
         // Encrypted-at-rest write (filename sealed under the vault key).
-        store.store_transfer(
-            "xfer-001", "alice_pk", "report.pdf", 1048576, "received", "completed", 16,
-            Some(&key),
-        ).unwrap();
+        store
+            .store_transfer(
+                "xfer-001",
+                "alice_pk",
+                "report.pdf",
+                1048576,
+                "received",
+                "completed",
+                16,
+                Some(&key),
+            )
+            .unwrap();
 
         let saved = store.get_transfer("xfer-001", Some(&key)).unwrap().unwrap();
         assert_eq!(saved.id, "xfer-001");
@@ -2665,11 +2886,22 @@ mod tests {
     #[test]
     fn test_transfer_store_update_state() {
         let store = mem_transferstore();
-        store.store_transfer(
-            "xfer-002", "bob_pk", "photo.jpg", 524288, "sent", "transferring", 8, None,
-        ).unwrap();
+        store
+            .store_transfer(
+                "xfer-002",
+                "bob_pk",
+                "photo.jpg",
+                524288,
+                "sent",
+                "transferring",
+                8,
+                None,
+            )
+            .unwrap();
 
-        store.update_state("xfer-002", "completed", Some(2000), None, None).unwrap();
+        store
+            .update_state("xfer-002", "completed", Some(2000), None, None)
+            .unwrap();
 
         let saved = store.get_transfer("xfer-002", None).unwrap().unwrap();
         assert_eq!(saved.state, "completed");
@@ -2680,12 +2912,28 @@ mod tests {
     fn test_transfer_store_update_error() {
         let store = mem_transferstore();
         let key = test_key();
-        store.store_transfer(
-            "xfer-003", "carol_pk", "archive.zip", 2097152, "sent", "transferring", 32,
-            Some(&key),
-        ).unwrap();
+        store
+            .store_transfer(
+                "xfer-003",
+                "carol_pk",
+                "archive.zip",
+                2097152,
+                "sent",
+                "transferring",
+                32,
+                Some(&key),
+            )
+            .unwrap();
 
-        store.update_state("xfer-003", "failed", None, Some("connection lost"), Some(&key)).unwrap();
+        store
+            .update_state(
+                "xfer-003",
+                "failed",
+                None,
+                Some("connection lost"),
+                Some(&key),
+            )
+            .unwrap();
 
         let saved = store.get_transfer("xfer-003", Some(&key)).unwrap().unwrap();
         assert_eq!(saved.state, "failed");
@@ -2695,9 +2943,18 @@ mod tests {
     #[test]
     fn test_transfer_store_update_progress() {
         let store = mem_transferstore();
-        store.store_transfer(
-            "xfer-004", "dave_pk", "video.mp4", 10485760, "sent", "transferring", 40, None,
-        ).unwrap();
+        store
+            .store_transfer(
+                "xfer-004",
+                "dave_pk",
+                "video.mp4",
+                10485760,
+                "sent",
+                "transferring",
+                40,
+                None,
+            )
+            .unwrap();
 
         store.update_progress("xfer-004", 15).unwrap();
 
@@ -2709,12 +2966,22 @@ mod tests {
     fn test_transfer_store_set_local_path() {
         let store = mem_transferstore();
         let key = test_key();
-        store.store_transfer(
-            "xfer-005", "eve_pk", "doc.pdf", 65536, "received", "completed", 1,
-            Some(&key),
-        ).unwrap();
+        store
+            .store_transfer(
+                "xfer-005",
+                "eve_pk",
+                "doc.pdf",
+                65536,
+                "received",
+                "completed",
+                1,
+                Some(&key),
+            )
+            .unwrap();
 
-        store.set_local_path("xfer-005", "/downloads/doc.pdf", Some(&key)).unwrap();
+        store
+            .set_local_path("xfer-005", "/downloads/doc.pdf", Some(&key))
+            .unwrap();
 
         let saved = store.get_transfer("xfer-005", Some(&key)).unwrap().unwrap();
         assert_eq!(saved.local_path, Some("/downloads/doc.pdf".to_string()));
@@ -2723,9 +2990,24 @@ mod tests {
     #[test]
     fn test_transfer_store_list_limit() {
         let store = mem_transferstore();
-        store.store_transfer("xf-01", "pk1", "a.txt", 100, "sent", "completed", 1, None).unwrap();
-        store.store_transfer("xf-02", "pk2", "b.txt", 200, "received", "failed", 2, None).unwrap();
-        store.store_transfer("xf-03", "pk3", "c.txt", 300, "sent", "transferring", 3, None).unwrap();
+        store
+            .store_transfer("xf-01", "pk1", "a.txt", 100, "sent", "completed", 1, None)
+            .unwrap();
+        store
+            .store_transfer("xf-02", "pk2", "b.txt", 200, "received", "failed", 2, None)
+            .unwrap();
+        store
+            .store_transfer(
+                "xf-03",
+                "pk3",
+                "c.txt",
+                300,
+                "sent",
+                "transferring",
+                3,
+                None,
+            )
+            .unwrap();
 
         let limited = store.list_transfers(2, None).unwrap();
         assert_eq!(limited.len(), 2);
@@ -2742,7 +3024,18 @@ mod tests {
     #[test]
     fn test_transfer_store_delete() {
         let store = mem_transferstore();
-        store.store_transfer("xf-del", "pk", "nope.txt", 100, "sent", "cancelled", 1, None).unwrap();
+        store
+            .store_transfer(
+                "xf-del",
+                "pk",
+                "nope.txt",
+                100,
+                "sent",
+                "cancelled",
+                1,
+                None,
+            )
+            .unwrap();
         assert!(store.get_transfer("xf-del", None).unwrap().is_some());
 
         store.delete_transfer("xf-del").unwrap();
@@ -2766,40 +3059,69 @@ mod tests {
         let key = test_key();
         let pk = [0x11u8; 32];
 
-        store.add_family_member(&pk, "Alice Home", Some(30), Some("192.168.1.50:7777"), Some(&key)).unwrap();
+        store
+            .add_family_member(
+                &pk,
+                "Alice Home",
+                Some(30),
+                Some("192.168.1.50:7777"),
+                Some(&key),
+            )
+            .unwrap();
 
         // Raw row must not leak plaintext metadata.
-        let raw_nick: String = store.conn.query_row(
-            "SELECT nickname FROM family WHERE public_key = ?1",
-            params![pk.as_slice()], |r| r.get(0)).unwrap();
-        assert!(raw_nick.starts_with("enc1:"), "nickname must be an envelope, got {raw_nick}");
+        let raw_nick: String = store
+            .conn
+            .query_row(
+                "SELECT nickname FROM family WHERE public_key = ?1",
+                params![pk.as_slice()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            raw_nick.starts_with("enc1:"),
+            "nickname must be an envelope, got {raw_nick}"
+        );
         assert!(!raw_nick.contains("Alice"));
 
         // Right key decrypts.
         let members = store.list_family(Some(&key)).unwrap();
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].nickname, "Alice Home");
-        assert_eq!(members[0].last_address.as_deref(), Some("192.168.1.50:7777"));
+        assert_eq!(
+            members[0].last_address.as_deref(),
+            Some("192.168.1.50:7777")
+        );
 
         // list_family_all (export path) also decrypts.
         let all = store.list_family_all(Some(&key)).unwrap();
         assert_eq!(all[0].nickname, "Alice Home");
 
         // Nickname update re-encrypts; read-back works.
-        store.set_family_nickname(&pk, "Renamed", Some(&key)).unwrap();
+        store
+            .set_family_nickname(&pk, "Renamed", Some(&key))
+            .unwrap();
         let renamed = store.list_family(Some(&key)).unwrap();
         assert_eq!(renamed[0].nickname, "Renamed");
 
         // Legacy plaintext row (key = None write) reads fine without a key
         // AND with a key (open_meta_value passes non-envelope values through).
         let pk2 = [0x22u8; 32];
-        store.add_family_member(&pk2, "Plaintext Bob", None, None, None).unwrap();
+        store
+            .add_family_member(&pk2, "Plaintext Bob", None, None, None)
+            .unwrap();
         let mixed_none = store.list_family(None).unwrap();
         assert_eq!(mixed_none.len(), 2);
-        let bob = mixed_none.iter().find(|m| m.public_key_hex == hex::encode(pk2)).unwrap();
+        let bob = mixed_none
+            .iter()
+            .find(|m| m.public_key_hex == hex::encode(pk2))
+            .unwrap();
         assert_eq!(bob.nickname, "Plaintext Bob");
         let mixed_keyed = store.list_family(Some(&key)).unwrap();
-        let bob2 = mixed_keyed.iter().find(|m| m.public_key_hex == hex::encode(pk2)).unwrap();
+        let bob2 = mixed_keyed
+            .iter()
+            .find(|m| m.public_key_hex == hex::encode(pk2))
+            .unwrap();
         assert_eq!(bob2.nickname, "Plaintext Bob");
     }
 
@@ -2812,41 +3134,87 @@ mod tests {
         let key = test_key();
         let peer = [0x33u8; 32];
         store.ensure_conversation("conv-r", &peer).unwrap();
-        store.store_message("m-1", "conv-r", "sent", &[0u8; 24], b"hello", 1000, true).unwrap();
+        store
+            .store_message("m-1", "conv-r", "sent", &[0u8; 24], b"hello", 1000, true)
+            .unwrap();
 
         // Keyed insert → envelope on disk.
-        store.upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
-        let raw: String = store.conn.query_row(
-            "SELECT reaction FROM reactions WHERE message_id = 'm-1'", [], |r| r.get(0)).unwrap();
-        assert!(raw.starts_with("enc1:"), "reaction must be an envelope, got {raw}");
+        store
+            .upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key))
+            .unwrap();
+        let raw: String = store
+            .conn
+            .query_row(
+                "SELECT reaction FROM reactions WHERE message_id = 'm-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            raw.starts_with("enc1:"),
+            "reaction must be an envelope, got {raw}"
+        );
 
         // Read back with right key.
-        let map = store.get_reactions(&["m-1".to_string()], Some(&key)).unwrap();
+        let map = store
+            .get_reactions(&["m-1".to_string()], Some(&key))
+            .unwrap();
         assert_eq!(map["m-1"][0].0, "👍");
 
         // Duplicate insert from same peer does NOT create a second row
         // (random nonces would defeat SQL-level uniqueness).
-        store.upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
-        let count: i64 = store.conn.query_row(
-            "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'", [], |r| r.get(0)).unwrap();
+        store
+            .upsert_reaction("m-1", "👍", &hex::encode(peer), false, "conv-r", Some(&key))
+            .unwrap();
+        let count: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(count, 1);
 
         // Remove matches by DECRYPTED text.
-        store.upsert_reaction("m-1", "👍", &hex::encode(peer), true, "conv-r", Some(&key)).unwrap();
-        let count_after: i64 = store.conn.query_row(
-            "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'", [], |r| r.get(0)).unwrap();
+        store
+            .upsert_reaction("m-1", "👍", &hex::encode(peer), true, "conv-r", Some(&key))
+            .unwrap();
+        let count_after: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(count_after, 0);
 
         // Wrong-key read skips the undecryptable row instead of erroring.
         let wrong = StorageKey::new([0xEE; 32]);
-        store.upsert_reaction("m-1", "❤️", &hex::encode(peer), false, "conv-r", Some(&key)).unwrap();
-        let skipped = store.get_reactions(&["m-1".to_string()], Some(&wrong)).unwrap();
-        assert!(skipped.is_empty(), "undecryptable reactions must be skipped");
+        store
+            .upsert_reaction("m-1", "❤️", &hex::encode(peer), false, "conv-r", Some(&key))
+            .unwrap();
+        let skipped = store
+            .get_reactions(&["m-1".to_string()], Some(&wrong))
+            .unwrap();
+        assert!(
+            skipped.is_empty(),
+            "undecryptable reactions must be skipped"
+        );
 
         // Legacy plaintext reaction still readable without a key.
-        store.upsert_reaction("m-1", "legacy", &hex::encode(peer), false, "conv-r", None).unwrap();
+        store
+            .upsert_reaction("m-1", "legacy", &hex::encode(peer), false, "conv-r", None)
+            .unwrap();
         let legacy_map = store.get_reactions(&["m-1".to_string()], None).unwrap();
-        assert_eq!(legacy_map["m-1"].iter().find(|(r, _, _)| r == "legacy").is_some(), true);
+        assert_eq!(
+            legacy_map["m-1"]
+                .iter()
+                .find(|(r, _, _)| r == "legacy")
+                .is_some(),
+            true
+        );
     }
 
     /// Metadata-at-rest (H-secondary): keyed writes must produce an
@@ -2858,16 +3226,38 @@ mod tests {
         let key = test_key();
         let wrong_key = StorageKey::new([0xEE; 32]);
 
-        store.store_transfer(
-            "enc-t1", "pk", "secret-report.pdf", 1, "sent", "failed", 1, Some(&key),
-        ).unwrap();
-        store.update_state("enc-t1", "failed", Some(99), Some("disk full"), Some(&key)).unwrap();
-        store.set_local_path("enc-t1", "/tmp/secret-report.pdf", Some(&key)).unwrap();
+        store
+            .store_transfer(
+                "enc-t1",
+                "pk",
+                "secret-report.pdf",
+                1,
+                "sent",
+                "failed",
+                1,
+                Some(&key),
+            )
+            .unwrap();
+        store
+            .update_state("enc-t1", "failed", Some(99), Some("disk full"), Some(&key))
+            .unwrap();
+        store
+            .set_local_path("enc-t1", "/tmp/secret-report.pdf", Some(&key))
+            .unwrap();
 
         // Raw row must not contain any plaintext metadata.
-        let raw_name: String = store.conn.query_row(
-            "SELECT filename FROM transfers WHERE id = 'enc-t1'", [], |r| r.get(0)).unwrap();
-        assert!(raw_name.starts_with("enc1:"), "filename must be stored as envelope, got {raw_name}");
+        let raw_name: String = store
+            .conn
+            .query_row(
+                "SELECT filename FROM transfers WHERE id = 'enc-t1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            raw_name.starts_with("enc1:"),
+            "filename must be stored as envelope, got {raw_name}"
+        );
         assert!(!raw_name.contains("secret"));
 
         // Right key decrypts everything.
@@ -2881,9 +3271,18 @@ mod tests {
         assert!(bad.is_err() || bad.unwrap().unwrap().filename != "secret-report.pdf");
 
         // Legacy plaintext rows still read back unchanged without a key.
-        store.store_transfer(
-            "legacy-t2", "pk2", "old-file.txt", 2, "sent", "completed", 1, None,
-        ).unwrap();
+        store
+            .store_transfer(
+                "legacy-t2",
+                "pk2",
+                "old-file.txt",
+                2,
+                "sent",
+                "completed",
+                1,
+                None,
+            )
+            .unwrap();
         let legacy = store.get_transfer("legacy-t2", None).unwrap().unwrap();
         assert_eq!(legacy.filename, "old-file.txt");
     }
@@ -2900,26 +3299,47 @@ mod tests {
     fn test_secure_message_roundtrip() {
         let store = mem_messagestore();
         store.ensure_conversation("conv-sec", &[0xAA; 32]).unwrap();
-        store.store_message_secure(
-            "m1", "conv-sec", "sent", b"shreddable secret", 1000, None, true, &test_key(),
-        ).unwrap();
+        store
+            .store_message_secure(
+                "m1",
+                "conv-sec",
+                "sent",
+                b"shreddable secret",
+                1000,
+                None,
+                true,
+                &test_key(),
+            )
+            .unwrap();
 
         let msgs = store.load_messages("conv-sec", 10).unwrap();
         assert_eq!(msgs.len(), 1);
-        assert!(msgs[0].content_key_wrapped.is_some(), "secure rows must carry a wrapped CEK");
+        assert!(
+            msgs[0].content_key_wrapped.is_some(),
+            "secure rows must carry a wrapped CEK"
+        );
 
         let pt = MessageStore::decrypt_stored_content(
-            &msgs[0].content_encrypted, &msgs[0].content_nonce,
-            msgs[0].content_key_wrapped.as_deref(), &test_key(),
-        ).unwrap();
+            &msgs[0].content_encrypted,
+            &msgs[0].content_nonce,
+            msgs[0].content_key_wrapped.as_deref(),
+            &test_key(),
+        )
+        .unwrap();
         assert_eq!(pt, b"shreddable secret");
 
         // Content must NOT be decryptable directly under the vault key —
         // it is sealed under the per-message CEK only.
-        assert!(crate::commands::util::crypto_decrypt_storage(
-            &msgs[0].content_encrypted, &msgs[0].content_nonce, &test_key(),
-            crate::commands::util::AAD_MSG_STORE,
-        ).is_err(), "content must not be encrypted under the vault storage key");
+        assert!(
+            crate::commands::util::crypto_decrypt_storage(
+                &msgs[0].content_encrypted,
+                &msgs[0].content_nonce,
+                &test_key(),
+                crate::commands::util::AAD_MSG_STORE,
+            )
+            .is_err(),
+            "content must not be encrypted under the vault storage key"
+        );
     }
 
     /// Legacy rows (pre-crypto-shredding) have no wrapped key and were
@@ -2931,16 +3351,25 @@ mod tests {
 
         // Old-style: caller encrypted under the vault key; no wrapped CEK.
         let (nonce, ct) = crate::commands::util::crypto_encrypt_storage(
-            b"legacy plaintext", &test_key(), crate::commands::util::AAD_MSG_STORE,
-        ).unwrap();
-        store.store_message("m1", "conv-old", "received", &ct, &nonce, 1000, true).unwrap();
+            b"legacy plaintext",
+            &test_key(),
+            crate::commands::util::AAD_MSG_STORE,
+        )
+        .unwrap();
+        store
+            .store_message("m1", "conv-old", "received", &ct, &nonce, 1000, true)
+            .unwrap();
 
         let msgs = store.load_messages("conv-old", 10).unwrap();
         assert!(msgs[0].content_key_wrapped.is_none());
 
         let pt = MessageStore::decrypt_stored_content(
-            &msgs[0].content_encrypted, &msgs[0].content_nonce, None, &test_key(),
-        ).unwrap();
+            &msgs[0].content_encrypted,
+            &msgs[0].content_nonce,
+            None,
+            &test_key(),
+        )
+        .unwrap();
         assert_eq!(pt, b"legacy plaintext");
     }
 
@@ -2950,10 +3379,21 @@ mod tests {
     #[test]
     fn test_soft_delete_shreds_content_key() {
         let store = mem_messagestore();
-        store.ensure_conversation("conv-shred", &[0xCC; 32]).unwrap();
-        store.store_message_secure(
-            "m1", "conv-shred", "sent", b"doomed message", 1000, None, true, &test_key(),
-        ).unwrap();
+        store
+            .ensure_conversation("conv-shred", &[0xCC; 32])
+            .unwrap();
+        store
+            .store_message_secure(
+                "m1",
+                "conv-shred",
+                "sent",
+                b"doomed message",
+                1000,
+                None,
+                true,
+                &test_key(),
+            )
+            .unwrap();
 
         // Capture the ciphertext remnants an attacker might recover from disk.
         let msgs = store.load_messages("conv-shred", 10).unwrap();
@@ -2966,36 +3406,63 @@ mod tests {
         let after = store.load_messages("conv-shred", 10).unwrap();
         assert_eq!(after.len(), 1);
         assert!(after[0].deleted);
-        let wrapped = after[0].content_key_wrapped.as_deref().expect("wrapped cell present");
+        let wrapped = after[0]
+            .content_key_wrapped
+            .as_deref()
+            .expect("wrapped cell present");
         assert_eq!(wrapped.len(), WRAPPED_CEK_LEN);
-        assert!(wrapped.iter().all(|&b| b == 0), "wrapped CEK must be zeroed");
+        assert!(
+            wrapped.iter().all(|&b| b == 0),
+            "wrapped CEK must be zeroed"
+        );
 
         // Simulated remnant attack: original ciphertext + nonce recovered
         // from disk + the CURRENT vault key → decryption MUST fail.
         assert!(MessageStore::decrypt_stored_content(
-            &remnant_ct, &remnant_nonce, Some(wrapped), &test_key(),
-        ).is_err());
+            &remnant_ct,
+            &remnant_nonce,
+            Some(wrapped),
+            &test_key(),
+        )
+        .is_err());
     }
 
     #[test]
     fn test_edit_message_secure_rekeys_and_shreds_old() {
         let store = mem_messagestore();
         store.ensure_conversation("conv-edit", &[0xDD; 32]).unwrap();
-        store.store_message_secure(
-            "m1", "conv-edit", "sent", b"original text", 1000, None, true, &test_key(),
-        ).unwrap();
-        let old_ct = store.load_messages("conv-edit", 10).unwrap()[0].content_encrypted.clone();
+        store
+            .store_message_secure(
+                "m1",
+                "conv-edit",
+                "sent",
+                b"original text",
+                1000,
+                None,
+                true,
+                &test_key(),
+            )
+            .unwrap();
+        let old_ct = store.load_messages("conv-edit", 10).unwrap()[0]
+            .content_encrypted
+            .clone();
 
-        assert!(store.edit_message_secure(
-            "m1", "conv-edit", "sent", b"edited text", &test_key(),
-        ).unwrap());
+        assert!(store
+            .edit_message_secure("m1", "conv-edit", "sent", b"edited text", &test_key(),)
+            .unwrap());
 
         let msgs = store.load_messages("conv-edit", 10).unwrap();
-        assert_ne!(msgs[0].content_encrypted, old_ct, "edit must re-encrypt content");
+        assert_ne!(
+            msgs[0].content_encrypted, old_ct,
+            "edit must re-encrypt content"
+        );
         let pt = MessageStore::decrypt_stored_content(
-            &msgs[0].content_encrypted, &msgs[0].content_nonce,
-            msgs[0].content_key_wrapped.as_deref(), &test_key(),
-        ).unwrap();
+            &msgs[0].content_encrypted,
+            &msgs[0].content_nonce,
+            msgs[0].content_key_wrapped.as_deref(),
+            &test_key(),
+        )
+        .unwrap();
         assert_eq!(pt, b"edited text");
     }
 
@@ -3005,8 +3472,30 @@ mod tests {
         store.ensure_conversation("conv-exp", &[0xEE; 32]).unwrap();
         let past = 1000i64;
         let future = chrono::Utc::now().timestamp() + 3600;
-        store.store_message_secure("m-expired", "conv-exp", "sent", b"gone", past, Some(past), true, &test_key()).unwrap();
-        store.store_message_secure("m-live", "conv-exp", "sent", b"kept", past, Some(future), true, &test_key()).unwrap();
+        store
+            .store_message_secure(
+                "m-expired",
+                "conv-exp",
+                "sent",
+                b"gone",
+                past,
+                Some(past),
+                true,
+                &test_key(),
+            )
+            .unwrap();
+        store
+            .store_message_secure(
+                "m-live",
+                "conv-exp",
+                "sent",
+                b"kept",
+                past,
+                Some(future),
+                true,
+                &test_key(),
+            )
+            .unwrap();
 
         let deleted = store.delete_expired_messages().unwrap();
         assert_eq!(deleted, 1);
@@ -3015,9 +3504,12 @@ mod tests {
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, "m-live");
         let pt = MessageStore::decrypt_stored_content(
-            &remaining[0].content_encrypted, &remaining[0].content_nonce,
-            remaining[0].content_key_wrapped.as_deref(), &test_key(),
-        ).unwrap();
+            &remaining[0].content_encrypted,
+            &remaining[0].content_nonce,
+            remaining[0].content_key_wrapped.as_deref(),
+            &test_key(),
+        )
+        .unwrap();
         assert_eq!(pt, b"kept");
     }
 
@@ -3041,20 +3533,33 @@ mod tests {
                     direction TEXT NOT NULL, content_encrypted BLOB NOT NULL,
                     content_nonce BLOB NOT NULL, timestamp INTEGER NOT NULL,
                     delivered INTEGER NOT NULL DEFAULT 0);",
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let store = MessageStore::open(&db_path).unwrap();
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
-        store.store_message_secure(
-            "m1", "c1", "sent", b"post-migration write", 1000, None, true, &test_key(),
-        ).unwrap();
+        store
+            .store_message_secure(
+                "m1",
+                "c1",
+                "sent",
+                b"post-migration write",
+                1000,
+                None,
+                true,
+                &test_key(),
+            )
+            .unwrap();
         let msgs = store.load_messages("c1", 10).unwrap();
         assert_eq!(
             MessageStore::decrypt_stored_content(
-                &msgs[0].content_encrypted, &msgs[0].content_nonce,
-                msgs[0].content_key_wrapped.as_deref(), &test_key(),
-            ).unwrap(),
+                &msgs[0].content_encrypted,
+                &msgs[0].content_nonce,
+                msgs[0].content_key_wrapped.as_deref(),
+                &test_key(),
+            )
+            .unwrap(),
             b"post-migration write"
         );
 

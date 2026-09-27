@@ -105,8 +105,7 @@ pub fn gather_ipv6_candidates() -> Vec<SocketAddr> {
 /// The returned socket is bound to `0.0.0.0:0` on IPv4-capable hosts and
 /// `[::]:0` on IPv6-only hosts.
 pub fn bind_udp_any() -> std::io::Result<std::net::UdpSocket> {
-    std::net::UdpSocket::bind("0.0.0.0:0")
-        .or_else(|_| std::net::UdpSocket::bind("[::]:0"))
+    std::net::UdpSocket::bind("0.0.0.0:0").or_else(|_| std::net::UdpSocket::bind("[::]:0"))
 }
 
 /// Returns `true` if `ip` is an IPv6 link-local address (fe80::/10).
@@ -141,7 +140,10 @@ mod local_addr_tests {
     #[test]
     fn test_host_candidate_gathering() {
         let candidates = gather_host_candidates();
-        assert!(candidates.len() <= 10, "sanity: shouldn't find dozens of IPs");
+        assert!(
+            candidates.len() <= 10,
+            "sanity: shouldn't find dozens of IPs"
+        );
     }
 
     #[test]

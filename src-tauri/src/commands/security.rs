@@ -87,10 +87,14 @@ pub fn apply_side_effects(state: &Arc<AppState>, app_handle: &AppHandle, config:
         if let Err(e) = window_security::apply_screen_protection(app_handle, true) {
             // Surface loudly: user believes they are protected but we failed.
             tracing::error!(error = %e, "screen capture protection FAILED to apply");
-            let _ = tauri::Emitter::emit(app_handle, "m2m://security-error", serde_json::json!({
-                "source": "screen_capture_protection",
-                "message": e,
-            }));
+            let _ = tauri::Emitter::emit(
+                app_handle,
+                "m2m://security-error",
+                serde_json::json!({
+                    "source": "screen_capture_protection",
+                    "message": e,
+                }),
+            );
         }
     } else {
         let _ = window_security::apply_screen_protection(app_handle, false);
@@ -182,13 +186,19 @@ pub async fn clear_clipboard() -> Result<(), String> {
     {
         unsafe {
             if let Ok(user32) = libloading::Library::new("user32.dll") {
-                if let Ok(func) = user32.get::<unsafe extern "system" fn() -> i32>(b"OpenClipboard\0") {
+                if let Ok(func) =
+                    user32.get::<unsafe extern "system" fn() -> i32>(b"OpenClipboard\0")
+                {
                     let result = func();
                     if result != 0 {
-                        if let Ok(empty_func) = user32.get::<unsafe extern "system" fn() -> i32>(b"EmptyClipboard\0") {
+                        if let Ok(empty_func) =
+                            user32.get::<unsafe extern "system" fn() -> i32>(b"EmptyClipboard\0")
+                        {
                             empty_func();
                         }
-                        if let Ok(close_func) = user32.get::<unsafe extern "system" fn() -> i32>(b"CloseClipboard\0") {
+                        if let Ok(close_func) =
+                            user32.get::<unsafe extern "system" fn() -> i32>(b"CloseClipboard\0")
+                        {
                             close_func();
                         }
                     }

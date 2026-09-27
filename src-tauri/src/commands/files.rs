@@ -8,7 +8,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::protocol;
-use crate::state::{AppState, IncomingFileTransfer, OutgoingFileTransfer, PeerConnection, TransferState};
+use crate::state::{
+    AppState, IncomingFileTransfer, OutgoingFileTransfer, PeerConnection, TransferState,
+};
 
 use super::{FileTransferInfo, TransferProgressEvent};
 
@@ -42,7 +44,8 @@ pub async fn send_file(
             protocol::MAX_FILE_SIZE
         ));
     }
-    let filename = path.file_name()
+    let filename = path
+        .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -51,7 +54,8 @@ pub async fn send_file(
     // Determine adaptive chunk size from the peer's connection strategy.
     let chunk_size = {
         let conns = state.connections.read().await;
-        let strategy = conns.get(&peer_key_hex)
+        let strategy = conns
+            .get(&peer_key_hex)
             .and_then(|c| {
                 let cg = c.try_lock().ok()?;
                 Some(cg.strategy_name.clone())
@@ -68,11 +72,12 @@ pub async fn send_file(
     // file into RAM. Runs on the blocking pool so large files don't stall
     // the async runtime (M5).
     let hash_path = file_path.clone();
-    let (file_hash, chunk_hashes) =
-        tokio::task::spawn_blocking(move || compute_file_hashes(&hash_path, total_chunks, chunk_size))
-            .await
-            .map_err(|e| format!("hash task failed: {e}"))?
-            .map_err(|e| format!("failed to read file: {e}"))?;
+    let (file_hash, chunk_hashes) = tokio::task::spawn_blocking(move || {
+        compute_file_hashes(&hash_path, total_chunks, chunk_size)
+    })
+    .await
+    .map_err(|e| format!("hash task failed: {e}"))?
+    .map_err(|e| format!("failed to read file: {e}"))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -82,40 +87,47 @@ pub async fn send_file(
     // ── Store outgoing transfer state ────────────────────────
     {
         let mut outgoing = state.outgoing_transfers.write().await;
-        outgoing.insert(transfer_id.clone(), OutgoingFileTransfer {
-            transfer_id: transfer_id.clone(),
-            peer_key_hex: peer_key_hex.clone(),
-            file_path: path.to_path_buf(),
-            filename: filename.clone(),
-            total_size,
-            total_chunks,
-            file_hash,
-            chunk_hashes: chunk_hashes.clone(),
-            chunk_size,
-            peer_protocol_version: 0, // will be detected from peer's ACK behavior
-            state: TransferState::Pending,
-            chunks_sent: 0,
-            chunks_acked: 0,
-            last_acked_index: 0,
-            created_at: now,
-            last_activity_at: now,
-        });
+        outgoing.insert(
+            transfer_id.clone(),
+            OutgoingFileTransfer {
+                transfer_id: transfer_id.clone(),
+                peer_key_hex: peer_key_hex.clone(),
+                file_path: path.to_path_buf(),
+                filename: filename.clone(),
+                total_size,
+                total_chunks,
+                file_hash,
+                chunk_hashes: chunk_hashes.clone(),
+                chunk_size,
+                peer_protocol_version: 0, // will be detected from peer's ACK behavior
+                state: TransferState::Pending,
+                chunks_sent: 0,
+                chunks_acked: 0,
+                last_acked_index: 0,
+                created_at: now,
+                last_activity_at: now,
+            },
+        );
     }
 
     // ── Send the file transfer request ───────────────────────
     let conns = state.connections.read().await;
-    let conn_arc = conns.get(&peer_key_hex)
-        .ok_or("no connection to this peer")?.clone();
+    let conn_arc = conns
+        .get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
     drop(conns); // release read lock before send
 
     // Serialize chunk_hashes as Vec<Vec<u8>> for the wire (convert from Vec<[u8; 32]>)
-    let wire_chunk_hashes: Vec<Vec<u8>> = chunk_hashes.iter()
-        .map(|h| h.to_vec())
-        .collect();
+    let wire_chunk_hashes: Vec<Vec<u8>> = chunk_hashes.iter().map(|h| h.to_vec()).collect();
 
     let result = {
         let mut conn = conn_arc.lock().await;
-        let PeerConnection { session, write_half, .. } = &mut *conn;
+        let PeerConnection {
+            session,
+            write_half,
+            ..
+        } = &mut *conn;
         let req = crate::protocol::FileTransferRequestData {
             transfer_id: transfer_id.to_string(),
             filename: filename.to_string(),
@@ -125,10 +137,7 @@ pub async fn send_file(
             chunk_hashes: wire_chunk_hashes,
             file_transfer_version: crate::protocol::PROTOCOL_FILE_TRANSFER_VERSION,
         };
-        session.send_file_request_v2(
-            &mut *write_half,
-            &req,
-        ).await
+        session.send_file_request_v2(&mut *write_half, &req).await
     };
 
     match result {
@@ -140,7 +149,10 @@ pub async fn send_file(
             }
 
             // Lazy init: open transfer store on first use if not already opened
-            state.ensure_transfer_store(&state.data_dir).await.map_err(|e| format!("transfer store init: {e}"))?;
+            state
+                .ensure_transfer_store(&state.data_dir)
+                .await
+                .map_err(|e| format!("transfer store init: {e}"))?;
 
             // Persist initial transfer record
             {
@@ -148,8 +160,13 @@ pub async fn send_file(
                 let ts = state.transfer_store.lock().await;
                 if let Some(ref store) = *ts {
                     let _ = store.store_transfer(
-                        &transfer_id, &peer_key_hex, &filename,
-                        total_size, "sent", "pending", total_chunks,
+                        &transfer_id,
+                        &peer_key_hex,
+                        &filename,
+                        total_size,
+                        "sent",
+                        "pending",
+                        total_chunks,
                         sk.as_ref(),
                     );
                 }
@@ -231,13 +248,21 @@ pub async fn accept_file_transfer(
     }
 
     let conns = state.connections.read().await;
-    let conn_arc = conns.get(&peer_key_hex)
-        .ok_or("no connection to this peer")?.clone();
+    let conn_arc = conns
+        .get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
     let mut conn = conn_arc.lock().await;
-    let PeerConnection { session, write_half, .. } = &mut *conn;
+    let PeerConnection {
+        session,
+        write_half,
+        ..
+    } = &mut *conn;
 
-    session.send_file_accept(&mut *write_half, &transfer_id)
-        .await.map_err(|e| format!("failed to send accept: {e}"))?;
+    session
+        .send_file_accept(&mut *write_half, &transfer_id)
+        .await
+        .map_err(|e| format!("failed to send accept: {e}"))?;
 
     Ok(())
 }
@@ -250,13 +275,21 @@ pub async fn reject_file_transfer(
     transfer_id: String,
 ) -> Result<(), String> {
     let conns = state.connections.read().await;
-    let conn_arc = conns.get(&peer_key_hex)
-        .ok_or("no connection to this peer")?.clone();
+    let conn_arc = conns
+        .get(&peer_key_hex)
+        .ok_or("no connection to this peer")?
+        .clone();
     let mut conn = conn_arc.lock().await;
-    let PeerConnection { session, write_half, .. } = &mut *conn;
+    let PeerConnection {
+        session,
+        write_half,
+        ..
+    } = &mut *conn;
 
-    session.send_file_reject(&mut *write_half, &transfer_id)
-        .await.map_err(|e| format!("failed to send reject: {e}"))?;
+    session
+        .send_file_reject(&mut *write_half, &transfer_id)
+        .await
+        .map_err(|e| format!("failed to send reject: {e}"))?;
 
     // Clean up local state
     state.incoming_transfers.write().await.remove(&transfer_id);
@@ -354,8 +387,14 @@ pub async fn cancel_file_transfer(
     let conns = state.connections.read().await;
     if let Some(conn_arc) = conns.get(&peer_key_hex) {
         let mut conn = conn_arc.lock().await;
-        let PeerConnection { session, write_half, .. } = &mut *conn;
-        let _ = session.send_file_cancel(&mut *write_half, &transfer_id).await;
+        let PeerConnection {
+            session,
+            write_half,
+            ..
+        } = &mut *conn;
+        let _ = session
+            .send_file_cancel(&mut *write_half, &transfer_id)
+            .await;
     }
     drop(conns);
 
@@ -387,9 +426,12 @@ pub async fn cancel_file_transfer(
     }
 
     // Notify frontend
-    let _ = app_handle.emit("m2m://transfer-cancelled", serde_json::json!({
-        "transfer_id": transfer_id,
-    }));
+    let _ = app_handle.emit(
+        "m2m://transfer-cancelled",
+        serde_json::json!({
+            "transfer_id": transfer_id,
+        }),
+    );
 
     Ok(())
 }
@@ -409,7 +451,9 @@ pub(super) fn try_start_outgoing_transfer(
     tokio::spawn(async move {
         let filepath = {
             let outgoing = state.outgoing_transfers.read().await;
-            outgoing.get(&transfer_id).map(|t| t.file_path.to_string_lossy().to_string())
+            outgoing
+                .get(&transfer_id)
+                .map(|t| t.file_path.to_string_lossy().to_string())
         };
 
         let filepath = match filepath {
@@ -439,7 +483,9 @@ pub(super) fn try_start_outgoing_transfer(
             }
         };
 
-        if !should_start { return; }
+        if !should_start {
+            return;
+        }
 
         // Mark transferring + persist
         {
@@ -457,14 +503,12 @@ pub(super) fn try_start_outgoing_transfer(
         }
 
         // ── Run chunk sender ──
-        let result = send_file_chunks_inner(
-            &app_handle, &state, &peer_key_hex, &transfer_id, &filepath,
-        ).await;
+        let result =
+            send_file_chunks_inner(&app_handle, &state, &peer_key_hex, &transfer_id, &filepath)
+                .await;
 
         // ── Handle result and chain next queued ──
-        finish_and_chain(
-            &app_handle, &state, &transfer_id, result,
-        ).await;
+        finish_and_chain(&app_handle, &state, &transfer_id, result).await;
     });
 }
 
@@ -491,12 +535,21 @@ async fn finish_and_chain(
             let sk = state.storage_key.read().await;
             let ts = state.transfer_store.lock().await;
             if let Some(ref store) = *ts {
-                let _ = store.update_state(transfer_id, "completed", Some(now as i64), None, sk.as_ref());
+                let _ = store.update_state(
+                    transfer_id,
+                    "completed",
+                    Some(now as i64),
+                    None,
+                    sk.as_ref(),
+                );
             }
 
-            let _ = app_handle.emit("m2m://transfer-completed", serde_json::json!({
-                "transfer_id": transfer_id,
-            }));
+            let _ = app_handle.emit(
+                "m2m://transfer-completed",
+                serde_json::json!({
+                    "transfer_id": transfer_id,
+                }),
+            );
         }
         Err(e) => {
             let mut outgoing = state.outgoing_transfers.write().await;
@@ -507,13 +560,22 @@ async fn finish_and_chain(
             let sk = state.storage_key.read().await;
             let ts = state.transfer_store.lock().await;
             if let Some(ref store) = *ts {
-                let _ = store.update_state(transfer_id, "failed", Some(now as i64), Some(e), sk.as_ref());
+                let _ = store.update_state(
+                    transfer_id,
+                    "failed",
+                    Some(now as i64),
+                    Some(e),
+                    sk.as_ref(),
+                );
             }
 
-            let _ = app_handle.emit("m2m://transfer-error", serde_json::json!({
-                "transfer_id": transfer_id,
-                "error": e,
-            }));
+            let _ = app_handle.emit(
+                "m2m://transfer-error",
+                serde_json::json!({
+                    "transfer_id": transfer_id,
+                    "error": e,
+                }),
+            );
         }
     }
 
@@ -528,16 +590,17 @@ async fn finish_and_chain(
         let (next_fp, next_pk) = {
             let outgoing = state.outgoing_transfers.read().await;
             match outgoing.get(&next_tid) {
-                Some(t) => (t.file_path.to_string_lossy().to_string(), t.peer_key_hex.clone()),
+                Some(t) => (
+                    t.file_path.to_string_lossy().to_string(),
+                    t.peer_key_hex.clone(),
+                ),
                 None => return,
             }
         };
 
         tracing::info!(transfer_id = %next_tid, "starting next queued transfer after previous finished");
 
-        let result = send_file_chunks_inner(
-            app_handle, state, &next_pk, &next_tid, &next_fp,
-        ).await;
+        let result = send_file_chunks_inner(app_handle, state, &next_pk, &next_tid, &next_fp).await;
 
         // Recurse for the chain
         Box::pin(finish_and_chain(app_handle, state, &next_tid, result)).await;
@@ -560,7 +623,8 @@ async fn send_file_chunks_inner(
     let chunk_size: usize;
     {
         let outgoing = state.outgoing_transfers.read().await;
-        let t = outgoing.get(transfer_id)
+        let t = outgoing
+            .get(transfer_id)
             .ok_or("transfer not found in state")?;
         total_chunks = t.total_chunks;
         chunk_hashes = t.chunk_hashes.clone();
@@ -587,12 +651,12 @@ async fn send_file_chunks_inner(
             let offset = (chunk_index as u64) * (chunk_size as u64);
             f.seek(std::io::SeekFrom::Start(offset))
                 .map_err(|e| format!("seek failed: {e}"))?;
-            let n = f.read(&mut buf)
-                .map_err(|e| format!("read failed: {e}"))?;
+            let n = f.read(&mut buf).map_err(|e| format!("read failed: {e}"))?;
             buf.truncate(n);
 
             // Verify chunk hash (integrity check against pre-computed hash)
-            let expected_hash = chunk_hashes.get(chunk_index as usize)
+            let expected_hash = chunk_hashes
+                .get(chunk_index as usize)
                 .cloned()
                 .unwrap_or([0u8; 32]);
             let actual_hash: [u8; 32] = {
@@ -609,14 +673,26 @@ async fn send_file_chunks_inner(
             // Send the chunk
             {
                 let conns = state.connections.read().await;
-                let conn_arc = conns.get(peer_key_hex)
-                    .ok_or("peer disconnected during transfer")?.clone();
+                let conn_arc = conns
+                    .get(peer_key_hex)
+                    .ok_or("peer disconnected during transfer")?
+                    .clone();
                 let mut conn = conn_arc.lock().await;
-                let PeerConnection { session, write_half, .. } = &mut *conn;
-                session.send_file_chunk(
-                    &mut *write_half,
-                    transfer_id, chunk_index, buf, expected_hash.to_vec(),
-                ).await.map_err(|e| format!("chunk send failed: {e}"))?;
+                let PeerConnection {
+                    session,
+                    write_half,
+                    ..
+                } = &mut *conn;
+                session
+                    .send_file_chunk(
+                        &mut *write_half,
+                        transfer_id,
+                        chunk_index,
+                        buf,
+                        expected_hash.to_vec(),
+                    )
+                    .await
+                    .map_err(|e| format!("chunk send failed: {e}"))?;
             }
 
             // Update chunks_sent
@@ -672,12 +748,20 @@ async fn send_file_chunks_inner(
     // ── All chunks sent — send FileTransferComplete ──
     {
         let conns = state.connections.read().await;
-        let conn_arc = conns.get(peer_key_hex)
-            .ok_or("peer disconnected during transfer")?.clone();
+        let conn_arc = conns
+            .get(peer_key_hex)
+            .ok_or("peer disconnected during transfer")?
+            .clone();
         let mut conn = conn_arc.lock().await;
-        let PeerConnection { session, write_half, .. } = &mut *conn;
-        session.send_file_complete(&mut *write_half, transfer_id)
-            .await.map_err(|e| format!("complete send failed: {e}"))?;
+        let PeerConnection {
+            session,
+            write_half,
+            ..
+        } = &mut *conn;
+        session
+            .send_file_complete(&mut *write_half, transfer_id)
+            .await
+            .map_err(|e| format!("complete send failed: {e}"))?;
     }
 
     Ok(())
@@ -725,18 +809,21 @@ async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_i
         let remaining = t.total_size.saturating_sub(bytes_completed);
         let eta = if speed > 0 { remaining / speed } else { 0 };
 
-        let _ = app_handle.emit("m2m://transfer-progress", TransferProgressEvent {
-            transfer_id: transfer_id.to_string(),
-            peer_key_hex: t.peer_key_hex.clone(),
-            filename: t.filename.clone(),
-            total_size: t.total_size,
-            bytes_transferred: bytes_completed.min(t.total_size),
-            chunks_completed: t.chunks_acked,
-            chunks_total: t.total_chunks,
-            state: t.state.to_string(),
-            speed_bytes_per_sec: speed,
-            estimated_remaining_secs: eta,
-        });
+        let _ = app_handle.emit(
+            "m2m://transfer-progress",
+            TransferProgressEvent {
+                transfer_id: transfer_id.to_string(),
+                peer_key_hex: t.peer_key_hex.clone(),
+                filename: t.filename.clone(),
+                total_size: t.total_size,
+                bytes_transferred: bytes_completed.min(t.total_size),
+                chunks_completed: t.chunks_acked,
+                chunks_total: t.total_chunks,
+                state: t.state.to_string(),
+                speed_bytes_per_sec: speed,
+                estimated_remaining_secs: eta,
+            },
+        );
     }
 }
 
@@ -768,20 +855,23 @@ fn compute_file_hashes(
     total_chunks: u32,
     chunk_size: usize,
 ) -> Result<([u8; 32], Vec<[u8; 32]>), String> {
-    use std::io::Read;
     use sha2::Digest;
+    use std::io::Read;
 
-    let mut file = std::fs::File::open(file_path)
-        .map_err(|e| format!("failed to open file: {e}"))?;
+    let mut file =
+        std::fs::File::open(file_path).map_err(|e| format!("failed to open file: {e}"))?;
 
     let mut full_hasher = sha2::Sha256::new();
     let mut chunk_hashes = Vec::with_capacity(total_chunks as usize);
     let mut buf = vec![0u8; chunk_size];
 
     loop {
-        let n = file.read(&mut buf)
+        let n = file
+            .read(&mut buf)
             .map_err(|e| format!("read error during hash computation: {e}"))?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
 
         let chunk = &buf[..n];
         full_hasher.update(chunk);

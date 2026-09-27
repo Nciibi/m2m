@@ -87,19 +87,19 @@ fn regression_frame_all_packet_types_with_hostile_body() {
 #[test]
 fn regression_wire_structs_hostile_msgpack() {
     let hostile: Vec<Vec<u8>> = vec![
-        vec![],                       // empty
-        vec![0xC0],                   // nil
-        vec![0x91, 0x01],             // array where map expected
-        vec![0xDE, 0xFF, 0xFF],       // truncated map16
+        vec![],                             // empty
+        vec![0xC0],                         // nil
+        vec![0x91, 0x01],                   // array where map expected
+        vec![0xDE, 0xFF, 0xFF],             // truncated map16
         vec![0xDD, 0xFF, 0xFF, 0xFF, 0xFF], // huge map32 marker
-        vec![0xC4, 0xFF],             // bin8 with absurd length claim
-        vec![0xC5, 0xFF, 0xFF],       // bin16 absurd length
+        vec![0xC4, 0xFF],                   // bin8 with absurd length claim
+        vec![0xC5, 0xFF, 0xFF],             // bin16 absurd length
         vec![0xC6, 0x7F, 0xFF, 0xFF, 0xFF], // bin32 ~2GB length claim
-        vec![0x92, 0xC3, 0xC2],       // array of bools where struct expected
-        vec![0xA1],                   // truncated fixstr
-        vec![0xD9, 0xFF, 0x41],       // str8 absurd length
-        vec![0x01],                   // bare int
-        vec![0xFF; 64],               // repeated negatives
+        vec![0x92, 0xC3, 0xC2],             // array of bools where struct expected
+        vec![0xA1],                         // truncated fixstr
+        vec![0xD9, 0xFF, 0x41],             // str8 absurd length
+        vec![0x01],                         // bare int
+        vec![0xFF; 64],                     // repeated negatives
     ];
     macro_rules! all {
         ($($t:ty),*) => {
@@ -204,14 +204,20 @@ fn regression_dht_parse_message_hostile() {
     // `panic = "abort"` that is a remote process abort, not a catchable error.
     let mut b = 0u32.to_be_bytes().to_vec();
     b.push(0x01);
-    assert!(dht::parse_dht_message(&b).is_err(), "declared length 0 must be rejected");
+    assert!(
+        dht::parse_dht_message(&b).is_err(),
+        "declared length 0 must be rejected"
+    );
 
     // Same, with a multi-byte body, to be sure the guard is the length check
     // and not an incidental body-length mismatch.
     let mut b = 0u32.to_be_bytes().to_vec();
     b.push(0x01);
     b.extend_from_slice(&[0xAA; 16]);
-    assert!(dht::parse_dht_message(&b).is_err(), "declared length 0 must be rejected");
+    assert!(
+        dht::parse_dht_message(&b).is_err(),
+        "declared length 0 must be rejected"
+    );
 }
 
 #[test]

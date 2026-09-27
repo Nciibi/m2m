@@ -7,9 +7,10 @@ use std::sync::Arc;
 
 use tauri::{Emitter, State};
 
+use crate::protocol::{
+    self, GroupCreateData, GroupInviteData, GroupLeaveData, GroupRemoveData, PacketType,
+};
 use crate::state::{AppState, PeerConnection};
-use crate::protocol::{self, GroupCreateData, GroupInviteData,
-    GroupLeaveData, GroupRemoveData, PacketType};
 
 use super::{ChatMessage, GroupEvent, GroupMessageEvent};
 
@@ -53,16 +54,20 @@ pub async fn create_group(
     // Create group in GroupManager
     let bundles = {
         let mut gm = state.group_manager.write().await;
-        let (gid, bundles) = gm.create_group(
-            group_id.clone(),
-            group_name.clone(),
-            now,
-            our_peer_key_hex.clone(),
-            &member_peer_keys,
-        ).map_err(|e| format!("group creation failed: {e}"))?;
+        let (gid, bundles) = gm
+            .create_group(
+                group_id.clone(),
+                group_name.clone(),
+                now,
+                our_peer_key_hex.clone(),
+                &member_peer_keys,
+            )
+            .map_err(|e| format!("group creation failed: {e}"))?;
 
         // Persist group to DB
-        state.ensure_message_store(&state.data_dir).await
+        state
+            .ensure_message_store(&state.data_dir)
+            .await
             .map_err(|e| format!("message store init: {e}"))?;
         let ms = state.message_store.lock().await;
         if let Some(store) = ms.as_ref() {
@@ -79,13 +84,17 @@ pub async fn create_group(
     for (peer_key_hex, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
         finalize_bundle(identity, &our_peer_key_hex, &mut signed);
-        let serialized = protocol::serialize(&signed)
-            .map_err(|e| format!("serialization failed: {e}"))?;
+        let serialized =
+            protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
 
         let conns = state.connections.read().await;
         if let Some(conn_arc) = conns.get(peer_key_hex) {
             let mut conn = conn_arc.lock().await;
-            let PeerConnection { session, write_half, .. } = &mut *conn;
+            let PeerConnection {
+                session,
+                write_half,
+                ..
+            } = &mut *conn;
             if let Err(e) = session
                 .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
                 .await
@@ -103,15 +112,19 @@ pub async fn create_group(
         created_at: now,
         initial_members: member_peer_keys.clone(),
     };
-    let create_bytes = protocol::serialize(&create_payload)
-        .map_err(|e| format!("serialization failed: {e}"))?;
+    let create_bytes =
+        protocol::serialize(&create_payload).map_err(|e| format!("serialization failed: {e}"))?;
 
     {
         let conns = state.connections.read().await;
         for member_key in &member_peer_keys {
             if let Some(conn_arc) = conns.get(member_key) {
                 let mut conn = conn_arc.lock().await;
-                let PeerConnection { session, write_half, .. } = &mut *conn;
+                let PeerConnection {
+                    session,
+                    write_half,
+                    ..
+                } = &mut *conn;
                 let _ = session
                     .send_encrypted_typed(write_half, PacketType::GroupCreate, &create_bytes)
                     .await;
@@ -120,11 +133,14 @@ pub async fn create_group(
     }
 
     // Emit group created event
-    let _ = app_handle.emit("m2m://group-event", GroupEvent {
-        group_id: group_id.clone(),
-        event_type: "created".to_string(),
-        peer_key_hex: None,
-    });
+    let _ = app_handle.emit(
+        "m2m://group-event",
+        GroupEvent {
+            group_id: group_id.clone(),
+            event_type: "created".to_string(),
+            peer_key_hex: None,
+        },
+    );
 
     Ok(super::GroupInfo {
         group_id,
@@ -165,9 +181,9 @@ pub async fn send_group_message(
     // Encrypt using group's sender key chain
     let encrypted_data = {
         let mut gm = state.group_manager.write().await;
-        let group = gm.get_group_mut(&group_id)
-            .ok_or("group not found")?;
-        let data = group.encrypt_message(&our_peer_key_hex, content.as_bytes())
+        let group = gm.get_group_mut(&group_id).ok_or("group not found")?;
+        let data = group
+            .encrypt_message(&our_peer_key_hex, content.as_bytes())
             .map_err(|e| format!("encryption failed: {e}"))?;
         data
     };
@@ -175,16 +191,17 @@ pub async fn send_group_message(
     // Send to all online group members over their DR sessions
     let members: Vec<String> = {
         let gm = state.group_manager.read().await;
-        let group = gm.get_group(&group_id)
-            .ok_or("group not found")?;
-        group.members.iter()
+        let group = gm.get_group(&group_id).ok_or("group not found")?;
+        group
+            .members
+            .iter()
             .filter(|m| m.peer_key_hex != our_peer_key_hex)
             .map(|m| m.peer_key_hex.clone())
             .collect()
     };
 
-    let serialized = protocol::serialize(&encrypted_data)
-        .map_err(|e| format!("serialization failed: {e}"))?;
+    let serialized =
+        protocol::serialize(&encrypted_data).map_err(|e| format!("serialization failed: {e}"))?;
 
     let mut delivered_count = 0u32;
     {
@@ -192,13 +209,23 @@ pub async fn send_group_message(
         for member_key in &members {
             if let Some(conn_arc) = conns.get(member_key) {
                 let mut conn = conn_arc.lock().await;
-                let PeerConnection { session, write_half, .. } = &mut *conn;
+                let PeerConnection {
+                    session,
+                    write_half,
+                    ..
+                } = &mut *conn;
                 match session
-                    .send_encrypted_typed(write_half, PacketType::GroupEncryptedMessage, &serialized)
+                    .send_encrypted_typed(
+                        write_half,
+                        PacketType::GroupEncryptedMessage,
+                        &serialized,
+                    )
                     .await
                 {
                     Ok(_) => delivered_count += 1,
-                    Err(e) => tracing::warn!(peer = %member_key, error = %e, "group message send failed"),
+                    Err(e) => {
+                        tracing::warn!(peer = %member_key, error = %e, "group message send failed")
+                    }
                 }
             }
         }
@@ -207,17 +234,28 @@ pub async fn send_group_message(
     let delivered = delivered_count > 0;
 
     // Store in DB (encrypting content for storage)
-    state.ensure_message_store(&state.data_dir).await
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
         .map_err(|e| format!("message store init: {e}"))?;
 
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
     if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-        match super::util::crypto_encrypt_storage(content.as_bytes(), key, super::util::AAD_MSG_STORE) {
+        match super::util::crypto_encrypt_storage(
+            content.as_bytes(),
+            key,
+            super::util::AAD_MSG_STORE,
+        ) {
             Ok((nonce, encrypted)) => {
                 let _ = store.store_group_message(
-                    &msg_id, &group_id, &our_peer_key_hex,
-                    &encrypted, &nonce, now as i64, delivered,
+                    &msg_id,
+                    &group_id,
+                    &our_peer_key_hex,
+                    &encrypted,
+                    &nonce,
+                    now as i64,
+                    delivered,
                 );
                 let preview = super::util::truncate_utf8(&content, 80, "...");
                 let _ = store.update_group_last_message(&group_id, now as i64, &preview);
@@ -233,28 +271,32 @@ pub async fn send_group_message(
     let message = ChatMessage::new(msg_id, content, "sent".to_string(), now);
 
     // Emit event for our own UI
-    let _ = app_handle.emit("m2m://group-message", GroupMessageEvent {
-        group_id,
-        message: message.clone(),
-    });
+    let _ = app_handle.emit(
+        "m2m://group-message",
+        GroupMessageEvent {
+            group_id,
+            message: message.clone(),
+        },
+    );
 
     Ok(message)
 }
 
 /// List all groups.
 #[tauri::command]
-pub async fn list_groups(
-    state: State<'_, Arc<AppState>>,
-) -> Result<Vec<super::GroupInfo>, String> {
+pub async fn list_groups(state: State<'_, Arc<AppState>>) -> Result<Vec<super::GroupInfo>, String> {
     let gm = state.group_manager.read().await;
     let groups = gm.list_groups();
 
-    let infos = groups.into_iter().map(|g| super::GroupInfo {
-        group_id: g.group_id,
-        group_name: g.group_name,
-        member_count: g.member_count,
-        created_at: g.created_at,
-    }).collect();
+    let infos = groups
+        .into_iter()
+        .map(|g| super::GroupInfo {
+            group_id: g.group_id,
+            group_name: g.group_name,
+            member_count: g.member_count,
+            created_at: g.created_at,
+        })
+        .collect();
 
     Ok(infos)
 }
@@ -266,14 +308,17 @@ pub async fn get_group_info(
     group_id: String,
 ) -> Result<super::GroupDetail, String> {
     let gm = state.group_manager.read().await;
-    let group = gm.get_group(&group_id)
-        .ok_or("group not found")?;
+    let group = gm.get_group(&group_id).ok_or("group not found")?;
 
     let our_identity = state.identity.read().await;
     let identity = our_identity.as_ref().ok_or("identity not initialized")?;
     let our_peer_key_hex = hex::encode(identity.public_key_bytes());
 
-    let our_role = if group.is_admin(&our_peer_key_hex) { "admin" } else { "member" };
+    let our_role = if group.is_admin(&our_peer_key_hex) {
+        "admin"
+    } else {
+        "member"
+    };
 
     let detail = super::GroupDetail {
         group_id: group.group_id.clone(),
@@ -313,7 +358,9 @@ pub async fn invite_to_group(
     };
 
     // Persist to DB
-    state.ensure_message_store(&state.data_dir).await
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
         .map_err(|e| format!("message store init: {e}"))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
@@ -325,12 +372,16 @@ pub async fn invite_to_group(
     let conns = state.connections.read().await;
     if let Some(conn_arc) = conns.get(&peer_key_hex) {
         let mut conn = conn_arc.lock().await;
-        let PeerConnection { session, write_half, .. } = &mut *conn;
+        let PeerConnection {
+            session,
+            write_half,
+            ..
+        } = &mut *conn;
         for bundle in &bundles {
             let mut signed = bundle.clone();
             finalize_bundle(identity, &our_peer_key_hex, &mut signed);
-            let serialized = protocol::serialize(&signed)
-                .map_err(|e| format!("serialization failed: {e}"))?;
+            let serialized =
+                protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
                 .await;
@@ -338,9 +389,10 @@ pub async fn invite_to_group(
 
         // Send GroupInvite
         let gm_read = state.group_manager.read().await;
-        let group = gm_read.get_group(&group_id)
-            .ok_or("group not found")?;
-        let existing: Vec<String> = group.members.iter()
+        let group = gm_read.get_group(&group_id).ok_or("group not found")?;
+        let existing: Vec<String> = group
+            .members
+            .iter()
             .map(|m| m.peer_key_hex.clone())
             .collect();
 
@@ -359,18 +411,21 @@ pub async fn invite_to_group(
         };
         drop(gm_read);
 
-        let invite_bytes = protocol::serialize(&invite)
-            .map_err(|e| format!("serialization failed: {e}"))?;
+        let invite_bytes =
+            protocol::serialize(&invite).map_err(|e| format!("serialization failed: {e}"))?;
         let _ = session
             .send_encrypted_typed(write_half, PacketType::GroupInvite, &invite_bytes)
             .await;
     }
 
-    let _ = app_handle.emit("m2m://group-event", GroupEvent {
-        group_id,
-        event_type: "member_added".to_string(),
-        peer_key_hex: Some(peer_key_hex),
-    });
+    let _ = app_handle.emit(
+        "m2m://group-event",
+        GroupEvent {
+            group_id,
+            event_type: "member_added".to_string(),
+            peer_key_hex: Some(peer_key_hex),
+        },
+    );
 
     Ok(())
 }
@@ -395,7 +450,9 @@ pub async fn remove_from_group(
     };
 
     // Persist removal
-    state.ensure_message_store(&state.data_dir).await
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
         .map_err(|e| format!("message store init: {e}"))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
@@ -408,12 +465,16 @@ pub async fn remove_from_group(
     for (member_key, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
         finalize_bundle(identity, &our_peer_key_hex, &mut signed);
-        let serialized = protocol::serialize(&signed)
-            .map_err(|e| format!("serialization failed: {e}"))?;
+        let serialized =
+            protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
 
         if let Some(conn_arc) = conns.get(member_key) {
             let mut conn = conn_arc.lock().await;
-            let PeerConnection { session, write_half, .. } = &mut *conn;
+            let PeerConnection {
+                session,
+                write_half,
+                ..
+            } = &mut *conn;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
                 .await;
@@ -427,22 +488,29 @@ pub async fn remove_from_group(
             removed_by_peer_key_hex: our_peer_key_hex.clone(),
             new_sender_key: Some(signed),
         };
-        let remove_bytes = protocol::serialize(&remove_msg)
-            .map_err(|e| format!("serialization failed: {e}"))?;
+        let remove_bytes =
+            protocol::serialize(&remove_msg).map_err(|e| format!("serialization failed: {e}"))?;
         if let Some(conn_arc) = conns.get(member_key) {
             let mut conn = conn_arc.lock().await;
-            let PeerConnection { session, write_half, .. } = &mut *conn;
+            let PeerConnection {
+                session,
+                write_half,
+                ..
+            } = &mut *conn;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupRemove, &remove_bytes)
                 .await;
         }
     }
 
-    let _ = app_handle.emit("m2m://group-event", GroupEvent {
-        group_id,
-        event_type: "member_removed".to_string(),
-        peer_key_hex: Some(peer_key_hex),
-    });
+    let _ = app_handle.emit(
+        "m2m://group-event",
+        GroupEvent {
+            group_id,
+            event_type: "member_removed".to_string(),
+            peer_key_hex: Some(peer_key_hex),
+        },
+    );
 
     Ok(())
 }
@@ -465,7 +533,9 @@ pub async fn leave_group(
     }
 
     // Persist: remove ourselves as member
-    state.ensure_message_store(&state.data_dir).await
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
         .map_err(|e| format!("message store init: {e}"))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
@@ -478,8 +548,8 @@ pub async fn leave_group(
         group_id: group_id.clone(),
         leaving_peer_key_hex: our_peer_key_hex.clone(),
     };
-    let leave_bytes = protocol::serialize(&leave_msg)
-        .map_err(|e| format!("serialization failed: {e}"))?;
+    let leave_bytes =
+        protocol::serialize(&leave_msg).map_err(|e| format!("serialization failed: {e}"))?;
 
     let gm_read = state.group_manager.read().await;
     let group = gm_read.get_group(&group_id);
@@ -495,18 +565,25 @@ pub async fn leave_group(
         }
         if let Some(conn_arc) = conns.get(member_key) {
             let mut conn = conn_arc.lock().await;
-            let PeerConnection { session, write_half, .. } = &mut *conn;
+            let PeerConnection {
+                session,
+                write_half,
+                ..
+            } = &mut *conn;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupLeave, &leave_bytes)
                 .await;
         }
     }
 
-    let _ = app_handle.emit("m2m://group-event", GroupEvent {
-        group_id,
-        event_type: "member_left".to_string(),
-        peer_key_hex: Some(our_peer_key_hex),
-    });
+    let _ = app_handle.emit(
+        "m2m://group-event",
+        GroupEvent {
+            group_id,
+            event_type: "member_left".to_string(),
+            peer_key_hex: Some(our_peer_key_hex),
+        },
+    );
 
     Ok(())
 }
@@ -518,7 +595,9 @@ pub async fn load_group_messages(
     group_id: String,
     limit: Option<i64>,
 ) -> Result<Vec<ChatMessage>, String> {
-    state.ensure_message_store(&state.data_dir).await
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
         .map_err(|e| format!("message store init: {e}"))?;
 
     let sk = state.storage_key.read().await;
@@ -532,7 +611,8 @@ pub async fn load_group_messages(
         .map_err(|e| format!("failed to load group messages: {e}"))?;
 
     let our_identity = state.identity.read().await;
-    let our_peer_key_hex = our_identity.as_ref()
+    let our_peer_key_hex = our_identity
+        .as_ref()
         .map(|id| hex::encode(id.public_key_bytes()));
     drop(our_identity);
 
@@ -540,7 +620,10 @@ pub async fn load_group_messages(
     for (mut m, enc_content, enc_nonce) in stored {
         // Decrypt content from storage
         let content = match super::util::crypto_decrypt_storage(
-            &enc_content, &enc_nonce, key, super::util::AAD_MSG_STORE,
+            &enc_content,
+            &enc_nonce,
+            key,
+            super::util::AAD_MSG_STORE,
         ) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
             Err(e) => {
@@ -577,8 +660,7 @@ pub async fn update_group_name(
 
     {
         let mut gm = state.group_manager.write().await;
-        let group = gm.get_group_mut(&group_id)
-            .ok_or("group not found")?;
+        let group = gm.get_group_mut(&group_id).ok_or("group not found")?;
         if !group.is_admin(&our_peer_key_hex) {
             return Err("only admins can change the group name".to_string());
         }
@@ -586,7 +668,9 @@ pub async fn update_group_name(
     }
 
     // Persist
-    state.ensure_message_store(&state.data_dir).await
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
         .map_err(|e| format!("message store init: {e}"))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
@@ -600,11 +684,12 @@ pub async fn update_group_name(
         new_name: Some(new_name),
         changed_by_peer_key_hex: our_peer_key_hex,
     };
-    let info_bytes = protocol::serialize(&info_msg)
-        .map_err(|e| format!("serialization failed: {e}"))?;
+    let info_bytes =
+        protocol::serialize(&info_msg).map_err(|e| format!("serialization failed: {e}"))?;
 
     let gm_read = state.group_manager.read().await;
-    let member_keys: Vec<String> = gm_read.get_group(&group_id)
+    let member_keys: Vec<String> = gm_read
+        .get_group(&group_id)
         .map(|g| g.members.iter().map(|m| m.peer_key_hex.clone()).collect())
         .unwrap_or_default();
     drop(gm_read);
@@ -613,18 +698,25 @@ pub async fn update_group_name(
     for member_key in &member_keys {
         if let Some(conn_arc) = conns.get(member_key) {
             let mut conn = conn_arc.lock().await;
-            let PeerConnection { session, write_half, .. } = &mut *conn;
+            let PeerConnection {
+                session,
+                write_half,
+                ..
+            } = &mut *conn;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupInfo, &info_bytes)
                 .await;
         }
     }
 
-    let _ = app_handle.emit("m2m://group-event", GroupEvent {
-        group_id,
-        event_type: "name_changed".to_string(),
-        peer_key_hex: None,
-    });
+    let _ = app_handle.emit(
+        "m2m://group-event",
+        GroupEvent {
+            group_id,
+            event_type: "name_changed".to_string(),
+            peer_key_hex: None,
+        },
+    );
 
     Ok(())
 }

@@ -48,7 +48,6 @@ use tokio::time;
 
 use thiserror::Error;
 
-
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 /// DHT protocol version.
@@ -154,7 +153,6 @@ pub struct DhtConfig {
     /// Whether we're behind a symmetric NAT (client-only mode).
     pub is_symmetric_nat: bool,
 }
-
 
 /// Active DHT state.
 pub struct DhtState {
@@ -460,15 +458,17 @@ pub async fn lookup_peer(
 
             let inner = time::timeout(DHT_CONNECT_TIMEOUT, dht_recv(&mut stream))
                 .await
-                .map_err(|_| DhtError::Timeout)?;  // timeout → error
-            let (resp_type, resp_body) = inner.map_err(|_| DhtError::Timeout)?;  // dht error
+                .map_err(|_| DhtError::Timeout)?; // timeout → error
+            let (resp_type, resp_body) = inner.map_err(|_| DhtError::Timeout)?; // dht error
 
             if resp_type != DHT_NODE_RESPONSE {
                 return Err(DhtError::BadResponse("expected NODE_RESPONSE".into()));
             }
 
             let peers = parse_node_response(&resp_body)?;
-            peers.into_iter().find(|p| p.peer_id == target_id)
+            peers
+                .into_iter()
+                .find(|p| p.peer_id == target_id)
                 .ok_or(DhtError::PeerNotFound)
         }));
     }
@@ -671,7 +671,10 @@ mod dht_tests {
 
         let peers = parse_node_response(&body).unwrap();
         assert_eq!(peers.len(), 2);
-        assert_eq!(peers[0].connect_addr.unwrap().ip().to_string(), "192.168.1.2");
+        assert_eq!(
+            peers[0].connect_addr.unwrap().ip().to_string(),
+            "192.168.1.2"
+        );
         assert_eq!(peers[1].connect_addr.unwrap().ip().to_string(), "fd00::1");
     }
 
@@ -686,7 +689,10 @@ mod dht_tests {
         let peers = parse_node_response(&body).unwrap();
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].peer_id[0], 0x33);
-        assert_eq!(peers[0].connect_addr.unwrap().ip().to_string(), "172.16.0.9");
+        assert_eq!(
+            peers[0].connect_addr.unwrap().ip().to_string(),
+            "172.16.0.9"
+        );
         assert_eq!(peers[0].connect_addr.unwrap().port(), 7777);
     }
 

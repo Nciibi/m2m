@@ -9,8 +9,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use m2m_lib::crypto::{
-    pad_message_variable, unpad_message_variable, DoubleRatchet, EphemeralKeypair,
-    PrekeyBundle, X3DHSessionKeys, X25519IdentityKeypair,
+    pad_message_variable, unpad_message_variable, DoubleRatchet, EphemeralKeypair, PrekeyBundle,
+    X25519IdentityKeypair, X3DHSessionKeys,
 };
 
 /// Helper: create a DoubleRatchet in a known state for benchmarking.
@@ -67,9 +67,7 @@ fn bench_dr_encrypt(c: &mut Criterion) {
     c.bench_function("dr_encrypt_100B_no_ratchet", |b| {
         b.iter(|| {
             let mut dr = make_dr();
-            let _ = black_box(
-                dr.encrypt(black_box(plaintext), black_box(aad), false),
-            );
+            let _ = black_box(dr.encrypt(black_box(plaintext), black_box(aad), false));
         })
     });
 }
@@ -81,9 +79,7 @@ fn bench_dr_encrypt_with_ratchet(c: &mut Criterion) {
     c.bench_function("dr_encrypt_100B_with_ratchet", |b| {
         b.iter(|| {
             let mut local_dr = make_dr();
-            let _ = black_box(
-                local_dr.encrypt(black_box(plaintext), black_box(aad), true),
-            );
+            let _ = black_box(local_dr.encrypt(black_box(plaintext), black_box(aad), true));
         })
     });
 }
@@ -100,15 +96,13 @@ fn bench_dr_decrypt(c: &mut Criterion) {
     c.bench_function("dr_decrypt_100B_no_ratchet", |b| {
         b.iter(|| {
             let (mut dr, _) = make_dr_receiver();
-            let _ = black_box(
-                dr.decrypt(
-                    black_box(&ciphertext),
-                    black_box(&nonce),
-                    black_box(aad),
-                    black_box(msg_num),
-                    black_box(ratchet_key.as_ref()),
-                ),
-            );
+            let _ = black_box(dr.decrypt(
+                black_box(&ciphertext),
+                black_box(&nonce),
+                black_box(aad),
+                black_box(msg_num),
+                black_box(ratchet_key.as_ref()),
+            ));
         })
     });
 }
@@ -121,11 +115,18 @@ fn bench_dr_roundtrip(c: &mut Criterion) {
         b.iter(|| {
             let mut sender = make_dr();
             let (mut receiver, _) = make_dr_receiver();
-            let (rk, mn, nonce, ct) = sender.encrypt(black_box(plaintext), black_box(aad), false).unwrap();
-            let decrypted = receiver.decrypt(
-                black_box(&ct), black_box(&nonce), black_box(aad),
-                black_box(mn), black_box(rk.as_ref()),
-            ).unwrap();
+            let (rk, mn, nonce, ct) = sender
+                .encrypt(black_box(plaintext), black_box(aad), false)
+                .unwrap();
+            let decrypted = receiver
+                .decrypt(
+                    black_box(&ct),
+                    black_box(&nonce),
+                    black_box(aad),
+                    black_box(mn),
+                    black_box(rk.as_ref()),
+                )
+                .unwrap();
             black_box(decrypted);
         })
     });
@@ -140,7 +141,11 @@ fn bench_storage_encrypt(c: &mut Criterion) {
 
     c.bench_function("storage_encrypt_100B", |b| {
         b.iter(|| {
-            let _ = black_box(storage_encrypt(black_box(plaintext), black_box(&key_arr), black_box(aad)));
+            let _ = black_box(storage_encrypt(
+                black_box(plaintext),
+                black_box(&key_arr),
+                black_box(aad),
+            ));
         })
     });
 }
@@ -157,7 +162,10 @@ fn bench_storage_decrypt(c: &mut Criterion) {
     c.bench_function("storage_decrypt_100B", |b| {
         b.iter(|| {
             let _ = black_box(storage_decrypt(
-                black_box(&ciphertext), black_box(&nonce), black_box(&key_arr), black_box(aad),
+                black_box(&ciphertext),
+                black_box(&nonce),
+                black_box(&key_arr),
+                black_box(aad),
             ));
         })
     });
@@ -241,13 +249,11 @@ fn bench_x3dh_initiate(c: &mut Criterion) {
 
     c.bench_function("x3dh_initiate", |b| {
         b.iter(|| {
-            let _ = black_box(
-                m2m_lib::crypto::x3dh_initiate(
-                    black_box(&ik_a),
-                    black_box(&ek_a),
-                    black_box(&bundle),
-                ),
-            );
+            let _ = black_box(m2m_lib::crypto::x3dh_initiate(
+                black_box(&ik_a),
+                black_box(&ek_a),
+                black_box(&bundle),
+            ));
         })
     });
 }
@@ -261,15 +267,13 @@ fn bench_x3dh_respond(c: &mut Criterion) {
 
     c.bench_function("x3dh_respond", |b| {
         b.iter(|| {
-            let _ = black_box(
-                m2m_lib::crypto::x3dh_respond(
-                    black_box(&ik_b),
-                    black_box(&spk_b),
-                    black_box(Some(&opk_b)),
-                    black_box(&ek_a.public_key_bytes()),
-                    black_box(&ik_a.public_key_bytes()),
-                ),
-            );
+            let _ = black_box(m2m_lib::crypto::x3dh_respond(
+                black_box(&ik_b),
+                black_box(&spk_b),
+                black_box(Some(&opk_b)),
+                black_box(&ek_a.public_key_bytes()),
+                black_box(&ik_a.public_key_bytes()),
+            ));
         })
     });
 }

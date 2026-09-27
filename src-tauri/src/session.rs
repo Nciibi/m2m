@@ -7,16 +7,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncRead, AsyncWrite};
 use zeroize::Zeroize;
 
-use crate::crypto::{self, DoubleRatchet, EphemeralKeypair, IdentityKeypair, SessionKeys,
-    X25519IdentityKeypair};
+use crate::crypto::{
+    self, DoubleRatchet, EphemeralKeypair, IdentityKeypair, SessionKeys, X25519IdentityKeypair,
+};
 use crate::network::{self, ConnectionState, RawFrame};
 use crate::protocol::{
-    self, DRHeader, EncryptedEnvelope, HandshakeComplete, HandshakeInit, HandshakeResponse,
-    MessageBody, PacketType, PROTOCOL_VERSION, MAX_SESSION_DURATION_SECS,
-    FileTransferRequestData, FileTransferChunkData, FileTransferCompleteData,
-    FileTransferAcceptData, FileTransferRejectData,
-    FileTransferCancelData,
-    ConversationMetaData, WireCandidate, MAX_FILE_CHUNK_SIZE,
+    self, ConversationMetaData, DRHeader, EncryptedEnvelope, FileTransferAcceptData,
+    FileTransferCancelData, FileTransferChunkData, FileTransferCompleteData,
+    FileTransferRejectData, FileTransferRequestData, HandshakeComplete, HandshakeInit,
+    HandshakeResponse, MessageBody, PacketType, WireCandidate, MAX_FILE_CHUNK_SIZE,
+    MAX_SESSION_DURATION_SECS, PROTOCOL_VERSION,
 };
 
 use thiserror::Error;
@@ -212,9 +212,8 @@ impl Session {
         let response: HandshakeResponse = protocol::deserialize(&response_frame.body)?;
 
         // Validate response version
-        protocol::validate_version(response.version).map_err(|e| {
-            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
-        })?;
+        protocol::validate_version(response.version)
+            .map_err(|e| SessionError::HandshakeFailed(format!("version mismatch: {e}")))?;
 
         // Verify peer's identity matches expected (from invite)
         if response.identity_pub != *expected_peer_pub {
@@ -223,19 +222,17 @@ impl Session {
             ));
         }
 
-    // Verify peer's signature on their ephemeral key + advertised candidates
-    let mut peer_sign_data = Vec::new();
-    peer_sign_data.extend_from_slice(&response.ephemeral_pub);
-    peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes());   // timestamp used ONLY here
-    append_candidates_to_sign_data(&mut peer_sign_data, &response.candidates);
+        // Verify peer's signature on their ephemeral key + advertised candidates
+        let mut peer_sign_data = Vec::new();
+        peer_sign_data.extend_from_slice(&response.ephemeral_pub);
+        peer_sign_data.extend_from_slice(&response.timestamp.to_be_bytes()); // timestamp used ONLY here
+        append_candidates_to_sign_data(&mut peer_sign_data, &response.candidates);
 
-    crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
-        .map_err(|_| {
-            SessionError::HandshakeFailed("peer signature invalid".to_string())
-        })?;
+        crypto::verify_signature(&response.identity_pub, &peer_sign_data, &response.signature)
+            .map_err(|_| SessionError::HandshakeFailed("peer signature invalid".to_string()))?;
 
-    // Replay protection (M1): reject stale/future timestamps.
-    validate_handshake_timestamp(response.timestamp)?;
+        // Replay protection (M1): reject stale/future timestamps.
+        validate_handshake_timestamp(response.timestamp)?;
 
         // Derive session keys (we are the client/initiator)
         let session_keys = ephemeral
@@ -290,9 +287,8 @@ impl Session {
         let init: HandshakeInit = protocol::deserialize(&init_frame.body)?;
 
         // Validate init version
-        protocol::validate_version(init.version).map_err(|e| {
-            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
-        })?;
+        protocol::validate_version(init.version)
+            .map_err(|e| SessionError::HandshakeFailed(format!("version mismatch: {e}")))?;
 
         // Verify initiator's signature (covers ephemeral key + advertised candidates)
         let mut peer_sign_data = Vec::new();
@@ -300,13 +296,12 @@ impl Session {
         peer_sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut peer_sign_data, &init.candidates);
 
-    crypto::verify_signature(&init.identity_pub, &peer_sign_data, &init.signature)
-        .map_err(|_| {
-            SessionError::HandshakeFailed("initiator signature invalid".to_string())
-        })?;
+        crypto::verify_signature(&init.identity_pub, &peer_sign_data, &init.signature).map_err(
+            |_| SessionError::HandshakeFailed("initiator signature invalid".to_string()),
+        )?;
 
-    // Replay protection (M1): reject stale/future timestamps.
-    validate_handshake_timestamp(init.timestamp)?;
+        // Replay protection (M1): reject stale/future timestamps.
+        validate_handshake_timestamp(init.timestamp)?;
 
         // Generate our ephemeral keypair
         let ephemeral = EphemeralKeypair::generate();
@@ -354,7 +349,9 @@ impl Session {
         let plaintext = session_keys
             .decrypt(&complete.encrypted_verify, &complete.nonce, &aad)
             .map_err(|_| {
-                SessionError::HandshakeFailed("handshake verification decryption failed".to_string())
+                SessionError::HandshakeFailed(
+                    "handshake verification decryption failed".to_string(),
+                )
             })?;
 
         if plaintext != b"m2m-handshake-complete-v1" {
@@ -426,16 +423,18 @@ impl Session {
         let resp_frame = network::read_frame(stream).await?;
         if resp_frame.packet_type != PacketType::X3DHHandshakeResponse {
             return Err(SessionError::HandshakeFailed(format!(
-                "expected X3DHHandshakeResponse, got {:?}", resp_frame.packet_type
+                "expected X3DHHandshakeResponse, got {:?}",
+                resp_frame.packet_type
             )));
         }
         let response: HandshakeResponse = protocol::deserialize(&resp_frame.body)?;
 
-        protocol::validate_version(response.version).map_err(|e| {
-            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
-        })?;
+        protocol::validate_version(response.version)
+            .map_err(|e| SessionError::HandshakeFailed(format!("version mismatch: {e}")))?;
         if response.identity_pub != *expected_peer_pub {
-            return Err(SessionError::HandshakeFailed("peer identity mismatch".to_string()));
+            return Err(SessionError::HandshakeFailed(
+                "peer identity mismatch".to_string(),
+            ));
         }
         let mut peer_sign_data = Vec::new();
         peer_sign_data.extend_from_slice(&response.ephemeral_pub);
@@ -460,14 +459,20 @@ impl Session {
         // sides agree: initiator ratchets against response.ephemeral_pub
         // (ek_b), responder against init.ephemeral_pub (ek_a).
         self.ratchet = Some(DoubleRatchet::new(
-            x3dh_out, ek_a, response.ephemeral_pub, true,
+            x3dh_out,
+            ek_a,
+            response.ephemeral_pub,
+            true,
         ));
 
         // Send HandshakeComplete encrypted with Double Ratchet
         let verify_data = b"m2m-x3dh-handshake-v1";
         let aad = [PacketType::X3DHComplete.to_byte()];
-        let (ratchet_key, msg_num, nonce, ciphertext) = self.ratchet.as_mut().unwrap()
-            .encrypt(verify_data, &aad, false)?;
+        let (ratchet_key, msg_num, nonce, ciphertext) =
+            self.ratchet
+                .as_mut()
+                .unwrap()
+                .encrypt(verify_data, &aad, false)?;
 
         let complete = EncryptedEnvelope {
             nonce,
@@ -517,23 +522,22 @@ impl Session {
 
         let init: HandshakeInit = protocol::deserialize(&init_frame.body)?;
 
-        protocol::validate_version(init.version).map_err(|e| {
-            SessionError::HandshakeFailed(format!("version mismatch: {e}"))
-        })?;
+        protocol::validate_version(init.version)
+            .map_err(|e| SessionError::HandshakeFailed(format!("version mismatch: {e}")))?;
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&init.ephemeral_pub);
         sign_data.extend_from_slice(&init.x25519_identity_pub);
         sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &init.candidates);
-        crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature)
-            .map_err(|_| SessionError::HandshakeFailed("initiator signature invalid".to_string()))?;
+        crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature).map_err(
+            |_| SessionError::HandshakeFailed("initiator signature invalid".to_string()),
+        )?;
 
         // Replay protection (M1): reject stale/future timestamps.
         validate_handshake_timestamp(init.timestamp)?;
 
         // ── Resolve DH4 participation deterministically (H6) ──
-        let opk_for_handshake: Option<&EphemeralKeypair> = match (&init.used_opk, one_time_prekey)
-        {
+        let opk_for_handshake: Option<&EphemeralKeypair> = match (&init.used_opk, one_time_prekey) {
             (Some(signaled_pub), Some(opk)) => {
                 if signaled_pub != &opk.public_key_bytes() {
                     return Err(SessionError::HandshakeFailed(
@@ -552,16 +556,23 @@ impl Session {
         };
 
         let x3dh_out = crate::crypto::x3dh_respond(
-            x25519_identity, signed_prekey, opk_for_handshake,
-            &init.ephemeral_pub, &init.x25519_identity_pub,
-        ).map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
+            x25519_identity,
+            signed_prekey,
+            opk_for_handshake,
+            &init.ephemeral_pub,
+            &init.x25519_identity_pub,
+        )
+        .map_err(|e| SessionError::HandshakeFailed(format!("x3dh: {e}")))?;
 
         let ek_b = EphemeralKeypair::generate();
         let ek_b_pub = ek_b.public_key_bytes();
         let now = now_unix_secs();
 
         self.ratchet = Some(DoubleRatchet::new(
-            x3dh_out, ek_b, init.ephemeral_pub, false,
+            x3dh_out,
+            ek_b,
+            init.ephemeral_pub,
+            false,
         ));
 
         let mut our_sign_data = Vec::new();
@@ -586,21 +597,32 @@ impl Session {
         let complete_frame = network::read_frame(stream).await?;
         if complete_frame.packet_type != PacketType::X3DHComplete {
             return Err(SessionError::HandshakeFailed(format!(
-                "expected X3DHComplete, got {:?}", complete_frame.packet_type
+                "expected X3DHComplete, got {:?}",
+                complete_frame.packet_type
             )));
         }
         let complete: EncryptedEnvelope = protocol::deserialize(&complete_frame.body)?;
 
-        let dr_hdr = complete.dr_header
+        let dr_hdr = complete
+            .dr_header
             .ok_or_else(|| SessionError::HandshakeFailed("missing dr_header".to_string()))?;
-        let plaintext = self.ratchet.as_mut().unwrap()
-            .decrypt(&complete.ciphertext, &complete.nonce,
-                     &[PacketType::X3DHComplete.to_byte()],
-                     dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
+        let plaintext = self
+            .ratchet
+            .as_mut()
+            .unwrap()
+            .decrypt(
+                &complete.ciphertext,
+                &complete.nonce,
+                &[PacketType::X3DHComplete.to_byte()],
+                dr_hdr.message_number,
+                dr_hdr.ratchet_key.as_ref(),
+            )
             .map_err(|_| SessionError::HandshakeFailed("verification failed".to_string()))?;
 
         if plaintext != b"m2m-x3dh-handshake-v1" {
-            return Err(SessionError::HandshakeFailed("verification mismatch".to_string()));
+            return Err(SessionError::HandshakeFailed(
+                "verification mismatch".to_string(),
+            ));
         }
 
         self.peer_candidates = init.candidates;
@@ -670,8 +692,8 @@ impl Session {
             let padded = crate::crypto::pad_message_variable(plaintext);
             let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &our_pub, &peer_pub);
             let do_ratchet = ratchet.should_ratchet(self.ratchet_interval);
-            let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
-                .encrypt(&padded, &aad, do_ratchet)?;
+            let (ratchet_key, msg_num, nonce, ciphertext) =
+                ratchet.encrypt(&padded, &aad, do_ratchet)?;
 
             let envelope = EncryptedEnvelope {
                 nonce,
@@ -731,13 +753,16 @@ impl Session {
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
         if let Some(dr_hdr) = &envelope.dr_header {
-            let ratchet = self.ratchet
-                .as_mut()
-                .ok_or(SessionError::InvalidState)?;
+            let ratchet = self.ratchet.as_mut().ok_or(SessionError::InvalidState)?;
             let aad = session_dr_aad(PacketType::EncryptedMessage.to_byte(), &our_pub, &peer_pub);
             let padded = ratchet
-                .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
-                         dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
+                .decrypt(
+                    &envelope.ciphertext,
+                    &envelope.nonce,
+                    &aad,
+                    dr_hdr.message_number,
+                    dr_hdr.ratchet_key.as_ref(),
+                )
                 .map_err(SessionError::Crypto)?;
             let plaintext = crate::crypto::unpad_message_variable(&padded)?;
             let body: MessageBody = protocol::deserialize(&plaintext)?;
@@ -803,7 +828,8 @@ impl Session {
         self.check_expiry()?;
 
         let body_bytes = protocol::serialize(req)?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes)
+            .await
     }
 
     /// Send a file transfer request to the peer (v1 — backward compat).
@@ -832,7 +858,8 @@ impl Session {
             file_transfer_version: 0,
         };
         let body_bytes = protocol::serialize(&req)?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferRequest, &body_bytes)
+            .await
     }
 
     /// Send a single file chunk.
@@ -849,7 +876,9 @@ impl Session {
         }
         self.check_expiry()?;
         if data.len() > MAX_FILE_CHUNK_SIZE {
-            return Err(SessionError::Protocol(protocol::ProtocolError::MessageTooLarge));
+            return Err(SessionError::Protocol(
+                protocol::ProtocolError::MessageTooLarge,
+            ));
         }
 
         let chunk = FileTransferChunkData {
@@ -859,7 +888,8 @@ impl Session {
             chunk_hash,
         };
         let body_bytes = protocol::serialize(&chunk)?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferChunk, &body_bytes).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferChunk, &body_bytes)
+            .await
     }
 
     /// Send file transfer complete notification.
@@ -877,7 +907,8 @@ impl Session {
             transfer_id: transfer_id.to_string(),
         };
         let body_bytes = protocol::serialize(&complete)?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferComplete, &body_bytes).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferComplete, &body_bytes)
+            .await
     }
 
     /// Accept an incoming file transfer.
@@ -892,7 +923,8 @@ impl Session {
         let body = protocol::serialize(&FileTransferAcceptData {
             transfer_id: transfer_id.to_string(),
         })?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferAccept, &body).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferAccept, &body)
+            .await
     }
 
     /// Reject an incoming file transfer.
@@ -907,7 +939,8 @@ impl Session {
         let body = protocol::serialize(&FileTransferRejectData {
             transfer_id: transfer_id.to_string(),
         })?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferReject, &body).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferReject, &body)
+            .await
     }
 
     /// Send a cancel notification to the peer for an in-progress file transfer.
@@ -924,7 +957,8 @@ impl Session {
         let body = protocol::serialize(&FileTransferCancelData {
             transfer_id: transfer_id.to_string(),
         })?;
-        self.send_encrypted_typed(stream, PacketType::FileTransferCancel, &body).await
+        self.send_encrypted_typed(stream, PacketType::FileTransferCancel, &body)
+            .await
     }
 
     /// Send conversation metadata (display names) to the peer.
@@ -942,7 +976,8 @@ impl Session {
             your_display_name: your_display_name.to_string(),
         };
         let body_bytes = protocol::serialize(&meta)?;
-        self.send_encrypted_typed(stream, PacketType::ConversationMeta, &body_bytes).await
+        self.send_encrypted_typed(stream, PacketType::ConversationMeta, &body_bytes)
+            .await
     }
 
     /// Encrypt and send data with a specific packet type.
@@ -966,8 +1001,8 @@ impl Session {
             let padded = crate::crypto::pad_message_variable(plaintext);
             let aad = session_dr_aad(packet_type.to_byte(), &our_pub, &peer_pub);
             let do_ratchet = ratchet.should_ratchet(self.ratchet_interval);
-            let (ratchet_key, msg_num, nonce, ciphertext) = ratchet
-                .encrypt(&padded, &aad, do_ratchet)?;
+            let (ratchet_key, msg_num, nonce, ciphertext) =
+                ratchet.encrypt(&padded, &aad, do_ratchet)?;
 
             let envelope = EncryptedEnvelope {
                 nonce,
@@ -1057,13 +1092,16 @@ impl Session {
         let peer_pub = self.peer_identity_pub;
         let our_pub = self.our_identity_pub;
         if let Some(dr_hdr) = &envelope.dr_header {
-            let ratchet = self.ratchet
-                .as_mut()
-                .ok_or(SessionError::InvalidState)?;
+            let ratchet = self.ratchet.as_mut().ok_or(SessionError::InvalidState)?;
             let aad = session_dr_aad(frame.packet_type.to_byte(), &our_pub, &peer_pub);
             let padded = ratchet
-                .decrypt(&envelope.ciphertext, &envelope.nonce, &aad,
-                         dr_hdr.message_number, dr_hdr.ratchet_key.as_ref())
+                .decrypt(
+                    &envelope.ciphertext,
+                    &envelope.nonce,
+                    &aad,
+                    dr_hdr.message_number,
+                    dr_hdr.ratchet_key.as_ref(),
+                )
                 .map_err(SessionError::Crypto)?;
             let plaintext = crate::crypto::unpad_message_variable(&padded)?;
             return Ok(plaintext);
@@ -1194,7 +1232,10 @@ mod session_tests {
     /// Generate a pair of identities (Ed25519 + X25519) for testing.
     /// Returns (ed25519_keypair, x25519_keypair).
     fn make_identities() -> (IdentityKeypair, crate::crypto::X25519IdentityKeypair) {
-        (IdentityKeypair::generate().unwrap(), crate::crypto::X25519IdentityKeypair::generate())
+        (
+            IdentityKeypair::generate().unwrap(),
+            crate::crypto::X25519IdentityKeypair::generate(),
+        )
     }
 
     fn make_session_keys() -> SessionKeys {
@@ -1226,7 +1267,10 @@ mod session_tests {
         assert!(s.our_candidates.is_empty());
         // Random initial counters should be non-zero (extremely unlikely to be zero)
         assert_eq!(s.tx_counter, 0, "tx counter must start at zero (H4)");
-        assert_eq!(s.rx_high_water_mark, 0, "rx watermark must start at zero (H4)");
+        assert_eq!(
+            s.rx_high_water_mark, 0,
+            "rx watermark must start at zero (H4)"
+        );
     }
 
     #[test]
@@ -1258,7 +1302,11 @@ mod session_tests {
         let s = Session::new();
         let fp = s.peer_fingerprint();
         // Fingerprint of all-zero key should be deterministic
-        assert_eq!(fp.len(), 39, "fingerprint should be 39 chars (16 hex bytes with separators)");
+        assert_eq!(
+            fp.len(),
+            39,
+            "fingerprint should be 39 chars (16 hex bytes with separators)"
+        );
     }
 
     #[test]
@@ -1296,7 +1344,10 @@ mod session_tests {
         // Set established_at far in the past
         s.established_at = 1; // Unix epoch + 1 second
         assert!(s.check_expiry().is_err());
-        assert!(matches!(s.check_expiry(), Err(SessionError::SessionExpired)));
+        assert!(matches!(
+            s.check_expiry(),
+            Err(SessionError::SessionExpired)
+        ));
     }
 
     #[test]
@@ -1372,11 +1423,16 @@ mod session_tests {
         let (mut alice_stream, mut bob_read) = tokio::io::duplex(65536);
 
         // Alice sends a text message
-        let msg_id = alice.send_text(&mut alice_stream, "Hello, Bob!").await.unwrap();
+        let msg_id = alice
+            .send_text(&mut alice_stream, "Hello, Bob!")
+            .await
+            .unwrap();
         assert!(!msg_id.is_empty(), "message ID should not be empty");
 
         // Bob reads the frame
-        let frame = crate::network::read_frame_impl(&mut bob_read).await.unwrap();
+        let frame = crate::network::read_frame_impl(&mut bob_read)
+            .await
+            .unwrap();
         assert_eq!(frame.packet_type, PacketType::EncryptedMessage);
 
         // Bob couldn't decrypt it because keys don't match (we used different key pairs)
@@ -1498,7 +1554,13 @@ mod session_tests {
         };
         let err = bob.decrypt_message(&stale_frame).unwrap_err();
         assert!(
-            matches!(err, SessionError::ReplayDetected { received: 1, expected: 2 }),
+            matches!(
+                err,
+                SessionError::ReplayDetected {
+                    received: 1,
+                    expected: 2
+                }
+            ),
             "expected ReplayDetected, got {err:?}"
         );
 
@@ -1529,21 +1591,25 @@ mod session_tests {
 
         // Send a file transfer request
         let transfer_id = "test-transfer-001";
-        alice.send_file_request(
-            &mut alice_w,
-            transfer_id,
-            "report.pdf",
-            1048576,
-            16,
-            vec![0xAB; 32],
-        ).await.unwrap();
+        alice
+            .send_file_request(
+                &mut alice_w,
+                transfer_id,
+                "report.pdf",
+                1048576,
+                16,
+                vec![0xAB; 32],
+            )
+            .await
+            .unwrap();
 
         // Bob receives and decrypts
         let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::FileTransferRequest);
 
         let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
-        let req: crate::protocol::FileTransferRequestData = crate::protocol::deserialize(&plaintext).unwrap();
+        let req: crate::protocol::FileTransferRequestData =
+            crate::protocol::deserialize(&plaintext).unwrap();
         assert_eq!(req.transfer_id, transfer_id);
         assert_eq!(req.filename, "report.pdf");
         assert_eq!(req.total_size, 1048576);
@@ -1588,8 +1654,10 @@ mod session_tests {
 
         // Try to replay frame1 — should be rejected
         let replay_result = bob.decrypt_message(&frame1_clone);
-        assert!(matches!(replay_result, Err(SessionError::ReplayDetected { .. })),
-            "replayed message should be rejected");
+        assert!(
+            matches!(replay_result, Err(SessionError::ReplayDetected { .. })),
+            "replayed message should be rejected"
+        );
     }
 
     #[tokio::test]
@@ -1613,10 +1681,14 @@ mod session_tests {
 
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        alice.send_conversation_meta(&mut alice_w, "Alice", "Bob").await.unwrap();
+        alice
+            .send_conversation_meta(&mut alice_w, "Alice", "Bob")
+            .await
+            .unwrap();
         let frame = crate::network::read_frame_impl(&mut bob_r).await.unwrap();
         let plaintext = bob.decrypt_typed_frame(&frame).unwrap();
-        let meta: crate::protocol::ConversationMetaData = crate::protocol::deserialize(&plaintext).unwrap();
+        let meta: crate::protocol::ConversationMetaData =
+            crate::protocol::deserialize(&plaintext).unwrap();
         assert_eq!(meta.my_display_name, "Alice");
         assert_eq!(meta.your_display_name, "Bob");
     }
@@ -1650,10 +1722,16 @@ mod session_tests {
         bob.decrypt_message(&frame).unwrap();
 
         // After ratchet, keys should have changed
-        assert_ne!(alice.session_keys.as_ref().unwrap().tx_key, initial_tx,
-            "alice tx_key should change after ratchet");
-        assert_ne!(bob.session_keys.as_ref().unwrap().rx_key, initial_rx,
-            "bob rx_key should change after ratchet (mirrors alice tx)");
+        assert_ne!(
+            alice.session_keys.as_ref().unwrap().tx_key,
+            initial_tx,
+            "alice tx_key should change after ratchet"
+        );
+        assert_ne!(
+            bob.session_keys.as_ref().unwrap().rx_key,
+            initial_rx,
+            "bob rx_key should change after ratchet (mirrors alice tx)"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1673,9 +1751,9 @@ mod session_tests {
         // Alice as initiator
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
-            ).await?;
+            session
+                .handshake_as_initiator(&mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp)
+                .await?;
             Ok::<_, SessionError>(session)
         });
 
@@ -1685,9 +1763,10 @@ mod session_tests {
 
         let bob_xp = bob_x25519.public_key_bytes();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder(&mut bob_io, &bob_identity, &frame, vec![], bob_xp)
+            .await
+            .unwrap();
 
         assert_eq!(bob_session.state, ConnectionState::Established);
         assert!(bob_session.session_keys.is_some());
@@ -1716,9 +1795,15 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, alice_candidates, alice_xp,
-            ).await?;
+            session
+                .handshake_as_initiator(
+                    &mut alice_io,
+                    &alice_identity,
+                    &bob_pub,
+                    alice_candidates,
+                    alice_xp,
+                )
+                .await?;
             Ok::<_, SessionError>(session)
         });
 
@@ -1727,16 +1812,23 @@ mod session_tests {
 
         let bob_xp = bob_x25519.public_key_bytes();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, candidates, bob_xp,
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder(&mut bob_io, &bob_identity, &frame, candidates, bob_xp)
+            .await
+            .unwrap();
 
-        assert_eq!(bob_session.peer_candidates.len(), 1,
-            "responder should have initiator's candidates");
+        assert_eq!(
+            bob_session.peer_candidates.len(),
+            1,
+            "responder should have initiator's candidates"
+        );
 
         let alice_session = alice.await.unwrap().unwrap();
-        assert_eq!(alice_session.peer_candidates.len(), 1,
-            "initiator should have responder's candidates");
+        assert_eq!(
+            alice_session.peer_candidates.len(),
+            1,
+            "initiator should have responder's candidates"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1755,18 +1847,23 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
-            ).await
+            session
+                .handshake_as_initiator(&mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp)
+                .await
         });
 
         let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::HandshakeInit);
-        network::write_frame(&mut peer_io, PacketType::Heartbeat, &[]).await.unwrap();
+        network::write_frame(&mut peer_io, PacketType::Heartbeat, &[])
+            .await
+            .unwrap();
 
         let result = alice.await.unwrap();
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for wrong packet type, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for wrong packet type, got: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -1781,9 +1878,9 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
-            ).await
+            session
+                .handshake_as_initiator(&mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp)
+                .await
         });
 
         let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
@@ -1799,11 +1896,16 @@ mod session_tests {
             candidates: vec![],
         };
         let body = protocol::serialize(&bad_response).unwrap();
-        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body).await.unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body)
+            .await
+            .unwrap();
 
         let result = alice.await.unwrap();
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for version mismatch, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for version mismatch, got: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -1818,9 +1920,9 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
-            ).await
+            session
+                .handshake_as_initiator(&mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp)
+                .await
         });
 
         let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
@@ -1836,11 +1938,16 @@ mod session_tests {
             candidates: vec![],
         };
         let body = protocol::serialize(&bad_response).unwrap();
-        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body).await.unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body)
+            .await
+            .unwrap();
 
         let result = alice.await.unwrap();
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for bad signature, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for bad signature, got: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -1856,9 +1963,9 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator(
-                &mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp,
-            ).await
+            session
+                .handshake_as_initiator(&mut alice_io, &alice_identity, &bob_pub, vec![], alice_xp)
+                .await
         });
 
         let frame = network::read_frame_impl(&mut peer_io).await.unwrap();
@@ -1874,11 +1981,16 @@ mod session_tests {
             candidates: vec![],
         };
         let body = protocol::serialize(&bad_response).unwrap();
-        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body).await.unwrap();
+        network::write_frame(&mut peer_io, PacketType::HandshakeResponse, &body)
+            .await
+            .unwrap();
 
         let result = alice.await.unwrap();
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for identity mismatch, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for identity mismatch, got: {:?}",
+            result
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1912,12 +2024,15 @@ mod session_tests {
         let (mut bob_io, _peer_io) = tokio::io::duplex(65536);
         let bob_xp = bob_x25519.public_key_bytes();
         let mut session = Session::new();
-        let result = session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
-        ).await;
+        let result = session
+            .handshake_as_responder(&mut bob_io, &bob_identity, &frame, vec![], bob_xp)
+            .await;
 
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for version mismatch, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for version mismatch, got: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -1953,12 +2068,15 @@ mod session_tests {
         let (mut bob_io, _peer_io) = tokio::io::duplex(65536);
         let bob_xp = bob_x25519.public_key_bytes();
         let mut session = Session::new();
-        let result = session.handshake_as_responder(
-            &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
-        ).await;
+        let result = session
+            .handshake_as_responder(&mut bob_io, &bob_identity, &frame, vec![], bob_xp)
+            .await;
 
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for bad signature, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for bad signature, got: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -1997,9 +2115,9 @@ mod session_tests {
 
         let bob = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_responder(
-                &mut bob_io, &bob_identity, &frame, vec![], bob_xp,
-            ).await
+            session
+                .handshake_as_responder(&mut bob_io, &bob_identity, &frame, vec![], bob_xp)
+                .await
         });
 
         let resp_frame = network::read_frame_impl(&mut peer_io).await.unwrap();
@@ -2011,11 +2129,15 @@ mod session_tests {
         };
         let complete_body = protocol::serialize(&bad_complete).unwrap();
         network::write_frame(&mut peer_io, PacketType::HandshakeComplete, &complete_body)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let result = bob.await.unwrap();
-        assert!(matches!(result, Err(SessionError::HandshakeFailed(_))),
-            "expected HandshakeFailed for bad verification, got: {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::HandshakeFailed(_))),
+            "expected HandshakeFailed for bad verification, got: {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -2055,9 +2177,9 @@ mod session_tests {
         // Freshness check fires after parsing the init but before any
         // further I/O, so a duplex stream suffices.
         let (_io_tx, mut io_rx) = tokio::io::duplex(65536);
-        let result = session.handshake_as_responder(
-            &mut io_rx, &bob_identity, &frame, vec![], bob_xp,
-        ).await;
+        let result = session
+            .handshake_as_responder(&mut io_rx, &bob_identity, &frame, vec![], bob_xp)
+            .await;
         assert!(
             matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("timestamp")),
             "expected stale-timestamp rejection, got: {:?}",
@@ -2115,9 +2237,9 @@ mod session_tests {
         let mut session = Session::new();
         // Signature verification fires before any I/O, so a bare rx half suffices.
         let (_io_tx, mut io_rx) = tokio::io::duplex(65536);
-        let result = session.handshake_as_responder(
-            &mut io_rx, &bob_identity, &frame, vec![], bob_xp,
-        ).await;
+        let result = session
+            .handshake_as_responder(&mut io_rx, &bob_identity, &frame, vec![], bob_xp)
+            .await;
         assert!(
             matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("signature")),
             "expected tampered-candidate rejection, got: {:?}",
@@ -2141,12 +2263,14 @@ mod session_tests {
         let mut session = Session::new();
         session.state = ConnectionState::Established;
 
-        let result = session.handshake_as_initiator(
-            &mut io, &identity, &peer_pub, vec![], xp,
-        ).await;
+        let result = session
+            .handshake_as_initiator(&mut io, &identity, &peer_pub, vec![], xp)
+            .await;
 
-        assert!(result.is_err(),
-            "handshake from Established state should fail");
+        assert!(
+            result.is_err(),
+            "handshake from Established state should fail"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -2183,11 +2307,20 @@ mod session_tests {
         // Alice as initiator (background)
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bob_bundle,
+                    vec![],
+                )
+                .await?;
             // Send a text message over the DR path
-            let msg_id = session.send_text(&mut alice_io, "Hello via X3DH+DR!").await?;
+            let msg_id = session
+                .send_text(&mut alice_io, "Hello via X3DH+DR!")
+                .await?;
             Ok::<_, SessionError>((session, msg_id))
         });
 
@@ -2196,11 +2329,23 @@ mod session_tests {
         assert_eq!(init_frame.packet_type, PacketType::X3DHHandshakeInit);
 
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
         assert_eq!(bob_session.state, ConnectionState::Established);
-        assert!(bob_session.ratchet.is_some(), "Bob should have DR after X3DH");
+        assert!(
+            bob_session.ratchet.is_some(),
+            "Bob should have DR after X3DH"
+        );
 
         // Bob reads Alice's text message
         let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
@@ -2213,7 +2358,10 @@ mod session_tests {
 
         let (alice_session, _msg_id) = alice.await.unwrap().unwrap();
         assert_eq!(alice_session.state, ConnectionState::Established);
-        assert!(alice_session.ratchet.is_some(), "Alice should have DR after X3DH");
+        assert!(
+            alice_session.ratchet.is_some(),
+            "Alice should have DR after X3DH"
+        );
     }
 
     #[tokio::test]
@@ -2228,20 +2376,43 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
-            ).await?;
-            session.send_file_request(
-                &mut alice_io, "integ-test-001", "secret.pdf", 524288, 8, vec![0xAB; 32],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bob_bundle,
+                    vec![],
+                )
+                .await?;
+            session
+                .send_file_request(
+                    &mut alice_io,
+                    "integ-test-001",
+                    "secret.pdf",
+                    524288,
+                    8,
+                    vec![0xAB; 32],
+                )
+                .await?;
             Ok::<_, SessionError>(session)
         });
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
 
         // Bob reads the file request — typed frame via DR path
         let req_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
@@ -2269,18 +2440,36 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
-            ).await?;
-            session.send_conversation_meta(&mut alice_io, "Alice", "Bob").await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bob_bundle,
+                    vec![],
+                )
+                .await?;
+            session
+                .send_conversation_meta(&mut alice_io, "Alice", "Bob")
+                .await?;
             Ok::<_, SessionError>(session)
         });
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
 
         let meta_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         assert_eq!(meta_frame.packet_type, PacketType::ConversationMeta);
@@ -2305,9 +2494,16 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bob_bundle,
+                    vec![],
+                )
+                .await?;
             // Send 105 messages to trigger DH ratchet at 100
             for i in 0..105 {
                 let msg = format!("Message {}", i);
@@ -2318,9 +2514,18 @@ mod session_tests {
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
 
         // Verify all 105 messages decrypt correctly (including across DH ratchet)
         for i in 0..105 {
@@ -2349,9 +2554,16 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bob_bundle, vec![],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bob_bundle,
+                    vec![],
+                )
+                .await?;
             session.send_text(&mut alice_io, "Message 1").await?;
             session.send_text(&mut alice_io, "Message 2").await?;
             Ok::<_, SessionError>(session)
@@ -2359,9 +2571,18 @@ mod session_tests {
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
 
         // Read both messages
         let f1 = network::read_frame_impl(&mut bob_io).await.unwrap();
@@ -2409,10 +2630,13 @@ mod session_tests {
         alice.peer_identity_pub = [0xBBu8; 32];
 
         let bob_x3dh = crate::crypto::x3dh_respond(
-            &ik_bob, &spk, None,
+            &ik_bob,
+            &spk,
+            None,
             &ek_alice.public_key_bytes(),
             &ik_alice.public_key_bytes(),
-        ).unwrap();
+        )
+        .unwrap();
         let mut bob = Session::new();
         bob.ratchet = Some(crate::crypto::DoubleRatchet::new(
             bob_x3dh, dh_bob, alice_pub, false,
@@ -2429,9 +2653,17 @@ mod session_tests {
         let (mut alice, mut bob) = make_session_with_ratchet();
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        alice.send_file_request(
-            &mut alice_w, "dr-file-001", "document.pdf", 1048576, 16, vec![0xCD; 32],
-        ).await.unwrap();
+        alice
+            .send_file_request(
+                &mut alice_w,
+                "dr-file-001",
+                "document.pdf",
+                1048576,
+                16,
+                vec![0xCD; 32],
+            )
+            .await
+            .unwrap();
 
         let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
         // Verify it has a DR header
@@ -2451,7 +2683,10 @@ mod session_tests {
         let (mut alice, mut bob) = make_session_with_ratchet();
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        alice.send_file_accept(&mut alice_w, "dr-accept-001").await.unwrap();
+        alice
+            .send_file_accept(&mut alice_w, "dr-accept-001")
+            .await
+            .unwrap();
 
         let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::FileTransferAccept);
@@ -2469,7 +2704,10 @@ mod session_tests {
         let (mut alice, mut bob) = make_session_with_ratchet();
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        alice.send_file_reject(&mut alice_w, "dr-reject-001").await.unwrap();
+        alice
+            .send_file_reject(&mut alice_w, "dr-reject-001")
+            .await
+            .unwrap();
 
         let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::FileTransferReject);
@@ -2488,9 +2726,16 @@ mod session_tests {
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
         let chunk_data = vec![0x42u8; 1024];
-        alice.send_file_chunk(
-            &mut alice_w, "dr-chunk-001", 0, chunk_data.clone(), vec![0xEF; 32],
-        ).await.unwrap();
+        alice
+            .send_file_chunk(
+                &mut alice_w,
+                "dr-chunk-001",
+                0,
+                chunk_data.clone(),
+                vec![0xEF; 32],
+            )
+            .await
+            .unwrap();
 
         let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::FileTransferChunk);
@@ -2510,7 +2755,10 @@ mod session_tests {
         let (mut alice, mut bob) = make_session_with_ratchet();
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        alice.send_file_complete(&mut alice_w, "dr-complete-001").await.unwrap();
+        alice
+            .send_file_complete(&mut alice_w, "dr-complete-001")
+            .await
+            .unwrap();
 
         let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::FileTransferComplete);
@@ -2528,7 +2776,10 @@ mod session_tests {
         let (mut alice, mut bob) = make_session_with_ratchet();
         let (mut alice_w, mut bob_r) = tokio::io::duplex(65536);
 
-        alice.send_conversation_meta(&mut alice_w, "AliceDR", "BobDR").await.unwrap();
+        alice
+            .send_conversation_meta(&mut alice_w, "AliceDR", "BobDR")
+            .await
+            .unwrap();
 
         let frame = network::read_frame_impl(&mut bob_r).await.unwrap();
         assert_eq!(frame.packet_type, PacketType::ConversationMeta);
@@ -2568,8 +2819,11 @@ mod session_tests {
         };
 
         let result = session.decrypt_typed_frame(&frame);
-        assert!(matches!(result, Err(SessionError::InvalidState)),
-            "expected InvalidState without ratchet, got {:?}", result);
+        assert!(
+            matches!(result, Err(SessionError::InvalidState)),
+            "expected InvalidState without ratchet, got {:?}",
+            result
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -2602,9 +2856,16 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bundle,
+                    vec![],
+                )
+                .await?;
             session.send_text(&mut alice_io, "hello with DH4").await?;
             Ok::<_, SessionError>(())
         });
@@ -2612,11 +2873,23 @@ mod session_tests {
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
 
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, Some(&bob_opk), &init_frame, vec![],
-        ).await.unwrap();
-        assert_eq!(bob_session.state, ConnectionState::Established,
-            "handshake with OPK must succeed - DH4 must be applied on both sides");
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                Some(&bob_opk),
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            bob_session.state,
+            ConnectionState::Established,
+            "handshake with OPK must succeed - DH4 must be applied on both sides"
+        );
 
         let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let body = bob_session.decrypt_message(&msg_frame).unwrap();
@@ -2653,16 +2926,31 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            let _ = session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await;
+            let _ = session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bundle,
+                    vec![],
+                )
+                .await;
         });
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        let result = bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await;
+        let result = bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await;
 
         assert!(
             matches!(result, Err(SessionError::HandshakeFailed(ref e)) if e.contains("one-time prekey")),
@@ -2700,18 +2988,34 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bundle,
+                    vec![],
+                )
+                .await?;
             session.send_text(&mut alice_io, "no opk path").await?;
             Ok::<_, SessionError>(())
         });
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, Some(&bob_opk), &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                Some(&bob_opk),
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
 
         let msg_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let body = bob_session.decrypt_message(&msg_frame).unwrap();
@@ -2746,9 +3050,16 @@ mod session_tests {
 
         let alice = tokio::spawn(async move {
             let mut session = Session::new();
-            session.handshake_as_initiator_x3dh(
-                &mut alice_io, &alice_id, &alice_x25519, &bob_pub, &bundle, vec![],
-            ).await?;
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut alice_io,
+                    &alice_id,
+                    &alice_x25519,
+                    &bob_pub,
+                    &bundle,
+                    vec![],
+                )
+                .await?;
             session.send_heartbeat(&mut alice_io).await?;
             // Injected plaintext heartbeat from an attacker.
             network::write_frame(&mut alice_io, PacketType::HeartbeatAck, &[]).await?;
@@ -2761,9 +3072,18 @@ mod session_tests {
 
         let init_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
         let mut bob_session = Session::new();
-        bob_session.handshake_as_responder_x3dh(
-            &mut bob_io, &bob_id, &bob_x25519, &bob_spk, None, &init_frame, vec![],
-        ).await.unwrap();
+        bob_session
+            .handshake_as_responder_x3dh(
+                &mut bob_io,
+                &bob_id,
+                &bob_x25519,
+                &bob_spk,
+                None,
+                &init_frame,
+                vec![],
+            )
+            .await
+            .unwrap();
 
         // 1. Encrypted heartbeat decrypts cleanly to empty payload.
         let hb_frame = network::read_frame_impl(&mut bob_io).await.unwrap();
@@ -2783,6 +3103,9 @@ mod session_tests {
         // 3. Bob's encrypted ack round-trips back through Alice's ratchet.
         bob_session.send_heartbeat_ack(&mut bob_io).await.unwrap();
 
-        assert!(alice.await.unwrap().unwrap(), "encrypted ack must decrypt on initiator");
+        assert!(
+            alice.await.unwrap().unwrap(),
+            "encrypted ack must decrypt on initiator"
+        );
     }
 }
