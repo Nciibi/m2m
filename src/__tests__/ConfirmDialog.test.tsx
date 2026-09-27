@@ -191,7 +191,7 @@ describe("DuressPassphraseDialog", () => {
 
     const value = "correct-horse-battery-staple";
     const passphraseInput = input("duress-passphrase");
-    await user.type(input, value);
+    await user.type(passphraseInput, value);
     await user.type(input("duress-passphrase-confirm"), value);
     await user.click(screen.getByText("Wipe on this passphrase"));
 
