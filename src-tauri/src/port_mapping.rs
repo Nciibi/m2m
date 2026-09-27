@@ -861,10 +861,103 @@ async fn upnp_discover() -> Result<UpnpService, PortMapError> {
         PortMapError::Upnp("no UPnP IGD device found on the network".into())
     })?;
 
+    // ── SSRF guard: only follow a LOCATION that points at a private gateway ──
+    //
+    // `LOCATION` is a header in an SSDP reply, and *anything* on the LAN can
+    // send one. Following it verbatim turns M2M into a request forwarder: a
+    // hostile host answering our `M-SEARCH` with
+    // `LOCATION: http://169.254.169.254/latest/meta-data/` makes us issue a
+    // GET to the cloud metadata service, and the connection outcome (or a
+    // distinguishable error) is a working internal port-scan primitive.
+    //
+    // UPnP IGD devices are, by definition, on the local network: RFC 6742
+    // expects the control URL to live on the gateway. So restricting the
+    // destination to private/loopback/link-local addresses costs nothing in
+    // practice and removes the whole class of attack.
+    let location = validate_upnp_location(&location)?;
+
     // Now fetch the device description XML and find the WANIPConnection control URL.
     let control_url = upnp_parse_description(&location).await?;
 
     Ok(UpnpService { control_url })
+}
+
+/// Maximum size of a `LOCATION` URL we will act on.
+const MAX_UPNP_LOCATION_LEN: usize = 512;
+
+/// Validate an SSDP `LOCATION` header before connecting to it.
+///
+/// Requires a plain `http://` URL whose host is a literal private, loopback or
+/// link-local IP — i.e. something that could plausibly be the local gateway.
+/// Everything else (HTTPS, a hostname, a public or documentation address) is
+/// rejected outright rather than resolved, so no DNS lookup is performed on an
+/// attacker-supplied name.
+fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
+    let url = raw.trim();
+    if url.is_empty() {
+        return Err(PortMapError::Upnp("empty UPnP LOCATION header".into()));
+    }
+    if url.len() > MAX_UPNP_LOCATION_LEN {
+        return Err(PortMapError::Upnp("UPnP LOCATION header too long".into()));
+    }
+    // Only plain HTTP. An IGD never needs TLS, and accepting `https` would mean
+    // trusting a certificate on a device that has no identity story.
+    let rest = url.strip_prefix("http://").ok_or_else(|| {
+        PortMapError::Upnp("UPnP LOCATION must be a plain http:// URL".into())
+    })?;
+    // Authority ends at the first '/', '?' or '#'.
+    let authority = rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or("");
+    if authority.is_empty() {
+        return Err(PortMapError::Upnp("UPnP LOCATION has no host".into()));
+    }
+    // Reject userinfo (`user@host`) outright — a classic parser-confusion trick.
+    if authority.contains('@') {
+        return Err(PortMapError::Upnp(
+            "UPnP LOCATION must not contain userinfo".into(),
+        ));
+    }
+    // IPv6 literals are bracketed: [::1]:80
+    let (host, _port) = if let Some(after_bracket) = authority.strip_prefix('[') {
+        let end = after_bracket.find(']').ok_or_else(|| {
+            PortMapError::Upnp("malformed IPv6 in UPnP LOCATION".into())
+        })?;
+        (&after_bracket[..end], &after_bracket[end + 1..])
+    } else {
+        match authority.rsplit_once(':') {
+            Some((h, p)) if p.chars().all(|c| c.is_ascii_digit()) => (h, p),
+            _ => (authority, ""),
+        }
+    };
+
+    // Must be a literal IP. A hostname is rejected rather than resolved: a
+    // DNS name is attacker-controlled and could point anywhere, including at
+    // rebind-style tricks.
+    let ip: IpAddr = host.parse().map_err(|_| {
+        PortMapError::Upnp(format!(
+            "UPnP LOCATION host '{host}' is not a literal IP address; refusing to \
+             resolve an attacker-supplied name"
+        ))
+    })?;
+
+    // Must look like a local gateway.
+    let is_local = ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || (match ip {
+            IpAddr::V6(v6) => (v6.segments()[0] & 0xfe00) == 0xfc00,
+            IpAddr::V4(_) => false,
+        });
+    if !is_local {
+        return Err(PortMapError::Upnp(format!(
+            "UPnP LOCATION host {ip} is not a local-network address; refusing to \
+             fetch a device description from a non-gateway host"
+        )));
+    }
+
+    Ok(url.to_string())
 }
 
 /// Read an HTTP response body from a stream, handling both Content-Length
