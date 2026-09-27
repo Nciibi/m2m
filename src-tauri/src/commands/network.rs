@@ -2570,6 +2570,40 @@ pub fn spawn_receive_loop(
                 }
             };
 
+            // ── Inbound rate limit ──
+            // Charged on the frame's declared wire size, before any
+            // deserialization, database write, or event emission. The
+            // limiter is a token bucket, so brief bursts (a file transfer
+            // legitimately sends large frames back to back) pass while a
+            // sustained flood does not.
+            //
+            // A breach is treated as fatal for the connection: once a peer is
+            // demonstrably over budget, continuing to serve it would just
+            // mean the attacker picks which frames get processed.
+            match frame_limiter.check(frame.body.len()) {
+                network::RateLimitVerdict::Allowed => {}
+                verdict @ (network::RateLimitVerdict::TooManyFrames
+                | network::RateLimitVerdict::TooManyBytes) => {
+                    tracing::warn!(
+                        peer = %peer_key_hex,
+                        bytes = frame.body.len(),
+                        ?verdict,
+                        "inbound rate limit exceeded — dropping connection"
+                    );
+                    let _ = app_handle.emit("m2m://connection", ConnectionEvent {
+                        peer_key_hex: peer_key_hex.clone(),
+                        state: "disconnected".to_string(),
+                        peer_fingerprint: None,
+                        peer_verified: reconnect_info
+                            .as_ref()
+                            .map(|ri| ri.peer_verified)
+                            .unwrap_or(false),
+                    });
+                    state.connections.write().await.remove(&peer_key_hex);
+                    break;
+                }
+            }
+
             // -- Domain dispatch: packet groups are handled in dedicated
             // functions below (receive-loop split). Each returns having
             // fully consumed the frame.
