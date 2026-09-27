@@ -3,7 +3,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import type { MockEventHandler } from "./tauriMock";
-import { createEventHandlerRegistry } from "./setup";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn((name: string, handler: MockEventHandler) => {
@@ -12,9 +11,12 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
-// `vi.hoisted` callbacks are hoisted above the imports, so the registry is
-// constructed inline — it cannot call an imported *value*.
-const { eventHandlers } = vi.hoisted(() => createEventHandlerRegistry());
+// `vi.hoisted` callbacks are hoisted above the import statements, so they cannot
+// reference an imported *value*. The Map is therefore built inline; the
+// `MockEventHandler` type import is erased and so is safe to use here.
+const { eventHandlers } = vi.hoisted(() => ({
+  eventHandlers: new Map<string, MockEventHandler>(),
+}));
 
 const mockInvoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => mockInvoke(...a) }));
