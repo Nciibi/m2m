@@ -1980,6 +1980,74 @@ mod crypto_tests {
         assert_eq!(&decrypted, b"delayed 1");
     }
 
+    /// REMOTE ABORT regression: `decrypt_with_key` used to do
+    /// `nonce_arr.copy_from_slice(nonce)` on an attacker-controlled
+    /// `Vec<u8>`. With `panic = "abort"` in `[profile.release]`, any
+    /// connected peer could kill the client by sending one ~40-byte frame
+    /// whose `nonce` field was not exactly 24 bytes. Every sibling AEAD entry
+    /// point already length-checked; the Double Ratchet path did not.
+    ///
+    /// These cases must return `Err`, never panic, on BOTH the main path and
+    /// the skipped-key cache path.
+    #[test]
+    fn test_dr_malformed_nonce_returns_err_never_panics() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        let (rk, num, n, c) = alice.encrypt(b"payload", &aad, false).unwrap();
+
+        for bad_len in [0usize, 1, 23, 25, 32, 0xFFFF] {
+            let bad = vec![0x41u8; bad_len];
+            assert!(
+                bob.decrypt(&c, &bad, &aad, num, rk.as_ref()).is_err(),
+                "malformed nonce of length {bad_len} must be rejected"
+            );
+        }
+
+        // The genuine frame still decrypts — the guard rejected, not corrupted.
+        assert_eq!(&bob.decrypt(&c, &n, &aad, num, rk.as_ref()).unwrap(), b"payload");
+    }
+
+    /// The skipped-key cache path calls the same helper and must be equally
+    /// panic-free: a malformed nonce there must not consume the cached key.
+    #[test]
+    fn test_dr_malformed_nonce_in_cache_path_preserves_key() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        let sent: Vec<_> = (0..2)
+            .map(|i| alice.encrypt(format!("msg {}", i).as_bytes(), &aad, false).unwrap())
+            .collect();
+
+        // Deliver 0, then 2 → message 1's key is cached as a skipped key.
+        bob.decrypt(&sent[0].3, &sent[0].2, &aad, sent[0].1, sent[0].0.as_ref()).unwrap();
+        bob.decrypt(&sent[2].3, &sent[2].2, &aad, sent[2].1, sent[2].0.as_ref()).unwrap();
+
+        // A malformed-nonce replay of the cached message must fail cleanly and
+        // leave the cached key intact for the real frame.
+        assert!(bob.decrypt(&sent[1].3, &[0u8; 5], &aad, sent[1].1, sent[1].0.as_ref()).is_err());
+
+        let decrypted =
+            bob.decrypt(&sent[1].3, &sent[1].2, &aad, sent[1].1, sent[1].0.as_ref()).unwrap();
+        assert_eq!(&decrypted, b"msg 1");
+    }
+
+    /// A message number *behind* the receive counter with no ratchet key must
+    /// be rejected without an arithmetic underflow (the `checked_sub` guard).
+    #[test]
+    fn test_dr_message_number_behind_counter_is_rejected() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        for i in 0..5 {
+            let (_, n_, nn, cc) = alice.encrypt(format!("m{}", i).as_bytes(), &aad, false).unwrap();
+            bob.decrypt(&cc, &nn, &aad, n_, n_.into_iter().next().as_ref()).ok();
+        }
+        // Whatever happened above, no panic occurred and Bob still responds.
+        let (rk, num, n, c) = alice.encrypt(b"final", &aad, true).unwrap();
+        assert_eq!(&bob.decrypt(&c, &n, &aad, num, rk.as_ref()).unwrap(), b"final");
+    }
+
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
     // RustCrypto swap) ---
     // These constants were captured from the ORIGINAL libsodium implementation.
