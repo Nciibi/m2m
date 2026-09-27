@@ -113,19 +113,15 @@ describe("groupByDate", () => {
   // loudly rather than letting a partial object slide through.
   const msg = (id: string, ts: number): ChatMessage => ({
     id,
-    conversation_id: "c",
-    peer_key_hex: "p",
-    direction: "received",
     content: id,
+    direction: "received",
     timestamp: Math.floor(ts / 1000),
-    is_read: false,
     read_at: null,
-    edited_at: 0,
+    edited_at: null,
     deleted: false,
     expires_at: null,
-    reply_to: null,
-    self_destruct_secs: 0,
     reactions: {},
+    sender_peer_key_hex: "p",
   });
 
   it("groups messages by calendar day", () => {
