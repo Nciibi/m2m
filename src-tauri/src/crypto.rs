@@ -2346,7 +2346,7 @@ mod crypto_tests {
             concat!(
                 "b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c",
                 "59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71",
-                "cc30c58179a3d0f2d1a4b0e4a4b6c0d3"
+                "cc30c58179ec3e87c14c01d5c1f3434f1d87"
             ),
             "RFC 5869 A.2 OKM mismatch"
         );
