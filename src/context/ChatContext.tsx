@@ -19,6 +19,7 @@ import {
 } from "../events";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "./AppContext";
+import { useT } from "../i18n/I18nContext";
 import type {
   ConnectionInfo, ChatMessage, FileRequest, ConversationEntry, TransferProgress,
 } from "../types";
@@ -99,6 +100,7 @@ export function useChat(): ChatContextValue {
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { addToast, setView } = useApp();
+  const t = useT();
 
   // ─── State ───
   const [connection, setConnection] = useState<ConnectionInfo | null>(null);
@@ -506,7 +508,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // key and a notification group.
       const payload = asMessageEvent(event.payload);
       if (!payload) {
-        tracing.warn("dropping malformed m2m://message payload");
+        console.warn("M2M: dropping malformed m2m://message payload");
         return;
       }
       const message = payload.message;
@@ -558,7 +560,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // shown, so an unrecognised value must not be acted on.
       const conn = asConnectionEvent(event.payload);
       if (!conn) {
-        tracing.warn("dropping malformed m2m://connection payload");
+        console.warn("M2M: dropping malformed m2m://connection payload");
         return;
       }
       const stateStr = conn.state;
@@ -571,10 +573,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (stateStr === "established") {
         setReconnecting(false);
         setReconnectAttempt(0);
-        setActiveConversationId(event.payload.peer_key_hex);
+        setActiveConversationId(conn.peer_key_hex);
         setView("chat");
         try {
-          setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: event.payload.peer_key_hex })));
+          setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: conn.peer_key_hex })));
         } catch { /* noop */ }
       } else if (stateStr === "disconnected") {
         // For verified peers, stay on ChatView so user can attempt reconnect.
@@ -594,7 +596,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // conversation table, so it is validated before we act on the event.
       const meta = asConversationMeta(event.payload);
       if (!meta) {
-        tracing.warn("dropping malformed m2m://conversation-meta payload");
+        console.warn("M2M: dropping malformed m2m://conversation-meta payload");
         return;
       }
       try { setConversations(asList<ConversationEntry>(await invoke("list_conversations"))); } catch { /* noop */ }
@@ -605,7 +607,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // and passed to a save-path default.
       const req = asFileRequestEvent(event.payload);
       if (!req) {
-        tracing.warn("dropping malformed m2m://file-request payload");
+        console.warn("M2M: dropping malformed m2m://file-request payload");
         return;
       }
       setFileRequests((prev) => [...prev, req]);
@@ -616,7 +618,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // constrained to the backend's known set.
       const progress = asTransferProgressEvent(event.payload);
       if (!progress) {
-        tracing.warn("dropping malformed m2m://transfer-progress payload");
+        console.warn("M2M: dropping malformed m2m://transfer-progress payload");
         return;
       }
       setTransfers((prev: TransferProgress[]) => {
@@ -633,7 +635,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const unlistenFileCompleted = listen("m2m://transfer-completed", (event) => {
       const done = asTransferCompletedEvent(event.payload);
       if (!done) {
-        tracing.warn("dropping malformed m2m://transfer-completed payload");
+        console.warn("M2M: dropping malformed m2m://transfer-completed payload");
         return;
       }
       setTransfers((prev) => prev.filter((t) => t.transfer_id !== done.transfer_id));
@@ -646,7 +648,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const unlistenFileError = listen("m2m://transfer-error", (event) => {
       const failed = asTransferErrorEvent(event.payload);
       if (!failed) {
-        tracing.warn("dropping malformed m2m://transfer-error payload");
+        console.warn("M2M: dropping malformed m2m://transfer-error payload");
         return;
       }
       setTransfers((prev) => prev.filter((t) => t.transfer_id !== failed.transfer_id));
@@ -661,7 +663,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const unlistenFileCancelled = listen("m2m://transfer-cancelled", (event) => {
       const cancelled = asTransferCancelledEvent(event.payload);
       if (!cancelled) {
-        tracing.warn("dropping malformed m2m://transfer-cancelled payload");
+        console.warn("M2M: dropping malformed m2m://transfer-cancelled payload");
         return;
       }
       setTransfers((prev) => prev.filter((t) => t.transfer_id !== cancelled.transfer_id));
@@ -673,7 +675,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // peer input there is both a rendering and a memory hazard.
       const rxn = asReactionEvent(event.payload);
       if (!rxn) {
-        tracing.warn("dropping malformed m2m://reaction payload");
+        console.warn("M2M: dropping malformed m2m://reaction payload");
         return;
       }
       const { message_id, reaction, peer_key_hex, remove } = rxn;
@@ -702,7 +704,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // `new_content` replaces the rendered body and reaches renderMarkdown.
       const edit = asEditEvent(event.payload);
       if (!edit) {
-        tracing.warn("dropping malformed m2m://edit payload");
+        console.warn("M2M: dropping malformed m2m://edit payload");
         return;
       }
       const { message_id, new_content, edited_at } = edit;
@@ -716,7 +718,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const unlistenReconnectAttempt = listen("m2m://reconnect-attempt", (event) => {
       const attempt_ = asReconnectAttempt(event.payload);
       if (!attempt_) {
-        tracing.warn("dropping malformed m2m://reconnect-attempt payload");
+        console.warn("M2M: dropping malformed m2m://reconnect-attempt payload");
         return;
       }
       const { state: reconnectState, attempt } = attempt_;
@@ -737,7 +739,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const unlistenDelete = listen("m2m://delete", (event) => {
       const del = asDeleteEvent(event.payload);
       if (!del) {
-        tracing.warn("dropping malformed m2m://delete payload");
+        console.warn("M2M: dropping malformed m2m://delete payload");
         return;
       }
       const { message_id } = del;
@@ -748,8 +750,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       ));
     });
 
-    const unlistenTyping = listen<any>("m2m://typing", (event) => {
-      const { peer_key_hex: typingPeer, typing } = event.payload;
+    const unlistenTyping = listen("m2m://typing", (event) => {
+      const typing_ = asTypingEvent(event.payload);
+      if (!typing_) {
+        console.warn("M2M: dropping malformed m2m://typing payload");
+        return;
+      }
+      const { peer_key_hex: typingPeer, typing } = typing_;
       if (typing) {
         setTypingPeers((prev: string[]) => prev.includes(typingPeer) ? prev : [...prev, typingPeer]);
       } else {
