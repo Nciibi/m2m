@@ -1002,8 +1002,7 @@ mod tests {
         msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1]);
         msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
         msg.extend_from_slice(&4u16.to_be_bytes());
-        let total_len = msg.len() + 8;
-        msg[2..4].copy_from_slice(&(total_len as u16).to_be_bytes());
+        msg[2..4].copy_from_slice(&20u16.to_be_bytes());
         msg.extend_from_slice(&[0, 0, 0, 0]);
         let crc = crc32(&msg[..msg.len() - 4]) ^ 0x5354_554eu32;
         let n = msg.len();
@@ -1049,13 +1048,17 @@ mod tests {
         let txn = [0x44u8; 12];
         let mut msg: Vec<u8> = Vec::new();
         msg.extend_from_slice(&[0x00, 0x01, 0x00, 0x00]);
-        msg.extend_from_slice(&12u16.to_be_bytes());
+        msg.extend_from_slice(&16u16.to_be_bytes());
         msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
         msg.extend_from_slice(&txn);
         msg.extend_from_slice(&0x8022u16.to_be_bytes()); // SOFTWARE
         msg.extend_from_slice(&4u16.to_be_bytes());
         msg.extend_from_slice(b"test");
-        let addr = parse_binding_response(&msg, &txn).expect("must parse");
-        assert_eq!(addr.port(), 0);
+        msg.extend_from_slice(&0x0020u16.to_be_bytes()); // XOR-MAPPED-ADDRESS
+        msg.extend_from_slice(&8u16.to_be_bytes());
+        msg.extend_from_slice(&[0x00, 0x01, 203, 0, 113, 9]);
+        let addr = parse_binding_response(&msg, &txn)
+            .expect("a response with no FINGERPRINT must still be accepted");
+        assert_eq!(addr.ip().to_string(), "203.0.113.9");
     }
 }
