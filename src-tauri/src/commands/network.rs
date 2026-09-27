@@ -103,6 +103,90 @@ fn frame_presented_one_time_prekey(frame: &network::RawFrame) -> bool {
     }
 }
 
+/// Run an X3DH responder handshake, consuming the one-time prekey if used.
+///
+/// Both inbound paths (direct TCP accept and the hole-punch responder leg)
+/// funnel through here so consume-on-use semantics cannot be applied on one
+/// path and forgotten on the other.
+///
+/// ## Why the prekey is burned
+///
+/// The one-time prekey was previously a single slot, written once per invite
+/// and never rotated on use, so it served *every* inbound session until the
+/// user made another invite. That turns it into a long-lived prekey and
+/// substantially defeats the forward secrecy X3DH exists to provide: one later
+/// compromise of the prekey (or the prekey store) recovers the DH4 input for
+/// all sessions established with that invite.
+///
+/// ## Why a spent prekey is not a hard failure
+///
+/// The invite embeds the prekey's public key. Once burned, a second peer
+/// holding the same invite cannot complete DH4. X3DH is defined to work
+/// without an OPK, so that session proceeds with reduced forward secrecy —
+/// the correct price for a prekey that was already spent. It is logged rather
+/// than accepted silently, because it is a real (if modest) downgrade.
+///
+/// ## Ordering
+///
+/// The prekey is retired only after the handshake *succeeds*, so a stream of
+/// malformed or failing attempts cannot be used to grief the user by forcing
+/// prekey rotation and permanently downgrading every future session.
+pub async fn x3dh_responder_handshake_consume_opk<S>(
+    state: &AppState,
+    session: &mut crate::session::Session,
+    stream: &mut S,
+    identity: &crate::crypto::IdentityKeypair,
+    x25519_identity: &crate::crypto::X25519IdentityKeypair,
+    init_frame: &network::RawFrame,
+    local_candidates: Vec<protocol::WireCandidate>,
+) -> Result<(), String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let spk_lock = state.active_signed_prekey.read().await;
+    let spk = spk_lock
+        .as_ref()
+        .ok_or_else(|| "no signed prekey for X3DH handshake".to_string())?;
+
+    let opk_consumed = frame_presented_one_time_prekey(init_frame);
+    let opk_lock = state.active_one_time_prekey.read().await;
+    let opk_available = opk_lock.is_some();
+    let use_opk = opk_available && opk_consumed;
+
+    if opk_consumed && !opk_available {
+        tracing::warn!(
+            "incoming X3DH handshake presented a one-time prekey that has already \
+             been consumed — continuing without DH4. This session has reduced \
+             forward secrecy; issue a fresh invite for full protection."
+        );
+    }
+
+    let opk_for_handshake = if use_opk { opk_lock.as_ref() } else { None };
+    let result = session
+        .handshake_as_responder_x3dh(
+            stream,
+            identity,
+            x25519_identity,
+            spk,
+            opk_for_handshake,
+            init_frame,
+            local_candidates,
+        )
+        .await;
+    drop(opk_lock);
+    drop(spk_lock);
+
+    result.map_err(|e| format!("X3DH handshake failed: {e}"))?;
+
+    if use_opk {
+        let mut opk_slot = state.active_one_time_prekey.write().await;
+        // `take()` + drop: EphemeralKeypair's Drop zeroizes the secret.
+        drop(opk_slot.take());
+        tracing::info!("one-time prekey consumed and retired");
+    }
+    Ok(())
+}
+
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
 /// so the invite works across the internet.
