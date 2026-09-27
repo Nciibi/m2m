@@ -17,6 +17,7 @@
 mod candidate;
 mod capture_monitor;
 mod commands;
+pub mod dial;
 mod duress;
 pub mod crypto;
 pub mod dht;
