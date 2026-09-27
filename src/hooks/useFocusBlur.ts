@@ -16,13 +16,14 @@ import { useEffect, useState } from "react";
  * SecurityConfig.blur_on_focus_loss.
  */
 export function useFocusBlur(enabled: boolean): boolean {
-  const [blurred, setBlurred] = useState(false);
+  // Lazy initializer: the initial reading comes from an external source
+  // (the document), so it is read once on mount rather than during render.
+  const [blurred, setBlurred] = useState(
+    () => typeof document !== "undefined" && document.visibilityState === "hidden",
+  );
 
   useEffect(() => {
-    if (!enabled) {
-      setBlurred(false);
-      return;
-    }
+    if (!enabled) return;
 
     const onBlur = () => setBlurred(true);
     const onFocus = () => setBlurred(false);
@@ -32,9 +33,6 @@ export function useFocusBlur(enabled: boolean): boolean {
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
 
-    // Initial state: if the app starts hidden, blur immediately.
-    onVisibility();
-
     return () => {
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
@@ -42,5 +40,10 @@ export function useFocusBlur(enabled: boolean): boolean {
     };
   }, [enabled]);
 
-  return blurred;
+  // Derived rather than stored. The previous version called
+  // `setBlurred(false)` inside the effect when `enabled` went false, which
+  // costs an extra render pass and leaves a window — one render — where the
+  // content is still un-blurred from a blur that happened before the feature
+  // was turned off. Gating the return value is immediate and exact.
+  return enabled && blurred;
 }
