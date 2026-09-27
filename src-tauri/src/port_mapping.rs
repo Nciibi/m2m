@@ -78,8 +78,7 @@ pub enum PortMapError {
     #[error("UPnP IGD mapping failed: {0}")]
     Upnp(String),
     #[error("all three mapping protocols (PCP, NAT-PMP, UPnP IGD) failed")]
-    AllFailed,
-}
+    AllFailed,}
 
 /// Unified port-mapping facade.
 ///
@@ -1031,10 +1030,9 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
                 .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))
         })?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
+    let mut stream = crate::dial::dial_lan_only(sock_addr, Duration::from_secs(5))
         .await
-        .map_err(|_| PortMapError::Upnp("connection to device description timed out".into()))?
-        .map_err(PortMapError::Io)?;
+        .map_err(pm_dial_err)?;
 
     // Determine the path from the URL for the GET request.
     let path = location_url
@@ -1133,10 +1131,9 @@ async fn upnp_map_tcp(
         .parse()
         .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
+    let mut stream = crate::dial::dial_lan_only(sock_addr, Duration::from_secs(5))
         .await
-        .map_err(|_| PortMapError::Upnp("connection to IGD timed out".into()))?
-        .map_err(PortMapError::Io)?;
+        .map_err(pm_dial_err)?;
 
     use tokio::io::AsyncWriteExt;
     stream.write_all(http_req.as_bytes()).await?;
@@ -1212,10 +1209,9 @@ async fn upnp_remove_tcp(
         .parse()
         .map_err(|e| PortMapError::Upnp(format!("invalid socket address: {e}")))?;
 
-    let mut stream = time::timeout(Duration::from_secs(5), TcpStream::connect(sock_addr))
+    let mut stream = crate::dial::dial_lan_only(sock_addr, Duration::from_secs(5))
         .await
-        .map_err(|_| PortMapError::Upnp("connection timed out".into()))?
-        .map_err(PortMapError::Io)?;
+        .map_err(pm_dial_err)?;
 
     use tokio::io::AsyncWriteExt;
     stream.write_all(http_req.as_bytes()).await?;
