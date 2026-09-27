@@ -160,7 +160,10 @@ export const DEFAULT_STUN_SERVERS: readonly string[] = [
  * rather than showing "undefined" to a user.
  */
 export function errorMessage(e: unknown, fallback = "Unknown error"): string {
-  if (typeof e === "string") return e;
+  // An empty string is a *possible* rejection value, so `typeof e === "string"`
+  // cannot return it unconditionally — doing so would hand the caller `""` and
+  // render a blank toast.
+  if (typeof e === "string") return e || fallback;
   if (e instanceof Error) return e.message || fallback;
   if (e && typeof e === "object" && "message" in e) {
     const m = (e as { message: unknown }).message;
