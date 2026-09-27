@@ -251,20 +251,71 @@ pub async fn pair_sync_device(
 
 /// Handle an incoming SyncDeviceInfo packet from a peer that has
 /// already established a session. Registers the peer as a synced device.
+///
+/// ## Authorization
+///
+/// The sender must present the one-time sync token the user generated on this
+/// device via `generate_sync_invite`. The token is looked up by SHA-256 hash,
+/// checked against the expiry window, and **consumed** on use.
+///
+/// This check was documented in the module header but never implemented: the
+/// handler auto-paired any peer that completed a handshake and then called
+/// `broadcast_sync_data`, handing over the complete contact graph — including
+/// peers the user had never messaged — to anyone who asked. A valid X3DH
+/// handshake is not authorization: with `require_known_contact` off by
+/// default, any Ed25519 identity on the internet can complete one.
 pub async fn handle_sync_device_info(
     app_handle: &tauri::AppHandle,
     state: &Arc<AppState>,
     peer_key_hex: &str,
     info: &SyncDeviceInfo,
 ) -> Result<(), String> {
-    let mut mgr = state.sync_manager.write().await;
+    if info.sync_protocol_version != SYNC_PROTOCOL_VERSION {
+        return Err(format!(
+            "unsupported sync protocol version {} (expected {})",
+            info.sync_protocol_version, SYNC_PROTOCOL_VERSION
+        ));
+    }
 
-    // Check if already paired
-    let already_paired = mgr.synced_devices.iter().any(|d| d.device_id == info.device_id);
-    if !already_paired {
+    let mut mgr = state.sync_manager.write().await;
+    mgr.prune_expired_invites();
+
+    // ── Token validation ──
+    let token_hash = hash_sync_token(&info.sync_token);
+    let now = now_unix();
+
+    let is_reconnect = mgr.synced_devices.iter().any(|d| {
+        d.peer_key_hex == peer_key_hex && d.device_id == info.device_id
+    });
+
+    if !is_reconnect {
+        // A device that is already paired re-announcing itself does not need a
+        // fresh token; a *new* device does.
+        let invite = mgr.pending_invites.get(&token_hash).ok_or_else(|| {
+            tracing::warn!(
+                peer = %peer_key_hex,
+                device = %info.device_id,
+                "sync pairing refused: no valid pending sync invite for this token"
+            );
+            "sync pairing refused: this device was not invited".to_string()
+        })?;
+
+        if invite.used {
+            return Err(
+                "sync pairing refused: this invite has already been used".to_string(),
+            );
+        }
+        if invite.expires_at <= now {
+            return Err("sync pairing refused: this invite has expired".to_string());
+        }
+
         if mgr.synced_devices.len() >= MAX_SYNCED_DEVICES {
             return Err("maximum number of synced devices reached".to_string());
         }
+
+        // Consume the token: invites are one-time, so a leaked/copied token
+        // cannot be replayed to pair a second device.
+        mgr.pending_invites.remove(&token_hash);
 
         mgr.synced_devices.push(SyncedDevice {
             device_id: info.device_id.clone(),
@@ -275,7 +326,7 @@ pub async fn handle_sync_device_info(
         tracing::info!(
             device_id = %info.device_id,
             device_name = %info.device_name,
-            "new sync device paired"
+            "new sync device paired (token consumed)"
         );
     }
 
@@ -284,6 +335,8 @@ pub async fn handle_sync_device_info(
         device_id: mgr.device_id.clone(),
         device_name: mgr.device_name.clone(),
         sync_protocol_version: SYNC_PROTOCOL_VERSION,
+        // We never echo a token back; pairing is one-directional.
+        sync_token: String::new(),
     };
     drop(mgr);
 
@@ -301,8 +354,11 @@ pub async fn handle_sync_device_info(
         drop(conns);
     }
 
-    // Send sync data (conversation metadata)
-    let _ = broadcast_sync_data(state, peer_key_hex).await;
+    // Send sync data (conversation metadata) — only now that the peer is a
+    // confirmed, token-authorized device.
+    if let Err(e) = broadcast_sync_data(state, peer_key_hex).await {
+        tracing::warn!(error = %e, "failed to broadcast sync data to paired device");
+    }
 
     // Notify frontend
     let _ = app_handle.emit("m2m://sync-device", serde_json::json!({
@@ -311,6 +367,35 @@ pub async fn handle_sync_device_info(
     }));
 
     Ok(())
+}
+
+/// SHA-256 hash of a sync invite token, used as the `pending_invites` key.
+///
+/// An empty token hashes to the digest of the empty string, which is never a
+/// key any real invite inserted (tokens are 24 random bytes), so an absent
+/// token can never collide with a valid one.
+fn hash_sync_token(token: &str) -> String {
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(token.as_bytes()))
+}
+
+/// Is this peer a currently-paired sync device?
+///
+/// Used to gate inbound `SyncPayload` application, so an unpaired peer cannot
+/// inject or rename arbitrary conversations in the local database.
+pub fn is_paired_sync_device(state: &AppState, peer_key_hex: &str) -> bool {
+    // `try_write` rather than blocking: the receive loop must not stall on the
+    // sync mutex. Failing to read the list is treated as "not paired", which
+    // is the fail-closed direction.
+    state
+        .sync_manager
+        .try_read()
+        .map(|mgr| {
+            mgr.synced_devices
+                .iter()
+                .any(|d| d.peer_key_hex == peer_key_hex)
+        })
+        .unwrap_or(false)
 }
 
 /// Handle an incoming SyncPayload from a paired device.
