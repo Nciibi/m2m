@@ -530,7 +530,29 @@ async fn handle_relay_incoming_with_frame(
     } // identity borrow dropped here
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
-    let peer_fingerprint = session.peer_fingerprint();
+    let peer_fingerprint = session.fingerprint_or_compute();
+
+    // ── Contact allowlist gate (H5) ──
+    // This path previously omitted the gate entirely, so a user who enabled
+    // `require_known_contact` could still be connected to, messaged, and have
+    // the stranger persisted into their key store by routing through a relay.
+    // The direct-TCP path applies the same check via the same function.
+    if let Err(reason) =
+        crate::commands::network::check_contact_gate(&state, &peer_key_hex).await
+    {
+        tracing::warn!(
+            peer = %peer_key_hex,
+            fingerprint = %peer_fingerprint,
+            "relay connection rejected: {reason} (allowlist enabled)"
+        );
+        let _ = network::send_error(
+            &mut stream,
+            protocol::ErrorCode::HandshakeFailed,
+            reason,
+        )
+        .await;
+        return;
+    }
 
     // Split the stream for the receive loop
     let (read_half, write_half) = stream.into_split();
@@ -544,9 +566,21 @@ async fn handle_relay_incoming_with_frame(
         last_hb_ack: None,
     };
 
-    let mut conns = state.connections.write().await;
-    conns.insert(peer_key_hex.clone(), Arc::new(tokio::sync::Mutex::new(conn)));
-    drop(conns);
+    // Do not silently displace an existing connection. The map is keyed by the
+    // peer's *self-declared* Ed25519 key, so an attacker who announces a
+    // known contact's key used to overwrite the legitimate `PeerConnection`
+    // and take over the slot. Refuse instead; the real peer keeps its session.
+    {
+        let mut conns = state.connections.write().await;
+        if conns.contains_key(&peer_key_hex) {
+            tracing::warn!(
+                peer = %peer_key_hex,
+                "refusing relay connection: a session with this peer key already exists"
+            );
+            return;
+        }
+        conns.insert(peer_key_hex.clone(), Arc::new(tokio::sync::Mutex::new(conn)));
+    }
 
     // Notify frontend
     let _ = app_handle.emit("m2m://connection", crate::commands::ConnectionEvent {
