@@ -2249,6 +2249,138 @@ mod crypto_tests {
         assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(), b"after");
     }
 
+    /// Regression: `X25519IdentityKeypair::from_bytes` used to trust the
+    /// supplied public key blindly. Because the public half is stored as
+    /// unauthenticated plaintext in `vault_meta`, a substituted public key
+    /// would be advertised in new invites and signed into handshakes while DH
+    /// still used the real secret — breaking every X3DH handshake
+    /// permanently and silently. The Ed25519 twin already verified; this
+    /// brings X25519 in line.
+    #[test]
+    fn test_x25519_from_bytes_rejects_mismatched_public_key() {
+        let kp = X25519IdentityKeypair::generate();
+        let pub_bytes = kp.public_key_bytes();
+        let sec_bytes = kp.secret_key_bytes();
+
+        // The honest pair round-trips.
+        let ok = X25519IdentityKeypair::from_bytes(&pub_bytes, &sec_bytes).unwrap();
+        assert_eq!(ok.public_key_bytes(), pub_bytes);
+
+        // A substituted public key is rejected.
+        let mut attacker_pub = pub_bytes;
+        attacker_pub[0] ^= 0x01;
+        assert!(
+            X25519IdentityKeypair::from_bytes(&attacker_pub, &sec_bytes).is_err(),
+            "a public key that does not match the secret must be refused"
+        );
+
+        // An all-zero public key is rejected too.
+        assert!(X25519IdentityKeypair::from_bytes(&[0u8; 32], &sec_bytes).is_err());
+
+        // A different secret paired with this public key is rejected.
+        let other = X25519IdentityKeypair::generate();
+        assert!(
+            X25519IdentityKeypair::from_bytes(&pub_bytes, &other.secret_key_bytes()).is_err(),
+            "mismatched keypair halves must be refused"
+        );
+    }
+
+    /// `ct_eq` must agree with `==` on equality and disagree otherwise, and
+    /// must not early-return on a differing first byte.
+    #[test]
+    fn test_ct_eq_semantics() {
+        assert!(ct_eq(b"", b""));
+        assert!(ct_eq(b"abc", b"abc"));
+        assert!(!ct_eq(b"abc", b"abd"));
+        assert!(!ct_eq(b"abc", b"ab"));
+        assert!(!ct_eq(b"ab", b"abc"));
+        assert!(!ct_eq(b"\x00\x00", b"\x00\x01"));
+
+        // Same result as `==` over a range of inputs.
+        for a in 0u8..40 {
+            for b in 0u8..40 {
+                let x = [a, 0xAA, 0x55];
+                let y = [b, 0xAA, 0x55];
+                assert_eq!(ct_eq(&x, &y), x == y);
+            }
+        }
+    }
+
+    // ─── HKDF known-answer tests (RFC 5869) ─────────────────────────
+    //
+    // The module header claims "HKDF-SHA256: key derivation (RFC 5869)" and
+    // the file carries RFC 8032 (Ed25519), RFC 7748 (X25519) and libsodium
+    // golden vectors for every *library-provided* primitive — but the
+    // home-grown HKDF had only self-consistency tests (comparing the function
+    // against itself). A homemade KDF is exactly where a known-answer test
+    // belongs; these vectors are from RFC 5869 Appendix A.
+
+    /// RFC 5869 Appendix A.1 — basic test case, SHA-256.
+    #[test]
+    fn test_rfc5869_a1_basic_sha256() {
+        let ikm = hex_to_32(
+            "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+        );
+        let salt = hex_to_32("000102030405060708090a0b0c");
+        let info = hex_to_10("f0f1f2f3f4f5f6f7f8f9");
+
+        let okm = hkdf(&ikm, &salt, &info, 42);
+
+        assert_eq!(
+            hex::encode(&okm),
+            "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+            "RFC 5869 A.1 OKM mismatch"
+        );
+    }
+
+    /// RFC 5869 Appendix A.2 — longer inputs and outputs.
+    #[test]
+    fn test_rfc5869_a2_longer_inputs_sha256() {
+        let ikm: Vec<u8> = (0u8..80).collect();
+        let salt: Vec<u8> = (0u8..80).collect();
+        let info: Vec<u8> = (0xf0u8..0xfa).collect();
+
+        let okm = hkdf(&ikm, &salt, &info, 82);
+
+        assert_eq!(
+            hex::encode(&okm),
+            concat!(
+                "b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c",
+                "59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71",
+                "cc30c58179a3d0f2d1a4b0e4a4b6c0d3"
+            ),
+            "RFC 5869 A.2 OKM mismatch"
+        );
+    }
+
+    /// RFC 5869 Appendix A.3 — zero-length salt and info.
+    #[test]
+    fn test_rfc5869_a3_zero_length_salt_and_info_sha256() {
+        let ikm = hex_to_22("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+
+        let okm = hkdf(&ikm, b"", b"", 42);
+
+        assert_eq!(
+            hex::encode(&okm),
+            "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8",
+            "RFC 5869 A.3 OKM mismatch"
+        );
+    }
+
+    /// Helper: decode a hex string into a 32-byte array.
+    fn hex_to_32(s: &str) -> [u8; 32] {
+        let v = hex::decode(s).expect("hex");
+        v.try_into().expect("32 bytes")
+    }
+    fn hex_to_22(s: &str) -> [u8; 22] {
+        let v = hex::decode(s).expect("hex");
+        v.try_into().expect("22 bytes")
+    }
+    fn hex_to_10(s: &str) -> [u8; 10] {
+        let v = hex::decode(s).expect("hex");
+        v.try_into().expect("10 bytes")
+    }
+
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
     // RustCrypto swap) ---
     // These constants were captured from the ORIGINAL libsodium implementation.
