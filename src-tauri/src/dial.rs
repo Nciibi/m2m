@@ -68,6 +68,10 @@ pub enum DialError {
 
     /// The TCP connect (direct or via SOCKS5) failed.
     #[error("dial failed: {0}")]
+    Dial(String),
+
+    /// The underlying socket operation failed.
+    #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
     /// The connect exceeded its deadline and was cancelled.
