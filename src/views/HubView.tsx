@@ -115,25 +115,48 @@ export default function HubView() {
         </div>
       </div>
 
-      <div className="tab-bar" role="tablist">
-        <button className={`tab-bar__tab ${tab === "connect" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("connect")} role="tab" aria-selected={tab === "connect"}>
+      {/*
+        Tabs: `aria-controls` + roving `tabIndex` + arrow-key navigation, per
+        the WAI-ARIA tabs pattern. Previously each tab was a separate tab stop,
+        there was no `aria-controls`, no `tabpanel` on the content region, and
+        no arrow-key support — so a keyboard or screen-reader user had to Tab
+        four times to reach a tab and had no indication of what the tab
+        controlled.
+
+        `onKeyDown` implements Left/Right/Home/End, and focuses the newly
+        selected tab via the data attribute.
+      */}
+      <div className="tab-bar" role="tablist" aria-label="Sections" onKeyDown={(e) => {
+        const order = ["connect", "chats", "nearby", "family"];
+        const i = order.indexOf(tab);
+        let next: number | null = null;
+        if (e.key === "ArrowRight") next = (i + 1) % order.length;
+        else if (e.key === "ArrowLeft") next = (i - 1 + order.length) % order.length;
+        else if (e.key === "Home") next = 0;
+        else if (e.key === "End") next = order.length - 1;
+        if (next === null) return;
+        e.preventDefault();
+        setTab(order[next]);
+        document.querySelector<HTMLElement>(`[data-tab="${order[next]}"]`)?.focus();
+      }}>
+        <button className={`tab-bar__tab ${tab === "connect" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("connect")} role="tab" id={`tab-connect`} aria-controls="tabpanel-main" aria-selected={tab === "connect"} tabIndex={tab === "connect" ? 0 : -1} data-tab=connect>
           <LinkIcon size={16} /> Connect
         </button>
-        <button className={`tab-bar__tab ${tab === "chats" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("chats")} role="tab" aria-selected={tab === "chats"}>
+        <button className={`tab-bar__tab ${tab === "chats" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("chats")} role="tab" id={`tab-chats`} aria-controls="tabpanel-main" aria-selected={tab === "chats"} tabIndex={tab === "chats" ? 0 : -1} data-tab=chats>
           <MessageIcon size={16} /> Chats
           {conversations.length > 0 && <span className="tab-bar__badge">{conversations.length}</span>}
         </button>
-        <button className={`tab-bar__tab ${tab === "nearby" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("nearby")} role="tab" aria-selected={tab === "nearby"}>
+        <button className={`tab-bar__tab ${tab === "nearby" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("nearby")} role="tab" id={`tab-nearby`} aria-controls="tabpanel-main" aria-selected={tab === "nearby"} tabIndex={tab === "nearby" ? 0 : -1} data-tab=nearby>
           <WifiIcon size={16} /> Nearby
           {discoveredPeers.length > 0 && <span className="tab-bar__badge">{discoveredPeers.length}</span>}
         </button>
-        <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" aria-selected={tab === "family"}>
+        <button className={`tab-bar__tab ${tab === "family" ? "tab-bar__tab--active" : ""}`} onClick={() => setTab("family")} role="tab" id={`tab-family`} aria-controls="tabpanel-main" aria-selected={tab === "family"} tabIndex={tab === "family" ? 0 : -1} data-tab=family>
           <HomeIcon size={16} /> Family
           {family.length > 0 && <span className="tab-bar__badge">{family.length}</span>}
         </button>
       </div>
 
-      <div className="app-content">
+      <div className="app-content" id="tabpanel-main" role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0}>
         {tab === "connect" ? (
           <ConnectTab
             generatedInvite={generatedInvite} inviteToConnect={inviteToConnect}
