@@ -91,10 +91,18 @@ pub enum DialError {
 /// candidate; a false negative leaks the user's IP.
 pub fn is_non_tor_routable(ip: IpAddr) -> bool {
     match ip {
-        // An IPv4 address reached through an IPv6 socket is the same address
-        // in disguise. Re-check the mapped form so `::ffff:192.168.1.1` is
-        // treated exactly like `192.168.1.1`.
         IpAddr::V6(v6) => {
+            // Loopback / unspecified / multicast are checked FIRST, before the
+            // IPv4-compatibility conversions below. `::1` is an
+            // "IPv4-compatible" address that `to_ipv4()` reports as
+            // `0.0.0.1` — not itself loopback — so converting first would let
+            // the IPv6 loopback through as routable.
+            if v6.is_loopback() || v6.is_unspecified() || v6.is_multicast() {
+                return true;
+            }
+            // An IPv4 address reached through an IPv6 socket is the same
+            // address in disguise. Re-check the mapped form so
+            // `::ffff:192.168.1.1` is treated exactly like `192.168.1.1`.
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_non_tor_routable(IpAddr::V4(v4));
             }
@@ -102,12 +110,8 @@ pub fn is_non_tor_routable(ip: IpAddr) -> bool {
             if let Some(v4) = v6.to_ipv4() {
                 return is_non_tor_routable(IpAddr::V4(v4));
             }
-            v6.is_loopback()
-                || v6.is_unspecified()
-                || v6.is_multicast()
-                // Unique local (fc00::/7) and link-local (fe80::/10).
-                || (v6.segments()[0] & 0xfe00) == 0xfc00
-                || (v6.segments()[0] & 0xffc0) == 0xfe80
+            // Unique local (fc00::/7) and link-local (fe80::/10).
+            (v6.segments()[0] & 0xfe00) == 0xfc00 || (v6.segments()[0] & 0xffc0) == 0xfe80
         }
         IpAddr::V4(v4) => {
             v4.is_loopback()
@@ -282,9 +286,29 @@ mod dial_tests {
     fn public_addresses_are_routable() {
         assert!(!is_non_tor_routable(v4("8.8.8.8")));
         assert!(!is_non_tor_routable(v4("1.1.1.1")));
-        assert!(!is_non_tor_routable(v4("203.0.113.9")), "TEST-NET is documentation-only");
+        assert!(!is_non_tor_routable(v4("198.51.100.7")), "this host is a real /24");
         assert!(!is_non_tor_routable(v6("2001:4860:4860::8888")));
         assert!(!is_non_tor_routable(v6("2606:4700:4700::1111")));
+    }
+
+    /// Documentation / benchmarking ranges are not globally routable. M2M
+    /// never needs to dial them, and a hostile bootstrap or DHT record that
+    /// points at one should be dropped rather than attempted.
+    #[test]
+    fn documentation_ranges_are_non_routable() {
+        assert!(is_non_tor_routable(v4("192.0.2.1")), "TEST-NET-1");
+        assert!(is_non_tor_routable(v4("198.51.100.1")), "TEST-NET-2");
+        assert!(is_non_tor_routable(v4("203.0.113.1")), "TEST-NET-3");
+        assert!(is_non_tor_routable(v4("198.18.0.1")), "benchmarking, RFC 2544");
+    }
+
+    /// `::1` is an "IPv4-compatible" address that `to_ipv4()` maps to
+    /// `0.0.0.1`. The loopback check must run before that conversion or the
+    /// IPv6 loopback is misclassified as a routable public address.
+    #[test]
+    fn ipv6_loopback_is_not_misclassified_via_ipv4_compat_form() {
+        assert!(is_non_tor_routable(v6("::1")), "IPv6 loopback");
+        assert!(is_non_tor_routable(v6("::")));
     }
 
     /// The critical bypass: a private address dressed up in IPv6 notation must
