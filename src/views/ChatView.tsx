@@ -376,8 +376,25 @@ export default function ChatView() {
         {messages.length > 0 && `New message from ${messages[messages.length - 1]?.direction === "received" ? "peer" : "you"}`}
       </div>
 
-      {/* Messages */}
-      <div className="msg-area" ref={msgRef} onScroll={onScroll} id="message-list">
+      {/*
+        Messages.
+
+        `role="log"` with a label: assistive technology treats this as a
+        transcript that grows, so the text is reachable without every bubble
+        being a tab stop. `aria-relevant="additions"` so only newly-arrived
+        messages are announced — `additions text` would re-announce the entire
+        thread whenever anything changed.
+      */}
+      <div
+        className="msg-area"
+        ref={msgRef}
+        onScroll={onScroll}
+        id="message-list"
+        role="log"
+        aria-label="Message transcript"
+        aria-relevant="additions"
+        tabIndex={0}
+      >
         {loadingOlder && <div className="msg-loading-older">Loading older messages…</div>}
         {!hasOlder && messages.length > 0 && <div className="msg-loading-older">Beginning of conversation</div>}
         <div className="session-banner">
