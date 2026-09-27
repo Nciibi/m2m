@@ -352,17 +352,13 @@ export default function SettingsView() {
             <div className="settings-row">
               <span className="settings-label">Duress Passphrase</span>
               {duressConfigured ? (
-                <Button variant="secondary" size="xs" onClick={() => clearDuressPassphrase()}>Remove</Button>
+                <Button variant="secondary" size="xs" onClick={() => clearDuressPassphrase()}>
+                  {t("generic.remove")}
+                </Button>
               ) : (
-                <Button variant="secondary" size="xs" onClick={async () => {
-                  const input = window.prompt(
-                    "Set a DISTINCT duress passphrase (min 12 chars).\n\n⚠ IRREVERSIBLE: entering it at unlock will silently DELETE all local data and show a normal wrong-password error.\n\nThere is no confirmation at unlock — that is the point.",
-                    ""
-                  );
-                  if (!input) return;
-                  if (!window.confirm("Register this duress passphrase? Entering it at unlock wipes the vault. This cannot be undone.")) return;
-                  await setDuressPassphrase(input);
-                }}>Set…</Button>
+                <Button variant="secondary" size="xs" onClick={() => setDuressOpen(true)}>
+                  {t("settings.duressSet")}
+                </Button>
               )}
               <span className="settings-hint">{duressConfigured ? "Registered — entering it at unlock wipes the vault" : "Coercion resistance: a special passphrase that wipes everything"}</span>
             </div>
@@ -373,7 +369,16 @@ export default function SettingsView() {
                 <input
                   type="checkbox"
                   checked={securityConfig?.panic_hotkey_enabled ?? false}
-                  onChange={handlePanicHotkeyArmToggle}
+                  onChange={() => {
+                    // Arming is irreversible and destroys everything on
+                    // press, so it is gated behind a real dialog rather than a
+                    // native confirm() popup.
+                    if (securityConfig?.panic_hotkey_enabled) {
+                      handlePanicHotkeyArmToggle();
+                    } else {
+                      setPanicArmOpen(true);
+                    }
+                  }}
                   aria-label="Arm emergency panic wipe hotkey"
                 />
                 <span className="toggle-slider" />
@@ -467,6 +472,40 @@ export default function SettingsView() {
             </div>
           </div>
         </section>
+
+        {/*
+          Destructive-action dialogs.
+
+          These were `window.prompt` + `window.confirm` until now. Native
+          dialogs are wrong for this product specifically: they cannot be
+          styled, cannot be localised, and are a recognised target for UI
+          spoofing. Someone under coercion has to be able to *read* what they
+          are agreeing to, in a language they actually read — and an
+          un-styleable `OK / Cancel` gives an attacker a very convincing
+          surface to overlay a fake one on.
+        */}
+        <DuressPassphraseDialog
+          open={duressOpen}
+          onClose={() => setDuressOpen(false)}
+          onSubmit={async (value) => {
+            await setDuressPassphrase(value);
+            setDuressOpen(false);
+          }}
+        />
+
+        <ConfirmDialog
+          open={panicArmOpen}
+          title={t("settings.panicArmTitle")}
+          body={t("settings.panicArmBody")}
+          confirmLabel={t("settings.panicArmAction")}
+          cancelLabel={t("generic.cancel")}
+          destructive
+          onConfirm={async () => {
+            await handlePanicHotkeyArmToggle();
+            setPanicArmOpen(false);
+          }}
+          onCancel={() => setPanicArmOpen(false)}
+        />
 
         {/* ─── Theme ─── */}
         <section className="settings-section">
