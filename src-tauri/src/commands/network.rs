@@ -529,46 +529,17 @@ async fn handle_incoming_connection(
     // and BEFORE any persistence: a stranger must not be upserted into the
     // key store merely by connecting, and must not reach the message
     // dispatcher when the allowlist is enabled.
-    {
-        let require_known = state.security_config.read().await.require_known_contact;
-        if require_known {
-            let peer_key_bytes = match util::decode_peer_key(&peer_key_hex) {
-                Ok(k) => k,
-                Err(_) => {
-                    tracing::warn!(peer = %peer_key_hex, "gate check skipped: malformed peer key");
-                    let _ = network::send_error(
-                        &mut stream,
-                        protocol::ErrorCode::HandshakeFailed,
-                        "connection rejected",
-                    ).await;
-                    return;
-                }
-            };
-            // Key-store lock scoped narrowly; no .await while held.
-            let (is_family, is_known) = {
-                let ks = state.key_store.lock().await;
-                match ks.as_ref() {
-                    Some(store) => (
-                        store.is_family_member(&peer_key_bytes).unwrap_or(false),
-                        store.is_known_peer(&peer_key_bytes).unwrap_or(false),
-                    ),
-                    None => (false, false),
-                }
-            };
-            if !contact_gate_allows(require_known, is_family, is_known) {
-                tracing::warn!(
-                    peer = %peer_key_hex,
-                    fingerprint = %peer_fingerprint,
-                    "incoming connection rejected: unknown contact (allowlist enabled)"
-                );
-                let _ = network::send_error(
-                    &mut stream,
-                    protocol::ErrorCode::HandshakeFailed,
-                    "unknown contact — connection rejected",
-                ).await;
-                return;
-            }
-        }
+    //
+    // Shared with the relay inbound path so the control cannot be bypassed by
+    // simply choosing a different transport.
+    if let Err(reason) = check_contact_gate(&state, &peer_key_hex).await {
+        tracing::warn!(
+            peer = %peer_key_hex,
+            fingerprint = %peer_fingerprint,
+            "incoming connection rejected: {reason} (allowlist enabled)"
+        );
+        let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
+        return;
     }
 
     // Split the stream for the receive loop
