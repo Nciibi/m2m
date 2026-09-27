@@ -134,15 +134,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // ─── Handlers ───
 
+  // The peer key as a primitive, for handlers to close over.
+  //
+  // These callbacks previously listed `connection?.peer_key_hex` as their
+  // dependency while reading `connection.peer_key_hex` in the body. React's
+  // compiler infers `connection` (the whole object) from the body, sees a
+  // mismatch, and then SKIPS COMPILING THE ENTIRE COMPONENT — so all ~30
+  // useCallbacks in this file were left unoptimised, silently defeating the
+  // "biggest render-cost fix in the app" the comment below claims.
+  //
+  // Reading a primitive that IS the declared dependency lets the compiler
+  // preserve every memo here, and makes these handlers stable across
+  // `connection` object identity changes (a fresh ConnectionInfo with the same
+  // key no longer invalidates them).
+  const peerKeyHex = connection?.peer_key_hex;
+
   const handleSendMessage = useCallback(async (content: string): Promise<ChatMessage> => {
-    if (!connection?.peer_key_hex) throw new Error("Not connected");
+    if (!peerKeyHex) throw new Error("Not connected");
     const msg = await invoke<ChatMessage>("send_message", {
-      peerKeyHex: connection.peer_key_hex,
+      peerKeyHex: peerKeyHex,
       content,
     });
     setMessages((prev) => [...prev, msg]);
     return msg;
-  }, [connection?.peer_key_hex]);
+  }, [peerKeyHex]);
 
   const handleVerify = useCallback(async () => {
     if (!connection?.peer_key_hex) {
@@ -160,23 +175,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [connection]);
 
   const handleDisconnect = useCallback(async () => {
-    if (!connection?.peer_key_hex) return;
+    if (!peerKeyHex) return;
     try {
-      await invoke("disconnect_peer", { peerKeyHex: connection.peer_key_hex });
+      await invoke("disconnect_peer", { peerKeyHex: peerKeyHex });
       setView("hub");
       setConnection(null);
       setMessages([]);
     } catch { /* noop */ }
-  }, [connection?.peer_key_hex, setView]);
+  }, [peerKeyHex, setView]);
 
   const handleSendFile = useCallback(async () => {
-    if (!connection?.peer_key_hex) return;
+    if (!peerKeyHex) return;
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({ multiple: false, title: "Select file to send" });
       if (!selected) return;
       const filePath = typeof selected === "string" ? selected : selected;
-      await invoke("send_file", { peerKeyHex: connection.peer_key_hex, filePath });
+      await invoke("send_file", { peerKeyHex: peerKeyHex, filePath });
       const filename = filePath.split(/[\\/]/).pop() || "file";
       setMessages((prev) => [...prev, {
         id: Date.now().toString(),
@@ -193,7 +208,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       addToast("Failed to send file: " + e, "error");
     }
-  }, [connection?.peer_key_hex, addToast]);
+  }, [peerKeyHex, addToast]);
 
   const handleAcceptFileTransfer = useCallback(async (req: FileRequest) => {
     try {
@@ -315,9 +330,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ─── Reaction handlers ───
 
   const handleSendReaction = useCallback(async (messageId: string, reaction: string) => {
-    if (!connection?.peer_key_hex) return;
+    if (!peerKeyHex) return;
     try {
-      await invoke("send_reaction", { peerKeyHex: connection.peer_key_hex, messageId, reaction });
+      await invoke("send_reaction", { peerKeyHex: peerKeyHex, messageId, reaction });
       // Optimistically update UI
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m;
@@ -329,12 +344,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return { ...m, reactions };
       }));
     } catch { /* noop */ }
-  }, [connection?.peer_key_hex]);
+  }, [peerKeyHex]);
 
   const handleRemoveReaction = useCallback(async (messageId: string, reaction: string) => {
-    if (!connection?.peer_key_hex) return;
+    if (!peerKeyHex) return;
     try {
-      await invoke("remove_reaction", { peerKeyHex: connection.peer_key_hex, messageId, reaction });
+      await invoke("remove_reaction", { peerKeyHex: peerKeyHex, messageId, reaction });
       // Optimistically update UI
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m;
@@ -348,7 +363,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return { ...m, reactions };
       }));
     } catch { /* noop */ }
-  }, [connection?.peer_key_hex]);
+  }, [peerKeyHex]);
 
   const handleReconnect = useCallback(async () => {
     if (!connection?.peer_key_hex) return;
@@ -381,21 +396,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ─── Self-destruct, Edit, Delete handlers ───
 
   const handleSendMessageWithTimer = useCallback(async (content: string, disappearAfter?: number): Promise<ChatMessage> => {
-    if (!connection?.peer_key_hex) throw new Error("Not connected");
+    if (!peerKeyHex) throw new Error("Not connected");
     const msg = await invoke<ChatMessage>("send_message_with_timer", {
-      peerKeyHex: connection.peer_key_hex,
+      peerKeyHex: peerKeyHex,
       content,
       disappearAfter: disappearAfter ?? null,
     });
     setMessages((prev) => [...prev, msg]);
     return msg;
-  }, [connection?.peer_key_hex]);
+  }, [peerKeyHex]);
 
   const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
-    if (!connection?.peer_key_hex) return;
+    if (!peerKeyHex) return;
     try {
       const updated = await invoke<ChatMessage>("edit_message", {
-        peerKeyHex: connection.peer_key_hex,
+        peerKeyHex: peerKeyHex,
         messageId,
         newContent,
       });
@@ -403,13 +418,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       addToast("Edit failed: " + e, "error");
     }
-  }, [connection?.peer_key_hex, addToast]);
+  }, [peerKeyHex, addToast]);
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
-    if (!connection?.peer_key_hex) return;
+    if (!peerKeyHex) return;
     try {
       await invoke("delete_message", {
-        peerKeyHex: connection.peer_key_hex,
+        peerKeyHex: peerKeyHex,
         messageId,
       });
       // Optimistic update — mark as deleted immediately
@@ -419,7 +434,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       addToast("Delete failed: " + e, "error");
     }
-  }, [connection?.peer_key_hex, addToast]);
+  }, [peerKeyHex, addToast]);
 
   // ─── Invite validation effect ───
   useEffect(() => {
