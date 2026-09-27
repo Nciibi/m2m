@@ -381,34 +381,6 @@ pub async fn start_listener(
     Ok(())
 }
 
-/// Connect to a remote peer with timeout.
-/// Routes through Tor SOCKS5 proxy when Tor is enabled, otherwise direct TCP.
-/// Enables TCP keepalive to maintain NAT bindings and detect silent peer disconnects.
-#[expect(dead_code, reason = "Reserved high-level connect wrapper")]
-pub async fn connect(addr: SocketAddr) -> Result<TcpStream, NetworkError> {
-    tracing::debug!(target_addr = %addr, tor_enabled = crate::tor::is_enabled(), "attempting TCP connection");
-    let result = time::timeout(CONNECT_TIMEOUT, crate::tor::connect(addr)).await;
-    match &result {
-        Ok(Ok(_)) => tracing::debug!(target_addr = %addr, "TCP connection succeeded"),
-        Ok(Err(e)) => tracing::error!(target_addr = %addr, error = %e, "TCP connection failed"),
-        Err(_) => tracing::error!(target_addr = %addr, "TCP connection timed out"),
-    }
-    let stream = result
-        .map_err(|_| NetworkError::ConnectionTimeout)?
-        .map_err(|e| match e {
-            crate::tor::TorError::Io(io_err) => NetworkError::Io(io_err),
-            other => NetworkError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionRefused,
-                other.to_string(),
-            )),
-        })?;
-
-    // Set TCP_NODELAY to disable Nagle's algorithm for lower latency messaging.
-    let _ = stream.set_nodelay(true);
-
-    Ok(stream)
-}
-
 /// Send a disconnect packet with reason (works with any AsyncWrite).
 /// NOTE: heartbeats are NOT sent here — they are encrypted at the session
 /// layer (`Session::send_heartbeat`) so observers can't use them as a
