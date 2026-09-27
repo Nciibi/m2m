@@ -524,13 +524,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         && peerKeyHex !== activeConversationIdRef.current
         && !mutedConversationsRef.current.includes(peerKeyHex)
       ) {
-        // `peer_fingerprint` is not part of the Rust `MessageEvent`, so it is
-        // always absent here; the old code read it from two places and got
-        // `undefined` both times. Fall back to the peer key prefix.
-        const peerFingerprint: string | null = null;
-        const displayName = peerFingerprint
-          ? peerFingerprint.substring(0, 8) + "…"
-          : peerKeyHex.substring(0, 8) + "…";
+        // The Rust `MessageEvent` carries no fingerprint — the old code read
+        // one from two places, got `undefined` from both, and fell through to
+        // the peer-key prefix anyway. So use the key prefix directly rather
+        // than keeping a variable that is provably always null.
+        const displayName = peerKeyHex.substring(0, 8) + "…";
         import("@tauri-apps/plugin-notification").then(({ sendNotification, isPermissionGranted: _i }) => {
           sendNotification({
             title: "M2M",
