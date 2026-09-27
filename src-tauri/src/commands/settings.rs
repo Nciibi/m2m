@@ -191,6 +191,18 @@ pub async fn check_connectivity(
 pub async fn get_network_diagnostics(
     state: State<'_, Arc<AppState>>,
 ) -> Result<candidate::NetworkDiagnostics, String> {
+    collect_network_diagnostics(&state, tor::is_enabled()).await
+}
+
+async fn collect_network_diagnostics(
+    state: &AppState,
+    tor_enabled: bool,
+) -> Result<candidate::NetworkDiagnostics, String> {
+    state.ensure_not_air_gapped().await?;
+    if tor_enabled {
+        return Err("Tor routing is enabled — direct STUN diagnostics are blocked".to_string());
+    }
+
     let nat_type = *state.nat_type.read().await;
     let candidates = state.candidates.read().await;
     let config = state.stun_config.read().await;
@@ -247,4 +259,61 @@ pub async fn set_tor_enabled(
     }
     tor::set_enabled(enabled);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn diagnostics_reject_air_gap_before_accessing_stun_config() {
+        let state = AppState::new(String::new());
+        state.security_config.write().await.air_gap_mode = true;
+        let _config_guard = state.stun_config.write().await;
+
+        for tor_enabled in [false, true] {
+            let result = tokio::time::timeout(
+                Duration::from_secs(1),
+                collect_network_diagnostics(&state, tor_enabled),
+            )
+            .await
+            .expect("diagnostics must reject before accessing STUN configuration");
+
+            assert_eq!(
+                result.unwrap_err(),
+                "air-gap mode is enabled — this internet-facing operation is blocked"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn diagnostics_reject_tor_before_accessing_stun_config() {
+        let state = AppState::new(String::new());
+        let _config_guard = state.stun_config.write().await;
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            collect_network_diagnostics(&state, true),
+        )
+        .await
+        .expect("diagnostics must reject before accessing STUN configuration");
+
+        assert_eq!(
+            result.unwrap_err(),
+            "Tor routing is enabled — direct STUN diagnostics are blocked"
+        );
+    }
+
+    #[tokio::test]
+    async fn diagnostics_allow_unrestricted_mode() {
+        let state = AppState::new(String::new());
+        state.stun_config.write().await.servers.clear();
+
+        let diagnostics = collect_network_diagnostics(&state, false).await.unwrap();
+
+        assert!(diagnostics.stun_servers.is_empty());
+        assert!(diagnostics.candidates.is_empty());
+        assert!(diagnostics.connectivity.public_addr.is_none());
+    }
 }

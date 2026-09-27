@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useApp, AppProvider } from "../context/AppContext";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+const { eventHandlers } = vi.hoisted(() => ({
+  eventHandlers: new Map<string, () => void>(),
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn((name: string, handler: () => void) => {
+    eventHandlers.set(name, handler);
+    return Promise.resolve(() => eventHandlers.delete(name));
+  }),
+}));
 
 function TestConsumer() {
   const { view, setView, toasts, addToast, removeToast, identity, vaultInitialized } = useApp();
@@ -37,6 +46,27 @@ describe("AppContext", () => {
     // Initially "setup", then flips based on invoke
     // Since we can't easily wait for async state, check it renders
     expect(screen.getByText("Set Chat")).toBeInTheDocument();
+  });
+
+  it("routes to vault on lock and rejects late protected navigation", async () => {
+    const invoke = (await import("@tauri-apps/api/core")).invoke as ReturnType<typeof vi.fn>;
+    invoke
+      .mockResolvedValueOnce({ fingerprint: "ABCD", public_key_hex: "ff", has_identity: true })
+      .mockResolvedValueOnce({ initialized: true, unlocked: true });
+    const user = userEvent.setup();
+
+    render(<AppProvider><TestConsumer /></AppProvider>);
+    await waitFor(() => expect(screen.getByTestId("view")).toHaveTextContent("hub"));
+    await user.click(screen.getByText("Set Chat"));
+    await user.click(screen.getByText("Add Toast"));
+
+    act(() => { eventHandlers.get("m2m://vault-locked")?.(); });
+
+    expect(screen.getByTestId("view")).toHaveTextContent("vault");
+    expect(screen.getByTestId("identity")).toHaveTextContent("none");
+    expect(screen.getByTestId("toast-count")).toHaveTextContent("0");
+    await user.click(screen.getByText("Set Chat"));
+    expect(screen.getByTestId("view")).toHaveTextContent("vault");
   });
 
   it("allows setting view", async () => {

@@ -938,14 +938,22 @@ impl DoubleRatchet {
     ///
     /// Extracted as a standalone helper so it can be called from both the
     /// normal decrypt path and the skipped-key cache path.
+    ///
+    /// The nonce arrives from the wire as a `Vec<u8>` whose length is fully
+    /// attacker-controlled, so it is length-checked BEFORE being copied into
+    /// a fixed-size array. Without this guard a single ~40-byte malformed
+    /// frame panics the process (and `panic = "abort"` makes that an
+    /// immediate abort with no unwinding). Matches the guards in
+    /// `SessionKeys::decrypt`, `aead_open_pub` and `storage::open_msg`.
     fn decrypt_with_key(
         key_bytes: &[u8; 32],
         ciphertext: &[u8],
         nonce: &[u8],
         aad: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        let mut nonce_arr = [0u8; 24];
-        nonce_arr.copy_from_slice(nonce);
+        let nonce_arr: [u8; 24] = nonce
+            .try_into()
+            .map_err(|_| CryptoError::InvalidKeyLength)?;
         aead_open(key_bytes, &nonce_arr, ciphertext, aad)
     }
 

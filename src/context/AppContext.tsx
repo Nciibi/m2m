@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "../hooks/useToast";
 import type { IdentityInfo, VaultStatus } from "../types";
@@ -17,6 +18,8 @@ interface AppContextValue {
   // Identity
   identity: IdentityInfo | null;
   vaultInitialized: boolean;
+  vaultUnlocked: boolean;
+  refreshVault: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -28,31 +31,57 @@ export function useApp(): AppContextValue {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { toasts, addToast, removeToast } = useToast();
-  const [view, setView] = useState<ViewName>("setup");
+  const { toasts, addToast: pushToast, removeToast, clearToasts } = useToast();
+  const [view, updateView] = useState<ViewName>("setup");
+  const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const unlockedRef = useRef(false);
+  const lockGeneration = useRef(0);
+  const setView = useCallback((next: ViewName) => {
+    if (unlockedRef.current || next === "vault" || next === "setup") updateView(next);
+  }, []);
+  const addToast = useCallback((...args: Parameters<typeof pushToast>) => {
+    pushToast(...args);
+  }, [pushToast]);
   const [identity, setIdentity] = useState<IdentityInfo | null>(null);
   const [vaultInitialized, setVaultInitialized] = useState(false);
 
-  // OnInit: check identity
+  const refreshVault = useCallback(async () => {
+    const generation = lockGeneration.current;
+    const status = await invoke<VaultStatus>("get_vault_status");
+    const info = status.unlocked ? await invoke<IdentityInfo>("get_identity") : null;
+    if (generation !== lockGeneration.current) return;
+    unlockedRef.current = status.unlocked;
+    setVaultUnlocked(status.unlocked);
+    setVaultInitialized(status.initialized);
+    setIdentity(info);
+    updateView(status.unlocked ? "hub" : "vault");
+  }, []);
+
   useEffect(() => {
-    async function check() {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    async function initialize() {
       try {
-        const info = await invoke<IdentityInfo>("init_identity");
-        setIdentity(info);
-        if (info.has_identity) {
-          const vs = await invoke<VaultStatus>("get_vault_status");
-          setVaultInitialized(vs.initialized);
-          setView(vs.unlocked ? "hub" : "vault");
-        } else {
-          setVaultInitialized(false);
-          setView("vault");
-        }
+        const stop = await listen("m2m://vault-locked", () => {
+          if (disposed) return;
+          lockGeneration.current += 1;
+          unlockedRef.current = false;
+          setVaultUnlocked(false);
+          setIdentity(null);
+          clearToasts();
+          updateView("vault");
+        });
+        if (disposed) { stop(); return; }
+        unlisten = stop;
+        await invoke("init_identity");
+        if (!disposed) await refreshVault();
       } catch (err) {
         console.error("Init failed:", err);
       }
     }
-    check();
-  }, []);
+    void initialize();
+    return () => { disposed = true; unlisten?.(); };
+  }, [clearToasts, refreshVault]);
 
   // Theme detection
   useEffect(() => {
@@ -73,13 +102,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [view]);
+  }, [view, setView]);
 
   return (
     <AppContext.Provider value={{
       view, setView,
       toasts, addToast, removeToast,
-      identity, vaultInitialized,
+      identity, vaultInitialized, vaultUnlocked, refreshVault,
     }}>
       {children}
     </AppContext.Provider>
