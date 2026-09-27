@@ -3,6 +3,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
+import { useT } from "../i18n/I18nContext";
 import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer, SecurityConfig, CaptureCapability } from "../types";
 
 interface SettingsContextValue {
@@ -63,6 +64,7 @@ export function useSettings(): SettingsContextValue {
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { addToast, setView } = useApp();
+  const t = useT();
 
   const [networkSettings, setNetworkSettings] = useState<NetworkSettings | null>(null);
   const [publicIp, setPublicIp] = useState<string | null>(null);
@@ -537,20 +539,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
     };
     const arming = !current.panic_hotkey_enabled;
-    if (arming) {
-      if (!window.confirm(
-        "ARM PANIC HOTKEY?\n\nCtrl+Alt+Shift+W will IMMEDIATELY delete all local data and close M2M. No confirmation. No undo.\n\nArm it?"
-      )) return;
-    }
     const newConfig: SecurityConfig = { ...current, panic_hotkey_enabled: arming };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
-      addToast(arming ? "Panic hotkey ARMED — Ctrl+Alt+Shift+W wipes everything" : "Panic hotkey disarmed", arming ? "warning" : "info");
+      addToast(
+        arming ? t("toast.panicArmed") : t("toast.panicDisarmed"),
+        arming ? "warning" : "info",
+      );
     } catch (e) {
-      addToast("Failed to toggle panic hotkey: " + e, "error");
+      addToast(t("toast.panicToggleFailed", { err: String(e) }), "error");
     }
-  }, [securityConfig, addToast]);
+  }, [securityConfig, addToast, t]);
+
+  /**
+   * Arm or disarm the panic hotkey.
+   *
+   * Arming is a destructive, irreversible action, so the View must confirm it
+   * in a real dialog first and then call this. Disarming needs no prompt, so
+   * this is the single place the config is actually written.
+   */
+  const setPanicHotkeyArmed = handlePanicHotkeyArmToggle;
 
   const handleLockVault = useCallback(async () => {
     try {
@@ -594,7 +603,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     securityConfig,
     captureCapability,
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
-    handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle, handlePanicHotkeyArmToggle,
+    handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle,
+    handlePanicHotkeyArmToggle: setPanicHotkeyArmed,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
