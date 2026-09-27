@@ -43,6 +43,117 @@ const RATE_LIMIT_WINDOW_SECS: u64 = 60;
 /// Maximum total concurrent connections across all IPs.
 const MAX_TOTAL_CONNECTIONS: usize = 50;
 
+/// Maximum inbound frames per second from a single established peer.
+///
+/// 20/s is generous for chat: a human cannot type 20 messages per second, and
+/// even a 256 KiB file-chunk transfer only needs ~4/s. The previous state of
+/// this code declared `protocol::RATE_LIMIT_MSGS_PER_SEC = 20` and never read
+/// it, while depending on the `governor` crate with zero imports — so an
+/// established peer could send frames at line rate, each costing a buffer
+/// allocation, a MessagePack parse, a bounded HKDF gap walk, and for
+/// `EncryptedMessage` a SQLite write plus `PRAGMA optimize`.
+pub const MAX_INBOUND_FRAMES_PER_SEC: u32 = 20;
+
+/// Maximum inbound bytes per second from a single established peer.
+///
+/// The frame-count limit alone is insufficient: at the per-type ceiling a
+/// single frame can be ~256 KiB, so 20 frames/s of file chunks is ~5 MiB/s of
+/// unauthenticated work. This budget bounds bandwidth-driven cost
+/// independently, so a peer sending few-but-huge frames is throttled too.
+///
+/// 4 MiB/s comfortably sustains a file transfer (which is the intended use of
+/// large frames) while capping the worst case at 4 MiB/s of parsing and
+/// allocation per connection.
+pub const MAX_INBOUND_BYTES_PER_SEC: u32 = 4 * 1024 * 1024;
+
+/// Per-connection inbound frame rate limiter.
+///
+/// Two independent GCRA token buckets: one counting frames, one counting
+/// bytes. Both are necessary — either alone leaves a cheap path to saturate
+/// the receive loop.
+///
+/// This is deliberately **per connection**, not per source IP. The established
+/// peer has already completed a cryptographic handshake and its IP is known,
+/// so keying on the authenticated peer is both more accurate and harder to
+/// evade than an IP key (which an IPv6 /64 makes free to rotate).
+///
+/// `governor`'s `check()` is non-blocking and takes `&self`, so no lock is
+/// held and the receive loop never stalls on the limiter.
+pub struct FrameRateLimiter {
+    frames: governor::RateLimiter<
+        governor::state::NotKeyed,
+        governor::state::InMemoryState,
+        governor::clock::DefaultClock,
+        governor::middleware::NoOpMiddleware<governor::clock::DefaultClock::Instant>,
+    >,
+    bytes: governor::RateLimiter<
+        governor::state::NotKeyed,
+        governor::state::InMemoryState,
+        governor::clock::DefaultClock,
+        governor::middleware::NoOpMiddleware<governor::clock::DefaultClock::Instant>,
+    >,
+}
+
+/// Why a frame was rejected by [`FrameRateLimiter`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RateLimitVerdict {
+    /// Within budget.
+    Allowed,
+    /// Too many frames in the current window.
+    TooManyFrames,
+    /// Too many bytes in the current window.
+    TooManyBytes,
+}
+
+impl FrameRateLimiter {
+    /// Build a limiter with the protocol defaults.
+    pub fn new() -> Self {
+        Self::with_limits(MAX_INBOUND_FRAMES_PER_SEC, MAX_INBOUND_BYTES_PER_SEC)
+    }
+
+    /// Build a limiter with explicit per-second budgets.
+    pub fn with_limits(frames_per_sec: u32, bytes_per_sec: u32) -> Self {
+        use governor::{clock::DefaultClock, middleware::NoOpMiddleware, state::*, Quota};
+        use std::num::NonZeroU32;
+
+        // A zero budget is meaningless; clamp to 1 so `NonZeroU32` is always
+        // satisfiable and a misconfiguration cannot panic.
+        let f = NonZeroU32::new(frames_per_sec).unwrap_or(NonZeroU32::MIN);
+        let b = NonZeroU32::new(bytes_per_sec).unwrap_or(NonZeroU32::MIN);
+
+        Self {
+            frames: <RateLimiter<NotKeyed, InMemoryState, DefaultClock,
+                NoOpMiddleware<DefaultClock::Instant>>>::direct(Quota::per_second(f)),
+            bytes: <RateLimiter<NotKeyed, InMemoryState, DefaultClock,
+                NoOpMiddleware<DefaultClock::Instant>>>::direct(Quota::per_second(b)),
+        }
+    }
+
+    /// Account for an inbound frame of `bytes` length.
+    ///
+    /// The byte budget is charged only when the frame-count budget passes, so
+    /// a flood of rejected frames cannot itself starve the byte budget and
+    /// cause *accepted* traffic to be throttled.
+    pub fn check(&self, bytes: usize) -> RateLimitVerdict {
+        if self.frames.check().is_err() {
+            return RateLimitVerdict::TooManyFrames;
+        }
+        // Saturate rather than truncate: a bogus huge length must not wrap to
+        // a small charge that sails under the limit.
+        let cost = u32::try_from(bytes).unwrap_or(u32::MAX);
+        if self.bytes.check_n(cost).is_err() {
+            return RateLimitVerdict::TooManyBytes;
+        }
+        RateLimitVerdict::Allowed
+    }
+}
+
+impl Default for FrameRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Per-IP rate limiter with total connection cap.
 ///
 /// Uses a lock-free concurrent hash map (`DashMap`) for per-IP tracking,
