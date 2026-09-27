@@ -138,6 +138,33 @@
   --radius-3xl: 32px;
   --radius-full: 9999px;
 
+  /* ─── Chrome surfaces ──────────────────────────────────────────────────
+     The shell chrome (sidebar, right panel) sat on hardcoded rgba() values
+     inside the theme-agnostic layout.css. That is wrong twice over: there was
+     no token to retune, and because the values are dark-theme literals they
+     were simply wrong in light mode — a dark sidebar on a white page. Moved
+     here so both themes can define them. */
+  --color-bg-sidebar: rgba(13, 28, 45, 0.4);
+  --color-bg-right-panel: rgba(13, 28, 45, 0.3);
+
+  /* ─── Sheen / shimmer ───────────────────────────────────────────────────
+     Decorative highlights. Derived from the accent so the accent picker
+     re-skins them, and so they are not white-on-white in light mode. */
+  --sheen-high: color-mix(in srgb, var(--color-text-primary) 80%, transparent);
+  --sheen-full: color-mix(in srgb, var(--color-text-primary) 100%, transparent);
+  --sheen-low: color-mix(in srgb, var(--color-text-primary) 30%, transparent);
+
+  --gradient-shimmer: linear-gradient(
+    to right,
+    var(--sheen-high) 20%,
+    var(--sheen-full) 40%,
+    var(--sheen-full) 60%,
+    var(--sheen-high) 80%
+  );
+
+  /* Top-down darkening used behind sticky headers and tab bars. */
+  --gradient-scrim-top: linear-gradient(to bottom, rgba(0, 0, 0, 0.1), transparent);
+
   /* ─── Shadows ─── */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.2);

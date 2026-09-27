@@ -57,4 +57,11 @@
 
   --scrollbar-thumb: rgba(15, 23, 42, 0.1);
   --scrollbar-thumb-hover: rgba(15, 23, 42, 0.25);
+
+  /* Light-theme values for the shell chrome and sheens. The dark values in
+     tokens.css are translucent near-black washes, which read as dirt on a
+     light background, so both are translucent white-on-dark instead. */
+  --color-bg-sidebar: rgba(15, 23, 42, 0.04);
+  --color-bg-right-panel: rgba(15, 23, 42, 0.03);
+  --gradient-scrim-top: linear-gradient(to bottom, rgba(15, 23, 42, 0.06), transparent);
 }
