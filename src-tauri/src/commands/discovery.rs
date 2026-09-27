@@ -228,8 +228,9 @@ pub async fn connect_discovered_peer(
         .as_ref()
         .ok_or("identity not initialized")?;
 
-    // Connect via TCP (respects Tor setting)
-    let mut stream = tor::connect(peer_addr)
+    // Connect via the Tor-aware chokepoint: a DHT-discovered peer is
+    // third-party, so this path must not reveal the real IP under Tor.
+    let mut stream = crate::dial::dial(peer_addr)
         .await
         .map_err(|e| format!("connection failed: {e}"))?;
 

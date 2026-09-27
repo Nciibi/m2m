@@ -652,7 +652,7 @@ pub async fn connect_family_member(
 
     // Try connecting if we have an address
     if let Some(addr) = saved_addr {
-        match crate::tor::connect(addr).await {
+        match crate::dial::dial(addr).await {
             Ok(mut stream) => {
                 let mut session = crate::session::Session::new();
 
