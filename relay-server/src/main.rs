@@ -423,7 +423,6 @@ async fn handle_connect(
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-#[tokio::main]
 /// Releases a per-IP and global connection slot on drop.
 ///
 /// Held for the whole lifetime of a connection task. Using a guard (rather
@@ -458,6 +457,7 @@ impl Drop for ConnectionSlot {
     }
 }
 
+#[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
