@@ -30,7 +30,12 @@ const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scr
 export function useIdleDetection({ timeoutSecs, onIdle }: IdleDetectionOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(onIdle);
-  callbackRef.current = onIdle;
+  // Synced in an effect, not assigned during render: a render can be thrown
+  // away and replayed, so a render-time write can leave this ref pointing at a
+  // callback from a render that never committed.
+  useEffect(() => {
+    callbackRef.current = onIdle;
+  });
 
   useEffect(() => {
     if (timeoutSecs <= 0) {

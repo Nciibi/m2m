@@ -449,7 +449,7 @@ export default function ChatView() {
           </div>
         )}
 
-        {Object.entries(grouped).map(([label, msgs]: [string, any]) => (
+        {Object.entries(grouped).map(([label, msgs]) => (
           <div key={label}>
             <div className="date-sep">
               <span className="date-sep__line" />
