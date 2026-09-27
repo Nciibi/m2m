@@ -98,6 +98,25 @@ pub enum DhtError {
     NotEnabled,
 }
 
+/// Map a chokepoint dial failure onto a DHT error.
+///
+/// Bootstrap nodes are third parties, so their connections are routed through
+/// the Tor-aware chokepoint. A non-Tor-routable bootstrap address is a
+/// configuration problem (a LAN address in the bootstrap list) rather than a
+/// transient fault, so it is reported distinctly.
+fn dial_err(e: crate::dial::DialError) -> DhtError {
+    match e {
+        crate::dial::DialError::TimedOut(_) => DhtError::Timeout,
+        crate::dial::DialError::Io(e) => DhtError::Io(e),
+        crate::dial::DialError::NonTorRoutable(a) => {
+            DhtError::BadResponse(format!("bootstrap node {a} is not reachable over Tor"))
+        }
+        crate::dial::DialError::TorLanUnsupported(a) => {
+            DhtError::BadResponse(format!("bootstrap node {a} is not a valid Tor target"))
+        }
+    }
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 /// A peer entry from the DHT.
