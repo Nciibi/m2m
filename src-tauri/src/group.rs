@@ -579,9 +579,9 @@ impl GroupManager {
         // The bundle must be owned by the direct transport peer.
         let peer_hex = hex::encode(peer_identity_pub);
         if data.sender_peer_key_hex != peer_hex {
-            return Err(format!(
-                "rejected sender key bundle: claimed sender is not the transport peer"
-            ));
+            return Err(
+                "rejected sender key bundle: claimed sender is not the transport peer".to_string(),
+            );
         }
 
         // Signature must verify under the transport peer's identity key.
@@ -1323,7 +1323,7 @@ mod group_tests {
                 1,
                 bob_hex.clone(),
                 false,
-                &[alice_hex.clone()],
+                std::slice::from_ref(&alice_hex),
             )
             .unwrap();
         let mut bundle = {
@@ -1410,7 +1410,7 @@ mod group_tests {
                 1,
                 "bob".to_string(),
                 false,
-                &[alice_hex.clone()],
+                std::slice::from_ref(&alice_hex),
             )
             .unwrap();
         let b2 = gm_bob

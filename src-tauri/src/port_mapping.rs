@@ -1756,13 +1756,10 @@ mod upnp_security_tests {
         assert_eq!(body, b"hello");
     }
 
-    /// Sanity: the bound constants are the values the code actually uses.
-    #[test]
-    fn test_body_limit_is_bounded() {
-        assert!(MAX_HTTP_BODY > 0);
-        assert!(
-            MAX_HTTP_BODY <= 1024 * 1024,
-            "a UPnP description is never this large"
-        );
-    }
+    /// The bound is a compile-time invariant, so a bad edit fails the build
+    /// rather than silently shipping a limit that is too small (breaking real
+    /// gateways) or too large (restoring the amplification it exists to stop).
+    const _: () = assert!(MAX_HTTP_BODY > 0);
+    const _: () = assert!(MAX_HTTP_BODY <= 1024 * 1024);
+    const _: () = assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
 }
