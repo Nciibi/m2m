@@ -78,7 +78,27 @@ pub enum PortMapError {
     #[error("UPnP IGD mapping failed: {0}")]
     Upnp(String),
     #[error("all three mapping protocols (PCP, NAT-PMP, UPnP IGD) failed")]
-    AllFailed,}
+    AllFailed,
+}
+
+/// Map a LAN-only dial failure onto a port-mapping error.
+///
+/// Port mapping talks to the user's own router, so under Tor it is refused
+/// outright: the request is meaningless (Tor cannot reach a LAN gateway) and
+/// is a direct IP-disclosure primitive. The distinct error lets the invite
+/// path report *why* no port-mapped candidate appeared.
+fn pm_dial_err(e: crate::dial::DialError) -> PortMapError {
+    match e {
+        crate::dial::DialError::TimedOut(_) => PortMapError::NoGateway,
+        crate::dial::DialError::Io(e) => PortMapError::Io(e),
+        crate::dial::DialError::NonTorRoutable(a) => {
+            PortMapError::Upnp(format!("{a} is not a local gateway address"))
+        }
+        crate::dial::DialError::TorLanUnsupported(_) => {
+            PortMapError::AllFailed
+        }
+    }
+}
 
 /// Unified port-mapping facade.
 ///
