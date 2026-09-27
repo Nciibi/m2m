@@ -958,87 +958,74 @@ mod tests {
         assert_eq!(crc32(b"a"), 0xE8B7_BE43);
     }
 
-    /// A response carrying a *valid* FINGERPRINT must still parse, so the
+    /// Build a valid Binding-Success response, optionally with a trailing
+    /// FINGERPRINT. `with_fingerprint = true` computes the correct CRC;
+    /// `false` omits the attribute entirely.
+    fn build_response_with_fingerprint(
+        txn: [u8; 12],
+        with_fingerprint: bool,
+    ) -> Vec<u8> {
+        let mut msg: Vec<u8> = Vec::with_capacity(48);
+        msg.extend_from_slice(&BINDING_RESPONSE_SUCCESS.to_be_bytes());
+        // Length covers the attributes only (XOR-MAPPED-ADDRESS 12 bytes,
+        // plus FINGERPRINT's 8 when present).
+        msg.extend_from_slice(&(if with_fingerprint { 20u16 } else { 12u16 }).to_be_bytes());
+        msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
+        msg.extend_from_slice(&txn);
+
+        // XOR-MAPPED-ADDRESS (RFC 8489 §15.2): 1 reserved, 1 family,
+        // 2 XORed port, 4 XORed address = 8 bytes.
+        msg.extend_from_slice(&XOR_MAPPED_ADDRESS.to_be_bytes());
+        msg.extend_from_slice(&8u16.to_be_bytes());
+        msg.push(0x00); // reserved
+        msg.push(0x01); // family = IPv4
+        let x_port = 32853u16 ^ (STUN_MAGIC_COOKIE >> 16) as u16;
+        msg.extend_from_slice(&x_port.to_be_bytes());
+        let x_addr = u32::from_be_bytes([192, 0, 2, 1]) ^ STUN_MAGIC_COOKIE;
+        msg.extend_from_slice(&x_addr.to_be_bytes());
+
+        if with_fingerprint {
+            msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
+            msg.extend_from_slice(&4u16.to_be_bytes());
+            let n = msg.len();
+            msg.extend_from_slice(&[0, 0, 0, 0]); // placeholder
+            let crc = crc32(&msg[..n]) ^ 0x5354_554eu32;
+            let m = msg.len();
+            msg[m - 4..].copy_from_slice(&crc.to_be_bytes());
+        }
+        msg
+    }
+
+    /// A response carrying a *valid* FINGERPRINT must still parse, so the new
     /// check is not simply rejecting everything.
     #[test]
     fn test_valid_fingerprint_is_accepted() {
         let txn = [0x11u8; 12];
-        // XOR-MAPPED-ADDRESS (0x0020), 8 bytes: family 0x01 + 127.0.0.1
-        let mut msg: Vec<u8> = Vec::new();
-        msg.extend_from_slice(&[0x00, 0x01, 0x00, 0x00]); // type Binding-Success
-        msg.extend_from_slice(&20u16.to_be_bytes()); // length (placeholder)
-        msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
-        msg.extend_from_slice(&txn);
-        msg.extend_from_slice(&0x0020u16.to_be_bytes());
-        msg.extend_from_slice(&8u16.to_be_bytes());
-        msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1, 0x00, 0x00]);
-        // FINGERPRINT
-        msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
-        msg.extend_from_slice(&4u16.to_be_bytes());
-        let total_len = msg.len() + 8; // header + value
-        msg[2..4].copy_from_slice(&(total_len as u16).to_be_bytes());
-        msg.extend_from_slice(&[0, 0, 0, 0]); // value placeholder
-        let crc = crc32(&msg[..msg.len() - 4]) ^ 0x5354_554eu32;
-        let n = msg.len();
-        msg[n - 4..].copy_from_slice(&crc.to_be_bytes());
-
+        let msg = build_response_with_fingerprint(txn, true);
         let addr = parse_binding_response(&msg, &txn)
             .expect("a correctly-fingerprinted response must parse");
-        assert_eq!(addr.ip().to_string(), "127.0.0.1");
+        assert_eq!(addr, "192.0.2.1:32853".parse().expect("addr"));
     }
 
-    /// A response whose FINGERPRINT does not match the body must be rejected —
-    /// this is the whole point of the check.
+    /// A response whose FINGERPRINT does not match its body must be rejected.
+    ///
+    /// This is the entire point of the check. The forged address below is the
+    /// realistic attack: an on-path attacker rewrites XOR-MAPPED-ADDRESS so
+    /// that the victim's invite advertises an address the attacker controls.
     #[test]
-    fn test_tampered_fingerprint_is_rejected() {
+    fn test_tampered_body_is_rejected_by_fingerprint() {
         let txn = [0x22u8; 12];
-        let mut msg: Vec<u8> = Vec::new();
-        msg.extend_from_slice(&[0x00, 0x01, 0x00, 0x00]);
-        msg.extend_from_slice(&20u16.to_be_bytes());
-        msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
-        msg.extend_from_slice(&txn);
-        msg.extend_from_slice(&0x0020u16.to_be_bytes());
-        msg.extend_from_slice(&8u16.to_be_bytes());
-        msg.extend_from_slice(&[0x00, 0x01, 127, 0, 0, 1, 0x00, 0x00]);
-        msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
-        msg.extend_from_slice(&4u16.to_be_bytes());
-        msg[2..4].copy_from_slice(&20u16.to_be_bytes());
-        msg.extend_from_slice(&[0, 0, 0, 0]);
-        let crc = crc32(&msg[..msg.len() - 4]) ^ 0x5354_554eu32;
-        let n = msg.len();
-        msg[n - 4..].copy_from_slice(&crc.to_be_bytes());
-
-        // Sanity: unmodified parses.
+        let msg = build_response_with_fingerprint(txn, true);
+        // Sanity: untouched, it parses.
         assert!(parse_binding_response(&msg, &txn).is_ok());
 
-        // Now forge the advertised address — the classic on-path attack, since
-        // this value ends up in the invite as the peer's reachable address.
-        let xormapped_at = 24 + 4; // XOR-MAPPED-ADDRESS value start
-        msg[xormapped_at + 4..xormapped_at + 8].copy_from_slice(&[1, 2, 3, 4]);
+        // Rewrite the address bytes (last 4 of the XOR-MAPPED-ADDRESS value).
+        let at = msg.len() - 4 - 4;
+        msg[at..at + 4].copy_from_slice(&0xDEAD_BEEFu32.to_be_bytes());
         assert!(
             parse_binding_response(&msg, &txn).is_err(),
             "a modified address must be caught by the FINGERPRINT"
         );
-    }
-
-    /// A FINGERPRINT that is not the last attribute is malformed.
-    #[test]
-    fn test_non_trailing_fingerprint_is_rejected() {
-        let txn = [0x33u8; 12];
-        let mut msg: Vec<u8> = Vec::new();
-        msg.extend_from_slice(&[0x00, 0x01, 0x00, 0x00]);
-        msg.extend_from_slice(&28u16.to_be_bytes());
-        msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
-        msg.extend_from_slice(&txn);
-        // FINGERPRINT first (wrong position)
-        msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
-        msg.extend_from_slice(&4u16.to_be_bytes());
-        msg.extend_from_slice(&[0, 0, 0, 0]);
-        // then another attribute
-        msg.extend_from_slice(&0x0020u16.to_be_bytes());
-        msg.extend_from_slice(&4u16.to_be_bytes());
-        msg.extend_from_slice(&[0, 0, 0, 0]);
-        assert!(parse_binding_response(&msg, &txn).is_err());
     }
 
     /// Servers that omit FINGERPRINT entirely must still work — the attribute
@@ -1046,19 +1033,29 @@ mod tests {
     #[test]
     fn test_response_without_fingerprint_still_parses() {
         let txn = [0x44u8; 12];
-        let mut msg: Vec<u8> = Vec::new();
-        msg.extend_from_slice(&[0x00, 0x01, 0x00, 0x00]);
-        msg.extend_from_slice(&16u16.to_be_bytes());
-        msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
-        msg.extend_from_slice(&txn);
-        msg.extend_from_slice(&0x8022u16.to_be_bytes()); // SOFTWARE
-        msg.extend_from_slice(&4u16.to_be_bytes());
-        msg.extend_from_slice(b"test");
-        msg.extend_from_slice(&0x0020u16.to_be_bytes()); // XOR-MAPPED-ADDRESS
-        msg.extend_from_slice(&8u16.to_be_bytes());
-        msg.extend_from_slice(&[0x00, 0x01, 203, 0, 113, 9, 0x00, 0x00]);
+        let msg = build_response_with_fingerprint(txn, false);
         let addr = parse_binding_response(&msg, &txn)
             .expect("a response with no FINGERPRINT must still be accepted");
-        assert_eq!(addr.ip().to_string(), "203.0.113.9");
+        assert_eq!(addr, "192.0.2.1:32853".parse().expect("addr"));
+    }
+
+    /// A FINGERPRINT that is not the final attribute violates RFC 8489 §14.6
+    /// and indicates a malformed (or crafted) message.
+    #[test]
+    fn test_non_trailing_fingerprint_is_rejected() {
+        let txn = [0x33u8; 12];
+        let mut msg: Vec<u8> = Vec::with_capacity(48);
+        msg.extend_from_slice(&BINDING_RESPONSE_SUCCESS.to_be_bytes());
+        msg.extend_from_slice(&20u16.to_be_bytes());
+        msg.extend_from_slice(&STUN_MAGIC_COOKIE.to_be_bytes());
+        msg.extend_from_slice(&txn);
+        // FINGERPRINT first, then a real attribute after it — wrong order.
+        msg.extend_from_slice(&FINGERPRINT_ATTR_TYPE.to_be_bytes());
+        msg.extend_from_slice(&4u16.to_be_bytes());
+        msg.extend_from_slice(&[0, 0, 0, 0]);
+        msg.extend_from_slice(&XOR_MAPPED_ADDRESS.to_be_bytes());
+        msg.extend_from_slice(&8u16.to_be_bytes());
+        msg.extend_from_slice(&[0, 1, 0, 0, 0, 0, 0, 0]);
+        assert!(parse_binding_response(&msg, &txn).is_err());
     }
 }
