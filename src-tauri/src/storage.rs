@@ -370,6 +370,21 @@ impl KeyStore {
         Ok(())
     }
 
+    /// The label recorded for the most recently created account, if any.
+    ///
+    /// Exists so the `label` column stays covered by a test without widening
+    /// `KeyStore::conn` or mirroring the column into `AccountRow` (nothing
+    /// reads it on the unlock path).
+    #[cfg(test)]
+    pub fn last_account_label(&self) -> Result<Option<String>, StorageError> {
+        let label: Option<String> = self.conn.query_row(
+            "SELECT label FROM accounts ORDER BY created_at DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        )?;
+        Ok(label)
+    }
+
     pub fn list_accounts(&self) -> Result<Vec<AccountRow>, StorageError> {
         let mut stmt = self.conn.prepare(
             "SELECT public_key, encrypted_private_key, private_key_nonce
