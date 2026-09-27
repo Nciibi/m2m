@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { I18nProvider } from "./i18n/I18nContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./styles/tokens.css";
@@ -162,17 +163,21 @@ function AppInner() {
 
 function App() {
   return (
-    <AppProvider>
-      <VaultProvider>
-        <SettingsProvider>
-          <ThemeProvider>
-            <ChatProvider>
-              <AppInner />
-            </ChatProvider>
-          </ThemeProvider>
-        </SettingsProvider>
-      </VaultProvider>
-    </AppProvider>
+    // I18nProvider is outermost: it has no dependencies, and every other
+    // provider below calls `useT()`.
+    <I18nProvider>
+      <AppProvider>
+        <VaultProvider>
+          <SettingsProvider>
+            <ThemeProvider>
+              <ChatProvider>
+                <AppInner />
+              </ChatProvider>
+            </ThemeProvider>
+          </SettingsProvider>
+        </VaultProvider>
+      </AppProvider>
+    </I18nProvider>
   );
 }
 
