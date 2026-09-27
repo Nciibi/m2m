@@ -541,27 +541,56 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast]);
 
+  /**
+   * Memoized so consumers only re-render when the context actually changes.
+   *
+   * The individual handlers were all `useCallback`'d, but the wrapping object
+   * literal was constructed fresh on every render, which defeats every one of
+   * them: any `setState` here re-rendered every `useSettings()` consumer, and
+   * `SettingsView` pulls the whole context, so toggling one checkbox re-rendered
+   * the entire settings page. The callbacks being stable was worth nothing.
+   */
+  const value = useMemo<SettingsContextValue>(() => ({
+    networkSettings, publicIp, stunLoading, networkDiagnostics,
+    stunConfig, stunServerInput, setStunServerInput,
+    privateMode, connectivityResult,
+    openSettings,
+    handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
+    handleResetStunDefaults, handlePrivateModeToggle,
+    handleConnectivityCheck, handleTorToggle,
+    discoveryConfig, discoveredPeers,
+    handleLanToggle, handleDhtToggle,
+    handleConnectDiscoveredPeer, handleRefreshDiscovery,
+    securityConfig,
+    captureCapability,
+    handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
+    handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle, handlePanicHotkeyArmToggle,
+    duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
+    handleClipboardClearSecsChange,
+    handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
+    scheduleClipboardClear,
+  }), [
+    networkSettings, publicIp, stunLoading, networkDiagnostics,
+    stunConfig, stunServerInput, privateMode, connectivityResult,
+    openSettings,
+    handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
+    handleResetStunDefaults, handlePrivateModeToggle,
+    handleConnectivityCheck, handleTorToggle,
+    discoveryConfig, discoveredPeers,
+    handleLanToggle, handleDhtToggle,
+    handleConnectDiscoveredPeer, handleRefreshDiscovery,
+    securityConfig, captureCapability,
+    handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
+    handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange,
+    handleCoverTypingToggle, handlePanicHotkeyArmToggle,
+    duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
+    handleClipboardClearSecsChange,
+    handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault,
+    handleClearClipboard, scheduleClipboardClear,
+  ]);
+
   return (
-    <SettingsContext.Provider value={{
-      networkSettings, publicIp, stunLoading, networkDiagnostics,
-      stunConfig, stunServerInput, setStunServerInput,
-      privateMode, connectivityResult,
-      openSettings,
-      handleStunDiscover, handleAddStunServer, handleRemoveStunServer,
-      handleResetStunDefaults, handlePrivateModeToggle,
-      handleConnectivityCheck, handleTorToggle,
-      discoveryConfig, discoveredPeers,
-      handleLanToggle, handleDhtToggle,
-      handleConnectDiscoveredPeer, handleRefreshDiscovery,
-      securityConfig,
-      captureCapability,
-      handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
-      handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle, handlePanicHotkeyArmToggle,
-      duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
-      handleClipboardClearSecsChange,
-      handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
-      scheduleClipboardClear,
-    }}>
+    <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
   );
