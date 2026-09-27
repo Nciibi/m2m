@@ -2380,8 +2380,6 @@ mod crypto_tests {
         hex::decode(s).expect("valid hex").try_into().expect("22 bytes")
     }
 
-    }
-
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
     // RustCrypto swap) ---
     // These constants were captured from the ORIGINAL libsodium implementation.
