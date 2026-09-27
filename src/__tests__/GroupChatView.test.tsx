@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import type { MockEventHandler } from "./tauriMock";
 
 vi.mock("@tauri-apps/api/event", () => ({
