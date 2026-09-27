@@ -197,6 +197,21 @@ fn regression_dht_parse_message_hostile() {
     let mut b = u32::MAX.to_be_bytes().to_vec();
     b.push(0x02);
     assert!(dht::parse_dht_message(&b).is_err());
+
+    // Declared length of exactly ZERO. This is the case the suite was missing,
+    // which is why it reported false confidence: the parser computed
+    // `_len - 1` and underflowed. With `overflow-checks = true` and
+    // `panic = "abort"` that is a remote process abort, not a catchable error.
+    let mut b = 0u32.to_be_bytes().to_vec();
+    b.push(0x01);
+    assert!(dht::parse_dht_message(&b).is_err(), "declared length 0 must be rejected");
+
+    // Same, with a multi-byte body, to be sure the guard is the length check
+    // and not an incidental body-length mismatch.
+    let mut b = 0u32.to_be_bytes().to_vec();
+    b.push(0x01);
+    b.extend_from_slice(&[0xAA; 16]);
+    assert!(dht::parse_dht_message(&b).is_err(), "declared length 0 must be rejected");
 }
 
 #[test]
