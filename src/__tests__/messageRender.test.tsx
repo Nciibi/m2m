@@ -135,9 +135,26 @@ describe("groupByDate", () => {
     expect(Object.keys(groupByDate([]))).toHaveLength(0);
   });
 
-  it("keeps messages in chronological order within a day", () => {
+  it("preserves the input order within a day", () => {
+    // Deliberate: `groupByDate` does NOT sort. The backend already returns
+    // messages in timestamp order, and re-sorting client-side would reorder
+    // optimistically-appended local messages relative to the ones the backend
+    // sent — making a just-sent message jump. It only partitions.
     const grouped = groupByDate([msg("a", base + 3000), msg("b", base + 1000)]);
     const only = Object.values(grouped)[0];
-    expect(only.map((m) => m.id)).toEqual(["b", "a"]);
+    expect(only.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  it("labels the current and previous day", () => {
+    // The labels come from the catalog, so this also pins the grouping key.
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    const grouped = groupByDate([
+      { ...msg("now", now), timestamp: Math.floor(now / 1000) },
+      { ...msg("yest", now - day), timestamp: Math.floor((now - day) / 1000) },
+    ]);
+    const keys = Object.keys(grouped);
+    expect(keys).toContain("Today");
+    expect(keys).toContain("Yesterday");
   });
 });

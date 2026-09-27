@@ -50,12 +50,40 @@ export function renderLinks(text: string, key: string): ReactNode {
   });
 }
 
-export function groupByDate(msgs: ChatMessage[]): Record<string, ChatMessage[]> {
+/**
+ * Partition messages into display groups keyed by a human-readable date label.
+ *
+ * Note this does NOT sort — the backend already returns messages in timestamp
+ * order, and re-sorting client-side would reorder optimistically-appended
+ * local messages against the ones the server sent, making a just-sent message
+ * appear to jump.
+ *
+ * `translate` is injected rather than imported from the i18n context so this
+ * stays a pure function (and therefore testable without a provider).
+ */
+export function groupByDate(
+  msgs: ChatMessage[],
+  translate: Translator = makeT("en"),
+): Record<string, ChatMessage[]> {
   const g: Record<string, ChatMessage[]> = {};
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
   for (const m of msgs) {
-    const d = new Date(m.timestamp * 1000), t = new Date(), y = new Date(t); y.setDate(y.getDate() - 1);
-    const l = d.toDateString() === t.toDateString() ? "Today" : d.toDateString() === y.toDateString() ? "Yesterday" : d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-    if (!g[l]) g[l] = []; g[l].push(m);
+    const d = new Date(m.timestamp * 1000);
+    const label =
+      d.toDateString() === today.toDateString()
+        ? translate("time.today")
+        : d.toDateString() === yesterday.toDateString()
+          ? translate("time.yesterday")
+          : d.toLocaleDateString(undefined, {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            });
+    if (!g[label]) g[label] = [];
+    g[label].push(m);
   }
   return g;
 }
