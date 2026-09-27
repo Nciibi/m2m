@@ -2250,12 +2250,22 @@ async fn handle_sync_frame(
 
                             // Bound the count. The lookback clamp above
                             // bounds the time range; this bounds the work.
+                            //
+                            // On overflow we keep the OLDEST messages rather
+                            // than the newest. The rows are returned in
+                            // chronological order, so a prefix is a contiguous
+                            // slice ending where the peer asked to resume;
+                            // taking the newest instead would leave a hole in
+                            // the middle of the conversation, which reads as
+                            // data loss to the recipient. A peer that needs
+                            // more can simply re-request from a later
+                            // `since_timestamp` — the protocol supports it.
                             let missed = if missed.len() > MAX_SYNC_RESEND_MESSAGES {
                                 tracing::warn!(
                                     peer = %peer_key_hex,
                                     total = missed.len(),
                                     cap = MAX_SYNC_RESEND_MESSAGES,
-                                    "sync response truncated"
+                                    "sync response truncated to the oldest messages"
                                 );
                                 missed[..MAX_SYNC_RESEND_MESSAGES].to_vec()
                             } else {
