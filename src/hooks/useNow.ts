@@ -22,7 +22,6 @@ export function useNow(intervalMs = 1000): number {
 
   useEffect(() => {
     if (intervalMs <= 0) return;
-    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(id);
   }, [intervalMs]);
