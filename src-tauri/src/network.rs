@@ -138,20 +138,41 @@ impl FrameRateLimiter {
     /// a flood of rejected frames cannot itself starve the byte budget and
     /// cause *accepted* traffic to be throttled.
     pub fn check(&self, bytes: usize) -> RateLimitVerdict {
-        if self.frames.check().is_err() {
+        if bucket_denied(self.frames.check()) {
             return RateLimitVerdict::TooManyFrames;
         }
-        // Saturate rather than truncate: a bogus huge length must not wrap to
-        // a small charge that sails under the limit. A frame larger than the
-        // entire per-second budget can never be admitted, so clamping to the
-        // budget is equivalent to rejecting it and keeps the arithmetic in
-        // range.
+        // A frame larger than the whole per-second budget can never be
+        // admitted, so clamping to the budget is equivalent to rejecting it
+        // and keeps the arithmetic in range. `bytes == 0` is charged as 1 so
+        // the `NonZeroU32` requirement always holds (a zero-length frame is
+        // not free — it still costs a read syscall and a dispatch).
         let cost = std::num::NonZeroU32::new(bytes.clamp(1, self.byte_budget as usize) as u32)
             .expect("clamped into 1..=byte_budget, so non-zero");
-        if self.bytes.check_n(cost).is_err() {
+        if bucket_denied(self.bytes.check_n(cost)) {
             return RateLimitVerdict::TooManyBytes;
         }
         RateLimitVerdict::Allowed
+    }
+}
+
+/// Interpret a governor result as "was this request denied?".
+///
+/// `check`/`check_n` return a *nested* result:
+///
+/// ```text
+/// Ok(Ok(_))               → allowed
+/// Ok(Err(NegativeOutcome)) → denied, over quota
+/// Err(InsufficientCapacity) → denied, the request can never fit this bucket
+/// ```
+///
+/// Matching only on `.is_err()` catches just the third case and silently
+/// treats an over-quota rejection as a success — which is how a byte budget
+/// can appear to be enforced while letting everything through.
+fn bucket_denied<M>(r: Result<Result<M, governor::middleware::NegativeOutcome>, InsufficientCapacity>) -> bool {
+    match r {
+        Ok(Ok(_)) => false,
+        Ok(Err(_)) => true,
+        Err(InsufficientCapacity(_)) => true,
     }
 }
 
