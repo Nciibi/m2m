@@ -28,9 +28,11 @@ export default function SelfDestructTimer({ expiresAt }: { expiresAt: number }) 
 
   if (remaining <= 0) return null;
 
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
   return (
-    <span className="self-destruct" aria-label={`Self-destructs in ${remaining} seconds`}>
-      ⏱ {remaining}s
+    <span className="msg-timer" title={`Self-destructs in ${mins}m ${secs}s`}>
+      🔥 {mins}:{secs.toString().padStart(2, "0")}
     </span>
   );
 }
