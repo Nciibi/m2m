@@ -233,13 +233,7 @@
   100% { background-position: 200% center; }
 }
 .animate-text-shimmer {
-  background: linear-gradient(
-    to right,
-    rgba(255, 255, 255, 0.8) 20%,
-    rgba(255, 255, 255, 1) 40%,
-    rgba(255, 255, 255, 1) 60%,
-    rgba(255, 255, 255, 0.8) 80%
-  );
+  background: var(--gradient-shimmer);
   background-size: 200% auto;
   color: transparent;
   -webkit-background-clip: text;
@@ -258,7 +252,7 @@
   top: 0; left: 0; right: 0; bottom: 0;
   background-attachment: fixed; background-image: radial-gradient(
     150px circle at var(--cursor-x) var(--cursor-y),
-    rgba(255, 255, 255, 0.3),
+    var(--sheen-low),
     transparent 40%
   );
   opacity: 0;

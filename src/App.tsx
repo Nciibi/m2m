@@ -34,7 +34,7 @@ function CaptureWarningBanner({ active }: { active: string[] }) {
       className="capture-warning"
       style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 9998,
-        background: "var(--color-danger, #dc2626)", color: "#fff",
+        background: "var(--color-danger, #dc2626)", color: "var(--color-on-danger, #fff)",
         padding: "6px 14px", fontSize: 13, textAlign: "center",
       }}
     >
