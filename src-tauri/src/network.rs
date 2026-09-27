@@ -138,7 +138,7 @@ impl FrameRateLimiter {
     /// a flood of rejected frames cannot itself starve the byte budget and
     /// cause *accepted* traffic to be throttled.
     pub fn check(&self, bytes: usize) -> RateLimitVerdict {
-        if denied(self.frames.check()) {
+        if self.frames.check().is_err() {
             return RateLimitVerdict::TooManyFrames;
         }
         // A frame larger than the whole per-second budget can never be
