@@ -554,9 +554,24 @@ async fn handle_incoming_connection(
         last_hb_ack: None,
     };
 
-    let mut conns = state.connections.write().await;
-    conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
-    drop(conns);
+    // Do not silently displace an existing session. This map is keyed by the
+    // peer's *self-declared* Ed25519 key, and a responder cannot pin an
+    // identity without prior contact — so an attacker who announces a known
+    // contact's key would otherwise overwrite the legitimate
+    // `PeerConnection` and evict the real peer from the UI and dispatcher.
+    // Refusing is the safe default; the genuine peer keeps its session and the
+    // user can retry deliberately if it was a stale entry.
+    {
+        let mut conns = state.connections.write().await;
+        if conns.contains_key(&peer_key_hex) {
+            tracing::warn!(
+                peer = %peer_key_hex,
+                "refusing incoming connection: a session with this peer key already exists"
+            );
+            return;
+        }
+        conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
+    }
 
     // Notify frontend
     let _ = app_handle.emit("m2m://connection", ConnectionEvent {
