@@ -47,7 +47,24 @@ export default function Modal({
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    requestAnimationFrame(() => {
+
+    // Focus the first field, but do NOT steal focus if the user has already
+    // moved it.
+    //
+    // This previously ran unconditionally on the next animation frame, which
+    // could land *after* the user started typing: keystrokes were silently
+    // swallowed from that point on (observed as a 28-character value arriving as
+    // "co"). Guarding on `document.activeElement` means a fast typist keeps
+    // their caret.
+    //
+    // A microtask is used rather than `requestAnimationFrame` because the
+    // dialog is laid out by the time the effect runs, and the extra frame only
+    // widened the window for the race.
+    queueMicrotask(() => {
+      if (!open) return;
+      const active = document.activeElement;
+      const alreadyInside = active instanceof HTMLElement && dialogRef.current?.contains(active);
+      if (alreadyInside) return;
       const first = dialogRef.current?.querySelector<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
