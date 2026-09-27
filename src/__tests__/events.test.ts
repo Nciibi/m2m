@@ -357,3 +357,54 @@ describe("cross-field invariants", () => {
     expect(KEY).toHaveLength(64);
   });
 });
+
+describe("asChatMessage — 1:1 messages", () => {
+  // The Rust `ChatMessage.sender_peer_key_hex` field is documented as "Empty
+  // string for 1:1 messages (implicit from conversation)" and `ChatMessage::new`
+  // defaults it to `String::new()`. A validator that requires a 64-char key
+  // therefore rejects EVERY direct message, and the chat listener silently drops
+  // all 1:1 traffic.
+  //
+  // Every earlier fixture in this file supplied a group-style key, so the suite
+  // could not catch it. These cases pin the actual 1:1 shape.
+  const direct = (over: Record<string, unknown> = {}) => ({
+    id: "m1",
+    content: "hello",
+    direction: "received",
+    timestamp: 1_700_000_000,
+    read_at: null,
+    edited_at: null,
+    deleted: false,
+    expires_at: null,
+    reactions: {},
+    sender_peer_key_hex: "",
+    ...over,
+  });
+
+  it("accepts a direct message with an empty sender key", () => {
+    const m = asChatMessage(direct());
+    expect(m).not.toBeNull();
+    expect(m?.sender_peer_key_hex).toBe("");
+  });
+
+  it("accepts a direct message that omits the field entirely", () => {
+    const { sender_peer_key_hex: _omitted, ...withoutKey } = direct();
+    expect(asChatMessage(withoutKey)).not.toBeNull();
+  });
+
+  it("still accepts a group message with a real sender key", () => {
+    const key = "a".repeat(64);
+    expect(asChatMessage(direct({ sender_peer_key_hex: key }))?.sender_peer_key_hex).toBe(key);
+  });
+
+  // The empty string is a legitimate sentinel, not a licence to accept junk.
+  it("rejects a malformed non-empty sender key", () => {
+    for (const bad of ["not-a-key", "z".repeat(64), "A".repeat(63), " ".repeat(64), 42, null]) {
+      expect(asChatMessage(direct({ sender_peer_key_hex: bad }))).toBeNull();
+    }
+  });
+
+  it("rejects a sender key with trailing whitespace", () => {
+    expect(asChatMessage(direct({ sender_peer_key_hex: `${"a".repeat(64)} ` }))).toBeNull();
+  });
+});
