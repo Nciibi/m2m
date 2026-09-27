@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
+import { render } from "./setup";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
 function Bomb({ message }: { message: string }): React.ReactElement {

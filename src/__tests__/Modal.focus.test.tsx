@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from "./setup";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import Modal from "../components/ui/Modal";
