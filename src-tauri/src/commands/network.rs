@@ -38,6 +38,55 @@ fn contact_gate_allows(require_known_contact: bool, is_family: bool, is_known_pe
     !require_known_contact || is_family || is_known_peer
 }
 
+/// Evaluate the contact allowlist gate for a freshly-handshaked peer.
+///
+/// Called by **every** inbound connection path — direct TCP *and* the relay —
+/// after the handshake has authenticated `peer_identity_pub` and before any
+/// persistence or dispatch. It lives here, next to the direct-TCP caller,
+/// because the relay path previously omitted it entirely: a user who enabled
+/// the documented `require_known_contact` hardening could still be connected
+/// to, messaged, and have the stranger written into their key store simply by
+/// routing through a relay.
+///
+/// Returns `Ok(())` when the connection may proceed, or the user-facing
+/// rejection reason.
+pub async fn check_contact_gate(
+    state: &AppState,
+    peer_key_hex: &str,
+) -> Result<(), &'static str> {
+    let require_known = state.security_config.read().await.require_known_contact;
+    if !require_known {
+        return Ok(());
+    }
+
+    let peer_key_bytes = match util::decode_peer_key(peer_key_hex) {
+        Ok(k) => k,
+        // A malformed key can never be a known contact; fail closed rather
+        // than skipping the check the way the original code did.
+        Err(_) => return Err("connection rejected"),
+    };
+
+    // Key-store lock scoped narrowly; no .await while held.
+    let (is_family, is_known) = {
+        let ks = state.key_store.lock().await;
+        match ks.as_ref() {
+            Some(store) => (
+                store.is_family_member(&peer_key_bytes).unwrap_or(false),
+                store.is_known_peer(&peer_key_bytes).unwrap_or(false),
+            ),
+            // No key store means no known contacts. Fail closed when the
+            // allowlist is on, or the setting would be silently inert.
+            None => (false, false),
+        }
+    };
+
+    if contact_gate_allows(require_known, is_family, is_known) {
+        Ok(())
+    } else {
+        Err("unknown contact — connection rejected")
+    }
+}
+
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
 /// so the invite works across the internet.
