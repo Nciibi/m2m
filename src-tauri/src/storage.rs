@@ -3193,9 +3193,7 @@ mod tests {
             .unwrap();
         let legacy_map = store.get_reactions(&["m-1".to_string()], None).unwrap();
         assert!(
-            legacy_map["m-1"]
-                .iter()
-                .any(|(r, _, _)| r == "legacy"),
+            legacy_map["m-1"].iter().any(|(r, _, _)| r == "legacy"),
             "expected the legacy 'legacy' reaction to be present"
         );
     }
