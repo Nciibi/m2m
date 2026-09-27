@@ -13,6 +13,10 @@ describe("errorMessage", () => {
     expect(errorMessage("Tauri command failed")).toBe("Tauri command failed");
   });
 
+  it("falls back for an empty string rejection", () => {
+    expect(errorMessage("", "fallback")).toBe("fallback");
+  });
+
   it("uses the message of an Error", () => {
     expect(errorMessage(new Error("boom"))).toBe("boom");
   });
