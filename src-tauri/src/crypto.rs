@@ -62,6 +62,13 @@ pub enum CryptoError {
     SignatureInvalid,
     #[error("key derivation failed")]
     KeyDerivationFailed,
+    /// The OS CSPRNG could not supply bytes.
+    ///
+    /// Distinct from the other variants so callers can tell "the system cannot
+    /// give us randomness right now" apart from a cryptographic failure — and
+    /// so this case is never papered over with a weaker source.
+    #[error("OS randomness unavailable: {0}")]
+    RandomnessUnavailable(String),
     #[error("input too large: {size} bytes exceeds {max} byte limit")]
     InputTooLarge { size: usize, max: usize },
     #[error("invalid key length")]
