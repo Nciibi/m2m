@@ -16,7 +16,11 @@
 
 mod candidate;
 mod capture_monitor;
-mod commands;
+// Public so the cross-language payload contract test (tests/payload_contract.rs)
+// can serialize the real event structs and pin the JSON key sets the frontend
+// validators depend on. Without it, a field rename here silently breaks
+// `src/events.ts` and messages are dropped with no error anywhere.
+pub mod commands;
 pub mod crypto;
 pub mod dht;
 pub mod dial;
