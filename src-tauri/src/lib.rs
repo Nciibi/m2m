@@ -30,6 +30,10 @@ mod local_addr;
 pub mod network;
 mod port_mapping;
 pub mod protocol;
+/// Fuzz-derived regression tests. Test-only: every item in this module is a
+/// `#[test]`, so keeping it out of release builds also keeps its imports from
+/// warning as dead in non-test builds.
+#[cfg(test)]
 mod protocol_fuzz_regression;
 mod reconnect;
 mod relay;

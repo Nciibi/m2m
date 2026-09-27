@@ -31,7 +31,6 @@ use crate::protocol::{
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// TCP connection timeout — used by the hole_punch module's per-strategy timeout.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ─── Connection Rate Limiting ───────────────────────────────────────────────
 

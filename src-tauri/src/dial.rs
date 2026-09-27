@@ -354,7 +354,7 @@ mod dial_tests {
     fn test_no_module_bypasses_the_dial_chokepoint() {
         let allowed = ["tor.rs", "dial.rs"];
 
-        let offenders: Vec<String> = crate::protocol_fuzz_regression::crate_root()
+        let offenders: Vec<String> = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("src")
             .read_dir()
             .expect("read src/")

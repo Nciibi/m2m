@@ -22,7 +22,6 @@ use crate::dht;
 use crate::ephemeral_id;
 use crate::lan_discovery;
 use crate::state::{AppState, DiscoveryConfig};
-use crate::tor;
 
 use super::util;
 use super::{ConnectionEvent, ConnectionInfo};

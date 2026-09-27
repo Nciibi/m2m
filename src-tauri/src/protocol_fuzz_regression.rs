@@ -11,15 +11,6 @@ use crate::dht;
 use crate::network;
 use crate::protocol;
 
-/// Absolute path to the crate root (the directory holding `Cargo.toml`).
-///
-/// Used by architectural tests that need to inspect sibling source files —
-/// for example the chokepoint test in [`crate::dial`], which greps every
-/// module for a raw `TcpStream::connect` that would bypass Tor routing.
-pub fn crate_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
 // ─── Frame parser ──────────────────────────────────────────────────────────
 
 fn parse_frames(bytes: &[u8]) -> Result<network::RawFrame, network::NetworkError> {
