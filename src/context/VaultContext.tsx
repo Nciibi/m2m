@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, ReactNode } from "react";
+import { createContext, useContext, useCallback, useMemo, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
 
@@ -25,8 +25,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setView("hub");
   }, [setView]);
 
+  const value = useMemo<VaultContextValue>(() => ({ handleUnlockVault }), [handleUnlockVault]);
+
   return (
-    <VaultContext.Provider value={{ handleUnlockVault }}>
+    <VaultContext.Provider value={value}>
       {children}
     </VaultContext.Provider>
   );

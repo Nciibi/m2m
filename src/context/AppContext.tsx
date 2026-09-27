@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "../hooks/useToast";
@@ -104,12 +104,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [view, setView]);
 
+  // Memoized: a fresh object literal on every render re-renders every
+  // `useApp()` consumer even when nothing it uses has changed. `addToast` in
+  // particular is called from all over the app, so a toast firing would
+  // otherwise re-render the entire view tree.
+  const value = useMemo<AppContextValue>(() => ({
+    view, setView,
+    toasts, addToast, removeToast,
+    identity, vaultInitialized, vaultUnlocked, refreshVault,
+  }), [view, toasts, identity, vaultInitialized, vaultUnlocked,
+       addToast, removeToast, refreshVault]);
+
   return (
-    <AppContext.Provider value={{
-      view, setView,
-      toasts, addToast, removeToast,
-      identity, vaultInitialized, vaultUnlocked, refreshVault,
-    }}>
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );

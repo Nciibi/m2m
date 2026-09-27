@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
 
@@ -103,8 +103,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
+  const value = useMemo<ThemeContextValue>(
+    () => ({ theme, setTheme, resolvedTheme, accentColor, setAccentColor }),
+    [theme, resolvedTheme, accentColor],
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme, accentColor, setAccentColor }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );
