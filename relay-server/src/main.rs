@@ -60,6 +60,27 @@ const MAX_CONNECTIONS_PER_IP: usize = 16;
 /// Maximum total concurrent connections (global cap).
 const MAX_TOTAL_CONNECTIONS: usize = 1024;
 
+/// Maximum number of *pending registrations* held at once.
+///
+/// The per-IP connection cap only throttles how fast a client can complete the
+/// REGISTER handshake — it does not bound how many registrations accumulate.
+/// A trivial loop (connect → REGISTER → read REGISTERED → close) added one
+/// `HashMap` entry and one spawned task per iteration, each living for
+/// `READER_IDLE_TIMEOUT` (5 minutes), so a few thousand cheap connections could
+/// exhaust memory and task slots. Registration slots are a separate resource and
+/// now have their own cap.
+const MAX_PENDING_REGISTRATIONS: usize = 1024;
+
+/// Maximum duration a bridged (proxied) connection may stay idle before it is
+/// torn down.
+///
+/// `copy_bidirectional` previously had no deadline of any kind: a single
+/// registration plus one CONNECT gave an attacker a permanently open socket
+/// with no cap, no idle timeout and no byte budget. Since bridged connections
+/// are the long-lived, valuable ones, an idle timeout is what keeps a single
+/// registration from becoming free server capacity.
+const BRIDGE_IDLE_TIMEOUT: Duration = Duration::from_secs(600); // 10 min
+
 /// A registered peer awaiting a bridge connection.
 ///
 /// The `bridge_tx` channel is used to deliver the other peer's TCP stream
@@ -277,15 +298,34 @@ async fn handle_register(
     // Create the bridge channel
     let (bridge_tx, bridge_rx) = oneshot::channel::<TcpStream>();
 
-    // Store the registration (the sender side, to deliver Bob's stream)
-    state.write().await.insert(
+    // Store the registration (the sender side, to deliver Bob's stream).
+    // Enforce a cap: without it, REGISTER is a trivial way to grow this map
+    // and the task count without bound.
+    {
+        let mut map = state.write().await;
+        if map.len() >= MAX_PENDING_REGISTRATIONS {
+            tracing::warn!(
+                peer = %peer_addr,
+                pending = map.len(),
+                "registration table full — rejecting"
+            );
+            drop(map);
+            let _ = send_error(
+                &mut stream,
+                5,
+                "relay at capacity — try again later",
+            )
+            .await;
+            return;
+        }
+        map.insert(
         relay_id.clone(),
-        Registration {
-            bridge_tx,
-            peer_addr,
-            created_at: Instant::now(),
-        },
-    );
+            Registration {
+                bridge_tx,
+                peer_addr,
+                created_at: Instant::now(),
+            },
+        );
 
     // Spawn the reader task — it owns the stream and waits for bridge or keepalive
     tokio::spawn(registration_reader(stream, relay_id.clone(), bridge_rx));
