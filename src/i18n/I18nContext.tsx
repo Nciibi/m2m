@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useMemo, useState, ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { LOCALES, LocaleCode, makeT, Translation } from "./catalog";
 
 type Translator = (path: string, values?: Record<string, string | number>) => string;
