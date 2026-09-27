@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockInvoke = vi.fn();
@@ -181,7 +181,10 @@ describe("SettingsContext", () => {
     );
 
     await user.click(screen.getByText("Toggle Tor"));
-    expect(mockInvoke).not.toHaveBeenCalled();
+    // `handleTorToggle` bails out when `networkSettings` is null. Assert the
+    // specific command was never issued — not that `invoke` was never called,
+    // because the provider legitimately reads the security config on mount.
+    expect(mockInvoke).not.toHaveBeenCalledWith("set_tor_enabled", expect.anything());
   });
 
   it("handleConnectivityCheck calls Tauri invoke", async () => {
@@ -278,18 +281,29 @@ describe("SettingsContext", () => {
 
   it("handleScreenCaptureToggle calls set_security_config", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue({ screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false });
-
+    // Relies on the command-aware default from `beforeEach`: the provider loads
+    // a config with `screen_capture_protection: false` on mount, so the toggle
+    // must flip it to `true`. (A blanket `mockResolvedValue` here also overrode
+    // `get_security_config`, loading protection as already-on and making the
+    // toggle send `false`.)
     render(
       <SettingsProvider>
         <TestConsumer />
       </SettingsProvider>
     );
 
+    await waitFor(() =>
+      expect(screen.getByTestId("screen-capture")).toHaveTextContent("false"),
+    );
+
     await user.click(screen.getByText("Toggle Screen Capture"));
+
     expect(mockInvoke).toHaveBeenCalledWith("set_security_config", {
-      config: { screen_capture_protection: true, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false },
+      config: { ...DEFAULT_SECURITY_CONFIG, screen_capture_protection: true },
     });
+    await waitFor(() =>
+      expect(screen.getByTestId("screen-capture")).toHaveTextContent("true"),
+    );
   });
 
   it("handleLockVault calls lock_vault", async () => {
