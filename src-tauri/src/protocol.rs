@@ -999,13 +999,28 @@ mod protocol_tests {
             validate_version(0x10),
             Err(ProtocolError::UnsupportedVersion(0x10))
         ));
-        assert!(matches!(
-            validate_version(0x03),
-            Err(ProtocolError::UnsupportedVersion(0x03))
-        ));
+        // 0x03 is the current version, so it is accepted, not rejected.
+        assert!(validate_version(PROTOCOL_VERSION).is_ok());
         assert!(matches!(
             validate_version(0xFD),
             Err(ProtocolError::UnsupportedVersion(0xFD))
+        ));
+    }
+
+    /// v0x02 must be REJECTED, not accepted.
+    ///
+    /// v0x02 computed the Double Ratchet AAD as just `context`; v0x03 folds the
+    /// DR header in. A v0x02 peer would pass a permissive version check and
+    /// then fail to decrypt every message with no useful error — so it is
+    /// excluded at the handshake instead, where the user gets a clear
+    /// "upgrade" signal.
+    #[test]
+    fn test_v02_is_rejected_because_its_aad_differs() {
+        assert_eq!(PROTOCOL_VERSION, 0x03);
+        assert!(matches!(
+            validate_version(0x02),
+            Err(ProtocolError::UnsupportedVersion(0x02)),
+            "v0x02 must not be accepted: its AEAD associated data differs from v0x03"
         ));
     }
 
