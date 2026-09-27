@@ -1112,24 +1112,52 @@ impl Drop for SessionKeys {
 ///
 /// ## Why this is not a bare `getrandom(...).expect(...)`
 ///
-/// `getrandom` can fail transiently: on Linux the syscall returns `EAGAIN`
-/// when the kernel's entropy pool is not yet initialised (early boot, a VM
-/// resuming from a snapshot, a freshly-created container), and `EINTR` on a
-/// signal. Panicking on those turns a recoverable condition into a crash —
-/// and because `[profile.release]` sets `panic = "abort"`, it is an
-/// *unrecoverable process abort* with no unwinding, for a tool whose users
-/// may be in exactly those situations.
+/// `getrandom` fails *transiently* in situations M2M's users plausibly hit:
+/// on Linux the syscall returns `EAGAIN` when the kernel entropy pool is not
+/// yet initialised — early boot, a VM resuming from a snapshot, a freshly
+/// created container, a live USB stick on a freshly imaged machine. That is
+/// exactly the population this app serves, and a single `expect` turned a
+/// recoverable, self-healing condition into a process abort (unrecoverable,
+/// since `[profile.release]` sets `panic = "abort"`).
 ///
-/// So transient conditions are retried, and only a genuinely unrecoverable
-/// failure is surfaced as an error. A silent fallback to weaker randomness
-/// would be far worse than either: a zero-filled key is catastrophic and
-/// undetectable after the fact.
-pub fn fill_random(buf: &mut [u8]) -> Result<(), CryptoError> {
-    const MAX_ATTEMPTS: u32 = 8;
-    let mut attempt = 0u32;
-    loop {
+/// So transient conditions are retried with a backoff, which turns the
+/// realistic failure into a brief delay rather than a crash.
+///
+/// ## Why the final failure still aborts
+///
+/// After [`MAX_RANDOM_ATTEMPTS`] attempts the OS has told us repeatedly that it
+/// cannot produce entropy, and there is no acceptable substitute:
+///
+/// * Returning zeros would silently produce a nonce or key that an attacker
+///   can predict, and the compromise would be undetectable afterwards.
+/// * Falling back to a userspace PRNG would be a silent downgrade — the worst
+///   possible failure for a tool protecting people at risk.
+///
+/// A loud, immediate, clearly-attributed abort that the user can act on
+/// (reboot) is the honest outcome. The message names the cause so a support
+/// request can be answered without guesswork.
+const MAX_RANDOM_ATTEMPTS: u32 = 10;
+
+/// How long to wait before the final abort, so a daemon (Tor, a crypto
+/// service) has a fair chance to populate the pool.
+const MAX_RANDOM_ATTEMPTS_BACKOFF_MS: u64 = 2_000;
+
+/// Abort message used when the OS CSPRNG cannot be reached at all.
+const RANDOM_FATAL_MSG: &str = "\
+The operating system could not provide cryptographic randomness (OS RNG \
+unavailable after repeated retries).
+
+M2M will not generate keys without a trustworthy random source. This is \
+almost always temporary — it happens when the machine boots before the \
+kernel entropy pool is initialised, or a VM/container resumes from a \
+snapshot. Reboot, or wait a few seconds and relaunch. Your existing keys \
+and messages are unaffected.";
+
+pub fn fill_random(buf: &mut [u8]) {
+    let mut waited_ms = 0u64;
+    for attempt in 1..=MAX_RANDOM_ATTEMPTS {
         match getrandom::getrandom(buf) {
-            Ok(()) => return Ok(()),
+            Ok(()) => return,
             Err(e) => {
                 let transient = matches!(
                     e.kind(),
@@ -1137,19 +1165,23 @@ pub fn fill_random(buf: &mut [u8]) -> Result<(), CryptoError> {
                         | std::io::ErrorKind::WouldBlock
                         | std::io::ErrorKind::TimedOut
                 );
-                attempt += 1;
-                if transient && attempt < MAX_ATTEMPTS {
-                    tracing::warn!(
-                        error = %e,
-                        attempt,
-                        "OS entropy source not ready — retrying"
-                    );
-                    // Brief backoff so a spinning retry loop cannot itself
-                    // starve the entropy daemon we are waiting on.
-                    std::thread::sleep(std::time::Duration::from_millis(10 * u64::from(attempt)));
-                    continue;
+                if !transient || attempt == MAX_RANDOM_ATTEMPTS {
+                    panic!("{RANDOM_FATAL_MSG}\n\nUnderlying error: {e}");
                 }
-                return Err(CryptoError::RandomnessUnavailable(e.to_string()));
+                // Backoff so a spinning retry loop cannot itself starve the
+                // entropy daemon we are waiting on.
+                let delay = 50u64 * u64::from(attempt);
+                tracing::warn!(
+                    error = %e,
+                    attempt,
+                    delay_ms = delay,
+                    "OS entropy source not ready — retrying"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(delay));
+                waited_ms += delay;
+                if waited_ms > MAX_RANDOM_ATTEMPTS_BACKOFF_MS {
+                    panic!("{RANDOM_FATAL_MSG}\n\nUnderlying error: {e}");
+                }
             }
         }
     }
@@ -1157,13 +1189,11 @@ pub fn fill_random(buf: &mut [u8]) -> Result<(), CryptoError> {
 
 /// Generate cryptographically secure random bytes.
 ///
-/// Fails loudly rather than returning zeros: silently substituting a
-/// predictable buffer for a nonce, an invite nonce, or a content-encryption
-/// key would be a catastrophic and undetectable compromise.
-pub fn random_bytes(len: usize) -> Result<Vec<u8>, CryptoError> {
+/// See [`fill_random`] for why a failure here aborts rather than degrading.
+pub fn random_bytes(len: usize) -> Vec<u8> {
     let mut buf = vec![0u8; len];
-    fill_random(&mut buf)?;
-    Ok(buf)
+    fill_random(&mut buf);
+    buf
 }
 
 // ─── AEAD primitive (XChaCha20-Poly1305-IETF) ──────────────────────────────
