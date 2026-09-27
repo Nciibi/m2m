@@ -588,14 +588,6 @@ async fn handle_incoming_connection(
                     return;
                 }
             };
-            let spk_lock = state.active_signed_prekey.read().await;
-            let spk = match spk_lock.as_ref() {
-                Some(spk) => spk,
-                None => {
-                    tracing::error!("no signed prekey for X3DH handshake");
-                    return;
-                }
-            };
             // Consume-on-use one-time prekey; see
             // `x3dh_responder_handshake_consume_opk` for the rationale.
             if let Err(e) = x3dh_responder_handshake_consume_opk(

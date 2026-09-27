@@ -214,6 +214,9 @@ pub async fn pair_sync_device(
             device_id: mgr.device_id.clone(),
             device_name: mgr.device_name.clone(),
             sync_protocol_version: SYNC_PROTOCOL_VERSION,
+            // Present the invite token so the primary can authorize us. The
+            // primary never echoes a token back — pairing is one-directional.
+            sync_token: sync_token.to_string(),
         }
     };
 
