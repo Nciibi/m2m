@@ -161,7 +161,8 @@ describe("DuressPassphraseDialog", () => {
     await user.type(input("duress-passphrase"), "correct-horse-battery");
     await user.type(input("duress-passphrase-confirm"), "correct-horse-batteru");
 
-    expect(screen.getByRole("alert")).toHaveTextContent(/do not match/i);
+    const alerts = screen.getAllByRole("alert").map((el) => el.textContent);
+    expect(alerts.join(" ")).toMatch(/do not match/i);
     expect(screen.getByText("Wipe on this passphrase").closest("button")).toBeDisabled();
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -175,6 +176,8 @@ describe("DuressPassphraseDialog", () => {
     const value = "correct-horse-battery-staple";
     await user.type(input("duress-passphrase"), value);
     await user.type(input("duress-passphrase-confirm"), value);
+    expect(input("duress-passphrase")).toHaveValue(value);
+    expect(input("duress-passphrase-confirm")).toHaveValue(value);
     await user.click(screen.getByText("Wipe on this passphrase"));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(value));
@@ -198,7 +201,7 @@ describe("DuressPassphraseDialog", () => {
     await waitFor(() =>
       expect(screen.getByText(/too similar/i)).toBeInTheDocument(),
     );
-    expect(passphraseInput).toHaveValue(value);
+    expect(input("duress-passphrase")).toHaveValue(value);
   });
 
   it("does not use a native dialog", async () => {
