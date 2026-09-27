@@ -996,6 +996,133 @@ mod group_tests {
         assert!(result.is_err());
     }
 
+    /// H3-class regression for the group path. The Double Ratchet's
+    /// derive-then-verify pattern was already established; the sender-key
+    /// chain had not been given it. `peek_message_key` used to advance the
+    /// chain *before* the AEAD open, so one forged frame with a large
+    /// `message_number` permanently desynced the receiver — every later
+    /// message from that sender became undecryptable and the group had to be
+    /// torn down. One hostile member could deafen all the others.
+    #[test]
+    fn test_forged_high_message_number_does_not_desync_receiver_chain() {
+        let mut gm = make_group_manager();
+        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        {
+            let group = gm.get_group_mut("g1").unwrap();
+            let init_key = group.our_initial_chain_key.clone().unwrap();
+            let verify_key = group.our_verification_key.unwrap();
+            group.store_receiver_key("alice", &init_key, &verify_key);
+        }
+
+        // Alice sends one genuine message so the chain advances normally.
+        let genuine = {
+            let g = gm.get_group_mut("g1").unwrap();
+            g.encrypt_message("alice", b"hello 0").unwrap()
+        };
+        assert_eq!(
+            gm.get_group_mut("g1").unwrap().decrypt_message(&genuine).unwrap(),
+            b"hello 0"
+        );
+
+        // Hostile member forges a frame with a huge message number. The
+        // signature check passes (they hold their own signing key) but the
+        // ciphertext is garbage.
+        let mut forged = {
+            let g = gm.get_group_mut("g1").unwrap();
+            g.encrypt_message("alice", b"attacker garbage").unwrap()
+        };
+        forged.message_number = 500_000;
+        // Re-sign so the failure is attributable to the AEAD, not the sig.
+        let sign_data = {
+            let mut sd = Vec::new();
+            sd.extend_from_slice(b"g1");
+            sd.extend_from_slice(&forged.message_number.to_be_bytes());
+            sd.extend_from_slice(&forged.nonce);
+            sd.extend_from_slice(&forged.ciphertext);
+            sd
+        };
+        {
+            let g = gm.get_group("g1").unwrap();
+            let sk = g.our_signing_key.clone().unwrap();
+            forged.signature = crate::crypto::sign_message(&sk, &sign_data).unwrap();
+        }
+        assert!(
+            gm.get_group_mut("g1").unwrap().decrypt_message(&forged).is_err(),
+            "forged frame must be rejected"
+        );
+
+        // THE POINT: the receiver chain must be untouched, so Alice's next
+        // real message still decrypts.
+        let next = {
+            let g = gm.get_group_mut("g1").unwrap();
+            g.encrypt_message("alice", b"hello 1").unwrap()
+        };
+        assert_eq!(
+            gm.get_group_mut("g1").unwrap().decrypt_message(&next).unwrap(),
+            b"hello 1",
+            "a rejected forgery must not desync the receiver chain"
+        );
+    }
+
+    /// A successfully decrypted group message must not be replayable. The
+    /// cache-hit path used to return a copy of the key and leave the entry in
+    /// place, so an on-path attacker could re-present the same frame
+    /// indefinitely and obtain the plaintext every time.
+    #[test]
+    fn test_group_message_replay_after_success_is_rejected() {
+        let mut gm = make_group_manager();
+        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        {
+            let g = gm.get_group_mut("g1").unwrap();
+            let k = g.our_initial_chain_key.clone().unwrap();
+            let v = g.our_verification_key.unwrap();
+            g.store_receiver_key("alice", &k, &v);
+        }
+
+        let msg = {
+            let g = gm.get_group_mut("g1").unwrap();
+            g.encrypt_message("alice", b"secret").unwrap()
+        };
+        assert_eq!(
+            gm.get_group_mut("g1").unwrap().decrypt_message(&msg).unwrap(),
+            b"secret"
+        );
+
+        // Same frame again — the key was consumed, so this must fail.
+        assert!(
+            gm.get_group_mut("g1").unwrap().decrypt_message(&msg).is_err(),
+            "an already-decrypted group message must not be replayable"
+        );
+    }
+
+    /// Out-of-order delivery must still work: receiving message 2 before
+    /// message 1 should cache 1's key, and the delayed frame then decrypts.
+    /// This is the behaviour the commit path must preserve.
+    #[test]
+    fn test_out_of_order_group_delivery_still_works() {
+        let mut gm = make_group_manager();
+        gm.create_group("g1".into(), "G".into(), 100, "alice".into(), &["bob".into()]).unwrap();
+        {
+            let g = gm.get_group_mut("g1").unwrap();
+            let k = g.our_initial_chain_key.clone().unwrap();
+            let v = g.our_verification_key.unwrap();
+            g.store_receiver_key("alice", &k, &v);
+        }
+
+        let frames: Vec<_> = {
+            let g = gm.get_group_mut("g1").unwrap();
+            (0..3)
+                .map(|i| g.encrypt_message("alice", format!("m{i}").as_bytes()).unwrap())
+                .collect()
+        };
+
+        // Deliver 0, then 2 (caching 1's key), then the delayed 1.
+        for i in [0usize, 2, 1] {
+            let out = gm.get_group_mut("g1").unwrap().decrypt_message(&frames[i]).unwrap();
+            assert_eq!(out, format!("m{i}").as_bytes());
+        }
+    }
+
     #[test]
     fn test_list_groups() {
         let mut gm = make_group_manager();
