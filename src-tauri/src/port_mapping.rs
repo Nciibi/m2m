@@ -1546,3 +1546,142 @@ mod port_mapping_tests {
         assert!(d.contains("1.2.3.4:54321"));
     }
 }
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod upnp_security_tests {
+    use super::*;
+
+    /// A hostile LAN host can answer our SSDP probe with any `LOCATION` it
+    /// likes. Following it verbatim turned M2M into a request forwarder — most
+    /// sharply against the cloud metadata endpoint at 169.254.169.254, whose
+    /// connection outcome is also a port-scan oracle.
+    #[test]
+    fn test_ssrf_blocks_cloud_metadata_endpoint() {
+        let err = validate_upnp_location("http://169.254.169.254/latest/meta-data/")
+            .expect_err("the cloud metadata endpoint must be refused");
+        assert!(
+            err.to_string().contains("not a local-network address"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_ssrf_blocks_public_and_documentation_addresses() {
+        for url in [
+            "http://8.8.8.8/desc.xml",
+            "http://1.1.1.1/",
+            "http://203.0.113.10/rootDesc.xml",
+            "http://198.51.100.7/desc.xml",
+        ] {
+            assert!(
+                validate_upnp_location(url).is_err(),
+                "{url} is not a gateway and must be refused"
+            );
+        }
+    }
+
+    /// A hostname is refused rather than resolved: DNS is attacker-controlled
+    /// and could point anywhere.
+    #[test]
+    fn test_ssrf_blocks_hostnames() {
+        for url in [
+            "http://evil.example.com/desc.xml",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://localhost/desc.xml",
+            "http://router.local/desc.xml",
+        ] {
+            assert!(
+                validate_upnp_location(url).is_err(),
+                "{url} must be refused (hostname, not a literal gateway IP)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ssrf_blocks_https_and_parser_confusion() {
+        for url in [
+            "https://192.168.1.1/desc.xml",   // TLS on a device with no identity story
+            "ftp://192.168.1.1/desc.xml",    // wrong scheme
+            "file:///etc/passwd",            // local file read
+            "http://user@8.8.8.8/desc.xml",  // userinfo confusion
+            "http://192.168.1.1@8.8.8.8/",  // userinfo confusion
+            "http://",                       // no host
+            "",                              // empty
+        ] {
+            assert!(
+                validate_upnp_location(url).is_err(),
+                "{url:?} must be refused"
+            );
+        }
+    }
+
+    /// The guard must not break real IGDs — they are always on the local
+    /// network, which is the whole point of UPnP.
+    #[test]
+    fn test_ssrf_allows_real_gateways() {
+        for url in [
+            "http://192.168.1.1:5000/rootDesc.xml",
+            "http://10.0.0.1/rootDesc.xml",
+            "http://172.16.0.1:80/upnp/desc.xml",
+            "http://127.0.0.1:49000/rootDesc.xml",
+            "http://[fe80::1]:80/desc.xml",
+            "http://[fd00::1]/desc.xml",
+        ] {
+            assert!(
+                validate_upnp_location(url).is_ok(),
+                "{url} is a legitimate gateway and must be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ssrf_rejects_overlong_location() {
+        let long = format!("http://192.168.1.1/{}", "a".repeat(MAX_UPNP_LOCATION_LEN));
+        assert!(validate_upnp_location(&long).is_err());
+    }
+
+    /// Every declared length in a UPnP HTTP response is chosen by whatever
+    /// answered the probe. They must never reach `vec![]` unbounded, because an
+    /// allocation failure aborts the process under `panic = "abort"`.
+    #[tokio::test]
+    async fn test_http_body_bounds_are_enforced() {
+        use tokio::io::AsyncReadExt;
+
+        // (a) A hostile Content-Length.
+        let mut evil = Vec::new();
+        evil.extend_from_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 500000000\r\n\r\n");
+        evil.extend_from_slice(b"x");
+        let mut rd = &evil[..];
+        let err = read_http_response_body(&mut rd)
+            .await
+            .expect_err("an oversized Content-Length must be refused");
+        assert!(err.to_string().contains("exceeds"), "unexpected: {err}");
+
+        // (b) A hostile chunk size in a chunked response.
+        let mut evil2 = Vec::new();
+        evil2.extend_from_slice(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+        evil2.extend_from_slice(b"100000000\r\n"); // 268 MB chunk
+        let mut rd2 = &evil2[..];
+        let err2 = read_http_response_body(&mut rd2)
+            .await
+            .expect_err("an oversized chunk size must be refused");
+        assert!(err2.to_string().contains("exceeds"), "unexpected: {err2}");
+
+        // (c) A legitimate body still works, so the guard is not over-tight.
+        let mut good = Vec::new();
+        good.extend_from_slice(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
+        let mut rd3 = &good[..];
+        let (status, body) = read_http_response_body(&mut rd3).await.unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(body, b"hello");
+    }
+
+    /// Sanity: the bound constants are the values the code actually uses.
+    #[test]
+    fn test_body_limit_is_bounded() {
+        assert!(MAX_HTTP_BODY > 0);
+        assert!(MAX_HTTP_BODY <= 1024 * 1024, "a UPnP description is never this large");
+    }
+}
