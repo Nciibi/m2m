@@ -94,7 +94,9 @@ struct Registration {
 
 // ─── Frame I/O ───────────────────────────────────────────────────────────────
 
-async fn read_frame(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), String> {
+/// Generic over the transport so the codec can be unit-tested against an
+/// in-memory duplex stream instead of requiring a real socket.
+async fn read_frame<S: tokio::io::AsyncRead + Unpin>(stream: &mut S) -> Result<(u8, Vec<u8>), String> {
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
     let mut pos = 0;
     while pos < LENGTH_PREFIX_SIZE {
@@ -125,7 +127,11 @@ async fn read_frame(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), String> {
     Ok((body[0], body[1..].to_vec()))
 }
 
-async fn write_frame(stream: &mut TcpStream, msg_type: u8, body: &[u8]) -> Result<(), String> {
+async fn write_frame<W: tokio::io::AsyncWrite + Unpin>(
+    stream: &mut W,
+    msg_type: u8,
+    body: &[u8],
+) -> Result<(), String> {
     let total_len = 1 + body.len();
     let mut frame = Vec::with_capacity(LENGTH_PREFIX_SIZE + total_len);
     frame.extend_from_slice(&(total_len as u32).to_be_bytes());
