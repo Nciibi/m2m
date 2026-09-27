@@ -4,7 +4,16 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
 import { useT } from "../i18n/I18nContext";
-import type { NetworkSettings, StunConfig, NatTypeInfo, DiscoveryConfig, DiscoveredPeer, SecurityConfig, CaptureCapability } from "../types";
+import type {
+  CaptureCapability,
+  ConnectionInfo,
+  DiscoveredPeer,
+  DiscoveryConfig,
+  NatTypeInfo,
+  NetworkSettings,
+  SecurityConfig,
+  StunConfig,
+} from "../types";
 
 interface SettingsContextValue {
   networkSettings: NetworkSettings | null;
@@ -29,7 +38,8 @@ interface SettingsContextValue {
   discoveredPeers: DiscoveredPeer[];
   handleLanToggle: () => Promise<void>;
   handleDhtToggle: () => Promise<void>;
-  handleConnectDiscoveredPeer: (address: string) => Promise<void>;
+  /** Resolves with the established connection; rethrows on failure. */
+  handleConnectDiscoveredPeer: (address: string) => Promise<ConnectionInfo>;
   handleRefreshDiscovery: () => Promise<void>;
   // Security
   securityConfig: SecurityConfig | null;
@@ -273,7 +283,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const handleConnectDiscoveredPeer = useCallback(async (address: string) => {
     try {
-      const info = await invoke<any>("connect_discovered_peer", { address });
+      // Returns `commands::ConnectionInfo`; typed here because the value is
+      // used to synthesise a conversation entry downstream.
+      const info = await invoke<ConnectionInfo>("connect_discovered_peer", { address });
       addToast("Connected to discovered peer", "success");
       return info;
     } catch (e) {
