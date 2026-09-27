@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Modal from "./Modal";
-import { Button } from "./Button";
+import Button from "./Button";
 import { useT } from "../../i18n/I18nContext";
 
 /**
