@@ -2023,13 +2023,36 @@ async fn handle_sync_frame(
                         match conn.session.decrypt_typed_frame(frame) {
                             Ok(plaintext) => {
                                 if let Ok(sync) = crate::protocol::deserialize::<crate::protocol::SyncRequestData>(&plaintext) {
-                                    // Load sent messages for this peer since the given timestamp,
-                                    // decrypt them from storage, and re-send over the session.
+                                    // ── Bound the requested window ──
+                                    // `since_timestamp` was fully peer-controlled
+                                    // with no lower bound (0 was accepted) and no cap
+                                    // on how many messages came back. A single
+                                    // 20-byte authenticated packet therefore
+                                    // triggered a full-table scan, a decrypt pass
+                                    // over the entire history, and N re-sends —
+                                    // repeatable at will, since (before the
+                                    // receive-loop rate limiter) there was no
+                                    // inbound throttle either.
+                                    //
+                                    // A request older than the retention window
+                                    // is clamped; a request that would return more
+                                    // than the cap is refused outright so the
+                                    // attacker cannot even get the partial work.
+                                    let now = chrono::Utc::now().timestamp();
+                                    let earliest = now - MAX_SYNC_LOOKBACK_SECS;
+                                    if (sync.since_timestamp as i64) < earliest {
+                                        tracing::warn!(
+                                            peer = %peer_key_hex,
+                                            requested = sync.since_timestamp,
+                                            "sync request window too old — clamped"
+                                        );
+                                    }
+                                    let since = (sync.since_timestamp as i64).max(earliest);
                                     let missed: Vec<(String, Option<i64>)> = {
                                         let ms = state.message_store.lock().await;
                                         let sk = state.storage_key.read().await;
                                         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-                                            if let Ok(stored) = store.load_sent_messages_since(&peer_key_hex, sync.since_timestamp as i64) {
+                                            if let Ok(stored) = store.load_sent_messages_since(&peer_key_hex, since) {
                                                 stored.iter().filter_map(|msg| {
                                                     crate::storage::MessageStore::decrypt_stored_content(
                                                         &msg.content_encrypted, &msg.content_nonce,
