@@ -108,12 +108,11 @@ fn dial_err(e: crate::dial::DialError) -> DhtError {
     match e {
         crate::dial::DialError::TimedOut(_) => DhtError::Timeout,
         crate::dial::DialError::Io(e) => DhtError::Io(e),
-        crate::dial::DialError::NonTorRoutable(a) => {
+        crate::dial::DialError::NonTorRoutable(a)
+        | crate::dial::DialError::TorLanUnsupported(a) => {
             DhtError::BadResponse(format!("bootstrap node {a} is not reachable over Tor"))
         }
-        crate::dial::DialError::TorLanUnsupported(a) => {
-            DhtError::BadResponse(format!("bootstrap node {a} is not a valid Tor target"))
-        }
+        crate::dial::DialError::Dial(msg) => DhtError::BadResponse(msg),
     }
 }
 

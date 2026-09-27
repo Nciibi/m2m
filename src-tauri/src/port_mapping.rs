@@ -94,9 +94,8 @@ fn pm_dial_err(e: crate::dial::DialError) -> PortMapError {
         crate::dial::DialError::NonTorRoutable(a) => {
             PortMapError::Upnp(format!("{a} is not a local gateway address"))
         }
-        crate::dial::DialError::TorLanUnsupported(_) => {
-            PortMapError::AllFailed
-        }
+        crate::dial::DialError::TorLanUnsupported(_) => PortMapError::AllFailed,
+        crate::dial::DialError::Dial(msg) => PortMapError::Upnp(msg),
     }
 }
 

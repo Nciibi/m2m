@@ -276,16 +276,7 @@ pub async fn register(config: &RelayConfig) -> Result<(TcpStream, String), Relay
     // user's IP, so this path used to bypass Tor as well.
     let mut stream = crate::dial::dial_with_timeout(relay_addr, RELAY_CONNECT_TIMEOUT)
         .await
-        .map_err(|e| match e {
-            crate::dial::DialError::TimedOut(_) => RelayError::TimedOut,
-            crate::dial::DialError::NonTorRoutable(a) => {
-                RelayError::Config(format!(
-                    "relay address {a} is not reachable over Tor — \
-                     self-hosted relays must use a public hostname/IP"
-                ))
-            }
-            crate::dial::DialError::Io(e) => RelayError::Io(e),
-        })?;
+        .map_err(relay_dial_err)?;
 
     let _ = stream.set_nodelay(true);
 
@@ -312,6 +303,25 @@ pub async fn register(config: &RelayConfig) -> Result<(TcpStream, String), Relay
     Ok((stream, relay_id))
 }
 
+/// Map a chokepoint dial failure onto a relay error.
+///
+/// A relay is a third party, so its connection is Tor-routed. A relay address
+/// that is not Tor-routable (typically a self-hosted relay on a LAN address)
+/// is reported as a configuration problem so the user learns why, rather than
+/// seeing an opaque connection failure.
+fn relay_dial_err(e: crate::dial::DialError) -> RelayError {
+    match e {
+        crate::dial::DialError::TimedOut(_) => RelayError::TimedOut,
+        crate::dial::DialError::Io(e) => RelayError::Io(e),
+        crate::dial::DialError::Dial(msg) => RelayError::ConnectionFailed(msg),
+        crate::dial::DialError::NonTorRoutable(a)
+        | crate::dial::DialError::TorLanUnsupported(a) => RelayError::Config(format!(
+            "relay address {a} is not reachable over Tor — \
+             self-hosted relays must use a public hostname or IP"
+        )),
+    }
+}
+
 // ─── Bridge via Relay (for Bob / invite consumer) ─────────────────────────────
 
 /// Connect to a peer through the relay server.
@@ -331,13 +341,7 @@ pub async fn connect_via_relay(
     // is a third party that must not learn the user's real address.
     let mut stream = crate::dial::dial_with_timeout(relay_addr, RELAY_CONNECT_TIMEOUT)
         .await
-        .map_err(|e| match e {
-            crate::dial::DialError::TimedOut(_) => RelayError::TimedOut,
-            crate::dial::DialError::NonTorRoutable(a) => {
-                RelayError::Config(format!("relay address {a} is not reachable over Tor"))
-            }
-            crate::dial::DialError::Io(e) => RelayError::Io(e),
-        })?;
+        .map_err(relay_dial_err)?;
 
     let _ = stream.set_nodelay(true);
 
