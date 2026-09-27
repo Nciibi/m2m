@@ -92,8 +92,7 @@ pub async fn connect_via_socks(target: SocketAddr) -> Result<TcpStream, TorError
 }
 
 /// Check if the Tor proxy is reachable by attempting a TCP connection to it.
-pub async fn check_proxy_reachable() -> bool {
-    match tokio::time::timeout(
+pub async fn check_proxy_reachable() -> bool {    match tokio::time::timeout(
         std::time::Duration::from_secs(3),
         TcpStream::connect(TOR_PROXY_ADDR),
     )
