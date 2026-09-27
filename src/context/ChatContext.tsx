@@ -93,7 +93,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const loadConversations = useCallback(async () => {
     try {
-      setConversations(await invoke<ConversationEntry[]>("list_conversations"));
+      setConversations(asList<ConversationEntry>(await invoke("list_conversations")));
     } catch { /* noop */ }
   }, []);
 
@@ -243,7 +243,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       setView("chat");
       try {
-        setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: info.peer_key_hex }));
+        setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: info.peer_key_hex })));
       } catch { /* noop */ }
     } catch (e) {
       addToast("Connection failed: " + e, "error");
@@ -263,7 +263,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       peer_key_hex: conv.peer_key_hex,
     });
     try {
-      setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: conv.peer_key_hex }));
+      setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: conv.peer_key_hex })));
     } catch { /* noop */ }
     // Mark messages as read when opening a conversation
     try {
@@ -527,7 +527,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setActiveConversationId(event.payload.peer_key_hex);
         setView("chat");
         try {
-          setMessages(await invoke<ChatMessage[]>("load_messages", { peerKeyHex: event.payload.peer_key_hex }));
+          setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: event.payload.peer_key_hex })));
         } catch { /* noop */ }
       } else if (stateStr === "disconnected") {
         // For verified peers, stay on ChatView so user can attempt reconnect.
@@ -539,11 +539,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           setActiveConversationId(null);
         }
       }
-      try { setConversations(await invoke<ConversationEntry[]>("list_conversations")); } catch { /* noop */ }
+      try { setConversations(asList<ConversationEntry>(await invoke("list_conversations"))); } catch { /* noop */ }
     });
 
     const unlistenConvMeta = listen<any>("m2m://conversation-meta", async () => {
-      try { setConversations(await invoke<ConversationEntry[]>("list_conversations")); } catch { /* noop */ }
+      try { setConversations(asList<ConversationEntry>(await invoke("list_conversations"))); } catch { /* noop */ }
     });
 
     const unlistenFileReq = listen<any>("m2m://file-request", (event) => {
