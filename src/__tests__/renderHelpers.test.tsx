@@ -164,11 +164,33 @@ describe("SelfDestructTimer", () => {
     expect(screen.getByText(/0:05/)).toBeInTheDocument();
   });
 
-  it("stops ticking after expiry", () => {
+  // The countdown is derived from a ticking clock rather than driven by a
+  // per-component `setInterval`, so there is nothing to clear — and nothing
+  // left running on a message that has already expired.
+  it("runs no interval of its own", () => {
+    const setSpy = vi.spyOn(globalThis, "setInterval");
+    const { unmount } = render(<SelfDestructTimer expiresAt={nowSecs() + 5} />);
+    // useNow's single clock is the only timer, so exactly one is expected.
+    expect(setSpy.mock.calls.length).toBeLessThanOrEqual(1);
+    unmount();
+    setSpy.mockRestore();
+  });
+
+  it("clears its clock on unmount", () => {
     const clearSpy = vi.spyOn(globalThis, "clearInterval");
-    render(<SelfDestructTimer expiresAt={nowSecs() + 1} />);
-    act(() => { vi.advanceTimersByTime(1000); });
+    const { unmount } = render(<SelfDestructTimer expiresAt={nowSecs() + 60} />);
+    unmount();
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
+  });
+
+  it("renders nothing once expired, with no leftover timer", () => {
+    const { container, unmount } = render(
+      <SelfDestructTimer expiresAt={nowSecs() + 1} />,
+    );
+    expect(container).not.toBeEmptyDOMElement();
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(container).toBeEmptyDOMElement();
+    expect(() => unmount()).not.toThrow();
   });
 });
