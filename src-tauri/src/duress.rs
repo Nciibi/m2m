@@ -90,17 +90,12 @@ pub fn derive_verifier_hex(entered: &str, salt: &[u8]) -> Option<String> {
 }
 
 /// Constant-time equality for equal-length byte slices.
-#[cfg(test)]
-fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
+///
+/// Thin alias onto the crate-wide implementation so production code and tests
+/// exercise the same comparator. This used to be `#[cfg(test)]`-only, which
+/// meant the test suite validated a code path production never ran — the
+/// vault's duress check used a plain `==`.
+use crate::crypto::ct_eq;
 
 /// Convenience check composing read + derive + compare. Test-only: the
 /// unlock command composes [`read_verifier`] + [`derive_verifier_hex`]
