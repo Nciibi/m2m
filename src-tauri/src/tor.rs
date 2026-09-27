@@ -47,33 +47,15 @@ pub fn is_enabled() -> bool {
     TOR_ENABLED.load(Ordering::SeqCst)
 }
 
-/// Connect to a peer, routing through Tor if enabled.
-/// Falls back to direct TCP if Tor is disabled.
-pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
-    if is_enabled() {
-        connect_via_tor(addr).await
-    } else {
-        TcpStream::connect(addr)
-            .await
-            .map_err(TorError::Io)
-    }
-}
-
-/// Connect to a peer, routing through Tor if enabled, or directly if not.
-pub async fn connect(addr: SocketAddr) -> Result<TcpStream, TorError> {
-    if is_enabled() {
-        connect_via_tor(addr).await
-    } else {
-        TcpStream::connect(addr)
-            .await
-            .map_err(TorError::Io)
-    }
-}
-
-/// Always route through the SOCKS5 proxy, regardless of [`is_enabled`].
+/// Connect to a target address through the Tor SOCKS5 proxy.
 ///
-/// The `dial` module relies on that distinction to make the Tor/direct branch
-/// explicit rather than implicit in a global flag check.
+/// This function **always** uses the proxy; it does not consult
+/// [`is_enabled`]. The Tor/direct decision belongs to
+/// [`crate::dial::dial_with_timeout`], which is the single chokepoint every
+/// outbound connection in M2M goes through. Keeping the flag check out of
+/// this module is deliberate: a "connect that sometimes uses Tor" helper is
+/// exactly the shape that let the peer-connection paths bypass Tor while the
+/// UI claimed otherwise.
 pub async fn connect_via_socks(target: SocketAddr) -> Result<TcpStream, TorError> {
     tracing::debug!(target = %target, proxy = TOR_PROXY_ADDR, "connecting via Tor SOCKS5");
 
@@ -85,7 +67,8 @@ pub async fn connect_via_socks(target: SocketAddr) -> Result<TcpStream, TorError
 }
 
 /// Check if the Tor proxy is reachable by attempting a TCP connection to it.
-pub async fn check_proxy_reachable() -> bool {    match tokio::time::timeout(
+pub async fn check_proxy_reachable() -> bool {
+    match tokio::time::timeout(
         std::time::Duration::from_secs(3),
         TcpStream::connect(TOR_PROXY_ADDR),
     )
