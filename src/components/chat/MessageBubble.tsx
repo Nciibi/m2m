@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "../ui";
 import { SmileyIcon, ChevronDownIcon, CheckDoubleIcon, ClockIcon } from "../ui/Icons";
 import SelfDestructTimer from "./SelfDestructTimer";
@@ -33,6 +33,11 @@ export default function MessageBubble({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
+  // Records that the currently-visible picker was opened by hover rather than by
+  // the click handler. A real click is preceded by a mouseenter, so without
+  // this the click's `!pickerOpen` toggle immediately closed the picker that
+  // hover had just opened — the button did nothing for mouse users.
+  const hoverOpenedRef = useRef(false);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -72,7 +77,14 @@ export default function MessageBubble({
       {!m.deleted && canReact && (
         <button type="button" className="msg-bubble-action msg-bubble-action--react"
           aria-label="Toggle reaction picker" aria-expanded={pickerOpen}
-          onClick={(e) => { e.stopPropagation(); setPickerOpen((o) => !o); }}>
+          onClick={(e) => {
+            e.stopPropagation();
+            // Keyboard and touch never fire mouseenter, so the toggle is the
+            // only thing that opens the picker there. When hover *did* open
+            // it, this click is consumed instead of closing it again.
+            if (hoverOpenedRef.current) { hoverOpenedRef.current = false; return; }
+            setPickerOpen((o) => !o);
+          }}>
           <SmileyIcon size={14} />
         </button>
       )}
@@ -138,7 +150,7 @@ export default function MessageBubble({
           <SelfDestructTimer expiresAt={m.expires_at} />
         )}
         {/* Read receipt for received messages */}
-        {m.direction === "received" && m.read_at !== null && (
+        {m.direction === "received" && m.read_at !== null && !m.deleted && (
           <span className="msg-read-badge" title={`Read ${new Date(m.read_at * 1000).toLocaleString()}`}>
             ✓✓
           </span>
