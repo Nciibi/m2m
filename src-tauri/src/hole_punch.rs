@@ -378,9 +378,8 @@ async fn connect_sequential(
 ) -> Result<HolePunchResult, ConnectionError> {
     for &addr in peer_candidates {
         tracing::debug!(target = %addr, "attempting TCP connect");
-        match time::timeout(STRATEGY_TIMEOUT, TcpStream::connect(addr)).await {
-            Ok(Ok(stream)) => {
-                let _ = stream.set_nodelay(true);
+        match crate::dial::dial_with_timeout(addr, STRATEGY_TIMEOUT).await {
+            Ok(stream) => {
                 tracing::info!(peer = %addr, "connect succeeded");
                 return Ok(HolePunchResult {
                     stream,
@@ -388,11 +387,8 @@ async fn connect_sequential(
                     remote_addr: addr,
                 });
             }
-            Ok(Err(e)) => {
+            Err(e) => {
                 tracing::warn!(target = %addr, error = %e, "connect failed");
-            }
-            Err(_) => {
-                tracing::warn!(target = %addr, "connect timed out");
             }
         }
     }
@@ -400,18 +396,29 @@ async fn connect_sequential(
 }
 
 /// Internal connect with per-attempt timeout.
+///
+/// Routes through the Tor-aware chokepoint so that enabling Tor actually
+/// affects peer connections rather than only the few paths that remembered
+/// to call `tor::connect`.
 async fn tcp_connect_timeout(
     addr: SocketAddr,
     timeout: Duration,
 ) -> Result<TcpStream, ConnectionError> {
-    match time::timeout(timeout, TcpStream::connect(addr)).await {
-        Ok(Ok(stream)) => {
-            let _ = stream.set_nodelay(true);
-            Ok(stream)
-        }
-        Ok(Err(e)) => Err(ConnectionError::Io(e)),
-        Err(_) => Err(ConnectionError::TimedOut(timeout)),
-    }
+    crate::dial::dial_with_timeout(addr, timeout)
+        .await
+        .map_err(|e| match e {
+            crate::dial::DialError::TimedOut(t) => ConnectionError::TimedOut(t),
+            crate::dial::DialError::Io(e) => ConnectionError::Io(e),
+            // A refused candidate is a normal, expected outcome while
+            // racing strategies — not an I/O fault.
+            crate::dial::DialError::NonTorRoutable(a) => {
+                tracing::debug!(target = %a, "candidate skipped: not Tor-routable");
+                ConnectionError::Io(std::io::Error::new(
+                    std::io::ErrorKind::AddrNotAvailable,
+                    "address is not reachable over Tor",
+                ))
+            }
+        })
 }
 
 // ─── Invite Helpers ─────────────────────────────────────────────────────────
