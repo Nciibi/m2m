@@ -64,9 +64,23 @@ function AppInner() {
     return () => { unlisten.then((fn) => fn()).catch(() => {}); };
   }, []);
 
+  // Auto-lock on idle.
+  //
+  // A silent `catch` here meant that if `lock_vault` failed, the user believed
+  // their vault had auto-locked and it had not. For a tool whose users may be
+  // under physical coercion, "I left it for 5 minutes and it locked itself" is
+  // a claim they might act on — so a failure has to be visible, not swallowed.
+  const { addToast } = useApp();
+  const onIdle = useCallback(() => {
+    invoke("lock_vault").catch((err) => {
+      console.error("idle auto-lock failed", err);
+      addToast("Auto-lock FAILED — lock the vault manually", "error");
+    });
+  }, [addToast]);
+
   useIdleDetection({
     timeoutSecs: securityConfig?.idle_lock_secs ?? 0,
-    onIdle: () => { invoke("lock_vault").catch(() => {}); },
+    onIdle,
   });
 
   // Emergency panic wipe (Ctrl+Alt+Shift+W) — only when explicitly armed
