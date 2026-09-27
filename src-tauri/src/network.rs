@@ -214,6 +214,14 @@ pub struct ConnectionLimiter {
     window_duration: Duration,
 }
 
+impl Default for ConnectionLimiter {
+    /// Same as [`ConnectionLimiter::new`] — the documented default (60s
+    /// window). Exists so `Default` is not a subtly different second code path.
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConnectionLimiter {
     /// Create a new connection limiter with default limits (60s window).
     pub fn new() -> Self {
@@ -385,11 +393,10 @@ pub enum NetworkError {
     PeerClosed,
     #[error("protocol error: {0}")]
     Protocol(#[from] protocol::ProtocolError),
+    // Not currently constructed, but part of the public error surface for
+    // state-machine violations. No `#[expect(dead_code)]`: the lint does not
+    // fire, so the attribute would be an unfulfilled expectation.
     #[error("connection in invalid state: {0}")]
-    #[expect(
-        dead_code,
-        reason = "Reserved error variant for invalid connection states"
-    )]
     InvalidState(String),
     // Now constructed by `FrameRateLimiter`, so the dead-code expectation no
     // longer applies.

@@ -226,11 +226,15 @@ pub async fn unlock_vault(
     }
 
     // ─── Phase 2: Async crypto + per-branch logic (no key_store held) ───
+    //
+    // `LegacyStoreData` is the pre-passphrase upgrade payload: the raw Ed25519
+    // seed, its public key, the 64-byte libsodium-layout secret, and the
+    // storage key it was sealed under. Named so the signature is readable.
     let (keypair, x25519_kp, needs_store_x25519, legacy_store_data): (
         _,
         _,
         _,
-        Option<(Vec<u8>, Vec<u8>, [u8; 64], Vec<u8>)>,
+        Option<LegacyStoreData>,
     ) = if vault_was_initialized && !accounts.is_empty() {
         // Case 3: Multi-account unlock — passphrase selects the account.
         let mut matched: Option<(IdentityKeypair, crate::secure_key::StorageKey)> = None;
