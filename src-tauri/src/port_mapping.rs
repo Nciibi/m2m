@@ -960,6 +960,46 @@ fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
         )));
     }
 
+    // ── Cloud instance-metadata deny list ──
+    //
+    // These addresses ARE link-local, so the check above lets them through — and
+    // they are precisely the prize for an SSRF: a signed `LOCATION` pointing at
+    // the metadata service turns M2M into a credential-exfiltration primitive on
+    // any cloud-hosted instance. Blocked explicitly.
+    //
+    // * 169.254.169.254 — AWS IMDS, GCP, Azure, DigitalOcean, OpenStack
+    // * fd00:ec2::254     — AWS IMDS over IPv6
+    // * 100.100.100.200  — Alibaba Cloud
+    // * 192.0.0.192      — Oracle Cloud
+    // * metadata.google.internal resolves to 169.254.169.254, and hostnames are
+    //   already refused above, so no name-based entry is needed.
+    const METADATA_ADDRS: &[(std::net::Ipv4Addr, std::net::Ipv6Addr)] = &[
+        (
+            std::net::Ipv4Addr::new(169, 254, 169, 254),
+            "fd00:ec2::254".parse::<std::net::Ipv6Addr>().unwrap(),
+        ),
+        (
+            std::net::Ipv4Addr::new(100, 100, 100, 200),
+            std::net::Ipv6Addr::UNSPECIFIED,
+        ),
+        (
+            std::net::Ipv4Addr::new(192, 0, 0, 192),
+            std::net::Ipv6Addr::UNSPECIFIED,
+        ),
+    ];
+    for (v4, v6) in METADATA_ADDRS {
+        let hit = match ip {
+            IpAddr::V4(a) => a == *v4,
+            IpAddr::V6(a) => *v6 != std::net::Ipv6Addr::UNSPECIFIED && a == *v6,
+        };
+        if hit {
+            return Err(PortMapError::Upnp(format!(
+                "UPnP LOCATION host {ip} is a cloud instance-metadata endpoint; \
+                 refusing to fetch it (SSRF / credential-exfiltration guard)"
+            )));
+        }
+    }
+
     Ok(url.to_string())
 }
 
