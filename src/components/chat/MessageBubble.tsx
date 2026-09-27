@@ -64,8 +64,8 @@ export default function MessageBubble({
       // affordances (react / edit / delete) are focusable in their own right.
       role="group"
       aria-label={`Message from ${senderLabel}`}
-      onMouseEnter={() => canReact && setPickerOpen(true)}
-      onMouseLeave={() => setPickerOpen(false)}
+      onMouseEnter={() => { if (canReact) { hoverOpenedRef.current = true; setPickerOpen(true); } }}
+      onMouseLeave={() => { hoverOpenedRef.current = false; setPickerOpen(false); }}
       onContextMenu={(e) => { if (!canEdit && !canDelete) return; e.preventDefault(); setMenuOpen(true); }}
       onKeyDown={(e) => { if (e.key === "Escape") { if (pickerOpen) { setPickerOpen(false); e.stopPropagation(); } if (menuOpen) { setMenuOpen(false); e.stopPropagation(); } } }}
     >
