@@ -345,45 +345,64 @@ mod dial_tests {
     }
 
     /// The property that makes this module load-bearing rather than
-    /// advisory: no other module may dial directly. If someone adds a raw
-    /// `TcpStream::connect` in a peer-facing module, this fails.
+    /// advisory: no module may dial a TCP socket directly. If someone adds a
+    /// raw `TcpStream::connect` in a peer-facing module, this test fails.
     ///
     /// Only `tor.rs` (the transport implementation) and this module are
-    /// allowed to hold the raw call.
+    /// permitted to hold the raw call.
     #[test]
     fn test_no_module_bypasses_the_dial_chokepoint() {
-        let allowed = ["tor.rs", "dial.rs"];
+        /// Modules allowed to contain the raw socket call.
+        const ALLOWED: &[&str] = &["tor.rs", "dial.rs"];
 
-        let offenders: Vec<String> = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("src")
-            .read_dir()
-            .expect("read src/")
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("rs"))
-            .filter(|e| {
-                let name = e.file_name().to_string_lossy().to_string();
-                !allowed.contains(&name.as_str())
-            })
-            .filter_map(|e| {
-                let src = std::fs::read_to_string(e.path()).ok()?;
-                // Ignore the doc/test commentary that legitimately names the
-                // call, and count only real code uses.
-                let real: String = src
+        let src_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders: Vec<String> = Vec::new();
+
+        let mut stack = vec![src_root.clone()];
+        while let Some(dir) = stack.pop() {
+            let entries = std::fs::read_dir(&dir)
+                .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()));
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    // `fuzz/` holds a separate crate with its own deps; skip it.
+                    if path.file_name().and_then(|s| s.to_str()) != Some("fuzz") {
+                        stack.push(path);
+                    }
+                    continue;
+                }
+                if path.extension().and_then(|s| s.to_str()) != Some("rs") {
+                    continue;
+                }
+                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                if ALLOWED.contains(&name.as_str()) {
+                    continue;
+                }
+                let Ok(src) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                // Strip comment lines so prose describing the chokepoint (and
+                // the doc tables in hole_punch.rs) does not trip the check.
+                let code: String = src
                     .lines()
                     .filter(|l| {
-                        let t = l.trim();
-                        !t.starts_with("//") && !t.starts_with("///") && !t.starts_with("|")
+                        let t = l.trim_start();
+                        !t.starts_with("//")
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
-                if real.contains("TcpStream::connect") {
-                    Some(name)
-                } else {
-                    None
+                if code.contains("TcpStream::connect") {
+                    offenders.push(
+                        path.strip_prefix(&src_root)
+                            .unwrap_or(&path)
+                            .display()
+                            .to_string(),
+                    );
                 }
-            })
-            .collect();
+            }
+        }
 
+        offenders.sort();
         assert!(
             offenders.is_empty(),
             "these modules bypass the Tor-aware dial chokepoint — \
