@@ -22,7 +22,7 @@ use tokio::time;
 use thiserror::Error;
 
 use crate::protocol::{
-    self, validate_frame_size, validate_version, PacketType, LENGTH_PREFIX_SIZE,
+    self, validate_frame_size, validate_version, PacketType, LENGTH_PREFIX_SIZE, MIN_FRAME_SIZE,
 };
 
 /// Network operation timeout for reads/writes.
@@ -79,19 +79,19 @@ pub const MAX_INBOUND_BYTES_PER_SEC: u32 = 4 * 1024 * 1024;
 ///
 /// `governor`'s `check()` is non-blocking and takes `&self`, so no lock is
 /// held and the receive loop never stalls on the limiter.
+/// A single GCRA token bucket over the default real-time clock.
+type Bucket = governor::RateLimiter<
+    governor::state::NotKeyed,
+    governor::state::InMemoryState,
+    governor::clock::DefaultClock,
+    governor::middleware::NoOpMiddleware<
+        <governor::clock::DefaultClock as governor::clock::Clock>::Instant,
+    >,
+>;
+
 pub struct FrameRateLimiter {
-    frames: governor::RateLimiter<
-        governor::state::NotKeyed,
-        governor::state::InMemoryState,
-        governor::clock::DefaultClock,
-        governor::middleware::NoOpMiddleware<governor::clock::DefaultClock::Instant>,
-    >,
-    bytes: governor::RateLimiter<
-        governor::state::NotKeyed,
-        governor::state::InMemoryState,
-        governor::clock::DefaultClock,
-        governor::middleware::NoOpMiddleware<governor::clock::DefaultClock::Instant>,
-    >,
+    frames: Bucket,
+    bytes: Bucket,
 }
 
 /// Why a frame was rejected by [`FrameRateLimiter`].
@@ -113,7 +113,7 @@ impl FrameRateLimiter {
 
     /// Build a limiter with explicit per-second budgets.
     pub fn with_limits(frames_per_sec: u32, bytes_per_sec: u32) -> Self {
-        use governor::{clock::DefaultClock, middleware::NoOpMiddleware, state::*, Quota};
+        use governor::Quota;
         use std::num::NonZeroU32;
 
         // A zero budget is meaningless; clamp to 1 so `NonZeroU32` is always
@@ -122,10 +122,8 @@ impl FrameRateLimiter {
         let b = NonZeroU32::new(bytes_per_sec).unwrap_or(NonZeroU32::MIN);
 
         Self {
-            frames: <RateLimiter<NotKeyed, InMemoryState, DefaultClock,
-                NoOpMiddleware<DefaultClock::Instant>>>::direct(Quota::per_second(f)),
-            bytes: <RateLimiter<NotKeyed, InMemoryState, DefaultClock,
-                NoOpMiddleware<DefaultClock::Instant>>>::direct(Quota::per_second(b)),
+            frames: Bucket::direct(Quota::per_second(f)),
+            bytes: Bucket::direct(Quota::per_second(b)),
         }
     }
 
