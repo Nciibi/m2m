@@ -46,8 +46,11 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
       {showAdd && <AddFamilyModal onClose={() => setShowAdd(false)} onDone={onRefresh} />}
 
       {family.map((m) => {
-        const isExpired = m.expires_at !== null && m.expires_at * 1000 < Date.now();
-        const daysLeft = m.expires_at ? Math.ceil((m.expires_at * 1000 - Date.now()) / 86400000) : null;
+        // `now` comes from useNow(): reading Date.now() inline here was impure
+        // and never re-evaluated, so "expires in N days" could sit stale for the
+        // lifetime of the window.
+        const isExpired = m.expires_at !== null && m.expires_at * 1000 < now;
+        const daysLeft = m.expires_at ? Math.ceil((m.expires_at * 1000 - now) / 86400000) : null;
 
         return (
           <div key={m.public_key_hex} className="conv-item">
