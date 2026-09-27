@@ -982,9 +982,9 @@ mod tests {
         let n = msg.len();
         msg[n - 4..].copy_from_slice(&crc.to_be_bytes());
 
-        let (addr, _) = parse_binding_response(&msg, &txn)
+        let addr = parse_binding_response(&msg, &txn)
             .expect("a correctly-fingerprinted response must parse");
-        assert_eq!(addr, "127.0.0.1:0".parse().expect("addr"));
+        assert_eq!(addr.ip().to_string(), "127.0.0.1");
     }
 
     /// A response whose FINGERPRINT does not match the body must be rejected —
@@ -1055,7 +1055,7 @@ mod tests {
         msg.extend_from_slice(&0x8022u16.to_be_bytes()); // SOFTWARE
         msg.extend_from_slice(&4u16.to_be_bytes());
         msg.extend_from_slice(b"test");
-        let (addr, _) = parse_binding_response(&msg, &txn).expect("must parse");
+        let addr = parse_binding_response(&msg, &txn).expect("must parse");
         assert_eq!(addr.port(), 0);
     }
 }
