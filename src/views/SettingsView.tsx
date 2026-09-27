@@ -4,7 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
 import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
-import type { ConnectivityStatus } from "../types";
+import type { NetworkSettings } from "../types";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useT } from "../i18n/I18nContext";
@@ -164,13 +164,25 @@ export default function SettingsView() {
               </label>
               <span className="settings-hint">Route connections via Tor</span>
               <Button size="xs" variant="secondary" onClick={async () => {
-                addToast("Testing Tor…", "info");
+                addToast(t("settings.testingTor"), "info");
                 try {
-                  const result = await invoke<ConnectivityStatus>("check_connectivity");
-                  const torOk = result?.tor_reachable ?? result?.tor ?? false;
-                  addToast(torOk ? "Tor ✓" : "Tor not reachable via current proxy", torOk ? "success" : "warning");
+                  // `tor_reachable` comes from `get_network_settings`
+                  // (`tor::NetworkSettings`), NOT from `check_connectivity`
+                  // (`stun::ConnectivityStatus`).
+                  //
+                  // The old code asked `check_connectivity` for
+                  // `result.tor_reachable ?? result.tor`, neither of which that
+                  // struct has — so the expression was always `false` and this
+                  // button reported "Tor not reachable" no matter what. Typing
+                  // the call is what surfaced it.
+                  const settings = await invoke<NetworkSettings>("get_network_settings");
+                  const torOk = settings.tor_reachable;
+                  addToast(
+                    torOk ? t("settings.torReachable") : t("settings.torUnreachable"),
+                    torOk ? "success" : "warning",
+                  );
                 } catch (e) {
-                  addToast("Tor test unavailable: " + e, "warning");
+                  addToast(t("settings.torTestUnavailable", { err: String(e) }), "warning");
                 }
               }}>Test Tor</Button>
             </div>
