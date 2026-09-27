@@ -134,7 +134,7 @@ the privacy rules the rest obeyed. In particular:
 
 | Suite | Result |
 | --- | --- |
-| `cargo test --all-targets` (app) | 379 passed |
+| `cargo test --all-targets` (app) | 378 passed |
 | `cargo test` (relay server) | 14 passed |
 | `cargo clippy --all-targets -- -D warnings` | clean |
 | `cargo fmt --check` | clean |
