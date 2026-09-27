@@ -6,9 +6,16 @@ import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, Glob
 import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
+import { useT } from "../i18n/I18nContext";
+import { ConfirmDialog, DuressPassphraseDialog } from "../components/ui/ConfirmDialog";
 import { useTheme } from "../context/ThemeContext";
 
 export default function SettingsView() {
+  const t = useT();
+  // Destructive-action dialogs. These used to be `window.confirm` /
+  // `window.prompt`; see ConfirmDialog for why that mattered here.
+  const [duressOpen, setDuressOpen] = useState(false);
+  const [panicArmOpen, setPanicArmOpen] = useState(false);
   const { identity, toasts, addToast, removeToast, setView } = useApp();
   const { theme, setTheme, resolvedTheme, accentColor, setAccentColor } = useTheme();
   const {
