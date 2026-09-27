@@ -663,7 +663,14 @@ export function translate(locale: LocaleCode, path: string): string {
  * t("toast.exportFailed", { err: "disk full" });   // "Export failed: disk full"
  * ```
  */
-export function makeT(locale: LocaleCode) {
+/** Signature of a bound translator, exported so pure helpers can accept one
+ *  as a parameter instead of depending on React context. */
+export type Translator = (
+  path: string,
+  values?: Record<string, string | number>,
+) => string;
+
+export function makeT(locale: LocaleCode): Translator {
   return (path: string, values?: Record<string, string | number>): string =>
     interpolate(translate(locale, path), values);
 }

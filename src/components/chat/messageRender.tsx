@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ChatMessage } from "../../types";
+import { makeT, type Translator } from "../../i18n/catalog";
 
 /** Simple markdown renderer: bold, italic, inline code, links */
 export function renderMarkdown(content: string): ReactNode {

@@ -1,7 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, ReactNode } from "react";
-import { LOCALES, LocaleCode, makeT, Translation } from "./catalog";
-
-type Translator = (path: string, values?: Record<string, string | number>) => string;
+import { LOCALES, LocaleCode, makeT, Translation, type Translator } from "./catalog";
 
 interface I18nContextValue {
   locale: LocaleCode;
