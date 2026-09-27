@@ -925,7 +925,11 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
                 let mut line_buf = Vec::with_capacity(128);
                 loop {
                     let mut byte = [0u8; 1];
-                    if reader.read(&mut byte).await.unwrap_or(0) == 0 {
+                    let got = time::timeout(UPNP_READ_TIMEOUT, reader.read(&mut byte))
+                        .await
+                        .map_err(|_| PortMapError::Upnp("HTTP chunk header read timed out".into()))?
+                        .map_err(PortMapError::Io)?;
+                    if got == 0 {
                         break;
                     }
                     if byte[0] == b'\n' {
@@ -944,10 +948,30 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
                 if chunk_size == 0 {
                     break; // End of chunks
                 }
+                // The chunk size comes from an unauthenticated HTTP response
+                // and was previously used directly as an allocation length, so
+                // a hostile "router" could ask for a 68 GB buffer. Rust's
+                // allocation-failure path aborts the process, and this binary
+                // is built with `panic = "abort"`.
+                if chunk_size > MAX_HTTP_BODY {
+                    return Err(PortMapError::Upnp(format!(
+                        "chunk size {chunk_size} exceeds the {MAX_HTTP_BODY} byte limit"
+                    )));
+                }
+                if body.len() + chunk_size > MAX_HTTP_BODY {
+                    return Err(PortMapError::Upnp(format!(
+                        "response body exceeds the {MAX_HTTP_BODY} byte limit"
+                    )));
+                }
                 let mut chunk = vec![0u8; chunk_size];
                 let mut read_total = 0;
                 while read_total < chunk_size {
-                    let n = reader.read(&mut chunk[read_total..]).await
+                    // Bounded like every other read here — the chunked path
+                    // previously had no timeout at all, so a hostile peer could
+                    // stall the task forever mid-body.
+                    let n = time::timeout(UPNP_READ_TIMEOUT, reader.read(&mut chunk[read_total..]))
+                        .await
+                        .map_err(|_| PortMapError::Upnp("HTTP chunk read timed out".into()))?
                         .map_err(PortMapError::Io)?;
                     if n == 0 {
                         break;
@@ -957,19 +981,30 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
                 body.extend_from_slice(&chunk);
                 // Consume trailing CRLF.
                 let mut trail = [0u8; 2];
-                let _ = reader.read(&mut trail).await;
+                let _ = time::timeout(UPNP_READ_TIMEOUT, reader.read(&mut trail)).await;
             }
             return Ok((status, body));
         }
     }
 
     if let Some(cl) = get_header("Content-Length") {
+        // `Content-Length` is attacker-chosen (the responder to our SSDP probe
+        // is whatever answers first) and was used directly as an allocation
+        // length: `Content-Length: 500000000` meant a 500 MB `vec![]`, whose
+        // allocation-failure path aborts the process under `panic = "abort"`.
         let remaining: usize = cl.parse().unwrap_or(0);
+        if remaining > MAX_HTTP_BODY || body.len() + remaining > MAX_HTTP_BODY {
+            return Err(PortMapError::Upnp(format!(
+                "Content-Length {remaining} exceeds the {MAX_HTTP_BODY} byte limit"
+            )));
+        }
         let to_read = remaining.saturating_sub(body.len());
         let mut rest = vec![0u8; to_read];
         let mut read_total = 0;
         while read_total < to_read {
-            let n = reader.read(&mut rest[read_total..]).await
+            let n = time::timeout(UPNP_READ_TIMEOUT, reader.read(&mut rest[read_total..]))
+                .await
+                .map_err(|_| PortMapError::Upnp("HTTP body read timed out".into()))?
                 .map_err(PortMapError::Io)?;
             if n == 0 {
                 break;
@@ -989,7 +1024,7 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
                 break;
             }
             body.extend_from_slice(&chunk[..n]);
-            if body.len() > 256 * 1024 {
+            if body.len() > MAX_HTTP_BODY {
                 break;
             }
         }
