@@ -265,7 +265,7 @@ impl Group {
             tentative.commit(chain);
         }
 
-        let plaintext = crypto::unpad_message_variable(&padded)
+        let plaintext = crypto::unpad_message_variable(&plaintext)
             .map_err(|e| format!("unpad failed: {e}"))?;
 
         Ok(plaintext)
