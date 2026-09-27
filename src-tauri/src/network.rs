@@ -833,6 +833,122 @@ mod network_tests {
         assert!(limiter.check(ip), "window expired — new connection should be allowed");
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // ConnectionLimiter — per-IP map reaping
+    // ═══════════════════════════════════════════════════════════
+
+    /// The per-IP map used to grow without bound: `check()` creates an entry
+    /// for every source IP (including rejected ones) and only drains an entry
+    /// when that same IP returns. A rotating source (trivial from an IPv6
+    /// /64) leaked one entry per attempt, forever.
+    #[test]
+    fn test_limiter_reap_removes_expired_entries() {
+        let window = Duration::from_millis(150);
+        let limiter = ConnectionLimiter::with_window(window);
+
+        // Ten distinct source addresses, each well over the per-IP cap so
+        // `check()` rejects them — but it still inserts their window entry.
+        for i in 1..=10u8 {
+            let ip: IpAddr = format!("10.0.0.{i}").parse().unwrap();
+            for _ in 0..(MAX_CONNECTIONS_PER_IP + 1) {
+                let _ = limiter.check(ip);
+            }
+        }
+        assert_eq!(limiter.tracked_ips(), 10, "all ten IPs are tracked");
+
+        // Let the windows age out entirely.
+        std::thread::sleep(window + Duration::from_millis(50));
+
+        assert_eq!(limiter.reap(), 10, "every expired entry should be dropped");
+        assert_eq!(limiter.tracked_ips(), 0, "map must not grow unbounded");
+    }
+
+    /// Reaping must not evict entries that are still inside their window, or
+    /// it would become a trivial bypass of the per-IP limit.
+    #[test]
+    fn test_limiter_reap_keeps_live_entries() {
+        let limiter = ConnectionLimiter::with_window(Duration::from_secs(60));
+        let ip: IpAddr = "10.0.0.1".parse().unwrap();
+        for _ in 0..3 {
+            assert!(limiter.check(ip));
+        }
+        assert_eq!(limiter.reap(), 0, "live windows must survive reaping");
+        assert_eq!(limiter.tracked_ips(), 1);
+        // The per-IP limit still applies after a reap.
+        for _ in 0..(MAX_CONNECTIONS_PER_IP - 3) {
+            assert!(limiter.check(ip));
+        }
+        assert!(!limiter.check(ip), "per-IP limit still enforced after reap");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FrameRateLimiter
+    // ═══════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_frame_limiter_allows_burst_up_to_quota() {
+        let limiter = FrameRateLimiter::with_limits(10, 1024 * 1024);
+        for i in 0..10 {
+            assert_eq!(
+                limiter.check(16),
+                RateLimitVerdict::Allowed,
+                "frame {i} is within budget"
+            );
+        }
+    }
+
+    #[test]
+    fn test_frame_limiter_rejects_frame_flood() {
+        let limiter = FrameRateLimiter::with_limits(5, 1024 * 1024);
+        for _ in 0..5 {
+            assert_eq!(limiter.check(16), RateLimitVerdict::Allowed);
+        }
+        assert_eq!(
+            limiter.check(16),
+            RateLimitVerdict::TooManyFrames,
+            "the 6th frame in the burst must be rejected"
+        );
+    }
+
+    /// Few-but-huge frames must also be throttled: the frame-count budget
+    /// alone lets a peer send 20 × 256 KiB per second.
+    #[test]
+    fn test_frame_limiter_throttles_bytes_independently_of_count() {
+        // Generous frame budget, tight byte budget.
+        let limiter = FrameRateLimiter::with_limits(1000, 4096);
+        assert_eq!(limiter.check(3000), RateLimitVerdict::Allowed);
+        assert_eq!(limiter.check(3000), RateLimitVerdict::TooManyBytes);
+    }
+
+    /// A frame larger than the entire per-second budget can never be
+    /// admitted. This must be a clean rejection, not a wrapping subtraction
+    /// that produces a tiny charge.
+    #[test]
+    fn test_frame_limiter_oversized_frame_is_rejected_not_wrapped() {
+        let limiter = FrameRateLimiter::with_limits(1000, 4096);
+        assert_eq!(
+            limiter.check(usize::MAX),
+            RateLimitVerdict::TooManyBytes,
+            "an absurd length must reject, not wrap to a small charge"
+        );
+    }
+
+    /// A zero-byte body must not panic on the `NonZeroU32` conversion.
+    #[test]
+    fn test_frame_limiter_zero_length_frame_is_safe() {
+        let limiter = FrameRateLimiter::with_limits(10, 4096);
+        assert_eq!(limiter.check(0), RateLimitVerdict::Allowed);
+    }
+
+    /// Zero budgets must not panic when building the limiter.
+    #[test]
+    fn test_frame_limiter_zero_budget_does_not_panic() {
+        let limiter = FrameRateLimiter::with_limits(0, 0);
+        // Clamped to 1/s, so the first frame is admitted and the rest are not.
+        let _ = limiter.check(1);
+        let _ = limiter.check(1);
+    }
+
     #[test]
     fn test_limiter_ipv6() {
         let limiter = ConnectionLimiter::new();
