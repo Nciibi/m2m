@@ -1259,15 +1259,6 @@ impl CachedSenderKey {
         self.key.zeroize();
         self.nonce.zeroize();
     }
-
-    /// Produce an independent copy for insertion into the live cache,
-    /// transferring the secret rather than sharing a reference.
-    fn clone_no_zeroize(&self) -> CachedSenderKey {
-        CachedSenderKey {
-            nonce: self.nonce,
-            key: self.key,
-        }
-    }
 }
 
 /// Context strings for Sender Key HKDF steps.
@@ -1305,44 +1296,101 @@ impl SenderKeyChain {
         Ok((aead_nonce, msg_key))
     }
 
-    /// Derive a message key for a specific message number (for out-of-order messages).
-    /// Caches intermediate keys; subsequent calls for the same number remain cached.
-    pub fn peek_message_key(&mut self, message_number: u64) -> Result<([u8; 24], [u8; 32]), CryptoError> {
-        // Check cache first
+    /// Derive the message key for `message_number` **without mutating state**.
+    ///
+    /// Handles both cases the old `peek_message_key` conflated:
+    ///
+    /// * **Cache hit** — the key is already stored (a genuinely delayed
+    ///   message). Returns it marked `was_cached`; the caller removes the
+    ///   entry on commit, consuming the key.
+    /// * **Derive forward** — walks the chain from its current position,
+    ///   staging every intermediate key. The chain is untouched; commit
+    ///   installs the new chain key, message number, and the staged skipped
+    ///   keys.
+    ///
+    /// The gap is bounded by [`MAX_GAP_DERIVATION`] (matching the Double
+    /// Ratchet) so a forged large message number cannot burn unbounded CPU,
+    /// and the staged set is bounded by `max_cache` so memory cannot be
+    /// exhausted by an unauthenticated frame.
+    pub fn tentative_message_key(
+        &self,
+        message_number: u64,
+    ) -> Result<SenderKeyTentative, CryptoError> {
+        // ── Fast path: the key is already cached (out-of-order delivery) ──
         if let Some(cached) = self.cached_keys.get(&message_number) {
-            return Ok((cached.nonce, cached.key));
-        }
-
-        // Derive forward to the target message number
-        while self.message_number <= message_number {
-            let msg_key_out = hkdf(&self.chain_key, b"", SENDER_MSG_KEY_INFO, 56);
-            let mut aead_nonce = [0u8; 24];
-            let mut msg_key = [0u8; 32];
-            aead_nonce.copy_from_slice(&msg_key_out[..24]);
-            msg_key.copy_from_slice(&msg_key_out[24..56]);
-
-            // Cache the key at the current message number
-            if self.cached_keys.len() >= self.max_cache {
-                return Err(CryptoError::DoubleRatchetError(
-                    "sender key cache full".into(),
-                ));
-            }
-            self.cached_keys.insert(self.message_number, CachedSenderKey {
-                nonce: aead_nonce,
-                key: msg_key,
+            return Ok(SenderKeyTentative {
+                nonce: cached.nonce,
+                key: cached.key,
+                message_number,
+                chain_key: self.chain_key,
+                next_message_number: self.message_number,
+                staged: Vec::new(),
+                was_cached: true,
             });
-
-            // Advance chain key
-            let next_key_out = hkdf(&self.chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
-            self.chain_key.copy_from_slice(&next_key_out);
-            self.message_number += 1;
         }
 
-        self.cached_keys.remove(&message_number)
-            .map(|c| (c.nonce, c.key))
-            .ok_or_else(|| CryptoError::DoubleRatchetError(
-                "sender key not found after derivation".into(),
-            ))
+        // ── Reject numbers already consumed, and absurd gaps, before
+        //    deriving anything ──
+        if message_number < self.message_number {
+            return Err(CryptoError::DoubleRatchetError(format!(
+                "sender key for message {message_number} is behind the chain \
+                 (already consumed at {})",
+                self.message_number
+            )));
+        }
+        let gap = message_number - self.message_number;
+        if gap as usize > MAX_GAP_DERIVATION {
+            return Err(CryptoError::DoubleRatchetError(format!(
+                "message number {message_number} is {gap} ahead — exceeds max gap \
+                 derivation ({MAX_GAP_DERIVATION})"
+            )));
+        }
+        if self.cached_keys.len() + gap as usize > self.max_cache {
+            return Err(CryptoError::DoubleRatchetError(
+                "sender key cache full".into(),
+            ));
+        }
+
+        // ── Derive on locals only ──
+        let mut chain_key = self.chain_key;
+        let mut num = self.message_number;
+        let mut staged: Vec<(u64, CachedSenderKey)> = Vec::new();
+        let mut target: Option<([u8; 24], [u8; 32])> = None;
+
+        while num <= message_number {
+            let out = hkdf(&chain_key, b"", SENDER_MSG_KEY_INFO, 56);
+            let mut nonce = [0u8; 24];
+            let mut key = [0u8; 32];
+            nonce.copy_from_slice(&out[..24]);
+            key.copy_from_slice(&out[24..56]);
+            out.zeroize();
+
+            if num == message_number {
+                target = Some((nonce, key));
+            } else {
+                staged.push((num, CachedSenderKey { nonce, key }));
+            }
+
+            let next = hkdf(&chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
+            chain_key.zeroize();
+            chain_key.copy_from_slice(&next);
+            next.zeroize();
+            num += 1;
+        }
+
+        let (nonce, key) = target.ok_or_else(|| {
+            CryptoError::DoubleRatchetError("sender key derivation did not reach target".into())
+        })?;
+
+        Ok(SenderKeyTentative {
+            nonce,
+            key,
+            message_number,
+            chain_key,
+            next_message_number: num,
+            staged,
+            was_cached: false,
+        })
     }
 
     /// Current message number (next message will get this number).
