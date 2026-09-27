@@ -131,7 +131,10 @@ export function asChatMessage(v: unknown): ChatMessage | null {
   // from the payload entirely; an absent key means the same as empty.
   // `null` is still rejected: the Rust field is a non-nullable `String`, so the
   // backend can never emit it, and accepting it would only widen the boundary.
-  if (!isString(m.sender_peer_key_hex) || !isPeerKeyHex(m.sender_peer_key_hex)) return null;
+  if (m.sender_peer_key_hex !== undefined) {
+    if (!isString(m.sender_peer_key_hex)) return null;
+    if (m.sender_peer_key_hex !== "" && !isPeerKeyHex(m.sender_peer_key_hex)) return null;
+  }
 
   // `reactions` becomes object keys AND visible labels, so both the key and
   // the values are bounded.
