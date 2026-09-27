@@ -210,7 +210,19 @@ pub async fn unlock_vault(
         })
         .await
         .unwrap_or(None);
-        if derived_hex.as_deref() == Some(stored_hash_hex.as_str()) {
+        // Constant-time comparison. A plain `==` on the hex verifier
+        // short-circuits on the first differing byte, which is the wrong
+        // property for a duress feature: its whole guarantee is that an
+        // observer cannot distinguish "duress passphrase" from "wrong
+        // passphrase". Argon2id's ~100 ms cost dominates any timing signal in
+        // practice, but relying on that is exactly the sort of assumption
+        // that rots. Both operands are fixed-width hex, so length is not a
+        // secret here.
+        let duress_match = match derived_hex.as_deref() {
+            Some(d) => crate::crypto::ct_eq(d.as_bytes(), stored_hash_hex.as_bytes()),
+            None => false,
+        };
+        if duress_match {
             // Duress confirmed: destroy everything, then answer EXACTLY like
             // a wrong passphrase ("No account matches this passphrase.").
             tracing::warn!("DURESS passphrase entered — wiping vault");
