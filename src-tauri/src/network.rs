@@ -44,26 +44,45 @@ const MAX_TOTAL_CONNECTIONS: usize = 50;
 
 /// Maximum inbound frames per second from a single established peer.
 ///
-/// 20/s is generous for chat: a human cannot type 20 messages per second, and
-/// even a 256 KiB file-chunk transfer only needs ~4/s. The previous state of
-/// this code declared `protocol::RATE_LIMIT_MSGS_PER_SEC = 20` and never read
-/// it, while depending on the `governor` crate with zero imports — so an
-/// established peer could send frames at line rate, each costing a buffer
-/// allocation, a MessagePack parse, a bounded HKDF gap walk, and for
-/// `EncryptedMessage` a SQLite write plus `PRAGMA optimize`.
-pub const MAX_INBOUND_FRAMES_PER_SEC: u32 = 20;
+/// The previous state of this code declared
+/// `protocol::RATE_LIMIT_MSGS_PER_SEC = 20` and never read it, while depending
+/// on the `governor` crate with zero imports — so an established peer could
+/// send frames at line rate, each costing a buffer allocation, a MessagePack
+/// parse, a bounded HKDF gap walk, and for `EncryptedMessage` a SQLite write
+/// plus `PRAGMA optimize`.
+///
+/// ## Sizing
+///
+/// 30/s is far above conversational use and is the *binding* constraint for
+/// large frames: at the 256 KiB per-type ceiling that is ~7.5 MiB/s of
+/// worst-case frame processing for one connection. The byte budget below is
+/// deliberately set ABOVE that, so for a peer sending maximum-size frames the
+/// frame limit always trips first — which is the one that represents genuine
+/// abuse. Keeping the byte budget higher than the frame-implied ceiling is
+/// what stops an ordinary file transfer from ever being mistaken for a flood.
+///
+/// Both budgets are token buckets, so a full second of burst is tolerated:
+/// a file transfer that pauses briefly (ACK round-trip, TCP backpressure) does
+/// not accumulate a deficit and get punished for it.
+pub const MAX_INBOUND_FRAMES_PER_SEC: u32 = 30;
 
 /// Maximum inbound bytes per second from a single established peer.
 ///
-/// The frame-count limit alone is insufficient: at the per-type ceiling a
-/// single frame can be ~256 KiB, so 20 frames/s of file chunks is ~5 MiB/s of
-/// unauthenticated work. This budget bounds bandwidth-driven cost
-/// independently, so a peer sending few-but-huge frames is throttled too.
+/// Bounds bandwidth-driven cost independently of frame count, so a peer
+/// sending few-but-huge frames is throttled too. Set to 16 MiB/s — roughly
+/// twice what [`MAX_INBOUND_FRAMES_PER_SEC`] permits at maximum frame size, so
+/// it is a backstop rather than the everyday limit.
+pub const MAX_INBOUND_BYTES_PER_SEC: u32 = 16 * 1024 * 1024;
+
+/// Consecutive rate-limit breaches tolerated before the connection is dropped.
 ///
-/// 4 MiB/s comfortably sustains a file transfer (which is the intended use of
-/// large frames) while capping the worst case at 4 MiB/s of parsing and
-/// allocation per connection.
-pub const MAX_INBOUND_BYTES_PER_SEC: u32 = 4 * 1024 * 1024;
+/// A GCRA token bucket tolerates a full second of burst, so a single breach
+/// means the peer has been over budget for a full second — which is already
+/// strong evidence of a flood. But dropping the session on the first breach
+/// makes a false positive very expensive (the user loses an established
+/// connection), so allow a short grace window. Sized so a legitimately
+/// over-budget peer gets time to back off rather than being killed.
+pub const MAX_INBOUND_RATE_LIMIT_STRIKES: u32 = 5;
 
 /// Per-connection inbound frame rate limiter.
 ///
