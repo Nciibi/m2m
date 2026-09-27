@@ -803,15 +803,14 @@ async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_i
             .unwrap_or_default()
             .as_secs();
 
-        // `.max(1)` guarantees a non-zero divisor, and the `speed > 0` guard
-        // covers the zero case — hence the manual checks rather than
-        // `checked_div`. Documented here so the two are not "simplified" into
-        // a divide-by-zero.
+        // `elapsed` is `.max(1)` so the divisor is never zero, and `checked_div`
+        // returns `None` for a zero transfer — together they make both
+        // divisions total, so neither can panic on hostile or degenerate input.
         let elapsed = now.saturating_sub(t.created_at).max(1);
         let bytes_completed = t.chunks_acked as u64 * protocol::MAX_FILE_CHUNK_SIZE as u64;
-        let speed = bytes_completed / elapsed; // bytes/sec
+        let speed = bytes_completed / elapsed; // bytes/sec; divisor >= 1
         let remaining = t.total_size.saturating_sub(bytes_completed);
-        let eta = if speed > 0 { remaining / speed } else { 0 };
+        let eta = remaining.checked_div(speed).unwrap_or(0);
 
         let _ = app_handle.emit(
             "m2m://transfer-progress",
