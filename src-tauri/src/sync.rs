@@ -187,14 +187,27 @@ pub async fn connect_sync_device(
 }
 
 /// Authorize an already-connected peer as a sync device.
-/// The peer must have sent SyncDeviceInfo, which is handled in the receive loop.
-/// This function validates the token hash and completes the pairing.
+///
+/// `sync_token` is the `m2m-sync://…` string the primary generated. It is sent
+/// in our `SyncDeviceInfo` so the primary can validate it before pairing and
+/// before it hands over any conversation metadata.
 #[tauri::command]
 pub async fn pair_sync_device(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
+    sync_token: String,
 ) -> Result<(), String> {
+    // Validate the shape before putting it on the wire. The authoritative
+    // check is the primary's lookup against its `pending_invites` map; this
+    // only rejects obviously malformed input early.
+    let token = sync_token
+        .strip_prefix("m2m-sync://")
+        .ok_or("invalid sync invite format")?;
+    if token.is_empty() {
+        return Err("sync invite token is empty".to_string());
+    }
+
     // Check if this device is already paired by this peer_key_hex
     let already_paired = {
         let mgr = state.sync_manager.read().await;
@@ -214,9 +227,7 @@ pub async fn pair_sync_device(
             device_id: mgr.device_id.clone(),
             device_name: mgr.device_name.clone(),
             sync_protocol_version: SYNC_PROTOCOL_VERSION,
-            // Present the invite token so the primary can authorize us. The
-            // primary never echoes a token back — pairing is one-directional.
-            sync_token: sync_token.to_string(),
+            sync_token: sync_token.clone(),
         }
     };
 
