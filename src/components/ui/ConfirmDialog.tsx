@@ -43,7 +43,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            variant={destructive ? "danger" : "primary"}
+            variant={destructive ? "danger" : "default"}
             disabled={busy}
             onClick={async () => {
               setBusy(true);
