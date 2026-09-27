@@ -424,6 +424,40 @@ async fn handle_connect(
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
+/// Releases a per-IP and global connection slot on drop.
+///
+/// Held for the whole lifetime of a connection task. Using a guard (rather
+/// than an inline release at the end of the handler) is what keeps the slot
+/// held for as long as the socket is actually open — including after
+/// `handle_register` hands ownership to `registration_reader`.
+struct ConnectionSlot {
+    ip: std::net::IpAddr,
+    counts: Arc<std::sync::Mutex<std::collections::HashMap<std::net::IpAddr, usize>>>,
+    total: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        // `unwrap_or_else(|e| e.into_inner())` rather than `unwrap()`: a
+        // poisoned mutex would otherwise panic inside `drop`, during unwind,
+        // which aborts. The critical section is a couple of integer updates,
+        // so the contained data is still usable after a poison.
+        let mut counts = self
+            .counts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(c) = counts.get_mut(&self.ip) {
+            *c = c.saturating_sub(1);
+            if *c == 0 {
+                counts.remove(&self.ip);
+            }
+        }
+        drop(counts);
+        self.total
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -507,6 +541,23 @@ async fn main() {
                 let conn_counts = conn_counts.clone();
                 let total_conns = total_conns.clone();
                 tokio::spawn(async move {
+                    // Releases the per-IP and global connection slots when this
+                    // task ends, however it ends.
+                    //
+                    // Previously the release was inline after the handler
+                    // returned. But `handle_register` returns as soon as it has
+                    // spawned `registration_reader`, which then owns the socket
+                    // for up to READER_IDLE_TIMEOUT — and a bridged connection
+                    // can then live indefinitely. So the slots were handed back
+                    // while the sockets were still open, meaning
+                    // MAX_TOTAL_CONNECTIONS bounded only handshakes in flight
+                    // and did **not** bound live connections at all.
+                    let _slot = ConnectionSlot {
+                        ip: peer_addr.ip(),
+                        counts: conn_counts,
+                        total: total_conns,
+                    };
+
                     let mut stream = stream;
                     // Read the first frame to determine client's intent.
                     match read_frame(&mut stream).await {
@@ -526,18 +577,6 @@ async fn main() {
                         Err(e) => {
                             tracing::warn!(peer = %peer_addr, error = %e, "failed to read initial frame");
                         }
-                    }
-
-                    // Release connection slots
-                    {
-                        let mut counts = conn_counts.lock().unwrap();
-                        if let Some(c) = counts.get_mut(&peer_addr.ip()) {
-                            *c = c.saturating_sub(1);
-                            if *c == 0 {
-                                counts.remove(&peer_addr.ip());
-                            }
-                        }
-                        total_conns.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 });
             }
