@@ -829,6 +829,35 @@ impl DoubleRatchet {
         let msg_num = self.send_message_number;
         self.send_message_number += 1;
 
+        // ── Bind the DR header into the AAD ──
+        //
+        // The `DRHeader` travels in cleartext and, before this change, nothing
+        // authenticated it. Two consequences:
+        //
+        // 1. **Active DoS by field stripping.** An on-path attacker could
+        //    delete `ratchet_key` from a ratcheted frame. The receiver would
+        //    treat it as an in-chain frame with `message_number = 0 <
+        //    recv_message_number`, miss the skipped-key cache, and reject it.
+        //    The receiver stays on chain A while the sender is on chain B, so
+        //    every subsequent frame fails until the sender's next ratchet.
+        // 2. **Metadata disclosure.** DH-ratchet boundaries and per-chain
+        //    message counts were freely readable by any observer.
+        //
+        // Folding the header into the AEAD's associated data makes both fields
+        // tamper-evident: a stripped or altered header changes the AAD, the
+        // tag fails to verify, and — because receive is transactional — no
+        // ratchet state is disturbed.
+        //
+        // The leading flag byte is a domain separator so a header-less frame
+        // can never produce the same AAD as a headered one.
+        let mut full_aad = Vec::with_capacity(aad.len() + 1 + 32 + 8);
+        full_aad.extend_from_slice(aad);
+        full_aad.push(u8::from(ratchet_pub.is_some()));
+        if let Some(pk) = ratchet_pub {
+            full_aad.extend_from_slice(&pk);
+        }
+        full_aad.extend_from_slice(&msg_num.to_be_bytes());
+
         // Encrypt with XChaCha20-Poly1305
         let nonce: [u8; 24] = random_bytes(24)
             .try_into()
