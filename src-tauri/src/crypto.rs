@@ -2657,64 +2657,61 @@ mod crypto_tests {
     /// then reject every subsequent frame too, because it is still on chain A
     /// while the sender is on chain B.
     #[test]
-    fn test_dr_header_tampering_is_detected() {
-        let (mut alice, mut bob) = make_dr_pair();
+    fn test_dr_stripped_ratchet_key_is_rejected_and_causes_no_desync() {
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
-        // In-order message first, so Bob's counter is non-zero.
-        let (_, n0, nonce0, c0) = alice.encrypt(b"first", &aad, false).unwrap();
-        bob.decrypt(&c0, &nonce0, &aad, n0, None).unwrap();
+        // Sanity: an untampered ratcheted frame decrypts.
+        {
+            let (mut alice, mut bob) = make_dr_pair();
+            let (rk, num, nonce, ct) = alice.encrypt(b"ratcheted", &aad, true).unwrap();
+            assert!(rk.is_some(), "should carry a ratchet key");
+            assert_eq!(
+                &bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(),
+                b"ratcheted"
+            );
+        }
 
-        // A genuine ratcheted message.
-        let (rk, num, nonce, ct) = alice.encrypt(b"ratcheted", &aad, true).unwrap();
-        assert!(rk.is_some(), "the message should carry a ratchet key");
-
-        // Sanity: the untampered frame decrypts.
-        let mut bob2 = make_dr_pair().1;
-        let (_, n0b, nonce0b, c0b) = alice.encrypt(b"first", &aad, false).unwrap();
-        bob2.decrypt(&c0b, &nonce0b, &aad, n0b, None).unwrap();
-        let (rk2, num2, nonce2, ct2) = alice.encrypt(b"ratcheted", &aad, true).unwrap();
-        assert_eq!(
-            &bob2.decrypt(&ct2, &nonce2, &aad, num2, rk2.as_ref()).unwrap(),
-            b"ratcheted"
-        );
-
-        // THE ATTACK: strip the ratchet key, claiming it is an in-chain frame.
-        // The receiver now computes a different AAD, so the tag must fail.
-        assert!(
-            bob.decrypt(&ct, &nonce, &aad, num, None).is_err(),
-            "a frame whose ratchet_key was stripped must be rejected"
-        );
-
-        // And crucially the failed attempt must not have moved Bob's ratchet
-        // state, so the genuine ratcheted frame still works.
-        assert_eq!(
-            &bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(),
-            b"ratcheted"
-        );
+        // The attack: same frame, ratchet key stripped.
+        {
+            let (mut alice, mut bob) = make_dr_pair();
+            let (rk, num, nonce, ct) = alice.encrypt(b"ratcheted", &aad, true).unwrap();
+            assert!(
+                bob.decrypt(&ct, &nonce, &aad, num, None).is_err(),
+                "a frame whose ratchet_key was stripped must be rejected"
+            );
+            // And the failed attempt must not have moved Bob's ratchet state,
+            // so the genuine frame still works.
+            assert_eq!(
+                &bob.decrypt(&ct, &nonce, &aad, num, rk.as_ref()).unwrap(),
+                b"ratcheted"
+            );
+        }
     }
 
     /// Rewriting the message number must also be caught: it is authenticated
     /// alongside the ratchet key.
     #[test]
-    fn test_dr_message_number_tampering_is_detected() {
-        let (mut alice, mut bob) = make_dr_pair();
+    fn test_dr_rewritten_message_number_is_rejected() {
         let aad = [PacketType::EncryptedMessage.to_byte()];
 
-        let (_, num, nonce, ct) = alice.encrypt(b"payload", &aad, false).unwrap();
-
         // Sanity.
-        let mut bob2 = make_dr_pair().1;
-        assert_eq!(
-            &bob2.decrypt(&ct, &nonce, &aad, num, None).unwrap(),
-            b"payload"
-        );
+        {
+            let (mut alice, mut bob) = make_dr_pair();
+            let (_, num, nonce, ct) = alice.encrypt(b"payload", &aad, false).unwrap();
+            assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, None).unwrap(), b"payload");
+        }
 
-        // Claim a different message number with the same ciphertext.
-        assert!(
-            bob.decrypt(&ct, &nonce, &aad, num.wrapping_add(1), None).is_err(),
-            "a rewritten message number must be rejected"
-        );
+        // Replay the same ciphertext under a different message number.
+        {
+            let (mut alice, mut bob) = make_dr_pair();
+            let (_, num, nonce, ct) = alice.encrypt(b"payload", &aad, false).unwrap();
+            assert!(
+                bob.decrypt(&ct, &nonce, &aad, num + 1, None).is_err(),
+                "a rewritten message number must be rejected"
+            );
+            // The genuine frame is unaffected.
+            assert_eq!(&bob.decrypt(&ct, &nonce, &aad, num, None).unwrap(), b"payload");
+        }
     }
 
     // --- MIGRATION GOLDEN VECTORS (byte-compat proof across the libsodium ?
