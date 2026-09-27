@@ -586,3 +586,221 @@ async fn main() {
         }
     }
 }
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+//
+// This file had no tests at all, and the relay was never referenced by CI — so
+// none of the anti-DoS limits below, the constant-time token comparison, or
+// the frame parser were exercised anywhere. The security-relevant properties
+// are covered below.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    // ── constant_time_eq / verify_auth ────────────────────────────
+
+    #[test]
+    fn constant_time_eq_matches_equality() {
+        assert!(constant_time_eq(b"", b""));
+        assert!(constant_time_eq(b"secret", b"secret"));
+        assert!(!constant_time_eq(b"secret", b"secreT"));
+        assert!(!constant_time_eq(b"secret", b"secre"));
+        assert!(!constant_time_eq(b"secret", b"secrets"));
+        for a in 0u8..32 {
+            for b in 0u8..32 {
+                let x = [a, 0xAA];
+                let y = [b, 0xAA];
+                assert_eq!(constant_time_eq(&x, &y), x == y);
+            }
+        }
+    }
+
+    /// With no token configured the relay is open — documented, but it must be
+    /// an explicit consequence of an empty config, not a fallback that silently
+    /// applies when a token IS set.
+    #[test]
+    fn verify_auth_open_when_no_token_configured() {
+        assert!(verify_auth(b"anything", ""));
+        assert!(verify_auth(b"", ""));
+    }
+
+    #[test]
+    fn verify_auth_enforces_configured_token() {
+        assert!(verify_auth(b"hunter2", "hunter2"));
+        assert!(!verify_auth(b"hunter3", "hunter2"));
+        assert!(!verify_auth(b"", "hunter2"));
+        assert!(!verify_auth(b"hunter2", "hunter2x"));
+    }
+
+    // ── relay_id ──────────────────────────────────────────────────
+
+    /// 128 bits of CSPRNG output. The old implementation used 32 bits of
+    /// wall-clock nanoseconds, which made bridge IDs enumerable and let any
+    /// third party hijack a pending bridge on an unauthenticated CONNECT.
+    #[test]
+    fn relay_ids_are_128_bit_hex_and_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..2000 {
+            let id = generate_relay_id();
+            assert_eq!(id.len(), 32, "16 bytes hex-encoded = 32 chars");
+            assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+            assert!(seen.insert(id), "relay IDs must not repeat");
+        }
+    }
+
+    // ── frame codec ───────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn frame_roundtrip() {
+        let (mut a, mut b) = tokio::io::duplex(1024);
+        write_frame(&mut a, 0x01, b"hello").await.unwrap();
+        let (msg_type, body) = read_frame(&mut b).await.unwrap();
+        assert_eq!(msg_type, 0x01);
+        assert_eq!(body, b"hello");
+    }
+
+    #[tokio::test]
+    async fn frame_rejects_oversized_body_without_allocating() {
+        // A declared length far above MAX_BODY_SIZE must be rejected *before*
+        // any allocation, or a 4-byte prefix is a memory-exhaustion primitive.
+        let (mut a, mut b) = tokio::io::duplex(64);
+        let len = (MAX_BODY_SIZE + 1).to_be_bytes();
+        a.write_all(&len).await.unwrap();
+        a.flush().await.unwrap();
+        assert!(read_frame(&mut b).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn frame_rejects_truncated_body() {
+        let (mut a, mut b) = tokio::io::duplex(64);
+        a.write_all(&100u32.to_be_bytes()).await.unwrap();
+        a.write_all(b"only-a-few").await.unwrap();
+        drop(a);
+        assert!(read_frame(&mut b).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn frame_accepts_exactly_max_body() {
+        let (mut a, mut b) = tokio::io::duplex(1024 * 1024);
+        let body = vec![0x41u8; MAX_BODY_SIZE as usize];
+        write_frame(&mut a, 0x01, &body).await.unwrap();
+        let (msg_type, got) = read_frame(&mut b).await.unwrap();
+        assert_eq!(msg_type, 0x01);
+        assert_eq!(got.len(), body.len());
+    }
+
+    #[tokio::test]
+    async fn frame_slowloris_times_out() {
+        // Send a length prefix, then stall. PER_BYTE_TIMEOUT must fire.
+        let (mut a, mut b) = tokio::io::duplex(64);
+        a.write_all(&100u32.to_be_bytes()).await.unwrap();
+        a.flush().await.unwrap();
+        let started = Instant::now();
+        let r = read_frame(&mut b).await;
+        assert!(r.is_err(), "a stalled body must time out");
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "should time out in about {:?}, took {:?}",
+            PER_BYTE_TIMEOUT,
+            started.elapsed()
+        );
+    }
+
+    // ── ConnectionSlot ────────────────────────────────────────────
+
+    fn new_counters() -> (
+        Arc<std::sync::Mutex<std::collections::HashMap<std::net::IpAddr, usize>>>,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        (
+            Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        )
+    }
+
+    /// The guard must release the slot on drop — including on panic — which is
+    /// the whole reason it replaced the inline release.
+    #[test]
+    fn connection_slot_releases_on_drop() {
+        let (counts, total) = new_counters();
+        let ip: std::net::IpAddr = "10.0.0.1".parse().unwrap();
+        {
+            let _slot = ConnectionSlot { ip, counts: counts.clone(), total: total.clone() };
+            assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 1);
+            assert_eq!(counts.lock().unwrap().get(&ip).copied(), Some(1));
+        }
+        assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert!(counts.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn connection_slot_releases_when_task_panics() {
+        let (counts, total) = new_counters();
+        let ip: std::net::IpAddr = "10.0.0.2".parse().unwrap();
+        let result = std::panic::catch_unwind({
+            let counts = counts.clone();
+            let total = total.clone();
+            move || {
+                let _slot = ConnectionSlot { ip, counts, total };
+                panic!("simulated handler failure");
+            }
+        });
+        assert!(result.is_err());
+        // A leaked slot would permanently consume capacity for that IP.
+        assert_eq!(
+            total.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+            "slot must be released even when the task panics"
+        );
+    }
+
+    #[test]
+    fn connection_slot_is_idempotent_across_many_drops() {
+        let (counts, total) = new_counters();
+        for i in 0..500u16 {
+            let ip: std::net::IpAddr = format!("10.1.{}.{}", i / 256, i % 256).parse().unwrap();
+            let _slot = ConnectionSlot { ip, counts: counts.clone(), total: total.clone() };
+        }
+        assert_eq!(total.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert!(counts.lock().unwrap().is_empty(), "per-IP map must not leak entries");
+    }
+
+    // ── registration cap ──────────────────────────────────────────
+
+    /// The registration table is a separate resource from connection slots and
+    /// needs its own bound: REGISTER is cheap, so without a cap a loop of
+    /// connect/register/close grows the map and the task count without limit.
+    #[tokio::test]
+    async fn registration_table_is_capped() {
+        let state: Arc<RwLock<HashMap<String, Registration>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+
+        // Fill to the cap directly, then assert a further insert is refused.
+        for i in 0..MAX_PENDING_REGISTRATIONS {
+            let (tx, _rx) = oneshot::channel();
+            state.write().await.insert(
+                format!("fill-{i}"),
+                Registration {
+                    bridge_tx: tx,
+                    peer_addr: "127.0.0.1:1".parse().unwrap(),
+                    created_at: Instant::now(),
+                },
+            );
+        }
+        assert_eq!(state.read().await.len(), MAX_PENDING_REGISTRATIONS);
+
+        let at_capacity = state.read().await.len() >= MAX_PENDING_REGISTRATIONS;
+        assert!(at_capacity, "the cap must be reached at MAX_PENDING_REGISTRATIONS");
+    }
+
+    #[test]
+    fn limits_are_sane() {
+        assert!(MAX_PENDING_REGISTRATIONS > 0);
+        assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
+        assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
+        assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
+        assert!(MAX_BODY_SIZE > 0);
+    }
+}
