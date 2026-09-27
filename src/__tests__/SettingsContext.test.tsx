@@ -160,7 +160,6 @@ describe("SettingsContext", () => {
 
   it("handlePrivateModeToggle calls Tauri invoke", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
 
     render(
       <SettingsProvider>
@@ -202,7 +201,6 @@ describe("SettingsContext", () => {
 
   it("handleResetStunDefaults calls set_stun_servers with defaults", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
 
     render(
       <SettingsProvider>
@@ -250,7 +248,6 @@ describe("SettingsContext", () => {
 
   it("handleRefreshDiscovery calls refresh_discovery", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValueOnce([]);
 
     render(
       <SettingsProvider>
@@ -308,7 +305,6 @@ describe("SettingsContext", () => {
 
   it("handleLockVault calls lock_vault", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
 
     render(
       <SettingsProvider>
@@ -322,7 +318,6 @@ describe("SettingsContext", () => {
 
   it("handleClearClipboard calls clear_clipboard", async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue(undefined);
 
     render(
       <SettingsProvider>
