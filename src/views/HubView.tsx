@@ -127,7 +127,7 @@ export default function HubView() {
         selected tab via the data attribute.
       */}
       <div className="tab-bar" role="tablist" aria-label="Sections" onKeyDown={(e) => {
-        const order = ["connect", "chats", "nearby", "family"];
+        const order = ["connect", "chats", "nearby", "family"] as const;
         const i = order.indexOf(tab);
         let next: number | null = null;
         if (e.key === "ArrowRight") next = (i + 1) % order.length;
