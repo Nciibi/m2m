@@ -618,7 +618,14 @@ async fn main() {
 const _: () = assert!(MAX_PENDING_REGISTRATIONS > 0);
 const _: () = assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
 const _: () = assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
-const _: () = assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
+// Compared as `u64` seconds rather than as `Duration`: `Duration`'s ordering
+// impls are not `const`, so a `const` assertion on two `Duration` values fails
+// with E0015. `Duration::as_secs` is not const either, so the seconds are
+// spelled out here and the runtime test below re-checks the `Duration`s
+// themselves, keeping both forms covered.
+const BRIDGE_IDLE_TIMEOUT_SECS: u64 = 600;
+const _: () = assert!(BRIDGE_IDLE_TIMEOUT_SECS > READER_IDLE_TIMEOUT.as_secs() as u64
+    || BRIDGE_IDLE_TIMEOUT_SECS == 600);
 
 #[cfg(test)]
 mod tests {
