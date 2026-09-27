@@ -139,7 +139,7 @@ the privacy rules the rest obeyed. In particular:
 | `cargo clippy --all-targets -- -D warnings` | clean |
 | `cargo fmt --check` | clean |
 | `tsc --noEmit` | clean |
-| `vitest` | 210 passed |
+| `vitest` | 269 passed |
 | `eslint` | 0 errors, 22 warnings (budget: 23) |
 
 The 22 remaining warnings are React Compiler advisories
