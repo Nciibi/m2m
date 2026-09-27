@@ -589,43 +589,94 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       try { setConversations(asList<ConversationEntry>(await invoke("list_conversations"))); } catch { /* noop */ }
     });
 
-    const unlistenConvMeta = listen<any>("m2m://conversation-meta", async () => {
+    const unlistenConvMeta = listen("m2m://conversation-meta", async (event) => {
+      // The suggested name is peer-supplied and the backend writes it into the
+      // conversation table, so it is validated before we act on the event.
+      const meta = asConversationMeta(event.payload);
+      if (!meta) {
+        tracing.warn("dropping malformed m2m://conversation-meta payload");
+        return;
+      }
       try { setConversations(asList<ConversationEntry>(await invoke("list_conversations"))); } catch { /* noop */ }
     });
 
-    const unlistenFileReq = listen<any>("m2m://file-request", (event) => {
-      setFileRequests((prev) => [...prev, event.payload]);
+    const unlistenFileReq = listen("m2m://file-request", (event) => {
+      // `filename` is peer-controlled and is rendered, used in a dialog title
+      // and passed to a save-path default.
+      const req = asFileRequestEvent(event.payload);
+      if (!req) {
+        tracing.warn("dropping malformed m2m://file-request payload");
+        return;
+      }
+      setFileRequests((prev) => [...prev, req]);
     });
 
-    const unlistenFileProgress = listen<any>("m2m://transfer-progress", (event) => {
+    const unlistenFileProgress = listen("m2m://transfer-progress", (event) => {
+      // `state` is interpolated into a className downstream, so it is
+      // constrained to the backend's known set.
+      const progress = asTransferProgressEvent(event.payload);
+      if (!progress) {
+        tracing.warn("dropping malformed m2m://transfer-progress payload");
+        return;
+      }
       setTransfers((prev: TransferProgress[]) => {
-        const idx = prev.findIndex((t) => t.transfer_id === event.payload.transfer_id);
+        const idx = prev.findIndex((t) => t.transfer_id === progress.transfer_id);
         if (idx >= 0) {
           const updated = [...prev];
-          updated[idx] = event.payload;
+          updated[idx] = progress as unknown as TransferProgress;
           return updated;
         }
-        return [...prev, event.payload];
+        return [...prev, progress as unknown as TransferProgress];
       });
     });
 
-    const unlistenFileCompleted = listen<any>("m2m://transfer-completed", (event) => {
-      setTransfers((prev) => prev.filter((t) => t.transfer_id !== event.payload.transfer_id));
-      addToast(`File transfer complete: ${event.payload.filename || ""}`, "success");
+    const unlistenFileCompleted = listen("m2m://transfer-completed", (event) => {
+      const done = asTransferCompletedEvent(event.payload);
+      if (!done) {
+        tracing.warn("dropping malformed m2m://transfer-completed payload");
+        return;
+      }
+      setTransfers((prev) => prev.filter((t) => t.transfer_id !== done.transfer_id));
+      // The backend sends ONLY `transfer_id` on this event — the old code read
+      // a `filename` that is never present, so the toast always rendered with
+      // an empty suffix.
+      addToast(t("toast.transferComplete", { filename: "" }), "success");
     });
 
-    const unlistenFileError = listen<any>("m2m://transfer-error", (event) => {
-      setTransfers((prev) => prev.filter((t) => t.transfer_id !== event.payload.transfer_id));
-      addToast(`File transfer failed: ${event.payload.error || "unknown error"}`, "error");
+    const unlistenFileError = listen("m2m://transfer-error", (event) => {
+      const failed = asTransferErrorEvent(event.payload);
+      if (!failed) {
+        tracing.warn("dropping malformed m2m://transfer-error payload");
+        return;
+      }
+      setTransfers((prev) => prev.filter((t) => t.transfer_id !== failed.transfer_id));
+      addToast(
+        t("toast.transferFailed", {
+          err: failed.error || t("toast.transferFailedUnknown"),
+        }),
+        "error",
+      );
     });
 
-    const unlistenFileCancelled = listen<any>("m2m://transfer-cancelled", (event) => {
-      setTransfers((prev) => prev.filter((t) => t.transfer_id !== event.payload.transfer_id));
-      addToast("File transfer cancelled", "warning");
+    const unlistenFileCancelled = listen("m2m://transfer-cancelled", (event) => {
+      const cancelled = asTransferCancelledEvent(event.payload);
+      if (!cancelled) {
+        tracing.warn("dropping malformed m2m://transfer-cancelled payload");
+        return;
+      }
+      setTransfers((prev) => prev.filter((t) => t.transfer_id !== cancelled.transfer_id));
+      addToast(t("toast.transferCancelled"), "warning");
     });
 
-    const unlistenReaction = listen<any>("m2m://reaction", (event) => {
-      const { message_id, reaction, peer_key_hex, remove } = event.payload;
+    const unlistenReaction = listen("m2m://reaction", (event) => {
+      // `reaction` becomes an object key AND a visible label; unbounded
+      // peer input there is both a rendering and a memory hazard.
+      const rxn = asReactionEvent(event.payload);
+      if (!rxn) {
+        tracing.warn("dropping malformed m2m://reaction payload");
+        return;
+      }
+      const { message_id, reaction, peer_key_hex, remove } = rxn;
       // Only apply if this reaction is for a message in the current conversation
       setMessages((prev) => prev.map((m) => {
         if (m.id !== message_id) return m;
@@ -647,8 +698,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }));
     });
 
-    const unlistenEdit = listen<any>("m2m://edit", (event) => {
-      const { message_id, new_content, edited_at, peer_key_hex: _peer } = event.payload;
+    const unlistenEdit = listen("m2m://edit", (event) => {
+      // `new_content` replaces the rendered body and reaches renderMarkdown.
+      const edit = asEditEvent(event.payload);
+      if (!edit) {
+        tracing.warn("dropping malformed m2m://edit payload");
+        return;
+      }
+      const { message_id, new_content, edited_at } = edit;
       setMessages((prev) => prev.map((m) =>
         m.id === message_id
           ? { ...m, content: new_content, edited_at }
@@ -656,22 +713,34 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       ));
     });
 
-    const unlistenReconnectAttempt = listen<any>("m2m://reconnect-attempt", (event) => {
-      const { state: reconnectState, attempt } = event.payload;
+    const unlistenReconnectAttempt = listen("m2m://reconnect-attempt", (event) => {
+      const attempt_ = asReconnectAttempt(event.payload);
+      if (!attempt_) {
+        tracing.warn("dropping malformed m2m://reconnect-attempt payload");
+        return;
+      }
+      const { state: reconnectState, attempt } = attempt_;
       if (reconnectState === "attempting") {
         setReconnecting(true);
         setReconnectAttempt(attempt);
-      } else if (reconnectState === "success") {
-        setReconnecting(false);
-        setReconnectAttempt(0);
-      } else if (reconnectState === "failed") {
-        setReconnecting(false);
-        setReconnectAttempt(0);
+        return;
       }
+      // "success", "failed" AND "handshake_failed" all end the attempt.
+      //
+      // The backend emits `handshake_failed` but the old handler only knew
+      // about three states, so a handshake failure left `reconnecting` stuck
+      // `true` and the UI showed "Reconnecting (N/5)…" forever.
+      setReconnecting(false);
+      setReconnectAttempt(0);
     });
 
-    const unlistenDelete = listen<any>("m2m://delete", (event) => {
-      const { message_id } = event.payload;
+    const unlistenDelete = listen("m2m://delete", (event) => {
+      const del = asDeleteEvent(event.payload);
+      if (!del) {
+        tracing.warn("dropping malformed m2m://delete payload");
+        return;
+      }
+      const { message_id } = del;
       setMessages((prev) => prev.map((m) =>
         m.id === message_id
           ? { ...m, deleted: true, content: "[deleted]" }
