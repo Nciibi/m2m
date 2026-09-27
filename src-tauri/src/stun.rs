@@ -373,7 +373,9 @@ fn build_binding_request(transaction_id: &[u8; 12]) -> Vec<u8> {
 /// 2. Message type must be Binding Response (0x0101)
 /// 3. Magic cookie must match (0x2112A442)
 /// 4. Transaction ID must match what we sent (injection protection)
-/// 5. Walk attributes looking for XOR-MAPPED-ADDRESS (preferred) or MAPPED-ADDRESS (fallback)
+/// 5. FINGERPRINT, if present, must match the body (tamper detection)
+/// 6. Walk attributes looking for XOR-MAPPED-ADDRESS (preferred) or MAPPED-ADDRESS (fallback)
+///
 /// Locate a trailing FINGERPRINT attribute, returning the offset of its header.
 ///
 /// Returns `Ok(None)` when the message carries no FINGERPRINT (tolerated for
