@@ -414,6 +414,9 @@ impl Session {
         expected_peer_pub: &[u8; 32],
         peer_bundle: &crate::crypto::PrekeyBundle,
         local_candidates: Vec<WireCandidate>,
+        /// Whether the source invite was marked one-time. Forwarded into the
+        /// signed transcript so the responder can enforce single use.
+        one_time: bool,
     ) -> Result<(), SessionError> {
         self.state = ConnectionState::Handshaking;
         self.our_candidates = local_candidates.clone();
@@ -583,10 +586,26 @@ impl Session {
                 Some(opk)
             }
             (Some(_), None) => {
-                return Err(SessionError::HandshakeFailed(
-                    "initiator used a one-time prekey we do not hold — invite may be stale"
-                        .to_string(),
-                ));
+                // The prekey is gone: either already spent, or never issued.
+                //
+                // For a one-time invite this is a replay and must be refused —
+                // the previous behaviour was to warn and continue *without*
+                // DH4, which meant a one-time invite stayed usable until it
+                // expired and every replay silently got a weaker session.
+                if init.one_time {
+                    return Err(SessionError::HandshakeFailed(
+                        "one-time invite has already been used".to_string(),
+                    ));
+                }
+                // Reusable invite: the prekey was spent by an earlier
+                // recipient, so proceed without DH4. The session is
+                // authenticated but has reduced forward secrecy for this peer.
+                tracing::warn!(
+                    "initiator presented a one-time prekey we no longer hold; \
+                     continuing without DH4 — this session has reduced forward \
+                     secrecy. Issue a fresh invite for full protection."
+                );
+                None
             }
             (None, _) => None,
         };
