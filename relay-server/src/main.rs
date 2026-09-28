@@ -224,6 +224,7 @@ async fn registration_reader(
     mut alice_stream: TcpStream,
     relay_id: String,
     bridge_rx: oneshot::Receiver<TcpStream>,
+    last_seen: Arc<StdMutex<Instant>>,
 ) {
     tracing::info!(relay_id = %relay_id, "registration reader started");
 
@@ -236,7 +237,14 @@ async fn registration_reader(
             frame = read_frame(&mut alice_stream) => {
                 match frame {
                     Ok((0x03, _)) => {
-                        // KEEPALIVE → send PONG
+                        // KEEPALIVE → refresh the idle timer, then PONG.
+                        //
+                        // Without this refresh the registration was reaped on
+                        // `created_at` age alone, so every invite outliving
+                        // READER_IDLE_TIMEOUT (5 min) silently died even with
+                        // the client connected and sending keepalives — while
+                        // the client still reported itself connected.
+                        *last_seen.lock().expect("last_seen mutex poisoned") = Instant::now();
                         let _ = write_frame(&mut alice_stream, 0x84, &[]).await;
                     }
                     Ok((other, _)) => {
@@ -374,7 +382,18 @@ async fn handle_register(
     }
 
     // Spawn the reader task — it owns the stream and waits for bridge or keepalive
-    tokio::spawn(registration_reader(stream, relay_id.clone(), bridge_rx));
+    let last_seen = {
+        let map = state.read().await;
+        map.get(&relay_id)
+            .map(|r| Arc::clone(&r.last_seen))
+            .unwrap_or_else(|| Arc::new(StdMutex::new(Instant::now())))
+    };
+    tokio::spawn(registration_reader(
+        stream,
+        relay_id.clone(),
+        bridge_rx,
+        last_seen,
+    ));
 
     tracing::info!(relay_id = %relay_id, peer = %peer_addr, "client registered");
 }
@@ -526,7 +545,7 @@ async fn main() {
             let mut state = cleanup_state.write().await;
             let before = state.len();
             state.retain(|id, reg| {
-                let expired = reg.created_at.elapsed() >= READER_IDLE_TIMEOUT;
+                let expired = reg.idle_for() >= READER_IDLE_TIMEOUT;
                 if expired {
                     tracing::warn!(relay_id = %id, "registration expired (timeout)");
                 }
