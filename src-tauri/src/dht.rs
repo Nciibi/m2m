@@ -508,13 +508,13 @@ pub async fn announce_loop(
     lan_state: Arc<RwLock<crate::lan_discovery::LanDiscoveryState>>,
     ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
     network_monitor: Arc<RwLock<crate::ephemeral_id::NetworkMonitor>>,
-    /// Live application state, read for the listen address each tick.
-    ///
-    /// This was previously an `Arc<RwLock<Option<SocketAddr>>>` built by
-    /// *copying* `state.listen_addr` at spawn time. Nothing ever wrote the
-    /// copy, so enabling discovery before `start_listening` (or after a
-    /// listener restart) left the announcer reading `None` forever and it
-    /// never announced at all.
+    // Live application state, read for the listen address each tick.
+    //
+    // This was previously an `Arc<RwLock<Option<SocketAddr>>>` built by
+    // *copying* `state.listen_addr` at spawn time. Nothing ever wrote the
+    // copy, so enabling discovery before `start_listening` (or after a
+    // listener restart) left the announcer reading `None` forever and it
+    // never announced at all.
     app: Arc<crate::state::AppState>,
     cancel: Arc<AtomicBool>,
 ) {
