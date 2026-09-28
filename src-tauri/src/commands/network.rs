@@ -1523,16 +1523,47 @@ async fn handle_file_transfer_packet(
                                             "duplicate file chunk — ignoring"
                                         );
                                     } else {
-                                        // Verify chunk hash before writing to disk
+                                        // Verify the chunk before writing it.
+                                        //
+                                        // Two checks, in this order:
+                                        //
+                                        // 1. Against `transfer.chunk_hashes` —
+                                        //    the per-chunk hashes announced in the
+                                        //    signed, session-authenticated transfer
+                                        //    *request*. This is the only value the
+                                        //    receiver holds that the peer did not
+                                        //    just supply alongside the bytes.
+                                        // 2. Against `chunk.chunk_hash`, which
+                                        //    travels with the chunk and is
+                                        //    therefore only self-consistency.
+                                        //
+                                        // The old code did (2) alone, and the
+                                        // pre-announced hashes were transmitted
+                                        // for every transfer and then dropped —
+                                        // defence in depth that cost a round trip
+                                        // and was thrown away. A v1 sender sends no
+                                        // per-chunk hashes, so (1) is skipped and
+                                        // (2) remains the only check available.
+                                        let announced = transfer
+                                            .chunk_hashes
+                                            .get(chunk.chunk_index as usize)
+                                            .filter(|h| h.len() == 32);
                                         let hash: [u8; 32] = {
                                             use sha2::Digest;
                                             sha2::Sha256::digest(&chunk.data).into()
                                         };
-                                        let hash_valid = hash.to_vec() == chunk.chunk_hash;
+                                        let self_consistent = hash.to_vec() == chunk.chunk_hash;
+                                        let matches_announcement = match announced {
+                                            Some(h) => hash.as_slice() == h.as_slice(),
+                                            None => true,
+                                        };
 
-                                        if !hash_valid {
+                                        if !self_consistent || !matches_announcement {
                                             tracing::warn!(
                                                 chunk = chunk.chunk_index,
+                                                self_consistent,
+                                                matches_announcement,
+                                                had_announced_hash = announced.is_some(),
                                                 "file chunk hash mismatch — skipping"
                                             );
                                         } else if let Some(ref mut file) = transfer.temp_file {
