@@ -746,14 +746,21 @@ pub struct MessageStore {
 // storage key. This converts an unbounded remnant problem into a bounded
 // one that `secure_delete` + WAL checkpointing can reliably cover.
 
-/// AAD domain for message content ciphertext (must match commands::util::AAD_MSG_STORE).
-const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
-/// AAD domain for wrapped content keys — distinct from every other domain.
-/// Canonical definition of the per-message content-key AAD.
+/// AAD domain for message content ciphertext.
 ///
-/// Do not re-declare this elsewhere: a second copy of a domain separator is a
-/// silent-drift hazard, because divergence would let a wrapped content key be
-/// accepted in the wrong domain.
+/// Canonical definition — do not re-declare this elsewhere. A second copy of a
+/// domain separator is a silent-drift hazard: if the two ever diverged, every
+/// message in the database would become undecryptable, or message ciphertext
+/// would be acceptable in a domain it was not sealed for.
+///
+/// This constant used to be declared *here* and again in `commands::util`, with
+/// a comment in `commands::util` instructing the reader to keep them in sync by
+/// hand — and the very next constant in that file violated its own rule. The
+/// definition now lives only here, next to its only use, and the command layer
+/// imports it.
+pub const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
+
+/// AAD domain for wrapped content keys — distinct from every other domain.
 const AAD_MSG_CEK: &[u8] = b"m2m-msg-cek-v1";
 /// AAD domain for reaction text (messages.db reactions table).
 const AAD_REACTION: &[u8] = b"m2m-reaction-v1";
@@ -3331,7 +3338,7 @@ mod tests {
                 &msgs[0].content_encrypted,
                 &msgs[0].content_nonce,
                 &test_key(),
-                crate::commands::util::AAD_MSG_STORE,
+                crate::storage::AAD_MSG_STORE,
             )
             .is_err(),
             "content must not be encrypted under the vault storage key"
@@ -3349,7 +3356,7 @@ mod tests {
         let (nonce, ct) = crate::commands::util::crypto_encrypt_storage(
             b"legacy plaintext",
             &test_key(),
-            crate::commands::util::AAD_MSG_STORE,
+            crate::storage::AAD_MSG_STORE,
         )
         .unwrap();
         store

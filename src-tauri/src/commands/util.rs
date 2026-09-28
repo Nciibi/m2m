@@ -24,9 +24,14 @@
 /// Domain-separates keys.db ciphertext from messages.db ciphertext.
 pub const AAD_KEY_STORE: &[u8] = b"m2m-keys-v1";
 
-/// AAD context for message store encryption (chat history).
-/// Domain-separates messages.db ciphertext from keys.db ciphertext.
-pub const AAD_MSG_STORE: &[u8] = b"m2m-msg-v1";
+/// AAD domain for message content ciphertext.
+///
+/// Re-exported from [`crate::storage`], which owns the definition. This
+/// constant previously had a second, hand-synchronised copy in `storage.rs`
+/// next to its only use — a silent-drift hazard for a security-critical domain
+/// separator, documented in a comment that the adjacent constant immediately
+/// violated.
+pub use crate::storage::AAD_MSG_STORE;
 
 // NOTE: the per-message content-key AAD (`m2m-msg-cek-v1`) lives in
 // `storage.rs`, next to the only code that uses it. It used to be declared
