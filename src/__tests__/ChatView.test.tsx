@@ -172,8 +172,8 @@ describe("ChatView", () => {
   it("shows messages in the message list", () => {
     state.connection = { state: "established", peer_verified: false };
     state.messages = [
-      { id: "m1", content: "Hello!", direction: "incoming", timestamp: 1000 },
-      { id: "m2", content: "Hi back!", direction: "outgoing", timestamp: 2000 },
+      { id: "m1", content: "Hello!", direction: "received", timestamp: 1000 },
+      { id: "m2", content: "Hi back!", direction: "sent", timestamp: 2000 },
     ];
     render(<ChatView />);
     expect(screen.getByText("Hello!")).toBeInTheDocument();
@@ -217,7 +217,7 @@ describe("ChatView", () => {
   it("groups messages by date", () => {
     state.connection = { state: "established", peer_verified: false };
     state.messages = [
-      { id: "m1", content: "Hi", direction: "incoming", timestamp: 1717000000 },
+      { id: "m1", content: "Hi", direction: "received", timestamp: 1717000000 },
     ];
     render(<ChatView />);
     // Should show a date separator
