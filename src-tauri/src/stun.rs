@@ -306,13 +306,21 @@ async fn query_single_server(
             error: "no addresses found".to_string(),
         })?;
 
-    // ── Bind ephemeral UDP socket (try IPv4, fall back to IPv6) ──
-    // On IPv6-only networks (mobile hotspots, some cloud VPCs), binding
-    // to 0.0.0.0 fails because it explicitly requests IPv4.
-    let socket = match UdpSocket::bind("0.0.0.0:0").await {
-        Ok(s) => s,
-        Err(_) => UdpSocket::bind("[::]:0").await.map_err(StunError::Io)?,
-    };
+    // ── Bind ephemeral UDP socket, refusing under Tor ──
+    //
+    // A STUN Binding Request is an IP-disclosure primitive by construction: it
+    // asks a third party to report the source address it saw. Tor has no UDP
+    // transport, so a STUN query issued while Tor is enabled leaves from the
+    // real address no matter what the TCP chokepoint does. This call was
+    // completely unguarded, reachable from five production paths, while
+    // `check_connectivity` refused the identical query — so the guard existed
+    // but only on the one path that nobody used automatically.
+    //
+    // Routing the bind through the UDP chokepoint makes the refusal structural
+    // rather than a check each call site has to remember.
+    let socket = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(|e| StunError::TorBlocked(e.to_string()))?;
 
     // Socket timeout is handled entirely by the outer tokio::time::timeout
     // wrapping the recv_from call. No need for set_read_timeout here.
