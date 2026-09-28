@@ -457,14 +457,13 @@ pub async fn remove_from_group(
     drop(ms);
 
     // Send new sender key bundles to remaining members
-    let conns = state.connections.read().await;
     for (member_key, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
         finalize_bundle(identity, &our_peer_key_hex, &mut signed);
         let serialized =
             protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
 
-        if let Some(conn_arc) = conns.get(member_key) {
+        if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
@@ -486,7 +485,7 @@ pub async fn remove_from_group(
         };
         let remove_bytes =
             protocol::serialize(&remove_msg).map_err(|e| format!("serialization failed: {e}"))?;
-        if let Some(conn_arc) = conns.get(member_key) {
+        if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
@@ -559,7 +558,7 @@ pub async fn leave_group(
         if member_key == &our_peer_key_hex {
             continue;
         }
-        if let Some(conn_arc) = conns.get(member_key) {
+        if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
