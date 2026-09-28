@@ -92,7 +92,7 @@ pub async fn create_group(
     // Distribute sender key bundles over existing DR sessions
     for (peer_key_hex, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
-        finalize_bundle(identity, &our_peer_key_hex, &mut signed);
+        finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
         let serialized =
             protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
 
@@ -352,8 +352,21 @@ pub async fn invite_to_group(
         .unwrap_or_default()
         .as_secs();
 
-    // Snapshot our own public key, releasing `identity` before any
-    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    // Snapshot the identity out of its lock before any `group_manager` access —
+    // see `AppState::our_peer_key_hex` for the lock-ordering reason.
+    //
+    // Both forms are needed here: the hex identifies us to the group manager,
+    // and the keypair signs the sender-key bundle and the invite. Neither is
+    // read while `group_manager` is held.
+    let identity_kp = {
+        let identity = state.identity.read().await;
+        let kp = identity.as_ref().ok_or("identity not initialized")?;
+        crate::crypto::IdentityKeypair::from_bytes(
+            &kp.public_key_bytes(),
+            &kp.secret_key_bytes(),
+        )
+        .map_err(|e| format!("identity error: {e}"))?
+    };
     let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     // Add member in GroupManager
@@ -404,7 +417,7 @@ pub async fn invite_to_group(
         let mut sign_data = Vec::new();
         sign_data.extend_from_slice(group_id.as_bytes());
         sign_data.extend_from_slice(&(existing.len() as u32).to_be_bytes());
-        let signature = identity.sign(&sign_data);
+        let signature = identity_kp.sign(&sign_data);
 
         let invite = GroupInviteData {
             group_id: group_id.clone(),
