@@ -20,6 +20,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "./AppContext";
 import { errorMessage } from "../utils";
+import { asArray } from "../events";
 import { useT } from "../i18n/I18nContext";
 import type {
   ChatMessage,
@@ -40,7 +41,10 @@ import type {
  * rather than trusting it.
  */
 function asList<T>(v: unknown): T[] {
-  return Array.isArray(v) ? (v as T[]) : [];
+  // Delegates to the shared guard in `events.ts`. This was an independent
+  // 3-line copy, which is how the same problem ended up solved twice and fixed
+  // at 6 of ~50 call sites.
+  return asArray<T>(v);
 }
 
 interface ChatContextValue {

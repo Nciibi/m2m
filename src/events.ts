@@ -446,6 +446,24 @@ export function asGroupMessageEvent(
   return { group_id: p.group_id, message };
 }
 
+/**
+ * Narrow an IPC return value to an array.
+ *
+ * `invoke<T>()` is a type *assertion*, not a check: whatever the backend
+ * returns is handed straight to `T`, and the real runtime value may be `null`
+ * if a command's error path or a future refactor produces it. Every consumer
+ * of such a value iterates it or reads `.length`, so a `null` throws on the
+ * next render rather than degrading.
+ *
+ * This lives here, next to the event guards, because a 7-line `asList` inside
+ * `ChatContext` was solving the same problem independently — and was applied at
+ * only 6 of the ~50 `invoke` call sites, leaving the rest to crash. One
+ * implementation, used everywhere.
+ */
+export function asArray<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
+
 export function asCaptureWarning(v: unknown): { active: string[] } | null {
   if (typeof v !== "object" || v === null) return null;
   const p = v as Record<string, unknown>;
