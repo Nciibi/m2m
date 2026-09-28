@@ -239,7 +239,7 @@ pub async fn connect_discovered_peer(
 ) -> Result<ConnectionInfo, AppError> {
     let peer_addr: std::net::SocketAddr = address
         .parse()
-        .map_err(||e| AppError::invalid(|e| format!("invalid address: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("invalid address: {e}")))?;
 
     let identity = state.identity.read().await;
     let kp = identity.as_ref().ok_or("identity not initialized")?;
@@ -248,7 +248,7 @@ pub async fn connect_discovered_peer(
     // third-party, so this path must not reveal the real IP under Tor.
     let mut stream = crate::dial::dial(peer_addr)
         .await
-        .map_err(||e| AppError::invalid(|e| format!("connection failed: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("connection failed: {e}")))?;
 
     let mut session = crate::session::Session::new();
 
@@ -296,7 +296,7 @@ pub async fn connect_discovered_peer(
             x25519_pub,
         )
         .await
-        .map_err(||e| AppError::invalid(|e| format!("handshake failed: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("handshake failed: {e}")))?;
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();

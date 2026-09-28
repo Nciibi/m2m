@@ -65,7 +65,7 @@ pub async fn discover_public_ip(state: State<'_, Arc<AppState>>) -> Result<Strin
     let result = state
         .refresh_stun()
         .await
-        .map_err(||e| AppError::invalid(|e| format!("STUN discovery failed: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("STUN discovery failed: {e}")))?;
 
     let addr = result
         .consensus_addr
@@ -176,7 +176,7 @@ pub async fn check_connectivity(
     let config = state.stun_config.read().await;
     let multi_result = stun::discover_public_addrs(&config)
         .await
-        .map_err(||e| AppError::invalid(|e| format!("STUN discovery failed for connectivity check: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("STUN discovery failed for connectivity check: {e}")))?;
 
     let nat_type = stun::classify_nat(&multi_result);
     let host_addrs: Vec<String> = crate::local_addr::gather_host_candidates()

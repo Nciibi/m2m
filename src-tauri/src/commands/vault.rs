@@ -32,19 +32,19 @@ async fn derive_key_blocking(
         util::derive_storage_key_from_passphrase(&passphrase, &salt)
     })
     .await
-    .map_err(||e| AppError::invalid(|e| format!("key derivation task failed: {e}"))?
+    .map_err(|e| AppError::invalid(format!("key derivation task failed: {e}")))?
 }
 
 /// Initialize the crypto library and check for existing identity.
 /// Does NOT decrypt the private key — that is deferred to `unlock_vault`.
 #[tauri::command]
 pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, AppError> {
-    crypto::init().map_err(||e| AppError::invalid(|e| format!("crypto init failed: {e}"))?;
+    crypto::init().map_err(|e| AppError::invalid(format!("crypto init failed: {e}")))?;
 
-    let data_dir = storage::ensure_data_dir().map_err(||e| AppError::invalid(|e| format!("data dir error: {e}"))?;
+    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::invalid(format!("data dir error: {e}")))?;
     let keys_db_path = data_dir.join("keys.db");
 
-    let key_store = KeyStore::open(&keys_db_path).map_err(||e| AppError::invalid(|e| format!("key store error: {e}"))?;
+    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::invalid(format!("key store error: {e}")))?;
 
     let has_identity = key_store.has_identity().unwrap_or(false);
 
@@ -52,7 +52,7 @@ pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityIn
         // Load only the public key — no decryption needed
         let pub_bytes = key_store
             .load_public_key()
-            .map_err(||e| AppError::invalid(|e| format!("failed to load public key: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to load public key: {e}")))?;
 
         if pub_bytes.len() != 32 {
             return Err(AppError::invalid("invalid public key length in storage"));
@@ -139,7 +139,7 @@ pub async fn unlock_vault(
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let _data_dir = storage::ensure_data_dir().map_err(||e| AppError::invalid(|e| format!("data dir error: {e}"))?;
+    let _data_dir = storage::ensure_data_dir().map_err(|e| AppError::invalid(format!("data dir error: {e}")))?;
     // Note: messages.db and transfers.db paths are used by
     // ensure_message_store / ensure_transfer_store lazy init in chat.rs/state.rs
 
@@ -157,7 +157,7 @@ pub async fn unlock_vault(
     let accounts: Vec<storage::AccountRow> = if vault_was_initialized {
         key_store
             .list_accounts()
-            .map_err(||e| AppError::invalid(|e| format!("failed to list accounts: {e}"))?
+            .map_err(|e| AppError::invalid(format!("failed to list accounts: {e}")))?
     } else {
         Vec::new()
     };
@@ -167,7 +167,7 @@ pub async fn unlock_vault(
         Some(
             key_store
                 .load_identity()
-                .map_err(||e| AppError::invalid(|e| format!("failed to load identity: {e}"))?,
+                .map_err(|e| AppError::invalid(format!("failed to load identity: {e}")))?,
         )
     } else {
         None
@@ -338,9 +338,9 @@ pub async fn unlock_vault(
         let new_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
         let (new_nonce, new_enc_sk) =
             util::crypto_encrypt_storage(&sk_arr, &new_key, util::AAD_KEY_STORE)
-                .map_err(||e| AppError::invalid(|e| format!("failed to re-encrypt identity: {e}"))?;
+                .map_err(|e| AppError::invalid(format!("failed to re-encrypt identity: {e}")))?;
         let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
-            .map_err(||e| AppError::invalid(|e| format!("failed to reconstruct identity: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to reconstruct identity: {e}")))?;
 
         let xkp = crate::crypto::X25519IdentityKeypair::generate();
 
@@ -357,7 +357,7 @@ pub async fn unlock_vault(
     } else if !has_identity {
         // Case 1: First run
         let kp =
-            IdentityKeypair::generate().map_err(||e| AppError::invalid(|e| format!("keypair generation failed: {e}"))?;
+            IdentityKeypair::generate().map_err(|e| AppError::invalid(format!("keypair generation failed: {e}")))?;
 
         let pub_bytes = kp.public_key_bytes();
         let sk_bytes = kp.secret_key_bytes();
@@ -365,14 +365,14 @@ pub async fn unlock_vault(
         let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
         let (nonce, encrypted_sk) =
             util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
-                .map_err(||e| AppError::invalid(|e| format!("failed to encrypt identity: {e}"))?;
+                .map_err(|e| AppError::invalid(format!("failed to encrypt identity: {e}")))?;
 
         let xkp = crate::crypto::X25519IdentityKeypair::generate();
         let x_sk_bytes = xkp.secret_key_bytes();
         let x_pub = xkp.public_key_bytes();
         let (x_nonce, x_enc) =
             util::crypto_encrypt_storage(&x_sk_bytes, &storage_key, util::AAD_KEY_STORE)
-                .map_err(||e| AppError::invalid(|e| format!("failed to encrypt X25519 key: {e}"))?;
+                .map_err(|e| AppError::invalid(format!("failed to encrypt X25519 key: {e}")))?;
 
         let now = chrono::Utc::now().timestamp();
 
@@ -381,16 +381,16 @@ pub async fn unlock_vault(
         let key_store2 = ks_guard2.as_ref().ok_or("key store not initialized")?;
         key_store2
             .store_identity(&pub_bytes, &encrypted_sk, &nonce, now)
-            .map_err(||e| AppError::invalid(|e| format!("failed to store identity: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to store identity: {e}")))?;
         key_store2
             .set_vault_initialized()
-            .map_err(||e| AppError::invalid(|e| format!("failed to mark vault initialized: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
         key_store2
             .store_x25519_key(&x_pub, &x_enc, &x_nonce)
-            .map_err(||e| AppError::invalid(|e| format!("failed to store X25519 key: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to store X25519 key: {e}")))?;
         key_store2
             .insert_account(&pub_bytes, &encrypted_sk, &nonce, Some("Main"), now)
-            .map_err(||e| AppError::invalid(|e| format!("failed to store account: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to store account: {e}")))?;
         drop(ks_guard2);
 
         // Store storage_key in state
@@ -466,10 +466,10 @@ pub async fn unlock_vault(
             if let Some((lnonce, lenc, _lsk, lpub)) = &legacy_store_data {
                 store
                     .update_encrypted_private_key(lenc, lnonce)
-                    .map_err(||e| AppError::invalid(|e| format!("failed to persist migrated identity: {e}"))?;
+                    .map_err(|e| AppError::invalid(format!("failed to persist migrated identity: {e}")))?;
                 store
                     .set_vault_initialized()
-                    .map_err(||e| AppError::invalid(|e| format!("failed to mark vault initialized: {e}"))?;
+                    .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
                 if store
                     .insert_account(
                         lpub,
@@ -482,13 +482,13 @@ pub async fn unlock_vault(
                 {
                     store
                         .update_account_private_key(lpub, lenc, lnonce)
-                        .map_err(||e| AppError::invalid(|e| format!("failed to persist migrated account: {e}"))?;
+                        .map_err(|e| AppError::invalid(format!("failed to persist migrated account: {e}")))?;
                 }
             }
             if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_store_data {
                 store
                     .store_x25519_key(x_pub, x_enc, x_nonce)
-                    .map_err(||e| AppError::invalid(|e| format!("failed to persist X25519 key: {e}"))?;
+                    .map_err(|e| AppError::invalid(format!("failed to persist X25519 key: {e}")))?;
             }
         }
         drop(ks_guard4);
@@ -510,7 +510,7 @@ pub async fn create_vault_account(
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let kp = IdentityKeypair::generate().map_err(||e| AppError::invalid(|e| format!("keypair generation failed: {e}"))?;
+    let kp = IdentityKeypair::generate().map_err(|e| AppError::invalid(format!("keypair generation failed: {e}")))?;
     let fingerprint = kp.fingerprint();
     let pub_bytes = kp.public_key_bytes();
     let sk_bytes = kp.secret_key_bytes();
@@ -520,7 +520,7 @@ pub async fn create_vault_account(
     let storage_key = derive_key_blocking(passphrase, pub_bytes.to_vec()).await?;
     let (nonce, encrypted_sk) =
         util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
-            .map_err(||e| AppError::invalid(|e| format!("failed to encrypt identity: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to encrypt identity: {e}")))?;
 
     let now = chrono::Utc::now().timestamp();
     {
@@ -530,10 +530,10 @@ pub async fn create_vault_account(
             .ok_or("key store not initialized — call init_identity first")?;
         key_store
             .set_vault_initialized()
-            .map_err(||e| AppError::invalid(|e| format!("failed to mark vault initialized: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
         key_store
             .insert_account(&pub_bytes, &encrypted_sk, &nonce, None, now)
-            .map_err(||e| AppError::invalid(|e| format!("failed to create account: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to create account: {e}")))?;
     }
 
     {
@@ -582,7 +582,7 @@ pub async fn list_family(state: State<'_, Arc<AppState>>) -> Result<Vec<FamilyMe
     let store = ks.as_ref().ok_or("key store not initialized")?;
     store
         .list_family(sk.as_ref())
-        .map_err(||e| AppError::invalid(|e| format!("failed to list family: {e}"))
+        .map_err(|e| AppError::invalid(format!("failed to list family: {e}")))
 }
 
 /// Add a peer to the family list.
@@ -598,7 +598,7 @@ pub async fn add_family_member(
         return Err(AppError::invalid("nickname cannot be empty"));
     }
     let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(||e| AppError::invalid(|e| format!("invalid peer key: {e}"))?;
+        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
 
     // Check peer has a conversation (must have connected at least once)
     {
@@ -620,7 +620,7 @@ pub async fn add_family_member(
         let store = ks.as_ref().ok_or("key store not initialized")?;
         store
             .add_family_member(&pk_bytes, &nickname, expires_in_days, None, sk.as_ref())
-            .map_err(||e| AppError::invalid(|e| format!("failed to add family member: {e}"))?
+            .map_err(|e| AppError::invalid(format!("failed to add family member: {e}")))?
     };
 
     Ok(member)
@@ -633,13 +633,13 @@ pub async fn remove_family_member(
     peer_key_hex: String,
 ) -> Result<(), AppError> {
     let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(||e| AppError::invalid(|e| format!("invalid peer key: {e}"))?;
+        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
     {
         let ks = state.key_store.lock().await;
         let store = ks.as_ref().ok_or("key store not initialized")?;
         store
             .remove_family_member(&pk_bytes)
-            .map_err(||e| AppError::invalid(|e| format!("failed to remove family member: {e}"))?
+            .map_err(|e| AppError::invalid(format!("failed to remove family member: {e}")))?
     }
     Ok(())
 }
@@ -655,14 +655,14 @@ pub async fn set_family_nickname(
         return Err(AppError::invalid("nickname cannot be empty"));
     }
     let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(||e| AppError::invalid(|e| format!("invalid peer key: {e}"))?;
+        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
     {
         let sk = state.storage_key.read().await;
         let ks = state.key_store.lock().await;
         let store = ks.as_ref().ok_or("key store not initialized")?;
         store
             .set_family_nickname(&pk_bytes, &nickname, sk.as_ref())
-            .map_err(||e| AppError::invalid(|e| format!("failed to set nickname: {e}"))?
+            .map_err(|e| AppError::invalid(format!("failed to set nickname: {e}")))?
     }
     Ok(())
 }
@@ -676,7 +676,7 @@ pub async fn connect_family_member(
     peer_key_hex: String,
 ) -> Result<ConnectionInfo, AppError> {
     let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(||e| AppError::invalid(|e| format!("invalid peer key: {e}"))?;
+        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
 
     // Extract the identity keypair bytes — drop guard before any .await
     let identity_keypair = {
@@ -685,7 +685,7 @@ pub async fn connect_family_member(
         let pub_bytes = kp.public_key_bytes();
         let sk_bytes = kp.secret_key_bytes();
         IdentityKeypair::from_bytes(&pub_bytes, &sk_bytes)
-            .map_err(||e| AppError::invalid(|e| format!("identity error: {e}"))?
+            .map_err(|e| AppError::invalid(format!("identity error: {e}")))?
     };
 
     // Look up the family member — drop key_store lock before any .await
@@ -695,13 +695,13 @@ pub async fn connect_family_member(
         let store = ks.as_ref().ok_or("key store not initialized")?;
         if !store
             .is_family_member(&pk_bytes)
-            .map_err(||e| AppError::invalid(|e| format!("family check: {e}"))?
+            .map_err(|e| AppError::invalid(format!("family check: {e}")))?
         {
             return Err(AppError::invalid("peer is not a family member"));
         }
         let members = store
             .list_family(sk.as_ref())
-            .map_err(||e| AppError::invalid(|e| format!("list family: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("list family: {e}")))?;
         members
             .into_iter()
             .find(|m| m.public_key_hex == peer_key_hex)
@@ -759,7 +759,7 @@ pub async fn connect_family_member(
                         x25519_pub,
                     )
                     .await
-                    .map_err(||e| AppError::invalid(|e| format!("handshake failed: {e}"))?;
+                    .map_err(|e| AppError::invalid(format!("handshake failed: {e}")))?;
 
                 let actual_peer_key = hex::encode(session.peer_identity_pub);
                 let peer_fingerprint = session.peer_fingerprint();
@@ -835,11 +835,11 @@ pub async fn update_family_member(
     invite_str: String,
 ) -> Result<FamilyMember, AppError> {
     let old_key =
-        util::decode_peer_key(&peer_key_hex).map_err(||e| AppError::invalid(|e| format!("invalid peer key: {e}"))?;
+        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
 
     // Validate the invite to extract the new peer key and address
     let signed = crate::identity::validate_invite(&invite_str)
-        .map_err(||e| AppError::invalid(|e| format!("invalid invite: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("invalid invite: {e}")))?;
 
     let new_public_key = signed.payload.identity_pub;
     let new_address = signed.payload.address_hint.clone();
@@ -850,7 +850,7 @@ pub async fn update_family_member(
 
     let updated = store
         .update_family_member(&old_key, &new_public_key, Some(&new_address), sk.as_ref())
-        .map_err(||e| AppError::invalid(|e| format!("failed to update family member: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("failed to update family member: {e}")))?;
 
     Ok(updated)
 }
@@ -881,14 +881,14 @@ pub async fn export_identity(
     let store = ks.as_ref().ok_or("key store not initialized")?;
     let family = store
         .list_family_all(sk.as_ref())
-        .map_err(||e| AppError::invalid(|e| format!("list family: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("list family: {e}")))?;
     drop(ks);
 
     // Encrypt the secret key with export passphrase
     let export_key = derive_key_blocking(passphrase, pub_bytes.to_vec()).await?;
     let (nonce, encrypted_sk) =
         util::crypto_encrypt_storage(&sk_bytes, &export_key, crate::commands::util::AAD_EXPORT_V2)
-            .map_err(||e| AppError::invalid(|e| format!("encryption failed: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("encryption failed: {e}")))?;
 
     // Build the export payload
     let payload = serde_json::json!({
@@ -909,11 +909,11 @@ pub async fn export_identity(
     });
 
     let payload_bytes =
-        serde_json::to_vec(&payload).map_err(||e| AppError::invalid(|e| format!("serialization failed: {e}"))?;
+        serde_json::to_vec(&payload).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
 
     // Write: nonce || ciphertext
     std::fs::write(&path, &payload_bytes)
-        .map_err(||e| AppError::invalid(|e| format!("failed to write export file: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("failed to write export file: {e}")))?;
 
     Ok(())
 }
@@ -934,7 +934,7 @@ pub async fn import_identity(
     // so it must meet the same strength requirements as unlock_vault.
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let data = std::fs::read(&path).map_err(||e| AppError::invalid(|e| format!("failed to read import file: {e}"))?;
+    let data = std::fs::read(&path).map_err(|e| AppError::invalid(format!("failed to read import file: {e}")))?;
 
     // Parse JSON payload
     let payload: serde_json::Value = serde_json::from_slice(&data)
@@ -1007,9 +1007,9 @@ pub async fn import_identity(
     let pub_hex = hex::encode(&pub_bytes);
 
     // Store to vault
-    let data_dir = storage::ensure_data_dir().map_err(||e| AppError::invalid(|e| format!("data dir error: {e}"))?;
+    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::invalid(format!("data dir error: {e}")))?;
     let keys_db_path = data_dir.join("keys.db");
-    let key_store = KeyStore::open(&keys_db_path).map_err(||e| AppError::invalid(|e| format!("key store error: {e}"))?;
+    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::invalid(format!("key store error: {e}")))?;
 
     // Seal the private key under Argon2id(passphrase, salt = public key) —
     // the exact derivation unlock_vault uses for account lookup — so the
@@ -1089,7 +1089,7 @@ pub async fn import_identity(
     // Initialize message store
     let msgs_db_path = data_dir.join("messages.db");
     let msg_store = storage::MessageStore::open(&msgs_db_path)
-        .map_err(||e| AppError::invalid(|e| format!("message store error: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("message store error: {e}")))?;
     {
         let mut ms = state.message_store.lock().await;
         *ms = Some(msg_store);
@@ -1098,7 +1098,7 @@ pub async fn import_identity(
     // Initialize transfer store
     let transfers_db_path = data_dir.join("transfers.db");
     let transfer_store = storage::TransferStore::open(&transfers_db_path)
-        .map_err(||e| AppError::invalid(|e| format!("transfer store error: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("transfer store error: {e}")))?;
     {
         let mut ts = state.transfer_store.lock().await;
         *ts = Some(transfer_store);
@@ -1133,15 +1133,15 @@ fn seal_imported_identity(
 ) -> Result<(), AppError> {
     let (new_nonce, new_enc_sk) =
         util::crypto_encrypt_storage(sk_bytes, storage_key, util::AAD_KEY_STORE)
-            .map_err(||e| AppError::invalid(|e| format!("encryption failed: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("encryption failed: {e}")))?;
 
     let now = chrono::Utc::now().timestamp();
     key_store
         .store_identity(pub_bytes, &new_enc_sk, &new_nonce, now)
-        .map_err(||e| AppError::invalid(|e| format!("failed to store identity: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("failed to store identity: {e}")))?;
     key_store
         .set_vault_initialized()
-        .map_err(||e| AppError::invalid(|e| format!("failed to mark vault initialized: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
     // insert_account fails only on the UNIQUE(public_key) conflict — i.e.
     // this identity was already registered as an account. Refresh it.
     if key_store
@@ -1150,7 +1150,7 @@ fn seal_imported_identity(
     {
         key_store
             .update_account_private_key(pub_bytes, &new_enc_sk, &new_nonce)
-            .map_err(||e| AppError::invalid(|e| format!("failed to persist imported account: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("failed to persist imported account: {e}")))?;
     }
     Ok(())
 }

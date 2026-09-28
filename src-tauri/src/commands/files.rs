@@ -34,7 +34,7 @@ pub async fn send_file(
         return Err(AppError::invalid("file not found"));
     }
 
-    let metadata = std::fs::metadata(path).map_err(||e| AppError::invalid(|e| format!("cannot read file: {e}"))?;
+    let metadata = std::fs::metadata(path).map_err(|e| AppError::invalid(format!("cannot read file: {e}")))?;
     let total_size = metadata.len();
     if total_size == 0 {
         return Err(AppError::invalid("cannot send an empty file"));
@@ -77,8 +77,8 @@ pub async fn send_file(
         compute_file_hashes(&hash_path, total_chunks, chunk_size)
     })
     .await
-    .map_err(||e| AppError::invalid(|e| format!("hash task failed: {e}"))?
-    .map_err(||e| AppError::invalid(|e| format!("failed to read file: {e}"))?;
+    .map_err(|e| AppError::invalid(format!("hash task failed: {e}")))?
+    .map_err(|e| AppError::invalid(format!("failed to read file: {e}")))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -151,7 +151,7 @@ pub async fn send_file(
             state
                 .ensure_transfer_store(&state.data_dir)
                 .await
-                .map_err(||e| AppError::invalid(|e| format!("transfer store init: {e}"))?;
+                .map_err(|e| AppError::invalid(format!("transfer store init: {e}")))?;
 
             // Persist initial transfer record
             {
@@ -260,7 +260,7 @@ pub async fn accept_file_transfer(
     session
         .send_file_accept(&mut *write_half, &transfer_id)
         .await
-        .map_err(||e| AppError::invalid(|e| format!("failed to send accept: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("failed to send accept: {e}")))?;
 
     Ok(())
 }
@@ -286,7 +286,7 @@ pub async fn reject_file_transfer(
     session
         .send_file_reject(&mut *write_half, &transfer_id)
         .await
-        .map_err(||e| AppError::invalid(|e| format!("failed to send reject: {e}"))?;
+        .map_err(|e| AppError::invalid(format!("failed to send reject: {e}")))?;
 
     // Clean up local state
     state.incoming_transfers.write().await.remove(&transfer_id);
@@ -710,7 +710,7 @@ async fn send_file_chunks_inner(
                         expected_hash.to_vec(),
                     )
                     .await
-                    .map_err(||e| AppError::invalid(|e| format!("chunk send failed: {e}"))?;
+                    .map_err(|e| AppError::invalid(format!("chunk send failed: {e}")))?;
             }
 
             // Update chunks_sent
@@ -778,7 +778,7 @@ async fn send_file_chunks_inner(
         session
             .send_file_complete(&mut *write_half, transfer_id)
             .await
-            .map_err(||e| AppError::invalid(|e| format!("complete send failed: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("complete send failed: {e}")))?;
     }
 
     Ok(())
@@ -896,7 +896,7 @@ fn compute_file_hashes(
     use std::io::Read;
 
     let mut file =
-        std::fs::File::open(file_path).map_err(||e| AppError::invalid(|e| format!("failed to open file: {e}"))?;
+        std::fs::File::open(file_path).map_err(|e| AppError::invalid(format!("failed to open file: {e}")))?;
 
     let mut full_hasher = sha2::Sha256::new();
     let mut chunk_hashes = Vec::with_capacity(total_chunks as usize);
@@ -905,7 +905,7 @@ fn compute_file_hashes(
     loop {
         let n = file
             .read(&mut buf)
-            .map_err(||e| AppError::invalid(|e| format!("read error during hash computation: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("read error during hash computation: {e}")))?;
         if n == 0 {
             break;
         }
