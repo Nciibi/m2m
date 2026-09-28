@@ -2,7 +2,7 @@ import { errorMessage } from "../utils";
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { asGroupEvent, asGroupMessageEvent } from "../events";
+import { asArray, asGroupEvent, asGroupMessageEvent } from "../events";
 import { Button, Badge, Input, ToastContainer } from "../components/ui";
 import {
   ArrowLeftIcon, PlusIcon, GroupsIcon, MessageIcon, SendIcon, LockIcon,
@@ -30,7 +30,9 @@ export default function GroupChatView() {
 
   const loadGroups = useCallback(async () => {
     try {
-      setGroups(await invoke<GroupInfo[]>("list_groups"));
+      // `asArray`: `invoke<GroupInfo[]>` asserts the shape but does not check
+      // it, and `groups.map(...)` in the render below would throw on `null`.
+      setGroups(asArray<GroupInfo>(await invoke("list_groups")));
       setLoadFailed(false);
     } catch (e) {
       setLoadFailed(true);
@@ -40,8 +42,7 @@ export default function GroupChatView() {
 
   const loadMessages = useCallback(async (groupId: string) => {
     try {
-      const msgs = await invoke<ChatMessage[]>("load_group_messages", { groupId, limit: 100 });
-      setMessages(msgs);
+      setMessages(asArray<ChatMessage>(await invoke("load_group_messages", { groupId, limit: 100 })));
     } catch { /* noop */ }
   }, []);
 
