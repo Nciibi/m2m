@@ -84,19 +84,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [clearToasts, refreshVault]);
 
   // Theme detection
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: light)");
-    const update = (e: MediaQueryListEvent | MediaQueryList) => {
-      document.documentElement.setAttribute("data-theme", e.matches ? "light" : "dark");
-    };
-    update(mq);
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
+  //
+  // REMOVED. This effect wrote `data-theme` from the OS preference, for the
+  // app's whole lifetime, with no knowledge of the user's explicit choice. So a
+  // user who selected the light theme and then let the OS flip to dark at
+  // sunset had their selection silently overwritten — and because `ThemeContext`
+  // still held `theme: "light"` while the DOM said otherwise, the Settings
+  // toggle showed "light" selected while the app rendered dark.
+  //
+  // `ThemeContext` is the single owner of `data-theme`: it resolves
+  // "system" against the OS and subscribes to the media query itself, so the
+  // two can no longer disagree.
 
   // Global keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // `Modal` handles Escape on `document`, which fires *before* this
+      // `window` listener during bubbling. Without this check, dismissing the
+      // fingerprint-verification dialog in ChatView also navigated to the hub —
+      // the user closed the dialog and was thrown out of the conversation.
+      // A modal is the innermost keyboard scope, so it wins.
+      if (document.querySelector('[role="dialog"]') !== null) return;
       if (e.key === "Escape" && view === "chat") { e.preventDefault(); setView("hub"); }
       if ((e.ctrlKey || e.metaKey) && e.key === ",") { e.preventDefault(); setView("settings"); }
     }
