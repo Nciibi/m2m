@@ -75,7 +75,6 @@ pub async fn set_discovery_config(
             Arc::new(RwLock::new(*val))
         };
         let lan_state_clone = lan_state.clone();
-        let app_for_loop = state.inner().clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let cancel_clone = lan_cancel.clone();
 
@@ -125,6 +124,7 @@ pub async fn set_discovery_config(
         // bootstrapped.
         let lan_state_shared = state.lan_state.clone();
         let dht_state_clone = dht_state.clone();
+        let app_for_loop = state.inner().clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let network_monitor = Arc::new(RwLock::new(ephemeral_id::NetworkMonitor::new()));
         let cancel_clone = dht_cancel.clone();
