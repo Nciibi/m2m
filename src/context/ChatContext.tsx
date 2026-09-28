@@ -194,7 +194,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       await invoke("send_file", { peerKeyHex: peerKeyHex, filePath });
       const filename = filePath.split(/[\\/]/).pop() || "file";
       setMessages((prev) => [...prev, {
-        id: Date.now().toString(),
+      // An optimistic local row so the send feels immediate. Built as a
+      // `ChatMessage` rather than cast into one: the previous `as ChatMessage`
+      // suppressed the compiler on exactly the fields that reach a className
+      // and a text node, including a peer-influenced `filename`.
+      //
+      // `crypto.randomUUID()` rather than `Date.now().toString()`: the id is
+      // used as a React key and as the handle later edits and reactions
+      // address, and two sends in the same millisecond produced a duplicate key.
+      const optimistic: ChatMessage = {
+        id: crypto.randomUUID(),
         content: `File request sent: ${filename}`,
         direction: "sent",
         timestamp: Math.floor(Date.now() / 1000),
@@ -203,8 +212,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         deleted: false,
         expires_at: null,
         reactions: {},
-        sender_peer_key_hex: "",
-      } as ChatMessage]);
+        sender_peer_key_hex: peerKeyHex,
+      };
+      setMessages((prev) => [...prev, optimistic]);
     } catch (e) {
       addToast("Failed to send file: " + e, "error");
     }
