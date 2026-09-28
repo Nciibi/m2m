@@ -91,6 +91,24 @@ pub struct Group {
     pub last_message_preview: Option<String>,
 }
 
+/// Redacting `Debug`. See the note on the `Group` declaration for why this
+/// is hand-written rather than derived.
+impl std::fmt::Debug for Group {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Group")
+            .field("group_id", &self.group_id)
+            .field("name", &self.name)
+            .field("created_at", &self.created_at)
+            .field("admin", &self.admin)
+            .field("members", &self.members.len())
+            .field("our_initial_chain_key", &self.our_initial_chain_key.as_ref().map(|_| "[redacted]"))
+            .field("our_signing_key", &self.our_signing_key.as_ref().map(|_| "[redacted]"))
+            .field("receiver_chains", &self.receiver_chains.len())
+            .field("verification_keys", &self.verification_keys.len())
+            .finish()
+    }
+}
+
 impl Drop for Group {
     fn drop(&mut self) {
         // Wipe per-group secret material. SenderKeyChain instances wipe

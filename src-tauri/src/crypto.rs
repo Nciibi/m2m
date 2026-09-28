@@ -1492,6 +1492,33 @@ pub struct SenderKeyChain {
     max_cache: usize,
 }
 
+/// Redacting `Debug`: exposes shape and non-secret counters only.
+///
+/// The derived implementation printed `chain_key` and, via `cached_keys`,
+/// every cached AEAD key and nonce in hex. Nothing Debug-formats this type
+/// today, but that is exactly the class of bug that one `tracing::debug!`
+/// in a later patch turns into a full key dump in a log file.
+impl std::fmt::Debug for SenderKeyChain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SenderKeyChain")
+            .field("chain_key", &"[redacted]")
+            .field("message_number", &self.message_number)
+            .field("cached_keys", &self.cached_keys.len())
+            .field("max_cache", &self.max_cache)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for CachedSenderKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CachedSenderKey")
+            .field("message_number", &self.message_number)
+            .field("key", &"[redacted]")
+            .field("nonce", &"[redacted]")
+            .finish()
+    }
+}
+
 impl Drop for SenderKeyChain {
     fn drop(&mut self) {
         self.chain_key.zeroize();
