@@ -96,6 +96,11 @@ pub enum PortMapError {
     Upnp(String),
     #[error("all three mapping protocols (PCP, NAT-PMP, UPnP IGD) failed")]
     AllFailed,
+    #[error(
+        "port mapping skipped: Tor is enabled, and PCP / NAT-PMP / SSDP are UDP \
+         queries that would go out from your real address"
+    )]
+    TorUnsupported,
 }
 
 /// Map a LAN-only dial failure onto a port-mapping error.
