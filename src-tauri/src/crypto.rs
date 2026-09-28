@@ -1031,7 +1031,7 @@ impl DoubleRatchet {
                 Ok(s) => s,
                 Err(e) => scrub_and!(e),
             };
-            let out = hkdf(&tent_root, &shared, b"M2M-DH-RATCHET", 64);
+            let mut out = hkdf(&tent_root, &shared, b"M2M-DH-RATCHET", 64);
             let mut new_root = [0u8; 32];
             let mut new_chain = [0u8; 32];
             new_root.copy_from_slice(&out[..32]);
