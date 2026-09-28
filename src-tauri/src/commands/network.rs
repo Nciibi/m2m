@@ -1020,9 +1020,8 @@ pub async fn get_connection_state(
     peer_key_hex: String,
 ) -> Result<ConnectionInfo, String> {
     let conn_state = state.connection_state(&peer_key_hex).await;
-    let conns = state.connections.read().await;
 
-    let (fingerprint, verified) = match conns.get(&peer_key_hex) {
+    let (fingerprint, verified) = match state.peer_connection(&peer_key_hex).await {
         Some(conn) => {
             let c = conn.lock().await;
             (Some(c.session.peer_fingerprint()), c.session.peer_verified)
@@ -1104,10 +1103,21 @@ pub async fn disconnect_peer(
 /// Get a list of all connected peers.
 #[tauri::command]
 pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<ConnectionInfo>, String> {
-    let conns = state.connections.read().await;
+    // Snapshot the handles, then release the map guard before locking each
+    // peer. Iterating the map in place held the global `connections` read lock
+    // across every `conn_arc.lock().await`, so one peer stalled mid-send (up
+    // to the 10s NETWORK_TIMEOUT) blocked this listing AND every writer in the
+    // process — disconnects, heartbeat teardown, new-connection insert.
+    let handles: Vec<(String, Arc<Mutex<crate::state::PeerConnection>>)> = {
+        let conns = state.connections.read().await;
+        conns
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    };
     let mut peers = Vec::new();
 
-    for (key, conn_arc) in conns.iter() {
+    for (key, conn_arc) in handles {
         let conn = conn_arc.lock().await;
         peers.push(ConnectionInfo {
             state: conn.session.state.to_string(),
@@ -1200,12 +1210,10 @@ pub(crate) async fn send_own_bundle(
     let serialized =
         protocol::serialize(&bundle).map_err(|e| format!("serialize sender key: {e}"))?;
 
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(target_peer)
-        .ok_or_else(|| "no connection to peer".to_string())?
-        .clone();
-    drop(conns);
+    let conn_arc = state
+        .peer_connection(target_peer)
+        .await
+        .ok_or_else(|| "no connection to peer".to_string())?;
     let mut conn = conn_arc.lock().await;
     let crate::state::PeerConnection {
         session,
@@ -3058,8 +3066,12 @@ pub fn spawn_receive_loop(
 
             let mut dead_reason: Option<String> = None;
             {
-                let conns = hb_state.connections.read().await;
-                let Some(conn_arc) = conns.get(&hb_peer) else {
+                // Clone-and-drop rather than holding the map guard: this
+                // worker runs every few seconds per peer and sends on the
+                // socket below, so holding the global read lock across a write
+                // (up to NETWORK_TIMEOUT) starved every connection writer in
+                // the process whenever several peers probed together.
+                let Some(conn_arc) = hb_state.peer_connection(&hb_peer).await else {
                     // Connection removed — stop heartbeat
                     break;
                 };
