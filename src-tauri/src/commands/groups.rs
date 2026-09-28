@@ -358,15 +358,7 @@ pub async fn invite_to_group(
     // Both forms are needed here: the hex identifies us to the group manager,
     // and the keypair signs the sender-key bundle and the invite. Neither is
     // read while `group_manager` is held.
-    let identity_kp = {
-        let identity = state.identity.read().await;
-        let kp = identity.as_ref().ok_or("identity not initialized")?;
-        crate::crypto::IdentityKeypair::from_bytes(
-            &kp.public_key_bytes(),
-            &kp.secret_key_bytes(),
-        )
-        .map_err(|e| format!("identity error: {e}"))?
-    };
+    let identity_kp = state.our_identity_kp().await?;
     let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     // Add member in GroupManager
@@ -397,7 +389,7 @@ pub async fn invite_to_group(
         } = &mut *conn;
         for bundle in &bundles {
             let mut signed = bundle.clone();
-            finalize_bundle(identity, &our_peer_key_hex, &mut signed);
+            finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
             let serialized =
                 protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
             let _ = session
@@ -481,7 +473,7 @@ pub async fn remove_from_group(
     // Send new sender key bundles to remaining members
     for (member_key, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
-        finalize_bundle(identity, &our_peer_key_hex, &mut signed);
+        finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
         let serialized =
             protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
 

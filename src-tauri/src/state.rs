@@ -521,6 +521,24 @@ impl AppState {
         Ok(hex::encode(kp.public_key_bytes()))
     }
 
+    /// An owned copy of this node's Ed25519 identity, for signing outside the
+    /// `identity` lock.
+    ///
+    /// Group operations must sign sender-key bundles and invites, which they
+    /// cannot do while holding `group_manager` (see [`Self::our_peer_key_hex`]
+    /// for the deadlock that ordering would create). Rather than hold two
+    /// `identity` reads open across a `group_manager` acquisition, copy the
+    /// keypair out. `IdentityKeypair::from_bytes` re-derives and validates, so
+    /// this cannot produce a key that disagrees with the one in state.
+    pub async fn our_identity_kp(&self) -> Result<crate::crypto::IdentityKeypair, String> {
+        let identity = self.identity.read().await;
+        let kp = identity
+            .as_ref()
+            .ok_or_else(|| "identity not initialized".to_string())?;
+        crate::crypto::IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
+            .map_err(|e| format!("identity error: {e}"))
+    }
+
     /// Copy of the peer's `ConnectionState` without acquiring the per-peer lock.
     ///
     /// Cheaper than [`Self::connection_state`] for poll-style callers: the
