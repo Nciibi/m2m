@@ -648,7 +648,7 @@ async fn send_file_chunks_inner(
             // transfer. `compute_file_hashes` already established the
             // discipline; the per-chunk loop never adopted it.
             let (mut buf, read_err) = {
-                let path = file_path.to_path_buf();
+                let path: std::path::PathBuf = std::path::Path::new(&file_path).to_path_buf();
                 let size = chunk_size;
                 let off = (chunk_index as u64) * (chunk_size as u64);
                 tokio::task::spawn_blocking(move || -> std::io::Result<Vec<u8>> {

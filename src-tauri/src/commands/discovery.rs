@@ -122,7 +122,15 @@ pub async fn set_discovery_config(
         // discovery finds. Previously the two discovery mechanisms were
         // completely unbridged, which is part of why the DHT never
         // bootstrapped.
-        let lan_state_shared = state.lan_state.clone();
+        // Clone the inner `Arc`, not the guard: `RwLock` is not `Clone`, and
+        // holding the guard here would keep it alive across the whole DHT task.
+        // Falls back to an empty state so the DHT simply has no LAN seeds yet.
+        let lan_state_shared = state
+            .lan_state
+            .read()
+            .await
+            .clone()
+            .unwrap_or_else(|| Arc::new(RwLock::new(lan_discovery::LanDiscoveryState::new())));
         let dht_state_clone = dht_state.clone();
         let app_for_loop = state.inner().clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));

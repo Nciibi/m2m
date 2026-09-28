@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 
 use crate::candidate;
 use crate::crypto;
+use crate::crypto::IdentityKeypair;
 use crate::hole_punch;
 use crate::identity;
 use crate::network;
@@ -595,7 +596,7 @@ pub(crate) async fn complete_inbound_connection(
     state: &Arc<AppState>,
     mut stream: tokio::net::TcpStream,
     peer_addr: SocketAddr,
-    pre_read: Option<protocol::RawFrame>,
+    pre_read: Option<network::RawFrame>,
 ) {
     let frame = match pre_read {
         Some(f) => f,
