@@ -1044,11 +1044,10 @@ pub async fn verify_peer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
 ) -> Result<(), String> {
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
     let mut conn = conn_arc.lock().await;
     conn.session.mark_peer_verified();
     Ok(())
@@ -1364,8 +1363,7 @@ async fn handle_file_transfer_packet(
     let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
         PacketType::FileTransferRequest => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -1481,8 +1479,7 @@ async fn handle_file_transfer_packet(
             }
         }
         PacketType::FileTransferChunk => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -1579,8 +1576,7 @@ async fn handle_file_transfer_packet(
             }
         }
         PacketType::FileTransferComplete => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -1703,8 +1699,7 @@ async fn handle_file_transfer_packet(
         }
         PacketType::FileTransferAccept => {
             // Peer accepted our file transfer — start sending chunks
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -1737,8 +1732,7 @@ async fn handle_file_transfer_packet(
             }
         }
         PacketType::FileTransferReject => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 if let Ok(plaintext) = conn.session.decrypt_typed_frame(frame) {
                     if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
@@ -1752,8 +1746,7 @@ async fn handle_file_transfer_packet(
         }
         PacketType::FileTransferChunkAck => {
             // Sender side: peer confirmed a chunk was received and verified.
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -1789,8 +1782,7 @@ async fn handle_file_transfer_packet(
         }
         PacketType::FileTransferCancel => {
             // Either side: peer cancelled an in-progress transfer.
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -1860,8 +1852,7 @@ async fn handle_heartbeat_frame(
             // Encrypted heartbeat: decrypt first (forged/garbage
             // frames are dropped, never acked), then answer with an
             // encrypted ack while still holding the connection lock.
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(_) => {
@@ -1896,8 +1887,7 @@ async fn handle_heartbeat_frame(
             };
             match decrypted {
                 Some(Ok(_)) => {
-                    let conns = state.connections.read().await;
-                    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+                    if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                         let mut conn = conn_arc.lock().await;
                         conn.last_hb_ack = Some(std::time::Instant::now());
                     }
@@ -2364,8 +2354,7 @@ async fn handle_sync_frame(
             }
         }
         PacketType::SyncDeviceInfo => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2393,8 +2382,7 @@ async fn handle_sync_frame(
             }
         }
         PacketType::SyncPayload => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2429,8 +2417,7 @@ async fn handle_group_frame(
     match frame.packet_type {
         // ─── Group Chat (Phase 3) ───
         PacketType::GroupCreate => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2578,8 +2565,7 @@ async fn handle_group_frame(
             }
         }
         PacketType::GroupInvite => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2683,8 +2669,7 @@ async fn handle_group_frame(
             }
         }
         PacketType::GroupSenderKey => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2737,8 +2722,7 @@ async fn handle_group_frame(
             }
         }
         PacketType::GroupEncryptedMessage => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2833,8 +2817,7 @@ async fn handle_group_frame(
             }
         }
         PacketType::GroupInfo => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2895,8 +2878,7 @@ async fn handle_group_frame(
             }
         }
         PacketType::GroupRemove => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
@@ -2990,8 +2972,7 @@ async fn handle_group_frame(
             }
         }
         PacketType::GroupLeave => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {

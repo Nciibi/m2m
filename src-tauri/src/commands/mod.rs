@@ -454,8 +454,7 @@ pub async fn attempt_reconnect(
                             since_timestamp: latest_ts as u64,
                         };
                         if let Ok(bytes) = crate::protocol::serialize(&sync_req) {
-                            let conns = flush_state.connections.read().await;
-                            if let Some(conn_arc) = conns.get(&flush_peer) {
+                            if let Some(conn_arc) = flush_state.peer_connection(&flush_peer).await {
                                 let mut conn = conn_arc.lock().await;
                                 let PeerConnection {
                                     session,

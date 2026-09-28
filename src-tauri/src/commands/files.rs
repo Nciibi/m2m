@@ -111,12 +111,10 @@ pub async fn send_file(
     }
 
     // ── Send the file transfer request ───────────────────────
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
-    drop(conns); // release read lock before send
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
 
     // Serialize chunk_hashes as Vec<Vec<u8>> for the wire (convert from Vec<[u8; 32]>)
     let wire_chunk_hashes: Vec<Vec<u8>> = chunk_hashes.iter().map(|h| h.to_vec()).collect();
@@ -247,11 +245,10 @@ pub async fn accept_file_transfer(
         }
     }
 
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
     let mut conn = conn_arc.lock().await;
     let PeerConnection {
         session,
@@ -274,11 +271,10 @@ pub async fn reject_file_transfer(
     peer_key_hex: String,
     transfer_id: String,
 ) -> Result<(), String> {
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
     let mut conn = conn_arc.lock().await;
     let PeerConnection {
         session,
@@ -384,8 +380,7 @@ pub async fn cancel_file_transfer(
     transfer_id: String,
 ) -> Result<(), String> {
     // Send cancel to peer if connected
-    let conns = state.connections.read().await;
-    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+    if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
         let mut conn = conn_arc.lock().await;
         let PeerConnection {
             session,
@@ -672,11 +667,10 @@ async fn send_file_chunks_inner(
 
             // Send the chunk
             {
-                let conns = state.connections.read().await;
-                let conn_arc = conns
-                    .get(peer_key_hex)
-                    .ok_or("peer disconnected during transfer")?
-                    .clone();
+                let conn_arc = state
+                    .peer_connection(peer_key_hex)
+                    .await
+                    .ok_or("peer disconnected during transfer")?;
                 let mut conn = conn_arc.lock().await;
                 let PeerConnection {
                     session,
@@ -747,11 +741,10 @@ async fn send_file_chunks_inner(
 
     // ── All chunks sent — send FileTransferComplete ──
     {
-        let conns = state.connections.read().await;
-        let conn_arc = conns
-            .get(peer_key_hex)
-            .ok_or("peer disconnected during transfer")?
-            .clone();
+        let conn_arc = state
+            .peer_connection(peer_key_hex)
+            .await
+            .ok_or("peer disconnected during transfer")?;
         let mut conn = conn_arc.lock().await;
         let PeerConnection {
             session,

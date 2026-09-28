@@ -87,8 +87,7 @@ pub async fn create_group(
         let serialized =
             protocol::serialize(&signed).map_err(|e| format!("serialization failed: {e}"))?;
 
-        let conns = state.connections.read().await;
-        if let Some(conn_arc) = conns.get(peer_key_hex) {
+        if let Some(conn_arc) = state.peer_connection(peer_key_hex).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
@@ -369,8 +368,7 @@ pub async fn invite_to_group(
     drop(ms);
 
     // Send sender key bundles to the new member
-    let conns = state.connections.read().await;
-    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+    if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
         let mut conn = conn_arc.lock().await;
         let PeerConnection {
             session,

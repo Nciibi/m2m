@@ -290,11 +290,10 @@ pub async fn send_conversation_names(
     my_name: String,
     their_name: String,
 ) -> Result<(), String> {
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
     let mut conn = conn_arc.lock().await;
     let PeerConnection {
         session,
@@ -409,11 +408,10 @@ pub async fn send_reaction(
     }
 
     // Send to peer via encrypted typed frame
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
     let mut conn = conn_arc.lock().await;
     let data = MessageReactionData {
         message_id,
@@ -464,11 +462,10 @@ pub async fn remove_reaction(
     }
 
     // Send remove signal to peer
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
     let mut conn = conn_arc.lock().await;
     let data = MessageReactionData {
         message_id,
@@ -611,11 +608,10 @@ pub async fn edit_message(
         return Err("edited message too large".to_string());
     }
 
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -698,11 +694,10 @@ pub async fn delete_message(
         }
     }
 
-    let conns = state.connections.read().await;
-    let conn_arc = conns
-        .get(&peer_key_hex)
-        .ok_or("no connection to this peer")?
-        .clone();
+    let conn_arc = state
+        .peer_connection(&peer_key_hex)
+        .await
+        .ok_or("no connection to this peer")?;
 
     // Send delete packet to peer
     {
@@ -784,8 +779,7 @@ pub async fn flush_offline_queue(
 
     // Now send each message via the active connection
     let mut sent_count = 0u32;
-    let conns = state.connections.read().await;
-    if let Some(conn_arc) = conns.get(peer_key_hex) {
+    if let Some(conn_arc) = state.peer_connection(peer_key_hex).await {
         let mut conn = conn_arc.lock().await;
         for (msg_id, text, expires_at) in &decrypted {
             let result = if let Some(secs) = expires_at {
@@ -910,8 +904,7 @@ pub async fn send_typing_indicator(
             tokio::time::sleep(std::time::Duration::from_millis(jitter)).await;
         }
     }
-    let conns = state.connections.read().await;
-    if let Some(conn_arc) = conns.get(&peer_key_hex) {
+    if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
         let mut conn = conn_arc.lock().await;
         let packet_type = if typing {
             PacketType::TypingIndicator

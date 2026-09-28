@@ -230,8 +230,7 @@ pub async fn pair_sync_device(
     let bytes = protocol::serialize(&our_info).map_err(|e| format!("serialize error: {e}"))?;
 
     {
-        let conns = state.connections.read().await;
-        if let Some(conn_arc) = conns.get(&peer_key_hex) {
+        if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
@@ -352,8 +351,7 @@ pub async fn handle_sync_device_info(
     drop(mgr);
 
     if let Ok(bytes) = protocol::serialize(&our_info) {
-        let conns = state.connections.read().await;
-        if let Some(conn_arc) = conns.get(peer_key_hex) {
+        if let Some(conn_arc) = state.peer_connection(peer_key_hex).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
@@ -505,8 +503,7 @@ pub async fn broadcast_sync_data(state: &Arc<AppState>, peer_key_hex: &str) -> R
 
     let bytes = protocol::serialize(&sync_payload).map_err(|e| format!("serialize error: {e}"))?;
 
-    let conns = state.connections.read().await;
-    if let Some(conn_arc) = conns.get(peer_key_hex) {
+    if let Some(conn_arc) = state.peer_connection(peer_key_hex).await {
         let mut conn = conn_arc.lock().await;
         let PeerConnection {
             session,
