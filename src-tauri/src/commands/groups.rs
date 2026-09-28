@@ -51,6 +51,19 @@ pub async fn create_group(
         .unwrap_or_default()
         .as_secs();
 
+    // Open the message store BEFORE taking the group-manager write lock.
+    //
+    // `ensure_message_store` takes the global `message_store` mutex and, on
+    // first call, performs a full SQLite open (schema creation, migrations,
+    // PRAGMAs) — hundreds of milliseconds. Holding the group-manager *write*
+    // guard across that blocked all group traffic for the duration, and the
+    // lock was also held across a nested `message_store` acquisition, adding a
+    // second edge to the store-lock graph.
+    state
+        .ensure_message_store(&state.data_dir)
+        .await
+        .map_err(|e| format!("message store init: {e}"))?;
+
     // Create group in GroupManager
     let bundles = {
         let mut gm = state.group_manager.write().await;
@@ -64,11 +77,7 @@ pub async fn create_group(
             )
             .map_err(|e| format!("group creation failed: {e}"))?;
 
-        // Persist group to DB
-        state
-            .ensure_message_store(&state.data_dir)
-            .await
-            .map_err(|e| format!("message store init: {e}"))?;
+        // Persist group to DB (store already opened above)
         let ms = state.message_store.lock().await;
         if let Some(store) = ms.as_ref() {
             let _ = store.upsert_group(&gid, &group_name, now as i64, "admin");
