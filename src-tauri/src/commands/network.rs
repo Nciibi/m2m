@@ -170,13 +170,10 @@ where
     let opk_available = opk_lock.is_some();
     let use_opk = opk_available && opk_consumed;
 
-    if opk_consumed && !opk_available {
-        tracing::warn!(
-            "incoming X3DH handshake presented a one-time prekey that has already \
-             been consumed — continuing without DH4. This session has reduced \
-             forward secrecy; issue a fresh invite for full protection."
-        );
-    }
+    // No warning here for `opk_consumed && !opk_available`: the responder now
+    // distinguishes a replayed one-time invite (refuse) from a reusable invite
+    // whose prekey was spent by an earlier recipient (proceed without DH4) and
+    // logs the appropriate message. Duplicating it here could only be wrong.
 
     let opk_for_handshake = if use_opk { opk_lock.as_ref() } else { None };
     let result = session
@@ -928,6 +925,7 @@ pub async fn connect_to_peer(
                         &expected_peer_pub,
                         &bundle,
                         our_candidates,
+                        identity::is_one_time(&signed),
                     )
                     .await
                     .map_err(|e| format!("X3DH initiator handshake failed: {e}"))?;
