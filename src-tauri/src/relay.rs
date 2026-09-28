@@ -450,8 +450,16 @@ pub async fn wait_for_bridge(
                 // Stream is now in raw proxy mode. Read the first M2M frame.
                 match network::read_frame(&mut relay_stream).await {
                     Ok(m2m_frame) => {
-                        if m2m_frame.packet_type != PacketType::HandshakeInit {
-                            tracing::warn!(packet_type = ?m2m_frame.packet_type, "relay: expected HandshakeInit");
+                        // Accept either handshake initiator, exactly as the
+                        // direct-TCP responder does. This previously matched
+                        // only `HandshakeInit`, so an X3DH peer tunnelling
+                        // through the relay — the path that most needs it, since
+                        // relayed peers are often the hardest to reach
+                        // directly — was refused outright.
+                        if m2m_frame.packet_type != PacketType::HandshakeInit
+                            && m2m_frame.packet_type != PacketType::X3DHHandshakeInit
+                        {
+                            tracing::warn!(packet_type = ?m2m_frame.packet_type, "relay: expected a handshake init");
                             let _ = network::send_error(
                                 &mut relay_stream,
                                 protocol::ErrorCode::HandshakeFailed,
