@@ -415,7 +415,7 @@ fn parse_hex_ipv4(hex: &str) -> Result<Ipv4Addr, ()> {
 async fn discover_gateway_fallback() -> Option<IpAddr> {
     // Learn our local interface IP.
     let local_ip = {
-        let sock = UdpSocket::bind("0.0.0.0:0").await.ok()?;
+        let sock = crate::dial::bind_udp_for_external_query().await.ok()?;
         sock.connect("8.8.8.8:53").await.ok()?;
         sock.local_addr().ok()?.ip()
     };
@@ -488,7 +488,9 @@ const NAT_PMP_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Send a NAT-PMP public-address request and return the WAN IP.
 async fn nat_pmp_public_address(gateway: &SocketAddr) -> Result<IpAddr, PortMapError> {
-    let sock = UdpSocket::bind("0.0.0.0:0").await?;
+    let sock = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(pm_dial_err)?;
     sock.connect(gateway).await?;
 
     // Request: [version=0, op=0] (2 bytes)
@@ -531,7 +533,9 @@ async fn nat_pmp_map_tcp(
     lifetime_secs: u32,
 ) -> Result<PortMapping, PortMapError> {
     let gw = SocketAddr::new(gateway, 5351);
-    let sock = UdpSocket::bind("0.0.0.0:0").await?;
+    let sock = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(pm_dial_err)?;
     sock.connect(gw).await?;
 
     // Request: [ver=0, op=2, reserved=2B, int_port=2B, ext_port=2B, lifetime=4B] (12 bytes)
@@ -592,7 +596,9 @@ async fn nat_pmp_remove_tcp(external_port: u16) -> Result<(), PortMapError> {
         None => return Err(PortMapError::NoGateway),
     };
 
-    let sock = UdpSocket::bind("0.0.0.0:0").await?;
+    let sock = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(pm_dial_err)?;
     sock.connect(SocketAddr::new(gateway, 5351)).await?;
 
     let mut req = [0u8; 12];
@@ -700,7 +706,9 @@ async fn pcp_map_tcp(
     lifetime_secs: u32,
 ) -> Result<PortMapping, PortMapError> {
     let gw = SocketAddr::new(gateway, 5351);
-    let sock = UdpSocket::bind("0.0.0.0:0").await?;
+    let sock = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(pm_dial_err)?;
     sock.connect(gw).await?;
 
     let req = build_pcp_map_request(lifetime_secs, internal_port, 0);
@@ -762,7 +770,9 @@ async fn pcp_remove_tcp(internal_port: u16, external_port: u16) -> Result<(), Po
         None => return Err(PortMapError::NoGateway),
     };
 
-    let sock = UdpSocket::bind("0.0.0.0:0").await?;
+    let sock = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(pm_dial_err)?;
     sock.connect(SocketAddr::new(gateway, 5351)).await?;
 
     // Lifetime = 0 signals deletion.
@@ -844,7 +854,9 @@ struct UpnpService {
 /// 3. Fetch the device description XML.
 /// 4. Extract the WANIPConnection service's `controlURL`.
 async fn upnp_discover() -> Result<UpnpService, PortMapError> {
-    let sock = UdpSocket::bind("0.0.0.0:0").await?;
+    let sock = crate::dial::bind_udp_for_external_query()
+        .await
+        .map_err(pm_dial_err)?;
     sock.set_broadcast(true)?;
     let ssdp_addr: SocketAddr = SSDP_ADDR
         .parse()
