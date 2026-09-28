@@ -125,6 +125,29 @@ fn append_candidates_to_sign_data(sign_data: &mut Vec<u8>, candidates: &[WireCan
     }
 }
 
+/// Fold the one-time-prekey participation flag into the signed transcript.
+///
+/// `used_opk` decides whether X3DH DH4 is applied, and therefore whether both
+/// peers derive the same `SK`. It was previously outside the signature, so an
+/// active MITM could rewrite it on the wire: the responder would then apply
+/// (or skip) DH4 differently from the initiator, silently downgrading the
+/// session to a weaker 3-DH agreement that both sides accept as valid. The
+/// encoding is hand-rolled and length-prefixed, matching
+/// `append_candidates_to_sign_data`, so the flag is unambiguous on both sides.
+///
+/// This changes the signed transcript and therefore the wire contract; it ships
+/// with the same protocol version bump that introduced the candidate binding.
+fn append_used_opk_to_sign_data(sign_data: &mut Vec<u8>, used_opk: Option<&[u8; 32]>) {
+    match used_opk {
+        Some(opk) => {
+            sign_data.push(1);
+            sign_data.extend_from_slice(&(opk.len() as u32).to_be_bytes());
+            sign_data.extend_from_slice(opk);
+        }
+        None => sign_data.push(0),
+    }
+}
+
 impl Session {
     /// Create a new session in the initial state.
     ///
@@ -402,6 +425,9 @@ impl Session {
         sign_data.extend_from_slice(&x25519_identity.public_key_bytes());
         sign_data.extend_from_slice(&now.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &local_candidates);
+        // `used_opk` is part of the transcript: it selects DH4 participation,
+        // so a peer that rewrites it would change the agreed `SK`.
+        append_used_opk_to_sign_data(&mut sign_data, peer_bundle.one_time_prekey.as_ref());
         let signature = identity.sign(&sign_data);
 
         let init = HandshakeInit {
