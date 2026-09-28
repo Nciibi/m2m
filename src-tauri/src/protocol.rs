@@ -414,6 +414,21 @@ pub struct HandshakeInit {
     /// The one-time prekey consumed, if any (X3DH).
     #[serde(default)]
     pub used_opk: Option<[u8; 32]>,
+    /// True when the invite that produced this handshake was marked one-time,
+    /// i.e. the initiator asserts it must never be replayed.
+    ///
+    /// Carried on the wire and covered by the signature, because the responder
+    /// has no other way to learn it: the flag lives in the invite payload, which
+    /// only the initiator holds. Without it the responder cannot tell an
+    /// ordinary reusable invite (which legitimately carries a prekey and must
+    /// keep working for a second recipient) from a spent one-time invite that
+    /// is being replayed.
+    ///
+    /// `#[serde(default)]` keeps this wire-compatible with a peer that omits it,
+    /// which is treated as "not one-time" — fail-open on the flag, but the
+    /// one-time prekey itself is still consumed exactly once either way.
+    #[serde(default)]
+    pub one_time: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

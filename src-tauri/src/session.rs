@@ -137,7 +137,7 @@ fn append_candidates_to_sign_data(sign_data: &mut Vec<u8>, candidates: &[WireCan
 ///
 /// This changes the signed transcript and therefore the wire contract; it ships
 /// with the same protocol version bump that introduced the candidate binding.
-fn append_used_opk_to_sign_data(sign_data: &mut Vec<u8>, used_opk: Option<&[u8; 32]>) {
+fn append_used_opk_to_sign_data(sign_data: &mut Vec<u8>, used_opk: Option<&[u8; 32]>, one_time: bool) {
     match used_opk {
         Some(opk) => {
             sign_data.push(1);
@@ -146,6 +146,10 @@ fn append_used_opk_to_sign_data(sign_data: &mut Vec<u8>, used_opk: Option<&[u8; 
         }
         None => sign_data.push(0),
     }
+    // One-time assertion, signed for the same reason as `used_opk`: the
+    // responder must not be able to be told "this is reusable" for an invite
+    // the initiator knows is single-use.
+    sign_data.push(u8::from(one_time));
 }
 
 impl Session {
@@ -427,7 +431,11 @@ impl Session {
         append_candidates_to_sign_data(&mut sign_data, &local_candidates);
         // `used_opk` is part of the transcript: it selects DH4 participation,
         // so a peer that rewrites it would change the agreed `SK`.
-        append_used_opk_to_sign_data(&mut sign_data, peer_bundle.one_time_prekey.as_ref());
+        append_used_opk_to_sign_data(
+            &mut sign_data,
+            peer_bundle.one_time_prekey.as_ref(),
+            one_time,
+        );
         let signature = identity.sign(&sign_data);
 
         let init = HandshakeInit {
@@ -439,6 +447,7 @@ impl Session {
             // can deterministically decide whether to apply its OPK secret
             // (H6). None when the invite's bundle carried no OPK.
             used_opk: peer_bundle.one_time_prekey,
+            one_time,
             timestamp: now,
             signature,
             candidates: local_candidates,
@@ -555,7 +564,7 @@ impl Session {
         sign_data.extend_from_slice(&init.x25519_identity_pub);
         sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &init.candidates);
-        append_used_opk_to_sign_data(&mut sign_data, init.used_opk.as_ref());
+        append_used_opk_to_sign_data(&mut sign_data, init.used_opk.as_ref(), init.one_time);
         crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature).map_err(
             |_| SessionError::HandshakeFailed("initiator signature invalid".to_string()),
         )?;
