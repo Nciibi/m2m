@@ -510,7 +510,8 @@ impl AppState {
         let Some(conn) = self.peer_connection(peer_key_hex).await else {
             return ConnectionState::Disconnected;
         };
-        conn.lock().await.session.state
+        let guard = conn.lock().await;
+        guard.session.state
     }
 
     /// Air-gap enforcement: refuse internet-facing operations when
