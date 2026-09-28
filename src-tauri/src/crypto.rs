@@ -1013,6 +1013,7 @@ impl DoubleRatchet {
         }
 
         // If peer sent a new ratchet key, compute the DH ratchet on locals.
+        let mut ratchet_reset = None;
         if let Some(new_pub) = ratchet_key {
             let shared = match dr.our_ratchet_keypair.diffie_hellman(new_pub) {
                 Ok(s) => s,
@@ -1023,11 +1024,17 @@ impl DoubleRatchet {
             let mut new_chain = [0u8; 32];
             new_root.copy_from_slice(&out[..32]);
             new_chain.copy_from_slice(&out[32..]);
+            out.zeroize();
+            let mut shared_scrub = shared;
+            shared_scrub.zeroize();
             tent_root.zeroize();
             tent_root = new_root;
             tent_chain_opt.zeroize();
             tent_chain_opt = Some(new_chain);
             tent_their_pub = *new_pub;
+            // Recorded so `commit` can prune the superseded chain's cached
+            // keys up to this point, keeping only the in-flight ones.
+            ratchet_reset = Some(tent_recv_num);
             tent_recv_num = 0;
         }
 
@@ -1082,7 +1089,7 @@ impl DoubleRatchet {
                 recv_chain_key: next_chain,
                 their_ratchet_pub: tent_their_pub,
                 recv_message_number: tent_recv_num + 1,
-                skipped_clear: ratchet_key.is_some(),
+                ratchet_reset,
                 staged_skips,
                 plaintext,
             }),
