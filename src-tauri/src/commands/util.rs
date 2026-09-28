@@ -51,7 +51,7 @@ pub const AAD_EXPORT_V2: &[u8] = b"m2m-export-v2";
 
 /// Decode a 64-char hex string into a 32-byte peer key.
 /// Returns an error if the hex string is malformed or wrong length.
-pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
+pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], AppError> {
     if hex_str.len() != 64 {
         return Err(AppError::invalid(format!(
             "invalid peer key hex length: expected 64 chars, got {}",

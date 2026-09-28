@@ -513,7 +513,7 @@ async fn finish_and_chain(
     app_handle: &AppHandle,
     state: &Arc<AppState>,
     transfer_id: &str,
-    result: Result<(), String>,
+    result: Result<(), AppError>,
 ) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
