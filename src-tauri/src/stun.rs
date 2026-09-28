@@ -188,6 +188,8 @@ pub enum StunError {
     DnsError { server: String, error: String },
     #[error("transaction ID mismatch from {server} — possible injection")]
     TransactionIdMismatch { server: String },
+    #[error("STUN blocked: {0}")]
+    TorBlocked(String),
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
