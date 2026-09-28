@@ -1194,7 +1194,9 @@ impl SessionKeys {
         let nonce: [u8; 24] = random_bytes(24)
             .try_into()
             .expect("random_bytes(24) always yields 24 bytes");
-        let ciphertext = aead_seal(&self.tx_key.clone(), &nonce, plaintext, aad);
+        // `&self.tx_key` coerces to `&[u8; 32]`; the clone copied a live
+        // session key into an unzeroized stack temporary for no reason.
+        let ciphertext = aead_seal(&self.tx_key, &nonce, plaintext, aad);
         Ok((nonce.to_vec(), ciphertext))
     }
 
