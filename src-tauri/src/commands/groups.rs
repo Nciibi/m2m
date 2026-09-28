@@ -553,7 +553,6 @@ pub async fn leave_group(
         .unwrap_or_default();
     drop(gm_read);
 
-    let conns = state.connections.read().await;
     for member_key in &member_keys {
         if member_key == &our_peer_key_hex {
             continue;
