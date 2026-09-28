@@ -33,7 +33,17 @@ export interface IdentityInfo {
 export interface ChatMessage {
   id: string;
   content: string;
-  direction: string;
+  /**
+   * Narrowed from the validator.
+   *
+   * This was `string`, while `events.ts` correctly restricted it to exactly
+   * `"sent" | "received"`. The mismatch matters: `MessageBubble` interpolates
+   * this straight into a className (`msg-bubble--${m.direction}`), so the loose
+   * type permitted the class injection that `events.ts` exists to prevent — and
+   * it was reachable on the non-event path too, where `handleSendFile`
+   * synthesises a message with a cast.
+   */
+  direction: "sent" | "received";
   timestamp: number;
   /// When this message was read (null = unread, only for received messages).
   read_at: number | null;

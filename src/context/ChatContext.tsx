@@ -651,10 +651,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const idx = prev.findIndex((t) => t.transfer_id === progress.transfer_id);
         if (idx >= 0) {
           const updated = [...prev];
-          updated[idx] = progress as unknown as TransferProgress;
+          updated[idx] = progress;
           return updated;
         }
-        return [...prev, progress as unknown as TransferProgress];
+        return [...prev, progress];
       });
     });
 

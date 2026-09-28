@@ -33,7 +33,7 @@
  * safe default for untrusted input.
  */
 
-import type { ChatMessage } from "./types";
+import type { ChatMessage, TransferProgress } from "./types";
 
 // ─── Primitive guards ───────────────────────────────────────────────────────
 
@@ -230,18 +230,17 @@ export function asFileRequestEvent(v: unknown): FileRequestEventPayload | null {
   };
 }
 
-export interface TransferProgressEventPayload {
-  transfer_id: string;
-  peer_key_hex: string;
-  filename: string;
-  total_size: number;
-  bytes_transferred: number;
-  chunks_completed: number;
-  chunks_total: number;
-  state: string;
-  speed_bytes_per_sec: number;
-  estimated_remaining_secs: number;
-}
+/**
+ * The validated shape of `m2m://transfer-progress`.
+ *
+ * This used to be a field-for-field duplicate of `types.ts`'s
+ * `TransferProgress`, which existed only because the validator declared its own
+ * structurally-identical return type. Every consumer then needed a
+ * `as unknown as` double-cast to cross between them — two of the only two type
+ * escapes in the whole codebase, forced by duplication rather than by any real
+ * modelling problem. It is now an alias of the single shared type.
+ */
+export type TransferProgressEventPayload = TransferProgress;
 
 /** Transfer states the backend reports. Bounded to a known set for the same
  *  reason connection states are: `state` is interpolated into a className. */
