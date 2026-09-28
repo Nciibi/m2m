@@ -519,153 +519,30 @@ pub async fn wait_for_bridge(
 
 /// Handle an incoming M2M connection that arrived via relay, with a pre-read frame.
 ///
-/// Mirrors `commands::network::handle_incoming_connection()` but takes an already-read
-/// HandshakeInit frame (since wait_for_bridge already consumed the first read).
+/// This used to be a ~150-line fork of the direct-TCP inbound path. It had
+/// already drifted: it ran a live STUN discovery on an unauthenticated
+/// connection (the DoS amplification the direct path avoids, and an outright
+/// Tor bypass), it held `state.identity` across the handshake, and it had no
+/// X3DH dispatch — so an X3DH peer using the relay was refused.
+///
+/// It now delegates to the single shared implementation, which is the whole
+/// point: the relay cannot fall behind the direct path again, because there is
+/// no second copy to fall behind.
 async fn handle_relay_incoming_with_frame(
-    mut stream: TcpStream,
+    stream: TcpStream,
     peer_addr: SocketAddr,
     frame: network::RawFrame,
     state: Arc<AppState>,
     app_handle: AppHandle,
 ) {
-    let mut session = Session::new();
-    {
-        let identity = state.identity.read().await;
-        let kp = match identity.as_ref() {
-            Some(kp) => kp,
-            None => {
-                tracing::error!("cannot handle relay connection: no identity");
-                return;
-            }
-        };
-
-        // Gather our local candidates for the handshake response
-        let config = state.stun_config.read().await;
-        let stun_result = stun::discover_public_addrs(&config).await.ok();
-        drop(config);
-
-        let host_candidates = candidate::gather_host_candidates();
-        let ipv6_candidates = candidate::gather_ipv6_candidates();
-        let reflexive_candidates = stun_result
-            .as_ref()
-            .map(candidate::gather_reflexive_candidates)
-            .unwrap_or_default();
-
-        let mut all = host_candidates;
-        all.extend(ipv6_candidates);
-        all.extend(reflexive_candidates);
-        all.sort_by_key(|c| std::cmp::Reverse(c.priority));
-        let wire_candidates: Vec<WireCandidate> = all
-            .iter()
-            .map(|c| WireCandidate {
-                address: c.address.clone(),
-                candidate_type: c.candidate_type as u8,
-                relay_id: None,
-            })
-            .collect();
-
-        // Update state with gathered candidates
-        {
-            let mut cand_state = state.candidates.write().await;
-            *cand_state = all;
-        }
-
-        // Same handshake flow as handle_incoming_connection
-        let x25519_pub = state
-            .x25519_identity
-            .read()
-            .await
-            .as_ref()
-            .map(|k| k.public_key_bytes())
-            .unwrap_or([0u8; 32]);
-        if let Err(e) = session
-            .handshake_as_responder(&mut stream, kp, &frame, wire_candidates, x25519_pub)
-            .await
-        {
-            tracing::warn!(error = %e, "relay handshake failed for incoming connection");
-            let _ = network::send_error(
-                &mut stream,
-                protocol::ErrorCode::HandshakeFailed,
-                "handshake failed",
-            )
-            .await;
-            return;
-        }
-    } // identity borrow dropped here
-
-    let peer_key_hex = hex::encode(session.peer_identity_pub);
-    let peer_fingerprint = session.peer_fingerprint();
-
-    // ── Contact allowlist gate (H5) ──
-    // This path previously omitted the gate entirely, so a user who enabled
-    // `require_known_contact` could still be connected to, messaged, and have
-    // the stranger persisted into their key store by routing through a relay.
-    // The direct-TCP path applies the same check via the same function.
-    if let Err(reason) = crate::commands::network::check_contact_gate(&state, &peer_key_hex).await {
-        tracing::warn!(
-            peer = %peer_key_hex,
-            fingerprint = %peer_fingerprint,
-            "relay connection rejected: {reason} (allowlist enabled)"
-        );
-        let _ =
-            network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
-        return;
-    }
-
-    // Split the stream for the receive loop
-    let (read_half, write_half) = stream.into_split();
-
-    let conn = PeerConnection {
-        write_half,
-        session,
-        remote_addr: peer_addr,
-        strategy_name: "relay".to_string(),
-        last_hb_sent: None,
-        last_hb_ack: None,
-    };
-
-    // Do not silently displace an existing connection. The map is keyed by the
-    // peer's *self-declared* Ed25519 key, so an attacker who announces a
-    // known contact's key used to overwrite the legitimate `PeerConnection`
-    // and take over the slot. Refuse instead; the real peer keeps its session.
-    {
-        let mut conns = state.connections.write().await;
-        if conns.contains_key(&peer_key_hex) {
-            tracing::warn!(
-                peer = %peer_key_hex,
-                "refusing relay connection: a session with this peer key already exists"
-            );
-            return;
-        }
-        conns.insert(
-            peer_key_hex.clone(),
-            Arc::new(tokio::sync::Mutex::new(conn)),
-        );
-    }
-
-    // Notify frontend
-    let _ = app_handle.emit(
-        "m2m://connection",
-        crate::commands::ConnectionEvent {
-            peer_key_hex: peer_key_hex.clone(),
-            state: "established".to_string(),
-            peer_fingerprint: Some(peer_fingerprint.clone()),
-            peer_verified: false,
-        },
-    );
-
-    tracing::info!(peer = %peer_key_hex, "peer connected via relay");
-
-    // Upsert peer in key store
-    if let Some(peer_key_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
-        let ks = state.key_store.lock().await;
-        if let Some(ref store) = *ks {
-            let _ = store.upsert_peer(&peer_key_bytes, &peer_fingerprint, None);
-        }
-    }
-
-    // Start the receive loop (using the one from commands/network)
-    crate::commands::network::spawn_receive_loop(app_handle, state, read_half, peer_key_hex, None);
+    crate::commands::network::complete_inbound_connection(
+        &app_handle,
+        &state,
+        stream,
+        peer_addr,
+        Some(frame),
+    )
+    .await;
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────
