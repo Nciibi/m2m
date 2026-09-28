@@ -93,9 +93,19 @@ pub enum RelayError {
 pub enum RelayRequest {
     Register = 0x01,
     Connect = 0x02,
-    #[expect(dead_code, reason = "Reserved relay protocol variant")]
     Keepalive = 0x03,
 }
+
+/// How often the client sends `KEEPALIVE` while parked in
+/// [`wait_for_bridge`], and how many consecutive unanswered probes are
+/// tolerated before the registration is declared dead.
+///
+/// The relay server reaps a registration after `READER_IDLE_TIMEOUT` (300s)
+/// measured from its last keepalive. At 60s with 3 strikes the client has
+/// 180s of margin — three lost probes on a healthy link — before it gives up,
+/// so a single dropped datagram does not tear down a working invite.
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(60);
+const KEEPALIVE_MAX_MISSES: u32 = 3;
 
 /// Relay message types (server → client).
 #[repr(u8)]
@@ -391,11 +401,43 @@ pub async fn wait_for_bridge(
 
     tracing::info!(relay = %relay_peer, "relay listener started, waiting for peer");
 
-    // Read relay frames until CONNECTED, ERROR, or disconnect
+    // Read relay frames until CONNECTED, ERROR, or disconnect.
+    //
+    // The read is bounded by `KEEPALIVE_INTERVAL` so an idle registration still
+    // emits a keepalive. Previously this loop blocked indefinitely in
+    // `read_relay_frame` and never sent one, so the server reaped the
+    // registration on age alone after 5 minutes while the client continued to
+    // report `connected: true` and kept advertising a dead `relay_id` in
+    // every invite it generated.
+    let mut consecutive_misses: u32 = 0;
     loop {
-        let frame = match read_relay_frame(&mut relay_stream).await {
-            Ok(f) => f,
-            Err(e) => {
+        let frame = match time::timeout(KEEPALIVE_INTERVAL, read_relay_frame(&mut relay_stream))
+            .await
+        {
+            Ok(Ok(f)) => {
+                consecutive_misses = 0;
+                f
+            }
+            // Timed out with nothing to read: probe, then keep waiting.
+            Err(_) => {
+                consecutive_misses += 1;
+                if consecutive_misses > KEEPALIVE_MAX_MISSES {
+                    tracing::warn!(
+                        relay = %relay_peer,
+                        misses = consecutive_misses,
+                        "relay listener: no response to keepalives — dropping registration"
+                    );
+                    break;
+                }
+                if let Err(e) =
+                    write_relay_frame(&mut relay_stream, RelayRequest::Keepalive as u8, &[]).await
+                {
+                    tracing::warn!(relay = %relay_peer, error = %e, "relay listener: keepalive write failed");
+                    break;
+                }
+                continue;
+            }
+            Ok(Err(e)) => {
                 tracing::warn!(relay = %relay_peer, error = %e, "relay listener: frame read failed");
                 break;
             }
