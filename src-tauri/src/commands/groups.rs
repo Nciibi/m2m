@@ -604,11 +604,9 @@ pub async fn load_group_messages(
         .load_group_messages_with_content(&group_id, limit.unwrap_or(100), 0)
         .map_err(|e| format!("failed to load group messages: {e}"))?;
 
-    let our_identity = state.identity.read().await;
-    let our_peer_key_hex = our_identity
-        .as_ref()
-        .map(|id| hex::encode(id.public_key_bytes()));
-    drop(our_identity);
+    // `Option` here: messages can still be listed with a locked vault, and
+    // the key is only needed to attribute outgoing messages.
+    let our_peer_key_hex = state.our_peer_key_hex().await.ok();
 
     let mut messages: Vec<ChatMessage> = Vec::with_capacity(stored.len());
     for (mut m, enc_content, enc_nonce) in stored {
