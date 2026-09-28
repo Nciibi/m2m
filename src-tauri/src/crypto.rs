@@ -711,8 +711,10 @@ struct TentativeReceive {
     /// Receive counter already advanced past this message.
     recv_message_number: u64,
     /// True when the frame carried a new DH ratchet key: the previous
-    /// receiving chain is superseded, so cached skipped keys must go.
-    skipped_clear: bool,
+    /// receiving chain is superseded. Carries the receive counter *before* the
+    /// reset so `commit` can prune exactly the now-unreachable keys instead of
+    /// dropping the whole cache.
+    ratchet_reset: Option<u64>,
     /// Skipped-message keys derived while filling the gap to this frame.
     staged_skips: Vec<(u64, [u8; 32])>,
     plaintext: Vec<u8>,

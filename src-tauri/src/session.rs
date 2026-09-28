@@ -555,6 +555,7 @@ impl Session {
         sign_data.extend_from_slice(&init.x25519_identity_pub);
         sign_data.extend_from_slice(&init.timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &init.candidates);
+        append_used_opk_to_sign_data(&mut sign_data, init.used_opk.as_ref());
         crypto::verify_signature(&init.identity_pub, &sign_data, &init.signature).map_err(
             |_| SessionError::HandshakeFailed("initiator signature invalid".to_string()),
         )?;
