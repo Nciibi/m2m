@@ -500,6 +500,27 @@ impl AppState {
         conns.get(peer_key_hex).cloned()
     }
 
+    /// This node's own public key, hex-encoded, as a `String`.
+    ///
+    /// Group operations need only this value from `identity`, but they also need
+    /// `group_manager`, and the two locks were acquired in *both* orders across
+    /// `commands/groups.rs` — `identity` → `group_manager` in `create_group` and
+    /// `get_group_info` did the reverse. Both are `tokio::sync::RwLock`, which is
+    /// write-preferring, so a queued writer on one lock blocks new readers on it
+    /// while a holder of the other waits: a real, permanent deadlock reachable
+    /// from the UI by creating a group while a vault operation writes `identity`.
+    ///
+    /// Reading the value out here and dropping the guard before any group
+    /// manager access makes the nesting impossible rather than merely
+    /// discouraged.
+    pub async fn our_peer_key_hex(&self) -> Result<String, String> {
+        let identity = self.identity.read().await;
+        let kp = identity
+            .as_ref()
+            .ok_or_else(|| "identity not initialized".to_string())?;
+        Ok(hex::encode(kp.public_key_bytes()))
+    }
+
     /// Copy of the peer's `ConnectionState` without acquiring the per-peer lock.
     ///
     /// Cheaper than [`Self::connection_state`] for poll-style callers: the

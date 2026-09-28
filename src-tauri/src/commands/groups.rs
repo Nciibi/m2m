@@ -37,9 +37,9 @@ pub async fn create_group(
     member_peer_keys: Vec<String>,
 ) -> Result<super::GroupInfo, String> {
     // Validate: members must exist as contacts
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     if member_peer_keys.is_empty() {
         return Err("group must have at least one member besides yourself".to_string());
@@ -170,9 +170,9 @@ pub async fn send_group_message(
         .unwrap_or_default()
         .as_secs();
 
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     let msg_id = uuid::Uuid::new_v4().to_string();
 
@@ -307,9 +307,9 @@ pub async fn get_group_info(
     let gm = state.group_manager.read().await;
     let group = gm.get_group(&group_id).ok_or("group not found")?;
 
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     let our_role = if group.is_admin(&our_peer_key_hex) {
         "admin"
@@ -343,9 +343,9 @@ pub async fn invite_to_group(
         .unwrap_or_default()
         .as_secs();
 
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     // Add member in GroupManager
     let bundles = {
@@ -435,9 +435,9 @@ pub async fn remove_from_group(
     group_id: String,
     peer_key_hex: String,
 ) -> Result<(), String> {
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     let bundles = {
         let mut gm = state.group_manager.write().await;
@@ -517,9 +517,9 @@ pub async fn leave_group(
     state: State<'_, Arc<AppState>>,
     group_id: String,
 ) -> Result<(), String> {
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     {
         let mut gm = state.group_manager.write().await;
@@ -648,9 +648,9 @@ pub async fn update_group_name(
     group_id: String,
     new_name: String,
 ) -> Result<(), String> {
-    let our_identity = state.identity.read().await;
-    let identity = our_identity.as_ref().ok_or("identity not initialized")?;
-    let our_peer_key_hex = hex::encode(identity.public_key_bytes());
+    // Snapshot our own public key, releasing `identity` before any
+    // `group_manager` access — see `AppState::our_peer_key_hex`.
+    let our_peer_key_hex = state.our_peer_key_hex().await?;
 
     {
         let mut gm = state.group_manager.write().await;
