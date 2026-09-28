@@ -9,6 +9,7 @@ import {
 import Sidebar from "../components/Sidebar";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
+import { asArray } from "../events";
 import { useSettings } from "../context/SettingsContext";
 import FamilyTab from "../components/FamilyTab";
 import { useNow } from "../hooks/useNow";
@@ -57,7 +58,8 @@ export default function HubView() {
   const loadFamily = useCallback(async () => {
     try {
       setFamilyLoading(true);
-      const f = await invoke<FamilyMember[]>("list_family");
+      // `asArray`: asserts vs. checks — see `events.ts`.
+      const f = asArray<FamilyMember>(await invoke("list_family"));
       setFamily(f);
     } catch { /* noop */ }
     finally { setFamilyLoading(false); }
