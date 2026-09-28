@@ -124,6 +124,19 @@ impl std::error::Error for AppError {}
 // calls. Every variant is listed, so adding a variant to any of these enums is
 // a compile error here rather than a silent `unreachable!()` or a lost code.
 
+use crate::crypto::CryptoError;
+use crate::dht::DhtError;
+use crate::hole_punch::ConnectionError;
+use crate::identity::IdentityError;
+use crate::network::NetworkError;
+use crate::port_mapping::PortMapError;
+use crate::protocol::ProtocolError;
+use crate::relay::RelayError;
+use crate::session::SessionError;
+use crate::storage::StorageError;
+use crate::stun::StunError;
+use crate::tor::TorError;
+
 impl From<CryptoError> for AppError {
     fn from(e: CryptoError) -> Self {
         // Message first: the enum is matched by reference so the rendered
