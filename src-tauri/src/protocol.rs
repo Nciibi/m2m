@@ -73,9 +73,6 @@ pub const MAX_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 /// bounds the receive bitmask to 16 KiB per transfer.
 pub const MAX_TOTAL_CHUNKS: u32 = 16 * 1024;
 
-/// Maximum handshake message size: 4 KiB.
-pub const MAX_HANDSHAKE_SIZE: usize = 4 * 1024;
-
 /// Minimum frame size: version (1) + at least 1 byte payload type.
 pub const MIN_FRAME_SIZE: u32 = 2;
 
@@ -100,9 +97,6 @@ pub const MAX_SESSION_DURATION_SECS: u64 = 24 * 60 * 60;
 /// File transfer protocol version (v0x02 — adds per-chunk hashes, ACKs, cancel).
 pub const PROTOCOL_FILE_TRANSFER_VERSION: u8 = 0x02;
 
-/// Key rotation interval in seconds (1 hour, reserved for future use).
-pub const KEY_ROTATION_INTERVAL_SECS: u64 = 60 * 60;
-
 /// Maximum invite validity duration in seconds (24 hours).
 pub const MAX_INVITE_VALIDITY_SECS: u64 = 24 * 60 * 60;
 
@@ -115,9 +109,6 @@ pub const MAX_INVITE_LENGTH: usize = 4096;
 
 /// Maximum address hint length.
 pub const MAX_ADDRESS_HINT_LENGTH: usize = 256;
-
-/// Rate limit: max messages per second from a single peer.
-pub const RATE_LIMIT_MSGS_PER_SEC: u32 = 20;
 
 #[derive(Debug, Error)]
 pub enum ProtocolError {
@@ -329,7 +320,9 @@ pub fn max_frame_size_for(packet_type: PacketType) -> u32 {
             (MAX_TEXT_MESSAGE_SIZE * 2 + 8 * 1024) as u32 + hdr
         }
         // Handshakes carry a signed prekey bundle plus an ICE candidate list,
-        // which is larger than MAX_HANDSHAKE_SIZE once candidates are counted.
+        // which is what the 4 KiB figure people remember from the removed
+        // `MAX_HANDSHAKE_SIZE` constant did NOT bound once candidates are
+        // counted. That constant was declared, documented, and never used.
         PacketType::HandshakeInit
         | PacketType::HandshakeResponse
         | PacketType::HandshakeComplete

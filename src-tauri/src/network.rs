@@ -44,7 +44,9 @@ const MAX_TOTAL_CONNECTIONS: usize = 50;
 ///
 /// The previous state of this code declared
 /// `protocol::RATE_LIMIT_MSGS_PER_SEC = 20` and never read it, while depending
-/// on the `governor` crate with zero imports — so an established peer could
+/// on the `governor` crate with zero imports. (The constant has since been
+/// deleted, so this paragraph is history rather than a pointer.) An established
+/// peer could
 /// send frames at line rate, each costing a buffer allocation, a MessagePack
 /// parse, a bounded HKDF gap walk, and for `EncryptedMessage` a SQLite write
 /// plus `PRAGMA optimize`.
