@@ -58,8 +58,20 @@ function AppInner() {
   useEffect(() => {
     invoke("reapply_security_config").catch(() => { /* backend may not be ready yet */ });
 
-    const unlisten = listen<{ active: string[] }>("m2m://capture-warning", (event) => {
-      setCaptureWarning(event.payload.active ?? []);
+    // Validate through `asCaptureWarning` rather than trusting
+    // `listen<{active: string[]}>`. The generic is an assertion, not a check: it
+    // told the compiler the payload was already the right shape, which is the
+    // opposite of what the boundary has to establish. `events.ts` already
+    // implements a tested guard for this exact event — length-bounded and
+    // control-character-screened, because these strings are rendered into the
+    // DOM by `active.join(", ")`. It was simply never called, so the banner
+    // accepted an unbounded, unfiltered array from a process-enumeration result
+    // — the one place in the app where a peer's software choice becomes UI
+    // text.
+    const unlisten = listen("m2m://capture-warning", (event) => {
+      const payload = asCaptureWarning(event.payload);
+      if (!payload) return;  // malformed → drop, never render
+      setCaptureWarning(payload.active);
     }).catch(() => () => {});
 
     return () => { unlisten.then((fn) => fn()).catch(() => {}); };
