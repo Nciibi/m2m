@@ -80,14 +80,12 @@ impl std::fmt::Display for TransferState {
 /// on timeouts. Pre-computed chunk hashes are stored for verification
 /// before each send.
 pub struct OutgoingFileTransfer {
-    #[allow(dead_code)]
     pub transfer_id: String,
     pub peer_key_hex: String,
     pub file_path: PathBuf,
     pub filename: String,
     pub total_size: u64,
     pub total_chunks: u32,
-    #[allow(dead_code)]
     pub file_hash: [u8; 32],
     /// Per-chunk SHA-256 hashes, pre-computed in a single streaming pass.
     pub chunk_hashes: Vec<[u8; 32]>,
@@ -128,11 +126,16 @@ pub struct IncomingFileTransfer {
     pub total_size: u64,
     pub total_chunks: u32,
     pub file_hash: Vec<u8>,
-    /// Per-chunk SHA-256 hashes from v2 request (empty if v1 sender).
-    #[allow(dead_code)]
+    /// Per-chunk SHA-256 hashes from the v2 request (empty for a v1 sender).
+    ///
+    /// Verified against each arriving chunk in `handle_file_chunk`. This was
+    /// `#[allow(dead_code)]` on the grounds that the receive path re-hashed the
+    /// chunk instead — true, but the re-hash was compared against the hash
+    /// *inside the chunk*, which the same peer supplied. These are the only
+    /// hashes the receiver can check against a value it did not just receive,
+    /// so they are now actually used, and the annotation is gone.
     pub chunk_hashes: Vec<Vec<u8>>,
-    /// File transfer protocol version used by the sender (0x01 = legacy, 0x02 = v2).
-    #[allow(dead_code)]
+    /// File transfer protocol version used by the sender (0x01 legacy, 0x02 v2).
     pub peer_protocol_version: u8,
     pub save_path: PathBuf,
     /// Temporary file on disk — chunks are written here as they arrive.
