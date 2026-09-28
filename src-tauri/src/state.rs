@@ -479,6 +479,40 @@ impl AppState {
         }
     }
 
+    /// Borrow a peer's connection handle **without** holding the connection-map
+    /// guard.
+    ///
+    /// `connections` is a single global map guarded by one `RwLock`, so holding
+    /// its read guard across an `.await` on socket I/O blocks every writer in
+    /// the process — `disconnect_peer`, heartbeat teardown, receive-loop
+    /// cleanup, and every new-connection insert. A stalled peer holding the
+    /// guard for the 10-second `NETWORK_TIMEOUT` starves all of them, and the
+    /// sync-resend path can hold it for `MAX_SYNC_RESEND_MESSAGES` writes.
+    ///
+    /// Cloning the `Arc` and dropping the guard here makes that ordering the
+    /// default instead of something each call site has to remember. Per-peer
+    /// locking still serialises that peer's own sends, which is intended.
+    pub async fn peer_connection(
+        &self,
+        peer_key_hex: &str,
+    ) -> Option<Arc<Mutex<PeerConnection>>> {
+        let conns = self.connections.read().await;
+        conns.get(peer_key_hex).cloned()
+    }
+
+    /// Copy of the peer's `ConnectionState` without acquiring the per-peer lock.
+    ///
+    /// Cheaper than [`Self::connection_state`] for poll-style callers: the
+    /// state is only ever set to `Established` once a handshake completes and
+    /// to `Disconnected` on teardown, so reading it behind the map guard alone
+    /// is sufficient and avoids contending with an in-flight send.
+    pub async fn peer_state_snapshot(&self, peer_key_hex: &str) -> ConnectionState {
+        let Some(conn) = self.peer_connection(peer_key_hex).await else {
+            return ConnectionState::Disconnected;
+        };
+        conn.lock().await.session.state
+    }
+
     /// Air-gap enforcement: refuse internet-facing operations when
     /// air-gap mode is enabled. LAN-only listening/connecting still works;
     /// what's blocked is anything that reveals your address to, or derives
