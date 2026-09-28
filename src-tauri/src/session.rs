@@ -220,6 +220,11 @@ impl Session {
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: x25519_pub,
             used_opk: None,
+            // The legacy handshake carries no prekey bundle, so there is no
+            // one-time property to assert. A legacy peer's replay exposure is
+            // the reduced-security mode documented on this path, not something
+            // this flag can address.
+            one_time: false,
             timestamp: now,
             signature,
             candidates: local_candidates,
@@ -414,8 +419,8 @@ impl Session {
         expected_peer_pub: &[u8; 32],
         peer_bundle: &crate::crypto::PrekeyBundle,
         local_candidates: Vec<WireCandidate>,
-        /// Whether the source invite was marked one-time. Forwarded into the
-        /// signed transcript so the responder can enforce single use.
+        // Whether the source invite was marked one-time. Forwarded into the
+        // signed transcript so the responder can enforce single use.
         one_time: bool,
     ) -> Result<(), SessionError> {
         self.state = ConnectionState::Handshaking;
