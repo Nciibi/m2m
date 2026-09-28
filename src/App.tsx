@@ -107,18 +107,37 @@ function AppInner() {
       }
     };
     
-    // Premium Mouse Spotlight Effect
+    // Mouse spotlight sheen (`--cursor-x` / `--cursor-y`, consumed by
+    // animations.css and utilities.css).
+    //
+    // Throttled to one write per animation frame. These are custom properties
+    // on `documentElement`, so every write invalidates style for the whole
+    // document; at a 120 Hz pointer rate the unthrottled version forced roughly
+    // 240 full style recalculations per second for the lifetime of the app, to
+    // feed two radial gradients. Coalescing to rAF keeps the effect visually
+    // identical — the gradient is already only painted once per frame — and
+    // bounds the cost to the display refresh rate.
+    let rafId: number | null = null;
+    let pendingX = 0;
+    let pendingY = 0;
+    const flush = () => {
+      rafId = null;
+      document.documentElement.style.setProperty('--cursor-x', `${pendingX}px`);
+      document.documentElement.style.setProperty('--cursor-y', `${pendingY}px`);
+    };
     const handleMouseMove = (e: MouseEvent) => {
-      document.documentElement.style.setProperty('--cursor-x', `${e.clientX}px`);
-      document.documentElement.style.setProperty('--cursor-y', `${e.clientY}px`);
+      pendingX = e.clientX;
+      pendingY = e.clientY;
+      if (rafId === null) rafId = requestAnimationFrame(flush);
     };
 
     window.addEventListener("keydown", handler);
     window.addEventListener("mousemove", handleMouseMove);
-    
+
     return () => {
       window.removeEventListener("keydown", handler);
       window.removeEventListener("mousemove", handleMouseMove);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, []);
 
