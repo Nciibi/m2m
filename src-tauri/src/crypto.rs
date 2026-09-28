@@ -1512,7 +1512,6 @@ impl std::fmt::Debug for SenderKeyChain {
 impl std::fmt::Debug for CachedSenderKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CachedSenderKey")
-            .field("message_number", &self.message_number)
             .field("key", &"[redacted]")
             .field("nonce", &"[redacted]")
             .finish()
