@@ -391,7 +391,6 @@ pub async fn cancel_file_transfer(
             .send_file_cancel(&mut *write_half, &transfer_id)
             .await;
     }
-    drop(conns);
 
     // Clean up outgoing state
     {

@@ -994,7 +994,6 @@ pub async fn connect_to_peer(
 
     let mut conns = state.connections.write().await;
     conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
-    drop(conns);
 
     // Start the receive loop for this peer
     spawn_receive_loop(
@@ -1725,7 +1724,6 @@ async fn handle_file_transfer_packet(
                                     let app_c = app_handle.clone();
                                     let peer_c = peer_key_hex.clone();
                                     drop(conn);
-                                    drop(conns);
                                     // Start via queue-aware transfer lifecycle
                                     super::files::try_start_outgoing_transfer(
                                         app_c, state_c, peer_c, tid,
@@ -2367,7 +2365,6 @@ async fn handle_sync_frame(
                             // Drop conn lock before calling sync handler which may re-acquire it
                             drop(conn);
                             let _ = conn_arc;
-                            drop(conns);
                             let _ = crate::sync::handle_sync_device_info(
                                 app_handle,
                                 state,
@@ -2393,7 +2390,6 @@ async fn handle_sync_frame(
                         {
                             drop(conn);
                             let _ = conn_arc;
-                            drop(conns);
                             crate::sync::handle_sync_payload(state, &peer_key_hex, &payload).await;
                         }
                     }
@@ -2485,7 +2481,6 @@ async fn handle_group_frame(
                                 }
                             }
                             drop(conn);
-                            drop(conns);
 
                             state.ensure_message_store(&state.data_dir).await.ok();
                             let ms = state.message_store.lock().await;
@@ -2591,7 +2586,6 @@ async fn handle_group_frame(
                                 .is_ok()
                             };
                             drop(conn);
-                            drop(conns);
 
                             if !inviter_pub_ok {
                                 tracing::warn!(group = %gid, peer = %peer_key_hex, "group invite signature invalid — ignoring");
@@ -2683,7 +2677,6 @@ async fn handle_group_frame(
                             // verified against it (H2 trust model v2).
                             let peer_identity_pub = conn.session.peer_identity_pub;
                             drop(conn);
-                            drop(conns);
                             let our_peer_key_hex = {
                                 let id = state.identity.read().await;
                                 id.as_ref().map(|kp| hex::encode(kp.public_key_bytes()))
@@ -2734,7 +2727,6 @@ async fn handle_group_frame(
                             let gid = group_msg.group_id.clone();
                             let sender = group_msg.sender_peer_key_hex.clone();
                             drop(conn);
-                            drop(conns);
 
                             // Decrypt inner group message
                             let mut gm = state.group_manager.write().await;
@@ -2841,7 +2833,6 @@ async fn handle_group_frame(
                                     .unwrap_or(false);
                             }
                             drop(conn);
-                            drop(conns);
 
                             // Authorization (H2): renames must come from the claimed
                             // changer themselves, who must be an admin member of the
@@ -2905,7 +2896,6 @@ async fn handle_group_frame(
                             };
                             let peer_identity_pub = conn.session.peer_identity_pub;
                             drop(conn);
-                            drop(conns);
 
                             if !authorized {
                                 tracing::warn!(
@@ -2996,7 +2986,6 @@ async fn handle_group_frame(
                                 return;
                             }
                             drop(conn);
-                            drop(conns);
 
                             let our_peer_key_hex = {
                                 let id = state.identity.read().await;

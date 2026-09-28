@@ -364,7 +364,6 @@ pub async fn handle_sync_device_info(
                 .send_encrypted_typed(write_half, PacketType::SyncDeviceInfo, &bytes)
                 .await;
         }
-        drop(conns);
     }
 
     // Send sync data (conversation metadata) — only now that the peer is a
