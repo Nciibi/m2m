@@ -117,6 +117,9 @@ fn pm_dial_err(e: crate::dial::DialError) -> PortMapError {
             PortMapError::Upnp(format!("{a} is not a local gateway address"))
         }
         crate::dial::DialError::TorLanUnsupported(_) => PortMapError::AllFailed,
+        // The UDP protocols (PCP / NAT-PMP / SSDP) now go through the UDP
+        // chokepoint too, so the Tor refusal reaches them.
+        crate::dial::DialError::TorUdpUnsupported => PortMapError::TorUnsupported,
         crate::dial::DialError::Dial(msg) => PortMapError::Upnp(msg),
     }
 }
