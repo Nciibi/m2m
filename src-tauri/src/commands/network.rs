@@ -2258,8 +2258,9 @@ async fn handle_sync_frame(
                             }
                             let since = (sync.since_timestamp as i64).max(earliest);
                             let missed: Vec<(String, Option<i64>)> = {
-                                let ms = state.message_store.lock().await;
+                                // Lock order: `storage_key` before `message_store`.
                                 let sk = state.storage_key.read().await;
+                                let ms = state.message_store.lock().await;
                                 if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
                                     if let Ok(stored) =
                                         store.load_sent_messages_since(&peer_key_hex, since)

@@ -1,3 +1,23 @@
+//! M2M — shared command helpers
+//!
+//! ## Lock order
+//!
+//! When a code path needs both the vault storage key and the message store,
+//! acquire **`storage_key` first, then `message_store`** — never the reverse.
+//!
+//! `storage_key` is a `tokio::sync::RwLock` (write-preferring: a queued writer
+//! blocks subsequent readers) and `message_store` is a `tokio::sync::Mutex`.
+//! Sixteen read paths took them in the documented order; `search_messages` and
+//! the sync-resend path took them the other way. That is a lock-order cycle: a
+//! holder of `message_store` waits for `storage_key.read()`, which is blocked
+//! by a queued `storage_key` writer, which is blocked by a reader holding the
+//! lock and waiting for `message_store`. A permanent hang, with no timeout and
+//! no error — on the vault-lock path, since `lock_vault` and `unlock_vault` are
+//! exactly the queued writers.
+//!
+//! The same rule applies to `AppState::our_peer_key_hex` and
+//! `group_manager`: snapshot the value out of `identity` before touching
+//! `group_manager`.
 //! Shared helper functions used across command modules.
 
 /// AAD context for key store encryption (identity keys, peer keys).

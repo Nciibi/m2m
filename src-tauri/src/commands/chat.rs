@@ -943,8 +943,11 @@ pub async fn search_messages(
     query: String,
 ) -> Result<Vec<ChatMessage>, String> {
     let messages: Vec<ChatMessage> = {
-        let ms = state.message_store.lock().await;
+                                // Lock order: `storage_key` before `message_store`, the
+                                // order used by every other read path. See
+                                // `commands::util::LOCK_ORDER` for why.
         let sk = state.storage_key.read().await;
+        let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
             let stored = store
                 .load_messages(&peer_key_hex, 500)
