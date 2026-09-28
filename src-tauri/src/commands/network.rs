@@ -2240,8 +2240,15 @@ async fn handle_sync_frame(
     let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
         PacketType::SyncRequest => {
-            let conns = state.connections.read().await;
-            if let Some(conn_arc) = conns.get(&peer_key_hex) {
+            // Clone the handle and release the connection-map guard BEFORE any
+            // I/O. Holding it across this body meant a single authenticated
+            // 20-byte `SyncRequest` from a peer that simply stops reading its
+            // socket pinned the global `connections` read lock for up to
+            // `MAX_SYNC_RESEND_MESSAGES` × `NETWORK_TIMEOUT` (~5.5 hours),
+            // blocking every `disconnect_peer`, every heartbeat teardown and
+            // every new-connection insert in the process. The count and
+            // lookback caps bound the work but never released the lock.
+            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
