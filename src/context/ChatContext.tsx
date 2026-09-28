@@ -193,7 +193,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const filePath = typeof selected === "string" ? selected : selected;
       await invoke("send_file", { peerKeyHex: peerKeyHex, filePath });
       const filename = filePath.split(/[\\/]/).pop() || "file";
-      setMessages((prev) => [...prev, {
       // An optimistic local row so the send feels immediate. Built as a
       // `ChatMessage` rather than cast into one: the previous `as ChatMessage`
       // suppressed the compiler on exactly the fields that reach a className
