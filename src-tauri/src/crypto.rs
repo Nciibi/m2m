@@ -471,15 +471,20 @@ fn kx_derive(our_pk: &[u8; 32], their_pk: &[u8; 32], shared: &[u8; 32]) -> ([u8;
     } else {
         (their_pk, our_pk)
     };
+    // `ikm` embeds the raw X25519 shared secret and `out` holds both derived
+    // session keys; neither was zeroized on the way out, leaving live key
+    // material in freed heap.
     let mut ikm = Vec::with_capacity(96);
     ikm.extend_from_slice(shared);
     ikm.extend_from_slice(lo);
     ikm.extend_from_slice(hi);
-    let out = hkdf(&[0u8; 32], &ikm, b"m2m-kx-v1", 64);
+    let mut out = hkdf(&[0u8; 32], &ikm, b"m2m-kx-v1", 64);
     let mut k_lo = [0u8; 32];
     let mut k_hi = [0u8; 32];
     k_lo.copy_from_slice(&out[..32]);
     k_hi.copy_from_slice(&out[32..]);
+    out.zeroize();
+    ikm.zeroize();
     (k_lo, k_hi)
 }
 
