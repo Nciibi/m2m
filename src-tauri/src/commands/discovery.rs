@@ -75,6 +75,7 @@ pub async fn set_discovery_config(
             Arc::new(RwLock::new(*val))
         };
         let lan_state_clone = lan_state.clone();
+        let app_for_loop = state.inner().clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let cancel_clone = lan_cancel.clone();
 
@@ -118,10 +119,6 @@ pub async fn set_discovery_config(
         let dht_state = Arc::new(RwLock::new(dht::DhtState::new(dht::DhtConfig::default())));
         let dht_cancel = Arc::new(AtomicBool::new(false));
 
-        let listen_addr = {
-            let val = state.listen_addr.read().await;
-            Arc::new(RwLock::new(*val))
-        };
         // Share the live LAN state so the DHT can seed from peers LAN
         // discovery finds. Previously the two discovery mechanisms were
         // completely unbridged, which is part of why the DHT never
@@ -135,9 +132,10 @@ pub async fn set_discovery_config(
         tokio::spawn(async move {
             dht::announce_loop(
                 dht_state_clone,
+                lan_state_shared,
                 eid,
                 network_monitor,
-                listen_addr,
+                app_for_loop,
                 cancel_clone,
             )
             .await;

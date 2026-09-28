@@ -508,7 +508,14 @@ pub async fn announce_loop(
     lan_state: Arc<RwLock<crate::lan_discovery::LanDiscoveryState>>,
     ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
     network_monitor: Arc<RwLock<crate::ephemeral_id::NetworkMonitor>>,
-    listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
+    /// Live application state, read for the listen address each tick.
+    ///
+    /// This was previously an `Arc<RwLock<Option<SocketAddr>>>` built by
+    /// *copying* `state.listen_addr` at spawn time. Nothing ever wrote the
+    /// copy, so enabling discovery before `start_listening` (or after a
+    /// listener restart) left the announcer reading `None` forever and it
+    /// never announced at all.
+    app: Arc<crate::state::AppState>,
     cancel: Arc<AtomicBool>,
 ) {
     // Track the current ephemeral ID so we can re-announce if it rotates
@@ -587,11 +594,14 @@ pub async fn announce_loop(
             nodes
         };
 
-        let addr = *listen_addr.read().await;
-
-        let addr = match addr {
+        let addr = match *app.listen_addr.read().await {
             Some(a) => a,
-            None => continue,
+            None => {
+                // The listener is not up yet. Announcing an address we do not
+                // hold would advertise a port nothing is listening on.
+                tracing::debug!("DHT announce skipped: not listening yet");
+                continue;
+            }
         };
 
         for node in &nodes {
