@@ -39,7 +39,7 @@
 /// ```
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -96,6 +96,20 @@ struct Registration {
     bridge_tx: oneshot::Sender<TcpStream>,
     peer_addr: SocketAddr,
     created_at: Instant,
+    /// Last time this client proved it was still there, refreshed by KEEPALIVE.
+    ///
+    /// A `std::sync::Mutex<Instant>` rather than a plain field because the
+    /// reader task that refreshes it does not hold the registration table lock.
+    /// The critical section is a single assignment with no `.await` inside, so
+    /// contention is negligible and it never blocks the async runtime.
+    last_seen: Arc<StdMutex<Instant>>,
+}
+
+impl Registration {
+    /// Age since the last KEEPALIVE (or since registration, if none arrived).
+    fn idle_for(&self) -> Duration {
+        self.last_seen.lock().expect("last_seen mutex poisoned").elapsed()
+    }
 }
 
 // ─── Frame I/O ───────────────────────────────────────────────────────────────
@@ -354,6 +368,7 @@ async fn handle_register(
                 bridge_tx,
                 peer_addr,
                 created_at: Instant::now(),
+                last_seen: Arc::new(StdMutex::new(Instant::now())),
             },
         );
     }
