@@ -92,6 +92,9 @@ pub async fn get_stun_config(state: State<'_, Arc<AppState>>) -> Result<stun::St
     Ok(config.clone())
 }
 
+/// Upper bound on configured STUN servers. One task and one socket per entry.
+const MAX_STUN_SERVERS: usize = 8;
+
 /// Update the STUN server list and configuration.
 #[tauri::command]
 pub async fn set_stun_servers(
@@ -101,13 +104,45 @@ pub async fn set_stun_servers(
     if servers.is_empty() {
         return Err("STUN server list cannot be empty".to_string());
     }
-    // Basic validation: each entry must contain a colon (host:port)
+    // Cap the list. `discover_public_addrs` spawns one task and one socket per
+    // entry, so an unbounded list is a task/socket exhaustion primitive
+    // reachable straight from the renderer.
+    if servers.len() > MAX_STUN_SERVERS {
+        return Err(format!(
+            "too many STUN servers: {} (max {})",
+            servers.len(),
+            MAX_STUN_SERVERS
+        ));
+    }
+    // Each entry must be a real `host:port` and must parse.
+    //
+    // The previous check was `s.contains(':')`, which accepts `"a:b"`, an
+    // empty host, and a non-numeric port. Whatever passes here is DNS-resolved
+    // and sent a UDP datagram from the user's real address, so this list is a
+    // probe target: it must be validated, not merely colon-checked.
     for s in &servers {
-        if !s.contains(':') {
-            return Err(format!("invalid STUN server address (missing port): {s}"));
-        }
         if s.len() > 255 {
             return Err(format!("STUN server address too long: {s}"));
+        }
+        if s.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(format!("invalid STUN server address: {s}"));
+        }
+        let (host, port) = s
+            .rsplit_once(':')
+            .ok_or_else(|| format!("invalid STUN server address (missing port): {s}"))?;
+        if host.is_empty() {
+            return Err(format!("invalid STUN server address (missing host): {s}"));
+        }
+        if host.contains(':') && !host.starts_with('[') {
+            return Err(format!(
+                "invalid STUN server address (bare IPv6 must be bracketed): {s}"
+            ));
+        }
+        let port: u16 = port
+            .parse()
+            .map_err(|_| format!("invalid STUN server port: {s}"))?;
+        if port == 0 {
+            return Err(format!("invalid STUN server port (0): {s}"));
         }
     }
 
