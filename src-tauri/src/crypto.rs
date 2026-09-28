@@ -919,15 +919,17 @@ impl DoubleRatchet {
     ///
     /// ## Out-of-order message handling
     ///
-    /// If `message_number` is below the current receiving chain position, the
-    /// skipped message key cache is consulted BEFORE any ratchet processing.
-    /// A cached key is consumed only when its decryption succeeds, so a
-    /// corrupted retransmission cannot burn the key needed for the genuine
-    /// frame.
+    /// If a ratchet-less frame's `message_number` has a cached key, that key is
+    /// used. The lookup is not gated on the receive counter, because a DH
+    /// ratchet resets that counter and frames from the superseded chain can
+    /// still be in flight. A cached key is consumed only when its decryption
+    /// succeeds, so a corrupted retransmission cannot burn the key the genuine
+    /// frame needs.
     ///
-    /// The cache is capped at [`MAX_SKIP`] entries (2000). Beyond this, new
-    /// messages are rejected as `MaxSkippedKeysExceeded` to prevent memory
-    /// exhaustion from a peer who sends messages with large gaps.
+    /// The cache is capped at [`MAX_SKIP`] entries (2000), counted across all
+    /// ratchet phases. Beyond this, new messages are rejected as
+    /// `MaxSkippedKeysExceeded` to prevent memory exhaustion from a peer who
+    /// sends messages with large gaps.
     pub fn decrypt(
         &mut self,
         ciphertext: &[u8],
@@ -937,32 +939,42 @@ impl DoubleRatchet {
         ratchet_key: Option<&[u8; 32]>,
     ) -> Result<Vec<u8>, CryptoError> {
         // ── Check skipped message key cache for out-of-order messages ──
-        // Only reached WITHOUT a ratchet key: a DH ratchet resets the
-        // receive counter to zero, so ratcheted frames always pass through
-        // the main path below. With no ratchet key, a frame numbered below
-        // our counter must come from the cached skipped keys.
-        if ratchet_key.is_none() && message_number < self.recv_message_number {
-            let saved_key = match self.skipped_keys.get(&message_number) {
-                Some(k) => *k,
-                None => {
-                    return Err(CryptoError::DoubleRatchetError(format!(
-                        "message key for {} not found (already consumed or never cached)",
-                        message_number
-                    )));
+        //
+        // The lookup is unconditional for ratchet-less frames, which is what
+        // the Signal spec does. A frame with no ratchet header can only have
+        // come from the chain we are currently receiving on, and if we are
+        // missing that message key the only way to read it is the cache.
+        //
+        // Gating this on `message_number < recv_message_number` (as the
+        // previous implementation did) is unsound once a DH ratchet lands: the
+        // counter resets to zero, so a frame from the *superseded* chain that
+        // is still in flight has a number far above the counter, never consults
+        // the cache, and is instead run through gap-derivation against the
+        // wrong chain — where its key can never match. That silently and
+        // permanently dropped every message crossing a ratchet in flight.
+        //
+        // Ratcheted frames are excluded: a new ratchet key means a new chain,
+        // whose keys are not in this cache.
+        if ratchet_key.is_none() {
+            if let Some(&saved_key) = self.skipped_keys.get(&message_number) {
+                // Rebuild the same header-derived AAD the sender used. A
+                // skipped-key message always comes from the current chain, so
+                // the ratchet flag is 0 and no public key is present.
+                let full_aad = Self::dr_header_aad(aad, None, message_number);
+                let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, &full_aad);
+                if result.is_ok() {
+                    self.skipped_keys.remove(&message_number);
+                } else {
+                    // Consume-on-success only: a corrupted or forged
+                    // retransmission must not burn the key the genuine frame
+                    // needs.
+                    let mut discard = saved_key;
+                    discard.zeroize();
                 }
-            };
-            // Rebuild the same header-derived AAD the sender used. A
-            // skipped-key message always comes from the current chain, so the
-            // ratchet flag is 0 and no public key is present.
-            let full_aad = Self::dr_header_aad(aad, None, message_number);
-            let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, &full_aad);
-            if result.is_ok() {
-                self.skipped_keys.remove(&message_number);
-            } else {
-                let mut discard = saved_key;
-                discard.zeroize();
+                return result;
             }
-            return result;
+            // Not cached. Fall through: the main path either derives the key
+            // normally or reports the number as behind the receive counter.
         }
 
         // ── Tentative derivation + verification ──
