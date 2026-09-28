@@ -137,13 +137,6 @@ pub async fn unlock_vault(
 ) -> Result<VaultStatus, String> {
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
-        return Err(format!(
-            "passphrase too weak: ~{:.0} bits of entropy. \
-             Use a longer passphrase (aim for 60+ bits). \
-             Try a diceware phrase with 5+ random words.",
-            entropy
-        ));
-    }
 
     let _data_dir = storage::ensure_data_dir().map_err(|e| format!("data dir error: {e}"))?;
     // Note: messages.db and transfers.db paths are used by
@@ -515,13 +508,6 @@ pub async fn create_vault_account(
 ) -> Result<IdentityInfo, String> {
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
-        return Err(format!(
-            "passphrase too weak: ~{:.0} bits of entropy. \
-             Use a longer passphrase (aim for 60+ bits). \
-             Try a diceware phrase with 5+ random words.",
-            entropy
-        ));
-    }
 
     let kp = IdentityKeypair::generate().map_err(|e| format!("keypair generation failed: {e}"))?;
     let fingerprint = kp.fingerprint();
@@ -951,13 +937,6 @@ pub async fn import_identity(
     // The passphrase becomes the vault passphrase for the imported identity,
     // so it must meet the same strength requirements as unlock_vault.
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
-        return Err(format!(
-            "passphrase too weak: ~{:.0} bits of entropy. \
-             Use a longer passphrase (aim for 60+ bits). \
-             Try a diceware phrase with 5+ random words.",
-            entropy
-        ));
-    }
 
     let data = std::fs::read(&path).map_err(|e| format!("failed to read import file: {e}"))?;
 
