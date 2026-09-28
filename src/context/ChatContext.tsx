@@ -77,7 +77,7 @@ interface ChatContextValue {
   copyInvite: () => void;
   handleConnect: () => Promise<void>;
   handleOpenChat: (conv: ConversationEntry) => Promise<void>;
-  handleDeleteConversation: () => void;
+  handleDeleteConversation: (conversationId: string) => Promise<void>;
   // Reactions & Read Receipts
   handleSendReaction: (messageId: string, reaction: string) => Promise<void>;
   handleRemoveReaction: (messageId: string, reaction: string) => Promise<void>;
@@ -332,9 +332,26 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loadConversations();
   }, [setView, loadConversations]);
 
-  const handleDeleteConversation = useCallback(() => {
-    loadConversations();
-  }, [loadConversations]);
+  // Owns the delete, including the IPC call.
+  //
+  // This was `() => void` that only reloaded the list, while the actual
+  // `invoke("delete_conversation_cmd")` was inlined at the call site in
+  // HubView. `ChatsTab` typed the prop as `(conversationId: string) => void`,
+  // but a zero-parameter function is assignable to that, so TypeScript stayed
+  // silent while the id was discarded — the exact bug the HubView comment
+  // claims was fixed by adding the annotation. The annotation silenced the
+  // compiler; it did not fix the split.
+  //
+  // Doing the delete here means the id is genuinely consumed, and the toast
+  // goes through the same path as every other command error.
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    try {
+      await invoke("delete_conversation_cmd", { conversationId });
+      await loadConversations();
+    } catch (e) {
+      addToast("Failed to delete conversation: " + errorMessage(e), "error");
+    }
+  }, [loadConversations, addToast]);
 
   // ─── Reaction handlers ───
 
