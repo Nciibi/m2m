@@ -209,6 +209,9 @@
   --z-base: 1;
   --z-dropdown: 100;
   --z-fab: 200;
+  /* Below --z-modal so a capture banner can never cover an open dialog, and
+     below --z-toast so an error toast is still readable over it. */
+  --z-banner: 9998;
   --z-modal: 9999;
   --z-toast: 10000;
 

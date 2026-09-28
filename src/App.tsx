@@ -34,7 +34,13 @@ function CaptureWarningBanner({ active }: { active: string[] }) {
       role="alert"
       className="capture-warning"
       style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 9998,
+        // The z-index belongs to the scale: 9998 was a bare literal sitting
+        // between `--z-modal` and `--z-toast`, so reordering the scale could
+        // silently put the banner over a modal or under a toast. The colour
+        // keeps a `var(--token, <literal>)` fallback on purpose — the one
+        // sanctioned exception, so the banner still gets a colour if the
+        // stylesheet fails to load.
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: "var(--z-banner)",
         background: "var(--color-danger, #dc2626)", color: "var(--color-on-danger, #fff)",
         padding: "6px 14px", fontSize: 13, textAlign: "center",
       }}
