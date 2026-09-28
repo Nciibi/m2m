@@ -1,4 +1,3 @@
-use crate::error::AppError;
 //! M2M — Security Commands
 //!
 //! Manages screen capture protection, clipboard auto-clear,
@@ -16,6 +15,7 @@ use crate::error::AppError;
 //! This closes the "silent protection drop" gap: a webview recreation or an
 //! app restart no longer leaves capture protection off.
 
+use crate::error::AppError;
 use std::sync::Arc;
 
 use tauri::{AppHandle, State};

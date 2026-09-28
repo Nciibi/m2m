@@ -1,9 +1,9 @@
-use crate::error::AppError;
 //! File transfer commands.
 //!
 //! Handles initiating outgoing file transfers, accepting/rejecting
 //! incoming ones, and the async chunk-sending loop with ACK tracking.
 
+use crate::error::AppError;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};

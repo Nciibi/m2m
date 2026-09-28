@@ -1,9 +1,9 @@
-use crate::error::AppError;
 //! Group chat commands (Phase 3).
 //!
 //! Tauri IPC bridge for group creation, member management,
 //! sending/receiving group messages, and group listing.
 
+use crate::error::AppError;
 use std::sync::Arc;
 
 use tauri::{Emitter, State};

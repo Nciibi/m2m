@@ -1,4 +1,3 @@
-use crate::error::AppError;
 //! M2M — shared command helpers
 //!
 //! ## Lock order
@@ -21,6 +20,7 @@ use crate::error::AppError;
 //! `group_manager`.
 //! Shared helper functions used across command modules.
 
+use crate::error::AppError;
 /// AAD context for key store encryption (identity keys, peer keys).
 /// Domain-separates keys.db ciphertext from messages.db ciphertext.
 pub const AAD_KEY_STORE: &[u8] = b"m2m-keys-v1";

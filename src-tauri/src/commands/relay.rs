@@ -1,10 +1,10 @@
-use crate::error::AppError;
 //! Relay server configuration commands.
 //!
 //! Allows the user to configure a TCP relay server for NAT traversal fallback.
 //! When configured, relay candidates are included in invites alongside direct
 //! candidates. The relay is only used as a last resort (priority 0).
 
+use crate::error::AppError;
 use std::sync::Arc;
 
 use tauri::State;

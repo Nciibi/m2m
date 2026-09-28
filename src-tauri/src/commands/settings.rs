@@ -1,9 +1,9 @@
-use crate::error::AppError;
 //! Network settings and diagnostics commands.
 //!
 //! Handles STUN discovery, Tor proxy configuration, private mode,
 //! connectivity checks, and full network diagnostics for the frontend.
 
+use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

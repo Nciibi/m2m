@@ -1,10 +1,10 @@
-use crate::error::AppError;
 //! Network connection commands.
 //!
 //! Handles invite creation/validation, TCP listening, peer connection
 //! (via hole-punch race), connection state management, and the async
 //! receive loop that dispatches all inbound packet types.
 
+use crate::error::AppError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 

@@ -1,4 +1,3 @@
-use crate::error::AppError;
 //! M2M — Peer Discovery Commands
 //!
 //! Controls DHT and LAN peer discovery. Both are **OFF by default**
@@ -13,6 +12,7 @@ use crate::error::AppError;
 //! - Enabling discovery while Private Mode is ON does **not** anonymize
 //!   discovery traffic — your IP is exposed to the discovery channel.
 
+use crate::error::AppError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

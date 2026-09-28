@@ -1,10 +1,10 @@
-use crate::error::AppError;
 //! M2M — Tauri Commands
 //!
 //! IPC bridge between the React UI and the Rust backend.
 //! Each command validates inputs and returns safe, typed responses.
 //! No secrets are exposed to the frontend.
 
+use crate::error::AppError;
 pub mod chat;
 pub mod discovery;
 pub mod files;

@@ -1,6 +1,6 @@
-use crate::error::AppError;
 //! Chat messaging and conversation management commands.
 
+use crate::error::AppError;
 use std::collections::HashSet;
 use std::sync::Arc;
 

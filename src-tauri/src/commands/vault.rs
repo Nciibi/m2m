@@ -1,9 +1,9 @@
-use crate::error::AppError;
 //! Vault and identity commands.
 //!
 //! Handles keypair generation, passphrase-based vault locking/unlocking,
 //! identity info queries, family contact management, and identity export/import.
 
+use crate::error::AppError;
 use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD, Engine};

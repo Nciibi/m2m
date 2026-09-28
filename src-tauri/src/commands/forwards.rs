@@ -1,10 +1,10 @@
-use crate::error::AppError;
 //! Manual port forwarding CRUD commands.
 //!
 //! These commands let the user manage port forwarding rules they've
 //! configured in their router admin panel. Each forward becomes a
 //! reliable candidate in invites.
 
+use crate::error::AppError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
