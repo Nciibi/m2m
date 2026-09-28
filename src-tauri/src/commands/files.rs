@@ -799,7 +799,21 @@ async fn emit_progress(app_handle: &AppHandle, state: &Arc<AppState>, transfer_i
         // returns `None` for a zero transfer — together they make both
         // divisions total, so neither can panic on hostile or degenerate input.
         let elapsed = now.saturating_sub(t.created_at).max(1);
-        let bytes_completed = t.chunks_acked as u64 * protocol::MAX_FILE_CHUNK_SIZE as u64;
+        // Use the transfer's OWN chunk size, not the protocol maximum.
+        //
+        // `compute_chunk_size` returns 128 KiB for relay connections and
+        // `MAX_FILE_CHUNK_SIZE` (256 KiB) otherwise, and `t.chunk_size` is
+        // recorded per transfer. Multiplying by the maximum instead meant every
+        // relay transfer reported exactly 2x the bytes actually sent: the
+        // progress bar, the byte counter, the speed and the ETA were all wrong
+        // for the entire duration. The `min(total_size)` clamp hid the
+        // overshoot at the end but not the curve.
+        let chunk_size = if t.chunk_size == 0 {
+            protocol::MAX_FILE_CHUNK_SIZE
+        } else {
+            t.chunk_size
+        };
+        let bytes_completed = t.chunks_acked as u64 * chunk_size as u64;
         let speed = bytes_completed / elapsed; // bytes/sec; divisor >= 1
         let remaining = t.total_size.saturating_sub(bytes_completed);
         let eta = remaining.checked_div(speed).unwrap_or(0);
