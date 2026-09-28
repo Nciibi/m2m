@@ -647,7 +647,7 @@ async fn send_file_chunks_inner(
             // the same moment, so a single slow disk can stall both halves of a
             // transfer. `compute_file_hashes` already established the
             // discipline; the per-chunk loop never adopted it.
-            let (mut buf, read_err) = {
+            let read_result = {
                 let path: std::path::PathBuf = std::path::Path::new(&file_path).to_path_buf();
                 let size = chunk_size;
                 let off = (chunk_index as u64) * (chunk_size as u64);
@@ -661,11 +661,16 @@ async fn send_file_chunks_inner(
                     Ok(buf)
                 })
                 .await
-                .map_err(|e| format!("chunk read task failed: {e}"))?
             };
-            if let Some(e) = read_err {
-                return Err(format!("failed to read chunk {chunk_index}: {e}"));
-            }
+            let mut buf = match read_result {
+                Ok(Ok(b)) => b,
+                Ok(Err(e)) => {
+                    return Err(format!("failed to read chunk {chunk_index}: {e}"));
+                }
+                Err(e) => {
+                    return Err(format!("chunk {chunk_index} read task failed: {e}"));
+                }
+            };
 
             // Verify chunk hash (integrity check against pre-computed hash)
             let expected_hash = chunk_hashes

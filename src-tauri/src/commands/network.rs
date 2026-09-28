@@ -636,6 +636,9 @@ pub(crate) async fn complete_inbound_connection(
     // import_identity), so holding it across the handshake let a remote
     // stranger prevent the user from locking their vault for as long as it
     // liked.
+    //
+    // This routine returns `()`, so these cannot use `?`; each failure is
+    // logged and drops the connection.
     let identity_kp = {
         let identity = state.identity.read().await;
         let kp = match identity.as_ref() {
@@ -645,19 +648,29 @@ pub(crate) async fn complete_inbound_connection(
                 return;
             }
         };
-        IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
-            .map_err(|e| format!("identity error: {e}"))?
+        match IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes()) {
+            Ok(kp) => kp,
+            Err(e) => {
+                tracing::error!(error = %e, "cannot handle connection: unusable identity key");
+                return;
+            }
+        }
     };
     let x25519_kp_owned = {
         let x = state.x25519_identity.read().await;
         match x.as_ref() {
-            Some(kp) => Some(
-                crate::crypto::X25519IdentityKeypair::from_bytes(
+            Some(kp) => {
+                match crate::crypto::X25519IdentityKeypair::from_bytes(
                     &kp.public_key_bytes(),
                     &kp.secret_key_bytes(),
-                )
-                .map_err(|e| format!("X25519 identity error: {e}"))?,
-            ),
+                ) {
+                    Ok(kp) => Some(kp),
+                    Err(e) => {
+                        tracing::error!(error = %e, "cannot handle connection: unusable X25519 identity");
+                        return;
+                    }
+                }
+            }
             None => None,
         }
     };
@@ -860,11 +873,14 @@ pub async fn connect_to_peer(
     // ── TCP Hole Punch: race accept vs connect simultaneously ──
     // Both peers race listener.accept() against connect(peer_candidates).
     // Whichever succeeds first determines our handshake role.
+    // `role` is intentionally ignored: the dialer is connect-only, so it can
+    // only ever return `Initiator` — see `punch_connect_only`.
     let hole_punch::StrategyResult {
         mut stream,
         remote_addr,
         strategy_name,
         latency,
+        role: _,
     } = hole_punch::ConnectionManager::connect(&peer_addrs, listen_addr, &relay_auth_token)
         .await
         .map_err(|e| {
