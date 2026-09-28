@@ -570,7 +570,23 @@ async fn handle_incoming_connection(
     }
 
     let mut session = Session::new();
-    {
+
+    // ── Snapshot the identity, then release the lock ──
+    //
+    // The handshake is a blocking read of a peer-supplied frame, so holding
+    // `state.identity` across it turns an unauthenticated socket into a lever
+    // on the vault. `handshake_as_responder_x3dh` waits for a
+    // `HandshakeComplete` frame bounded at 256 KiB, and
+    // `network::read_exact_timeout` applies its timeout per `read()` call
+    // rather than per frame — so a peer that trickles a byte every 900 ms can
+    // hold the guard for minutes. Everything downstream of this point needs
+    // `identity.write()` (lock_vault, unlock_vault, create_vault_account,
+    // import_identity), so the previous arrangement let a remote stranger
+    // prevent the user from locking their vault for as long as it liked.
+    //
+    // Copy the keypairs out under the guard and drop it before the handshake.
+    // This is the same pattern `connect_family_member` already uses.
+    let identity_kp = {
         let identity = state.identity.read().await;
         let kp = match identity.as_ref() {
             Some(kp) => kp,
@@ -579,81 +595,98 @@ async fn handle_incoming_connection(
                 return;
             }
         };
+        IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
+            .map_err(|e| format!("identity error: {e}"))?
+    };
+    let x25519_kp_owned = {
+        let x = state.x25519_identity.read().await;
+        match x.as_ref() {
+            Some(kp) => Some(
+                crate::crypto::X25519IdentityKeypair::from_bytes(
+                    &kp.public_key_bytes(),
+                    &kp.secret_key_bytes(),
+                )
+                .map_err(|e| format!("X25519 identity error: {e}"))?,
+            ),
+            None => None,
+        }
+    };
 
-        // Use CACHED candidates for the handshake response. Running a full
-        // STUN discovery here would let any unauthenticated host force us
-        // into expensive outbound work just by opening a connection (DoS
-        // amplification). The cache is populated at listener startup /
-        // settings refresh; if it's empty we schedule an authenticated
-        // post-handshake refresh below.
-        let wire_candidates: Vec<WireCandidate> = {
-            let cached = state.candidates.read().await;
-            cached
-                .iter()
-                .map(|c| WireCandidate {
-                    address: c.address.clone(),
-                    candidate_type: c.candidate_type as u8,
-                    relay_id: None,
-                })
-                .collect()
+    // Use CACHED candidates for the handshake response. Running a full
+    // STUN discovery here would let any unauthenticated host force us
+    // into expensive outbound work just by opening a connection (DoS
+    // amplification). The cache is populated at listener startup /
+    // settings refresh; if it's empty we schedule an authenticated
+    // post-handshake refresh below.
+    let wire_candidates: Vec<WireCandidate> = {
+        let cached = state.candidates.read().await;
+        cached
+            .iter()
+            .map(|c| WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+                relay_id: None,
+            })
+            .collect()
+    };
+
+    if is_x3dh {
+        // X3DH handshake path
+        let x25519_kp = match x25519_kp_owned.as_ref() {
+            Some(kp) => kp,
+            None => {
+                tracing::error!("no X25519 identity for X3DH handshake");
+                return;
+            }
         };
-
-        if is_x3dh {
-            // X3DH handshake path
-            let x25519 = state.x25519_identity.read().await;
-            let x25519_kp = match x25519.as_ref() {
-                Some(kp) => kp,
-                None => {
-                    tracing::error!("no X25519 identity for X3DH handshake");
-                    return;
-                }
-            };
-            // Consume-on-use one-time prekey; see
-            // `x3dh_responder_handshake_consume_opk` for the rationale.
-            if let Err(e) = x3dh_responder_handshake_consume_opk(
-                &state,
-                &mut session,
+        // Consume-on-use one-time prekey; see
+        // `x3dh_responder_handshake_consume_opk` for the rationale.
+        if let Err(e) = x3dh_responder_handshake_consume_opk(
+            &state,
+            &mut session,
+            &mut stream,
+            &identity_kp,
+            x25519_kp,
+            &frame,
+            wire_candidates,
+        )
+        .await
+        {
+            tracing::warn!(error = %e, "X3DH handshake failed for incoming connection");
+            let _ = network::send_error(
                 &mut stream,
-                kp,
-                x25519_kp,
+                protocol::ErrorCode::HandshakeFailed,
+                "x3dh handshake failed",
+            )
+            .await;
+            return;
+        }
+    } else {
+        // Legacy handshake path (use X25519 pub key for the `x25519_identity_pub` field)
+        let x25519_pub = x25519_kp_owned
+            .as_ref()
+            .map(|k| k.public_key_bytes())
+            .unwrap_or([0u8; 32]);
+        if let Err(e) = session
+            .handshake_as_responder(
+                &mut stream,
+                &identity_kp,
                 &frame,
                 wire_candidates,
+                x25519_pub,
             )
             .await
-            {
-                tracing::warn!(error = %e, "X3DH handshake failed for incoming connection");
-                let _ = network::send_error(
-                    &mut stream,
-                    protocol::ErrorCode::HandshakeFailed,
-                    "x3dh handshake failed",
-                )
-                .await;
-                return;
-            }
-        } else {
-            // Legacy handshake path (use X25519 pub key for the `x25519_identity_pub` field)
-            let x25519_pub = state
-                .x25519_identity
-                .read()
-                .await
-                .as_ref()
-                .map(|k| k.public_key_bytes())
-                .unwrap_or([0u8; 32]);
-            if let Err(e) = session
-                .handshake_as_responder(&mut stream, kp, &frame, wire_candidates, x25519_pub)
-                .await
-            {
-                tracing::warn!(error = %e, "handshake failed for incoming connection");
-                let _ = network::send_error(
-                    &mut stream,
-                    protocol::ErrorCode::HandshakeFailed,
-                    "handshake failed",
-                )
-                .await;
-                return;
-            }
+        {
+            tracing::warn!(error = %e, "handshake failed for incoming connection");
+            let _ = network::send_error(
+                &mut stream,
+                protocol::ErrorCode::HandshakeFailed,
+                "handshake failed",
+            )
+            .await;
+            return;
         }
-    } // identity borrow dropped here
+    }
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();
