@@ -361,7 +361,6 @@ pub async fn invite_to_group(
     // read while `group_manager` is held.
     let identity_kp = state.our_identity_kp().await?;
     let our_peer_key_hex = state.our_peer_key_hex().await?;
-    let identity_kp = state.our_identity_kp().await?;
 
     // Add member in GroupManager
     let bundles = {
