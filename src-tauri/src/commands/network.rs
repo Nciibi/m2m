@@ -1248,7 +1248,10 @@ async fn handle_incoming_text(
                         // an arbitrarily large body that went straight
                         // to SQLite — bounded only by the frame cap,
                         // which the receive-loop rate limiter then
-                        // still allows at 20 frames/s. Without this, a
+                        // still allows at `MAX_INBOUND_FRAMES_PER_SEC`.
+                        // (This comment used to cite 20, quoting the deleted
+                        // `RATE_LIMIT_MSGS_PER_SEC`; the enforced value has been 30.)
+                        // Without this, a
                         // peer could fill the victim's disk.
                         if content.len() > crate::protocol::MAX_TEXT_MESSAGE_SIZE {
                             tracing::warn!(
