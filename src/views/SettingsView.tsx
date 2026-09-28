@@ -196,7 +196,21 @@ export default function SettingsView() {
             {connectivityResult && (
               <div className="settings-row">
                 <span className="settings-label">Result</span>
-                <span className="settings-mono">{JSON.stringify(connectivityResult)}</span>
+                {/* Rendered field by field, not as `JSON.stringify`.
+                    `ConnectivityStatus` carries `public_addr` and
+                    `host_addrs` — the user's own WAN and LAN addresses — and
+                    its own doc comment says a renderer must treat them as
+                    sensitive. Dumping the raw object into the DOM did exactly
+                    that, and it was debug output shipped as UI. `nat_type` and
+                    the symmetric-NAT flag are the actionable parts; the
+                    addresses are shown per-field and labelled, so what is
+                    disclosed is deliberate. */}
+                <span className="settings-mono">
+                  {connectivityResult.nat_type.replace(/_/g, " ")}
+                  {connectivityResult.behind_symmetric_nat ? " (symmetric)" : ""}
+                  {" · reachable: "}
+                  {String(connectivityResult.reachable)}
+                </span>
               </div>
             )}
           </div>
