@@ -1326,16 +1326,38 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
     })?;
 
     // Resolve relative URLs against the base URL.
-    if control_url.starts_with('/') {
+    let resolved = if control_url.starts_with('/') {
         let base = location_url.trim_end_matches('/');
         if let Some(slash_pos) = base.rfind('/') {
-            Ok(format!("{}{}", &base[..slash_pos], control_url))
+            format!("{}{}", &base[..slash_pos], control_url)
         } else {
-            Ok(format!("{}{}", base, control_url))
+            format!("{}{}", base, control_url)
         }
     } else {
-        Ok(control_url)
-    }
+        control_url
+    };
+
+    // ── Validate hop 2 as strictly as hop 1 ──
+    //
+    // `LOCATION` is validated by `validate_upnp_location`, but the `controlURL`
+    // *inside the fetched document* was returned verbatim and then used as the
+    // POST target. Anything on the LAN can answer our SSDP probe, so a hostile
+    // host could return a legitimate-looking
+    // `LOCATION: http://192.168.1.1/desc.xml` whose document contains
+    //
+    //     <controlURL>http://169.254.169.254/latest/meta-data/</controlURL>
+    //
+    // and M2M would POST a SOAP body straight at the cloud metadata service.
+    // The metadata deny-list in `validate_upnp_location` was bypassable, because
+    // it only ever applied to the first hop.
+    //
+    // `dial_lan_only` does not help: it refuses only under Tor and performs no
+    // locality check.
+    validate_upnp_location(&resolved).map_err(|e| {
+        PortMapError::Upnp(format!(
+            "device description returned an unsafe controlURL ({e}) — refusing to POST to it"
+        ))
+    })
 }
 
 /// Add a TCP port mapping via UPnP IGD.
