@@ -91,11 +91,14 @@ export default function ChatView() {
       setLoadingOlder(true);
       const oldestTimestamp = messages.reduce((minT, m) => Math.min(minT, m.timestamp), Infinity);
       try {
-        const older = await invoke<ChatMessage[]>("load_messages", {
+        // `asArray`, not the bare generic: `invoke<ChatMessage[]>` asserts the
+        // shape rather than checking it, and `older.length` on a `null` return
+        // throws on the next render instead of ending pagination.
+        const older = asArray<ChatMessage>(await invoke("load_messages", {
           peerKeyHex: activeConversationId,
           beforeTimestamp: oldestTimestamp,
           limit: 100,
-        });
+        }));
         if (older.length === 0) {
           setHasOlder(false);
         } else {
@@ -219,10 +222,10 @@ export default function ChatView() {
     }
     setIsSearching(true);
     try {
-      const results = await invoke<ChatMessage[]>("search_messages", {
+      const results = asArray<ChatMessage>(await invoke("search_messages", {
         peerKeyHex: activeConversationId,
         query: query.trim(),
-      });
+      }));
       setSearchResults(results);
     } catch {
       addToast("Search failed", "error");
