@@ -55,7 +55,7 @@ fn contact_gate_allows(require_known_contact: bool, is_family: bool, is_known_pe
 ///
 /// Returns `Ok(())` when the connection may proceed, or the user-facing
 /// rejection reason.
-pub async fn check_contact_gate(state: &AppState, peer_key_hex: &str) -> Result<(), &'static str> {
+pub(crate) async fn check_contact_gate(state: &AppState, peer_key_hex: &str) -> Result<(), &'static str> {
     let require_known = state.security_config.read().await.require_known_contact;
     if !require_known {
         return Ok(());
@@ -542,19 +542,42 @@ pub async fn start_listening(
     Ok(format!("listening on {bound_addr}"))
 }
 
-/// Handle an incoming connection: perform handshake as responder.
-async fn handle_incoming_connection(
-    app_handle: AppHandle,
-    state: Arc<AppState>,
+/// Complete an inbound connection, given the stream and its already-read
+/// handshake-init frame.
+///
+/// ## Why this exists
+///
+/// There were five hand-rolled copies of "gather candidates → build a
+/// `PeerConnection` → insert into the map → emit → upsert → spawn the receive
+/// loop", and they had already diverged in ways that mattered. The clearest
+/// example is documented in the body of [`check_contact_gate`]: the allowlist
+/// gate was added to the direct-TCP and relay paths *after the fact*, because
+/// a security control was bypassable by choosing a different transport, and the
+/// same gap reopened on the discovery and family-contact paths.
+///
+/// Forking a ~150-line connection routine is exactly the shape that produces
+/// the next H5. There is now one implementation, and every inbound transport
+/// (direct TCP, relay) routes through it, so a control added here cannot be
+/// bypassed by adding a transport.
+///
+/// Both call sites differ only in where the stream came from and whether the
+/// first frame has already been consumed — hence the `pre_read` frame.
+pub(crate) async fn complete_inbound_connection(
+    app_handle: &AppHandle,
+    state: &Arc<AppState>,
     mut stream: tokio::net::TcpStream,
     peer_addr: SocketAddr,
+    pre_read: Option<protocol::RawFrame>,
 ) {
-    let frame = match network::read_frame(&mut stream).await {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to read initial frame from incoming connection");
-            return;
-        }
+    let frame = match pre_read {
+        Some(f) => f,
+        None => match network::read_frame(&mut stream).await {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to read initial frame from incoming connection");
+                return;
+            }
+        },
     };
 
     let is_x3dh = frame.packet_type == protocol::PacketType::X3DHHandshakeInit;
@@ -581,11 +604,9 @@ async fn handle_incoming_connection(
     // rather than per frame — so a peer that trickles a byte every 900 ms can
     // hold the guard for minutes. Everything downstream of this point needs
     // `identity.write()` (lock_vault, unlock_vault, create_vault_account,
-    // import_identity), so the previous arrangement let a remote stranger
-    // prevent the user from locking their vault for as long as it liked.
-    //
-    // Copy the keypairs out under the guard and drop it before the handshake.
-    // This is the same pattern `connect_family_member` already uses.
+    // import_identity), so holding it across the handshake let a remote
+    // stranger prevent the user from locking their vault for as long as it
+    // liked.
     let identity_kp = {
         let identity = state.identity.read().await;
         let kp = match identity.as_ref() {
@@ -612,12 +633,13 @@ async fn handle_incoming_connection(
         }
     };
 
-    // Use CACHED candidates for the handshake response. Running a full
-    // STUN discovery here would let any unauthenticated host force us
-    // into expensive outbound work just by opening a connection (DoS
-    // amplification). The cache is populated at listener startup /
-    // settings refresh; if it's empty we schedule an authenticated
-    // post-handshake refresh below.
+    // Use CACHED candidates for the handshake response. Running a full STUN
+    // discovery here would let any unauthenticated host force us into
+    // expensive outbound work just by opening a connection (DoS
+    // amplification) — and, under Tor, would emit a STUN query from the user's
+    // real address. The cache is populated at listener startup / settings
+    // refresh; if it is empty we schedule an authenticated post-handshake
+    // refresh below.
     let wire_candidates: Vec<WireCandidate> = {
         let cached = state.candidates.read().await;
         cached
@@ -631,7 +653,6 @@ async fn handle_incoming_connection(
     };
 
     if is_x3dh {
-        // X3DH handshake path
         let x25519_kp = match x25519_kp_owned.as_ref() {
             Some(kp) => kp,
             None => {
@@ -642,7 +663,7 @@ async fn handle_incoming_connection(
         // Consume-on-use one-time prekey; see
         // `x3dh_responder_handshake_consume_opk` for the rationale.
         if let Err(e) = x3dh_responder_handshake_consume_opk(
-            &state,
+            state,
             &mut session,
             &mut stream,
             &identity_kp,
@@ -662,19 +683,12 @@ async fn handle_incoming_connection(
             return;
         }
     } else {
-        // Legacy handshake path (use X25519 pub key for the `x25519_identity_pub` field)
         let x25519_pub = x25519_kp_owned
             .as_ref()
             .map(|k| k.public_key_bytes())
             .unwrap_or([0u8; 32]);
         if let Err(e) = session
-            .handshake_as_responder(
-                &mut stream,
-                &identity_kp,
-                &frame,
-                wire_candidates,
-                x25519_pub,
-            )
+            .handshake_as_responder(&mut stream, &identity_kp, &frame, wire_candidates, x25519_pub)
             .await
         {
             tracing::warn!(error = %e, "handshake failed for incoming connection");
@@ -693,24 +707,19 @@ async fn handle_incoming_connection(
 
     // ── Contact allowlist gate (H5) ──
     // Runs AFTER the handshake (peer_identity_pub is now signature-authenticated)
-    // and BEFORE any persistence: a stranger must not be upserted into the
-    // key store merely by connecting, and must not reach the message
-    // dispatcher when the allowlist is enabled.
-    //
-    // Shared with the relay inbound path so the control cannot be bypassed by
-    // simply choosing a different transport.
-    if let Err(reason) = check_contact_gate(&state, &peer_key_hex).await {
+    // and BEFORE any persistence: a stranger must not be upserted into the key
+    // store merely by connecting, and must not reach the message dispatcher
+    // when the allowlist is enabled.
+    if let Err(reason) = check_contact_gate(state, &peer_key_hex).await {
         tracing::warn!(
             peer = %peer_key_hex,
             fingerprint = %peer_fingerprint,
             "incoming connection rejected: {reason} (allowlist enabled)"
         );
-        let _ =
-            network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
+        let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
         return;
     }
 
-    // Split the stream for the receive loop
     let (read_half, write_half) = stream.into_split();
 
     let conn = PeerConnection {
@@ -725,10 +734,9 @@ async fn handle_incoming_connection(
     // Do not silently displace an existing session. This map is keyed by the
     // peer's *self-declared* Ed25519 key, and a responder cannot pin an
     // identity without prior contact — so an attacker who announces a known
-    // contact's key would otherwise overwrite the legitimate
-    // `PeerConnection` and evict the real peer from the UI and dispatcher.
-    // Refusing is the safe default; the genuine peer keeps its session and the
-    // user can retry deliberately if it was a stale entry.
+    // contact's key would otherwise overwrite the legitimate `PeerConnection`
+    // and evict the real peer from the UI and dispatcher. Refusing is the safe
+    // default.
     {
         let mut conns = state.connections.write().await;
         if conns.contains_key(&peer_key_hex) {
@@ -741,7 +749,6 @@ async fn handle_incoming_connection(
         conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
     }
 
-    // Notify frontend
     let _ = app_handle.emit(
         "m2m://connection",
         ConnectionEvent {
@@ -752,8 +759,8 @@ async fn handle_incoming_connection(
         },
     );
 
-    // Post-authentication candidate refresh: only when the cached set is
-    // empty (see pre-handshake comment) AND air-gap mode allows STUN.
+    // Post-authentication candidate refresh: only when the cached set is empty
+    // (see pre-handshake comment) AND air-gap mode allows STUN.
     if state.candidates.read().await.is_empty() && !state.security_config.read().await.air_gap_mode
     {
         let st = state.clone();
@@ -774,8 +781,17 @@ async fn handle_incoming_connection(
         }
     }
 
-    // Start the receive loop for this peer
-    spawn_receive_loop(app_handle, state, read_half, peer_key_hex, None);
+    spawn_receive_loop(app_handle.clone(), state.clone(), read_half, peer_key_hex, None);
+}
+
+/// Handle an incoming direct-TCP connection.
+async fn handle_incoming_connection(
+    app_handle: AppHandle,
+    state: Arc<AppState>,
+    stream: tokio::net::TcpStream,
+    peer_addr: SocketAddr,
+) {
+    complete_inbound_connection(&app_handle, &state, stream, peer_addr, None).await;
 }
 
 /// Connect to a peer using an invite link.
