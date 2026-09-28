@@ -3500,4 +3500,52 @@ mod contact_gate_tests {
         assert!(contact_gate_allows(true, false, true));
         assert!(contact_gate_allows(true, true, true));
     }
+
+    /// In-order ACKs advance the watermark one chunk at a time.
+    #[test]
+    fn test_ack_watermark_advances_contiguously() {
+        let mut last = 0u32;
+        for expected in 1..=5u32 {
+            let next = advance_ack_watermark(last, expected)
+                .unwrap_or_else(|| panic!("chunk {expected} should advance from {last}"));
+            last = next;
+            // `chunks_acked` mirrors the contiguous prefix.
+            assert_eq!(last + 1, expected + 1);
+        }
+        assert_eq!(last, 5);
+    }
+
+    /// A gap must not be honoured: ACK 0 then ACK 5 skips chunks 1-4.
+    #[test]
+    fn test_ack_watermark_rejects_gap() {
+        let last = 0u32;
+        assert_eq!(advance_ack_watermark(last, 0), None, "duplicate first ack");
+        assert_eq!(
+            advance_ack_watermark(last, 5),
+            None,
+            "a gap must not advance the confirmed prefix"
+        );
+    }
+
+    /// Regression: one ACK for the final chunk must not confirm the whole file.
+    ///
+    /// This is the delivery-confirmation forgery. `wait_for_ack` treats
+    /// `last_acked_index >= chunk_index` as delivered, so under the previous
+    /// span-inflating arithmetic a single `chunk_index = total_chunks - 1`
+    /// satisfied it for every remaining chunk.
+    #[test]
+    fn test_single_final_ack_does_not_confirm_whole_file() {
+        let total_chunks = 8u32;
+        let last = advance_ack_watermark(0, total_chunks - 1);
+        assert_eq!(
+            last, None,
+            "a lone ack for the last chunk must not confirm unacked chunks"
+        );
+        // The honest sequence still works.
+        let mut last = 0u32;
+        for i in 1..total_chunks {
+            last = advance_ack_watermark(last, i).expect("in-order ack");
+        }
+        assert_eq!(last, total_chunks - 1);
+    }
 }
