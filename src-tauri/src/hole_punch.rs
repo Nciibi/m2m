@@ -422,6 +422,16 @@ async fn tcp_connect_timeout(
                     "address is not usable in the current transport mode",
                 ))
             }
+            // A UDP query was refused by the transport guard. It cannot reach
+            // a TCP connect path, so treat it as an unusable candidate rather
+            // than an error — this keeps the match exhaustive as the UDP
+            // chokepoint grows.
+            crate::dial::DialError::TorUdpUnsupported => ConnectionError::Io(
+                std::io::Error::new(
+                    std::io::ErrorKind::AddrNotAvailable,
+                    "outbound UDP queries are blocked in the current transport mode",
+                ),
+            ),
             crate::dial::DialError::Dial(msg) => ConnectionError::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
                 msg,
