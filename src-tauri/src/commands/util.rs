@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! M2M — shared command helpers
 //!
 //! ## Lock order
@@ -52,10 +53,10 @@ pub const AAD_EXPORT_V2: &[u8] = b"m2m-export-v2";
 /// Returns an error if the hex string is malformed or wrong length.
 pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
     if hex_str.len() != 64 {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "invalid peer key hex length: expected 64 chars, got {}",
             hex_str.len()
-        ));
+        )));
     }
     let bytes = hex::decode(hex_str).map_err(|e| format!("invalid peer key hex: {e}"))?;
     let mut key = [0u8; 32];
@@ -169,21 +170,21 @@ pub const MIN_PASSPHRASE_BITS: f64 = 40.0;
 /// is held to the same bar as the vault one — which it must be, because
 /// `unlock_vault` runs the identical check first, so a weaker duress passphrase
 /// could never have triggered.
-pub fn validate_passphrase(passphrase: &str, kind: PassphraseKind) -> Result<(), String> {
+pub fn validate_passphrase(passphrase: &str, kind: PassphraseKind) -> Result<(), AppError> {
     if passphrase.len() < MIN_PASSPHRASE_CHARS {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "{} must be at least {} characters — longer is more secure",
             kind.label(),
             MIN_PASSPHRASE_CHARS
-        ));
+        )));
     }
     let entropy = estimate_passphrase_entropy(passphrase);
     if entropy < MIN_PASSPHRASE_BITS {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "{} too weak: ~{:.0} bits. Use a stronger passphrase (aim for 60+).",
             kind.label(),
             entropy
-        ));
+        )));
     }
     Ok(())
 }
@@ -440,7 +441,7 @@ fn detect_substitution_penalty(
 pub fn derive_storage_key_from_passphrase(
     passphrase: &str,
     salt: &[u8],
-) -> Result<crate::secure_key::StorageKey, String> {
+) -> Result<crate::secure_key::StorageKey, AppError> {
     use argon2::{Algorithm, Argon2, Params, Version};
 
     let params = Params::new(
@@ -488,7 +489,7 @@ pub fn crypto_encrypt_storage(
     plaintext: &[u8],
     key: &crate::secure_key::StorageKey,
     aad: &[u8],
-) -> Result<(Vec<u8>, Vec<u8>), String> {
+) -> Result<(Vec<u8>, Vec<u8>), AppError> {
     // XChaCha20-Poly1305-IETF: 24-byte nonce, ciphertext||tag (RustCrypto).
     use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
@@ -514,10 +515,10 @@ pub fn crypto_decrypt_storage(
     nonce_bytes: &[u8],
     key: &crate::secure_key::StorageKey,
     aad: &[u8],
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, AppError> {
     use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305};
     if nonce_bytes.len() != 24 {
-        return Err("invalid nonce".to_string());
+        return Err(AppError::invalid("invalid nonce"));
     }
     let cipher = XChaCha20Poly1305::new(chacha20poly1305::Key::from_slice(key.as_bytes()));
     cipher

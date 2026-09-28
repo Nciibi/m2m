@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Relay server configuration commands.
 //!
 //! Allows the user to configure a TCP relay server for NAT traversal fallback.
@@ -15,7 +16,7 @@ use crate::state::AppState;
 #[tauri::command]
 pub async fn get_relay_config(
     state: State<'_, Arc<AppState>>,
-) -> Result<Option<RelayConfig>, String> {
+) -> Result<Option<RelayConfig>, AppError> {
     let config = state.relay_config.read().await;
     Ok(config.clone())
 }
@@ -28,17 +29,17 @@ pub async fn get_relay_config(
 pub async fn set_relay_config(
     state: State<'_, Arc<AppState>>,
     config: Option<RelayConfig>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Validate the config if provided
     if let Some(ref cfg) = config {
         if cfg.host.trim().is_empty() {
-            return Err("relay host cannot be empty".to_string());
+            return Err(AppError::invalid("relay host cannot be empty"));
         }
         if cfg.port == 0 {
-            return Err("relay port must be > 0".to_string());
+            return Err(AppError::invalid("relay port must be > 0"));
         }
         if cfg.auth_token.len() > 256 {
-            return Err("auth token too long (max 256 chars)".to_string());
+            return Err(AppError::invalid("auth token too long (max 256 chars)"));
         }
     }
 
@@ -55,7 +56,7 @@ pub async fn set_relay_config(
 
 /// Get the current relay connection state (for frontend diagnostics).
 #[tauri::command]
-pub async fn get_relay_state(state: State<'_, Arc<AppState>>) -> Result<RelayState, String> {
+pub async fn get_relay_state(state: State<'_, Arc<AppState>>) -> Result<RelayState, AppError> {
     let relay_state = state.relay_state.read().await;
     Ok(relay_state.clone())
 }

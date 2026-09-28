@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Network settings and diagnostics commands.
 //!
 //! Handles STUN discovery, Tor proxy configuration, private mode,
@@ -28,7 +29,7 @@ fn default_accent() -> String {
 #[tauri::command]
 pub async fn get_theme_preference(
     state: State<'_, Arc<AppState>>,
-) -> Result<ThemePreference, String> {
+) -> Result<ThemePreference, AppError> {
     let theme_str = state.theme_preference.read().await;
     let accent = state.accent_color.read().await;
     Ok(ThemePreference {
@@ -43,10 +44,10 @@ pub async fn set_theme_preference(
     state: State<'_, Arc<AppState>>,
     theme: String,
     accent_color: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let valid = ["light", "dark", "system"];
     if !valid.contains(&theme.as_str()) {
-        return Err("Invalid theme value".to_string());
+        return Err(AppError::invalid("Invalid theme value"));
     }
     let mut tp = state.theme_preference.write().await;
     *tp = theme;
@@ -59,7 +60,7 @@ pub async fn set_theme_preference(
 
 /// Discover the public IP address using enhanced STUN (parallel queries + consensus).
 #[tauri::command]
-pub async fn discover_public_ip(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn discover_public_ip(state: State<'_, Arc<AppState>>) -> Result<String, AppError> {
     state.ensure_not_air_gapped().await?;
     let result = state
         .refresh_stun()
@@ -87,7 +88,7 @@ pub async fn discover_public_ip(state: State<'_, Arc<AppState>>) -> Result<Strin
 
 /// Get the current STUN configuration.
 #[tauri::command]
-pub async fn get_stun_config(state: State<'_, Arc<AppState>>) -> Result<stun::StunConfig, String> {
+pub async fn get_stun_config(state: State<'_, Arc<AppState>>) -> Result<stun::StunConfig, AppError> {
     let config = state.stun_config.read().await;
     Ok(config.clone())
 }
@@ -100,19 +101,19 @@ const MAX_STUN_SERVERS: usize = 8;
 pub async fn set_stun_servers(
     state: State<'_, Arc<AppState>>,
     servers: Vec<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if servers.is_empty() {
-        return Err("STUN server list cannot be empty".to_string());
+        return Err(AppError::invalid("STUN server list cannot be empty"));
     }
     // Cap the list. `discover_public_addrs` spawns one task and one socket per
     // entry, so an unbounded list is a task/socket exhaustion primitive
     // reachable straight from the renderer.
     if servers.len() > MAX_STUN_SERVERS {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "too many STUN servers: {} (max {})",
             servers.len(),
             MAX_STUN_SERVERS
-        ));
+        )));
     }
     // Each entry must be a real `host:port` and must parse.
     //
@@ -122,27 +123,27 @@ pub async fn set_stun_servers(
     // probe target: it must be validated, not merely colon-checked.
     for s in &servers {
         if s.len() > 255 {
-            return Err(format!("STUN server address too long: {s}"));
+            return Err(AppError::invalid(format!("STUN server address too long: {s}")));
         }
         if s.chars().any(|c| c.is_whitespace() || c.is_control()) {
-            return Err(format!("invalid STUN server address: {s}"));
+            return Err(AppError::invalid(format!("invalid STUN server address: {s}")));
         }
         let (host, port) = s
             .rsplit_once(':')
             .ok_or_else(|| format!("invalid STUN server address (missing port): {s}"))?;
         if host.is_empty() {
-            return Err(format!("invalid STUN server address (missing host): {s}"));
+            return Err(AppError::invalid(format!("invalid STUN server address (missing host): {s}")));
         }
         if host.contains(':') && !host.starts_with('[') {
-            return Err(format!(
+            return Err(AppError::invalid(format!(
                 "invalid STUN server address (bare IPv6 must be bracketed): {s}"
-            ));
+            )));
         }
         let port: u16 = port
             .parse()
             .map_err(|_| format!("invalid STUN server port: {s}"))?;
         if port == 0 {
-            return Err(format!("invalid STUN server port (0): {s}"));
+            return Err(AppError::invalid(format!("invalid STUN server port (0): {s}")));
         }
     }
 
@@ -157,7 +158,7 @@ pub async fn set_stun_servers(
 pub async fn set_private_mode(
     state: State<'_, Arc<AppState>>,
     enabled: bool,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut pm = state.private_mode.write().await;
     *pm = enabled;
     let mut config = state.stun_config.write().await;
@@ -170,7 +171,7 @@ pub async fn set_private_mode(
 #[tauri::command]
 pub async fn check_connectivity(
     state: State<'_, Arc<AppState>>,
-) -> Result<stun::ConnectivityStatus, String> {
+) -> Result<stun::ConnectivityStatus, AppError> {
     state.ensure_not_air_gapped().await?;
     let config = state.stun_config.read().await;
     let multi_result = stun::discover_public_addrs(&config)
@@ -222,17 +223,17 @@ pub async fn check_connectivity(
 #[tauri::command]
 pub async fn get_network_diagnostics(
     state: State<'_, Arc<AppState>>,
-) -> Result<candidate::NetworkDiagnostics, String> {
+) -> Result<candidate::NetworkDiagnostics, AppError> {
     collect_network_diagnostics(&state, tor::is_enabled()).await
 }
 
 async fn collect_network_diagnostics(
     state: &AppState,
     tor_enabled: bool,
-) -> Result<candidate::NetworkDiagnostics, String> {
+) -> Result<candidate::NetworkDiagnostics, AppError> {
     state.ensure_not_air_gapped().await?;
     if tor_enabled {
-        return Err("Tor routing is enabled — direct STUN diagnostics are blocked".to_string());
+        return Err(AppError::invalid("Tor routing is enabled — direct STUN diagnostics are blocked"));
     }
 
     let nat_type = *state.nat_type.read().await;
@@ -267,7 +268,7 @@ async fn collect_network_diagnostics(
 #[tauri::command]
 pub async fn get_network_settings(
     state: State<'_, Arc<AppState>>,
-) -> Result<tor::NetworkSettings, String> {
+) -> Result<tor::NetworkSettings, AppError> {
     let tor_reachable = tor::check_proxy_reachable().await;
     let public_ip = state.public_ip.read().await;
 
@@ -281,7 +282,7 @@ pub async fn get_network_settings(
 
 /// Enable or disable Tor routing.
 #[tauri::command]
-pub async fn set_tor_enabled(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
+pub async fn set_tor_enabled(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), AppError> {
     // Air-gap mode: Tor traffic is internet-facing by definition.
     if enabled {
         state.ensure_not_air_gapped().await?;

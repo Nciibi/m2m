@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Network connection commands.
 //!
 //! Handles invite creation/validation, TCP listening, peer connection
@@ -173,7 +174,7 @@ pub async fn x3dh_responder_handshake_consume_opk<S>(
     x25519_identity: &crate::crypto::X25519IdentityKeypair,
     init_frame: &network::RawFrame,
     local_candidates: Vec<protocol::WireCandidate>,
-) -> Result<(), String>
+) -> Result<(), AppError>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -245,7 +246,7 @@ pub async fn create_invite(
     address: String,
     validity_minutes: u64,
     one_time: bool,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     // Air-gap mode: invite creation performs STUN/UPnP/relay registration —
     // all internet-facing. LAN invites are still possible via manual
     // address exchange, so this is a hard block rather than silent degrade.
@@ -465,7 +466,7 @@ pub async fn create_invite(
 
 /// Validate a received invite link.
 #[tauri::command]
-pub async fn validate_invite(invite_str: String) -> Result<InviteInfo, String> {
+pub async fn validate_invite(invite_str: String) -> Result<InviteInfo, AppError> {
     let signed = identity::validate_invite(&invite_str)
         .map_err(|e| format!("invite validation failed: {e}"))?;
 
@@ -486,7 +487,7 @@ pub async fn start_listening(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     address: String,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let addr: SocketAddr = address
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
@@ -842,7 +843,7 @@ pub async fn connect_to_peer(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     invite_str: String,
-) -> Result<ConnectionInfo, String> {
+) -> Result<ConnectionInfo, AppError> {
     let signed =
         identity::validate_invite(&invite_str).map_err(|e| format!("invite invalid: {e}"))?;
 
@@ -1049,7 +1050,7 @@ pub async fn connect_to_peer(
 pub async fn get_connection_state(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<ConnectionInfo, String> {
+) -> Result<ConnectionInfo, AppError> {
     let conn_state = state.connection_state(&peer_key_hex).await;
 
     let (fingerprint, verified) = match state.peer_connection(&peer_key_hex).await {
@@ -1073,7 +1074,7 @@ pub async fn get_connection_state(
 pub async fn verify_peer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let conn_arc = state
         .peer_connection(&peer_key_hex)
         .await
@@ -1088,7 +1089,7 @@ pub async fn verify_peer(
 pub async fn disconnect_peer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut conns = state.connections.write().await;
     if let Some(conn_arc) = conns.remove(&peer_key_hex) {
         let mut conn = conn_arc.lock().await;
@@ -1133,7 +1134,7 @@ pub async fn disconnect_peer(
 
 /// Get a list of all connected peers.
 #[tauri::command]
-pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<ConnectionInfo>, String> {
+pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<ConnectionInfo>, AppError> {
     // Snapshot the handles, then release the map guard before locking each
     // peer. Iterating the map in place held the global `connections` read lock
     // across every `conn_arc.lock().await`, so one peer stalled mid-send (up
@@ -1163,7 +1164,7 @@ pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<Connectio
 
 /// Get the actual listening address (after binding to port 0).
 #[tauri::command]
-pub async fn get_listen_address(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+pub async fn get_listen_address(state: State<'_, Arc<AppState>>) -> Result<String, AppError> {
     let addr = state.listen_addr.read().await;
     addr.map(|a| a.to_string())
         .ok_or("not listening".to_string())
@@ -1180,7 +1181,7 @@ pub(crate) async fn rotate_and_announce(
     state: Arc<AppState>,
     group_id: &str,
     our_peer_key_hex: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     {
         let mut gm = state.group_manager.write().await;
         let group = gm.get_group_mut(group_id).ok_or("group not found")?;
@@ -1207,7 +1208,7 @@ pub(crate) async fn fan_out_own_bundle(
     group_id: &str,
     roster: &[String],
     our_peer_key_hex: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     for peer in roster {
         if peer == our_peer_key_hex {
             continue;
@@ -1226,7 +1227,7 @@ pub(crate) async fn send_own_bundle(
     group_id: &str,
     target_peer: &str,
     our_peer_key_hex: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut bundle = {
         let gm = state.group_manager.read().await;
         let group = gm.get_group(group_id).ok_or("group not found")?;

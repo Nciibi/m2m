@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! M2M — Security Commands
 //!
 //! Manages screen capture protection, clipboard auto-clear,
@@ -109,7 +110,7 @@ pub fn apply_side_effects(state: &Arc<AppState>, app_handle: &AppHandle, config:
 #[tauri::command]
 pub async fn get_security_config(
     state: State<'_, Arc<AppState>>,
-) -> Result<SecurityConfig, String> {
+) -> Result<SecurityConfig, AppError> {
     let config = state.security_config.read().await;
     Ok(config.clone())
 }
@@ -124,7 +125,7 @@ pub async fn set_security_config(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     config: SecurityConfig,
-) -> Result<SecurityConfig, String> {
+) -> Result<SecurityConfig, AppError> {
     let old_config = state.security_config.read().await.clone();
 
     // Handle screen capture protection toggle
@@ -162,7 +163,7 @@ pub async fn set_security_config(
 pub async fn reapply_security_config(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let config = state.security_config.read().await.clone();
     apply_side_effects(&state, &app_handle, &config);
     tracing::debug!("security config side effects re-applied");
@@ -172,7 +173,7 @@ pub async fn reapply_security_config(
 /// Honest capability report for screen-capture protection on THIS platform,
 /// so the Settings UI can show exactly what the toggle does and does not do.
 #[tauri::command]
-pub async fn get_capture_capability() -> Result<crate::window_security::CaptureCapability, String> {
+pub async fn get_capture_capability() -> Result<crate::window_security::CaptureCapability, AppError> {
     Ok(window_security::platform_capability())
 }
 
@@ -181,7 +182,7 @@ pub async fn get_capture_capability() -> Result<crate::window_security::CaptureC
 /// Called by the frontend after the auto-clear timer fires,
 /// or manually from the settings panel.
 #[tauri::command]
-pub async fn clear_clipboard() -> Result<(), String> {
+pub async fn clear_clipboard() -> Result<(), AppError> {
     #[cfg(target_os = "windows")]
     {
         unsafe {

@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! File transfer commands.
 //!
 //! Handles initiating outgoing file transfers, accepting/rejecting
@@ -27,22 +28,22 @@ pub async fn send_file(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     file_path: String,
-) -> Result<FileTransferInfo, String> {
+) -> Result<FileTransferInfo, AppError> {
     let path = std::path::Path::new(&file_path);
     if !path.exists() {
-        return Err("file not found".to_string());
+        return Err(AppError::invalid("file not found"));
     }
 
     let metadata = std::fs::metadata(path).map_err(|e| format!("cannot read file: {e}"))?;
     let total_size = metadata.len();
     if total_size == 0 {
-        return Err("cannot send an empty file".to_string());
+        return Err(AppError::invalid("cannot send an empty file"));
     }
     if total_size > protocol::MAX_FILE_SIZE {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "file exceeds maximum transfer size ({} bytes)",
             protocol::MAX_FILE_SIZE
-        ));
+        )));
     }
     let filename = path
         .file_name()
@@ -187,7 +188,7 @@ pub async fn send_file(
         Err(e) => {
             // Clean up state on send failure
             state.outgoing_transfers.write().await.remove(&transfer_id);
-            Err(format!("failed to send file request: {e}"))
+            Err(AppError::invalid(format!("failed to send file request: {e}")))
         }
     }
 }
@@ -200,7 +201,7 @@ pub async fn accept_file_transfer(
     peer_key_hex: String,
     transfer_id: String,
     save_dir: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Store the save_dir and update state
     {
         let transfers = state.incoming_transfers.read().await;
@@ -270,7 +271,7 @@ pub async fn reject_file_transfer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     transfer_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let conn_arc = state
         .peer_connection(&peer_key_hex)
         .await
@@ -301,7 +302,7 @@ pub async fn pause_file_transfer(
     state: State<'_, Arc<AppState>>,
     _peer_key_hex: String,
     transfer_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Pause outgoing transfer
     {
         let mut outgoing = state.outgoing_transfers.write().await;
@@ -337,13 +338,13 @@ pub async fn resume_file_transfer(
     state: State<'_, Arc<AppState>>,
     _peer_key_hex: String,
     transfer_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Resume outgoing transfer
     {
         let mut outgoing = state.outgoing_transfers.write().await;
         if let Some(t) = outgoing.get_mut(&transfer_id) {
             if t.state != TransferState::Paused && t.state != TransferState::Failed {
-                return Err("transfer is not paused or failed".to_string());
+                return Err(AppError::invalid("transfer is not paused or failed"));
             }
             t.state = TransferState::Transferring;
         }
@@ -378,7 +379,7 @@ pub async fn cancel_file_transfer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     transfer_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Send cancel to peer if connected
     if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
         let mut conn = conn_arc.lock().await;
@@ -609,7 +610,7 @@ async fn send_file_chunks_inner(
     peer_key_hex: &str,
     transfer_id: &str,
     file_path: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let total_chunks: u32;
     let chunk_hashes: Vec<[u8; 32]>;
     let is_v2_protocol: bool;
@@ -665,10 +666,10 @@ async fn send_file_chunks_inner(
             let mut buf = match read_result {
                 Ok(Ok(b)) => b,
                 Ok(Err(e)) => {
-                    return Err(format!("failed to read chunk {chunk_index}: {e}"));
+                    return Err(AppError::invalid(format!("failed to read chunk {chunk_index}: {e}")));
                 }
                 Err(e) => {
-                    return Err(format!("chunk {chunk_index} read task failed: {e}"));
+                    return Err(AppError::invalid(format!("chunk {chunk_index} read task failed: {e}")));
                 }
             };
 
@@ -682,10 +683,10 @@ async fn send_file_chunks_inner(
                 sha2::Sha256::digest(&buf).into()
             };
             if actual_hash != expected_hash {
-                return Err(format!(
+                return Err(AppError::invalid(format!(
                     "chunk {} hash mismatch before send — file may have changed on disk",
                     chunk_index
-                ));
+                )));
             }
 
             // Send the chunk
@@ -733,10 +734,10 @@ async fn send_file_chunks_inner(
                 } else {
                     retries += 1;
                     if retries >= max_retries {
-                        return Err(format!(
+                        return Err(AppError::invalid(format!(
                             "chunk {} not acked after {} retries",
                             chunk_index, max_retries
-                        ));
+                        )));
                     }
                     tracing::warn!(
                         transfer_id = %transfer_id,
@@ -753,7 +754,7 @@ async fn send_file_chunks_inner(
         };
 
         if !chunk_success {
-            return Err(format!("failed to send chunk {}", chunk_index));
+            return Err(AppError::invalid(format!("failed to send chunk {}", chunk_index)));
         }
 
         // Emit progress periodically

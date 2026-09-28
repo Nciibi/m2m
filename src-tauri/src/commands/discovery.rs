@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! M2M — Peer Discovery Commands
 //!
 //! Controls DHT and LAN peer discovery. Both are **OFF by default**
@@ -43,7 +44,7 @@ pub struct DiscoveredPeer {
 #[tauri::command]
 pub async fn get_discovery_config(
     state: State<'_, Arc<AppState>>,
-) -> Result<DiscoveryConfig, String> {
+) -> Result<DiscoveryConfig, AppError> {
     let config = state.discovery_config.read().await;
     Ok(config.clone())
 }
@@ -58,11 +59,11 @@ pub async fn set_discovery_config(
     _app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     config: DiscoveryConfig,
-) -> Result<DiscoveryConfig, String> {
+) -> Result<DiscoveryConfig, AppError> {
     // Air-gap mode: both LAN multicast and DHT announce leak presence.
     if (config.lan_enabled || config.dht_enabled) && state.security_config.read().await.air_gap_mode
     {
-        return Err("air-gap mode is enabled — peer discovery is blocked".to_string());
+        return Err(AppError::invalid("air-gap mode is enabled — peer discovery is blocked"));
     }
     // ── LAN Discovery ──
     if config.lan_enabled && !state.lan_cancel.read().await.is_some() {
@@ -188,7 +189,7 @@ pub async fn set_discovery_config(
 #[tauri::command]
 pub async fn get_discovered_peers(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<DiscoveredPeer>, String> {
+) -> Result<Vec<DiscoveredPeer>, AppError> {
     let mut peers = Vec::new();
 
     // LAN peers
@@ -235,7 +236,7 @@ pub async fn connect_discovered_peer(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     address: String,
-) -> Result<ConnectionInfo, String> {
+) -> Result<ConnectionInfo, AppError> {
     let peer_addr: std::net::SocketAddr = address
         .parse()
         .map_err(|e| format!("invalid address: {e}"))?;
@@ -373,7 +374,7 @@ pub async fn connect_discovered_peer(
 #[tauri::command]
 pub async fn refresh_discovery(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<DiscoveredPeer>, String> {
+) -> Result<Vec<DiscoveredPeer>, AppError> {
     // LAN: expire stale peers explicitly
     if let Some(ref lan_state_arc) = *state.lan_state.read().await {
         let mut lan = lan_state_arc.write().await;

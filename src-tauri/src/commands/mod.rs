@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! M2M — Tauri Commands
 //!
 //! IPC bridge between the React UI and the Rust backend.
@@ -280,7 +281,7 @@ pub async fn attempt_reconnect(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
     peer_key_hex: String,
-) -> Result<crate::commands::ConnectionInfo, String> {
+) -> Result<crate::commands::ConnectionInfo, AppError> {
     let info = {
         let mut pr = state.pending_reconnects.write().await;
         pr.remove(&peer_key_hex)
@@ -511,7 +512,7 @@ pub async fn attempt_reconnect(
 #[tauri::command]
 pub async fn list_pending_reconnects(
     state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, AppError> {
     let pr = state.pending_reconnects.read().await;
     Ok(pr.keys().cloned().collect())
 }

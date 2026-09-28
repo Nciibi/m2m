@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Chat messaging and conversation management commands.
 
 use std::collections::HashSet;
@@ -22,13 +23,13 @@ pub async fn send_message(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     content: String,
-) -> Result<ChatMessage, String> {
+) -> Result<ChatMessage, AppError> {
     if content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "message too large: {} bytes exceeds {} byte limit",
             content.len(),
             protocol::MAX_TEXT_MESSAGE_SIZE
-        ));
+        )));
     }
 
     let now = std::time::SystemTime::now()
@@ -103,7 +104,7 @@ pub async fn load_messages(
     peer_key_hex: String,
     limit: Option<i64>,
     before_timestamp: Option<i64>,
-) -> Result<Vec<ChatMessage>, String> {
+) -> Result<Vec<ChatMessage>, AppError> {
     // Lazy init: open message store on first load if not already opened
     state
         .ensure_message_store(&state.data_dir)
@@ -166,7 +167,7 @@ pub async fn load_messages(
 #[tauri::command]
 pub async fn list_conversations(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<ConversationListItem>, String> {
+) -> Result<Vec<ConversationListItem>, AppError> {
     // Snapshot the connected-peer set and drop the connection-map guard before
     // taking the storage locks. Holding it across the message-store work
     // blocked every connection writer in the process for the duration of a
@@ -248,7 +249,7 @@ pub async fn rename_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
     display_name: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
@@ -261,7 +262,7 @@ pub async fn rename_conversation(
 pub async fn delete_conversation_cmd(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
@@ -278,12 +279,12 @@ pub async fn set_conversation_retention(
     conversation_id: String,
     policy: String,
     duration_secs: Option<i64>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let valid_policies = ["none", "delete", "export"];
     if !valid_policies.contains(&policy.as_str()) {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "invalid policy: {policy}. Must be one of: none, delete, export"
-        ));
+        )));
     }
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
@@ -300,7 +301,7 @@ pub async fn send_conversation_names(
     peer_key_hex: String,
     my_name: String,
     their_name: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let conn_arc = state
         .peer_connection(&peer_key_hex)
         .await
@@ -325,7 +326,7 @@ pub async fn export_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
     export_path: String,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
@@ -394,9 +395,9 @@ pub async fn send_reaction(
     peer_key_hex: String,
     message_id: String,
     reaction: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if reaction.len() > 10 {
-        return Err("reaction too long".to_string());
+        return Err(AppError::invalid("reaction too long"));
     }
 
     // Store locally first (scoped to this conversation — H4).
@@ -453,7 +454,7 @@ pub async fn remove_reaction(
     peer_key_hex: String,
     message_id: String,
     reaction: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Remove locally (scoped to this conversation — H4). Ephemeral mode: no-op.
     if !state.security_config.read().await.ephemeral_mode {
         let sk = state.storage_key.read().await;
@@ -507,7 +508,7 @@ pub async fn remove_reaction(
 pub async fn mark_messages_read(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
-) -> Result<u32, String> {
+) -> Result<u32, AppError> {
     // Ephemeral mode: read state lives in RAM only.
     if state.security_config.read().await.ephemeral_mode {
         return Ok(0);
@@ -528,13 +529,13 @@ pub async fn send_message_with_timer(
     peer_key_hex: String,
     content: String,
     disappear_after: Option<u64>,
-) -> Result<ChatMessage, String> {
+) -> Result<ChatMessage, AppError> {
     if content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "message too large: {} bytes exceeds {} byte limit",
             content.len(),
             protocol::MAX_TEXT_MESSAGE_SIZE
-        ));
+        )));
     }
 
     let now = std::time::SystemTime::now()
@@ -614,9 +615,9 @@ pub async fn edit_message(
     peer_key_hex: String,
     message_id: String,
     new_content: String,
-) -> Result<ChatMessage, String> {
+) -> Result<ChatMessage, AppError> {
     if new_content.len() > protocol::MAX_TEXT_MESSAGE_SIZE {
-        return Err("edited message too large".to_string());
+        return Err(AppError::invalid("edited message too large"));
     }
 
     let conn_arc = state
@@ -647,7 +648,7 @@ pub async fn edit_message(
             ) {
                 Ok(true) => {}
                 Ok(false) => {
-                    return Err("message not found in this conversation".to_string());
+                    return Err(AppError::invalid("message not found in this conversation"));
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "failed to persist edited message");
@@ -689,7 +690,7 @@ pub async fn delete_message(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     message_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Validate ownership locally BEFORE sending: the message must exist in
     // this conversation and be one of our sent messages (H4).
     // Ephemeral mode: no local tombstone is written.
@@ -700,7 +701,7 @@ pub async fn delete_message(
                 .message_in_conversation(&message_id, &peer_key_hex, "sent")
                 .map_err(|e| format!("delete failed: {e}"))?;
             if !owned && !state.security_config.read().await.ephemeral_mode {
-                return Err("message not found in this conversation".to_string());
+                return Err(AppError::invalid("message not found in this conversation"));
             }
         }
     }
@@ -734,7 +735,7 @@ pub async fn delete_message(
 
 /// Clean up expired (self-destructed) messages from the database.
 #[tauri::command]
-pub async fn cleanup_expired_messages(state: State<'_, Arc<AppState>>) -> Result<u32, String> {
+pub async fn cleanup_expired_messages(state: State<'_, Arc<AppState>>) -> Result<u32, AppError> {
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
@@ -748,7 +749,7 @@ pub async fn cleanup_expired_messages(state: State<'_, Arc<AppState>>) -> Result
 pub async fn flush_offline_queue(
     state: &std::sync::Arc<AppState>,
     peer_key_hex: &str,
-) -> Result<u32, String> {
+) -> Result<u32, AppError> {
     // Make sure message store is available
     state
         .ensure_message_store(&state.data_dir)
@@ -844,7 +845,7 @@ pub async fn flush_offline_queue(
 pub async fn mute_conversation(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut muted = state.muted_conversations.write().await;
     muted.insert(peer_key_hex);
     Ok(())
@@ -855,7 +856,7 @@ pub async fn mute_conversation(
 pub async fn unmute_conversation(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let mut muted = state.muted_conversations.write().await;
     muted.remove(&peer_key_hex);
     Ok(())
@@ -865,7 +866,7 @@ pub async fn unmute_conversation(
 #[tauri::command]
 pub async fn get_muted_conversations(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, AppError> {
     let muted = state.muted_conversations.read().await;
     Ok(muted.iter().cloned().collect())
 }
@@ -875,7 +876,7 @@ pub async fn get_muted_conversations(
 pub async fn toggle_favorite(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let new_val = store
@@ -889,7 +890,7 @@ pub async fn toggle_favorite(
 pub async fn toggle_archive(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let new_val = store
@@ -908,7 +909,7 @@ pub async fn send_typing_indicator(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     typing: bool,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if state.security_config.read().await.cover_typing_traffic {
         let jitter = rand::random::<u64>() % 600;
         if jitter > 0 {
@@ -941,7 +942,7 @@ pub async fn search_messages(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     query: String,
-) -> Result<Vec<ChatMessage>, String> {
+) -> Result<Vec<ChatMessage>, AppError> {
     let messages: Vec<ChatMessage> = {
                                 // Lock order: `storage_key` before `message_store`, the
                                 // order used by every other read path. See

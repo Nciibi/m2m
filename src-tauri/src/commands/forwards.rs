@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Manual port forwarding CRUD commands.
 //!
 //! These commands let the user manage port forwarding rules they've
@@ -15,7 +16,7 @@ use crate::state::{AppState, ManualForward};
 #[tauri::command]
 pub async fn list_manual_forwards(
     state: State<'_, Arc<AppState>>,
-) -> Result<Vec<ManualForward>, String> {
+) -> Result<Vec<ManualForward>, AppError> {
     let forwards = state.manual_forwards.read().await;
     Ok(forwards.clone())
 }
@@ -30,7 +31,7 @@ pub async fn add_manual_forward(
     public_addr: String,
     listen_port: u16,
     label: String,
-) -> Result<Vec<ManualForward>, String> {
+) -> Result<Vec<ManualForward>, AppError> {
     // Validate the address parses as a SocketAddr.
     let _: SocketAddr = public_addr
         .parse()
@@ -56,7 +57,7 @@ pub async fn add_manual_forward(
 pub async fn remove_manual_forward(
     state: State<'_, Arc<AppState>>,
     order: u32,
-) -> Result<Vec<ManualForward>, String> {
+) -> Result<Vec<ManualForward>, AppError> {
     let mut forwards = state.manual_forwards.write().await;
     forwards.retain(|f| f.order != order);
     Ok(forwards.clone())
@@ -68,7 +69,7 @@ pub async fn remove_manual_forward(
 pub async fn reorder_manual_forwards(
     state: State<'_, Arc<AppState>>,
     orders: Vec<u32>,
-) -> Result<Vec<ManualForward>, String> {
+) -> Result<Vec<ManualForward>, AppError> {
     let mut forwards = state.manual_forwards.write().await;
     // Build lookup.
     let old: std::collections::HashMap<u32, ManualForward> =

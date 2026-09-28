@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Vault and identity commands.
 //!
 //! Handles keypair generation, passphrase-based vault locking/unlocking,
@@ -26,7 +27,7 @@ use super::{ConnectionEvent, ConnectionInfo, FamilyMember, IdentityInfo, VaultSt
 async fn derive_key_blocking(
     passphrase: String,
     salt: Vec<u8>,
-) -> Result<crate::secure_key::StorageKey, String> {
+) -> Result<crate::secure_key::StorageKey, AppError> {
     tokio::task::spawn_blocking(move || {
         util::derive_storage_key_from_passphrase(&passphrase, &salt)
     })
@@ -37,7 +38,7 @@ async fn derive_key_blocking(
 /// Initialize the crypto library and check for existing identity.
 /// Does NOT decrypt the private key — that is deferred to `unlock_vault`.
 #[tauri::command]
-pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, String> {
+pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, AppError> {
     crypto::init().map_err(|e| format!("crypto init failed: {e}"))?;
 
     let data_dir = storage::ensure_data_dir().map_err(|e| format!("data dir error: {e}"))?;
@@ -54,7 +55,7 @@ pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityIn
             .map_err(|e| format!("failed to load public key: {e}"))?;
 
         if pub_bytes.len() != 32 {
-            return Err("invalid public key length in storage".to_string());
+            return Err(AppError::invalid("invalid public key length in storage"));
         }
         let mut pub_arr = [0u8; 32];
         pub_arr.copy_from_slice(&pub_bytes);
@@ -93,7 +94,7 @@ pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityIn
 
 /// Get the current identity info.
 #[tauri::command]
-pub async fn get_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, String> {
+pub async fn get_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, AppError> {
     let identity = state.identity.read().await;
     match identity.as_ref() {
         Some(kp) => Ok(IdentityInfo {
@@ -111,7 +112,7 @@ pub async fn get_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInf
 
 /// Get the current vault lock status.
 #[tauri::command]
-pub async fn get_vault_status(state: State<'_, Arc<AppState>>) -> Result<VaultStatus, String> {
+pub async fn get_vault_status(state: State<'_, Arc<AppState>>) -> Result<VaultStatus, AppError> {
     let initialized = *state.vault_initialized.read().await;
     let unlocked = *state.vault_unlocked.read().await;
     Ok(VaultStatus {
@@ -134,7 +135,7 @@ pub async fn get_vault_status(state: State<'_, Arc<AppState>>) -> Result<VaultSt
 pub async fn unlock_vault(
     state: State<'_, Arc<AppState>>,
     passphrase: String,
-) -> Result<VaultStatus, String> {
+) -> Result<VaultStatus, AppError> {
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
@@ -176,7 +177,7 @@ pub async fn unlock_vault(
     let x25519_preload = if key_store.has_x25519_key().unwrap_or(false) {
         match key_store.load_x25519_key() {
             Ok((xp, xe, xn)) => Some((xp, xe, xn)),
-            Err(e) => return Err(format!("failed to load X25519 key: {e}")),
+            Err(e) => return Err(AppError::invalid(format!("failed to load X25519 key: {e}"))),
         }
     } else {
         None
@@ -212,7 +213,7 @@ pub async fn unlock_vault(
             // a wrong passphrase ("No account matches this passphrase.").
             tracing::warn!("DURESS passphrase entered — wiping vault");
             execute_duress_wipe(&state).await;
-            return Err("No account matches this passphrase.".to_string());
+            return Err(AppError::invalid("No account matches this passphrase."));
         }
     }
 
@@ -400,7 +401,7 @@ pub async fn unlock_vault(
 
         (kp, xkp, false, None)
     } else {
-        return Err("vault data missing — cannot unlock".to_string());
+        return Err(AppError::invalid("vault data missing — cannot unlock"));
     };
 
     // ─── Phase 3: Async state writes ───
@@ -505,7 +506,7 @@ pub async fn unlock_vault(
 pub async fn create_vault_account(
     state: State<'_, Arc<AppState>>,
     passphrase: String,
-) -> Result<IdentityInfo, String> {
+) -> Result<IdentityInfo, AppError> {
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
@@ -575,7 +576,7 @@ pub async fn create_vault_account(
 
 /// List all non-expired family members.
 #[tauri::command]
-pub async fn list_family(state: State<'_, Arc<AppState>>) -> Result<Vec<FamilyMember>, String> {
+pub async fn list_family(state: State<'_, Arc<AppState>>) -> Result<Vec<FamilyMember>, AppError> {
     let sk = state.storage_key.read().await;
     let ks = state.key_store.lock().await;
     let store = ks.as_ref().ok_or("key store not initialized")?;
@@ -592,9 +593,9 @@ pub async fn add_family_member(
     peer_key_hex: String,
     nickname: String,
     expires_in_days: Option<u64>,
-) -> Result<FamilyMember, String> {
+) -> Result<FamilyMember, AppError> {
     if nickname.trim().is_empty() {
-        return Err("nickname cannot be empty".to_string());
+        return Err(AppError::invalid("nickname cannot be empty"));
     }
     let pk_bytes =
         util::decode_peer_key(&peer_key_hex).map_err(|e| format!("invalid peer key: {e}"))?;
@@ -608,7 +609,7 @@ pub async fn add_family_member(
             .flatten()
             .is_some();
         if !has_conversation {
-            return Err("no conversation with this peer".to_string());
+            return Err(AppError::invalid("no conversation with this peer"));
         }
     }
 
@@ -630,7 +631,7 @@ pub async fn add_family_member(
 pub async fn remove_family_member(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let pk_bytes =
         util::decode_peer_key(&peer_key_hex).map_err(|e| format!("invalid peer key: {e}"))?;
     {
@@ -649,9 +650,9 @@ pub async fn set_family_nickname(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     nickname: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     if nickname.trim().is_empty() {
-        return Err("nickname cannot be empty".to_string());
+        return Err(AppError::invalid("nickname cannot be empty"));
     }
     let pk_bytes =
         util::decode_peer_key(&peer_key_hex).map_err(|e| format!("invalid peer key: {e}"))?;
@@ -673,7 +674,7 @@ pub async fn connect_family_member(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
-) -> Result<ConnectionInfo, String> {
+) -> Result<ConnectionInfo, AppError> {
     let pk_bytes =
         util::decode_peer_key(&peer_key_hex).map_err(|e| format!("invalid peer key: {e}"))?;
 
@@ -696,7 +697,7 @@ pub async fn connect_family_member(
             .is_family_member(&pk_bytes)
             .map_err(|e| format!("family check: {e}"))?
         {
-            return Err("peer is not a family member".to_string());
+            return Err(AppError::invalid("peer is not a family member"));
         }
         let members = store
             .list_family(sk.as_ref())
@@ -817,12 +818,12 @@ pub async fn connect_family_member(
             }
             Err(_) => {
                 // Connection failed — address is stale
-                return Err("CANNOT_REACH".to_string());
+                return Err(AppError::invalid("CANNOT_REACH"));
             }
         }
     }
 
-    Err("CANNOT_REACH".to_string())
+    Err(AppError::invalid("CANNOT_REACH"))
 }
 
 /// Update a family member with a fresh invite (new key + address).
@@ -832,7 +833,7 @@ pub async fn update_family_member(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     invite_str: String,
-) -> Result<FamilyMember, String> {
+) -> Result<FamilyMember, AppError> {
     let old_key =
         util::decode_peer_key(&peer_key_hex).map_err(|e| format!("invalid peer key: {e}"))?;
 
@@ -862,7 +863,7 @@ pub async fn export_identity(
     state: State<'_, Arc<AppState>>,
     path: String,
     passphrase: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
     // Get identity from state
@@ -928,7 +929,7 @@ pub async fn import_identity(
     state: State<'_, Arc<AppState>>,
     path: String,
     passphrase: String,
-) -> Result<IdentityInfo, String> {
+) -> Result<IdentityInfo, AppError> {
     // The passphrase becomes the vault passphrase for the imported identity,
     // so it must meet the same strength requirements as unlock_vault.
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
@@ -970,7 +971,7 @@ pub async fn import_identity(
     let pub_arr = {
         let mut arr = [0u8; 32];
         if pub_bytes.len() != 32 {
-            return Err("invalid public key length".to_string());
+            return Err(AppError::invalid("invalid public key length"));
         }
         arr.copy_from_slice(&pub_bytes);
         arr
@@ -988,7 +989,7 @@ pub async fn import_identity(
     let mut sk_arr = [0u8; 64];
     if sk_bytes.len() != 64 {
         sk_bytes.zeroize();
-        return Err("invalid secret key length in backup".to_string());
+        return Err(AppError::invalid("invalid secret key length in backup"));
     }
     sk_arr.copy_from_slice(&sk_bytes);
     sk_bytes.zeroize();
@@ -998,7 +999,7 @@ pub async fn import_identity(
         Ok(kp) => kp,
         Err(e) => {
             sk_arr.zeroize();
-            return Err(format!("failed to reconstruct identity: {e}"));
+            return Err(AppError::invalid(format!("failed to reconstruct identity: {e}")));
         }
     };
 
@@ -1129,7 +1130,7 @@ fn seal_imported_identity(
     pub_bytes: &[u8],
     sk_bytes: &[u8],
     storage_key: &crate::secure_key::StorageKey,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let (new_nonce, new_enc_sk) =
         util::crypto_encrypt_storage(sk_bytes, storage_key, util::AAD_KEY_STORE)
             .map_err(|e| format!("encryption failed: {e}"))?;
@@ -1225,10 +1226,10 @@ async fn execute_duress_wipe(state: &Arc<AppState>) {
 pub async fn panic_wipe(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let armed = state.security_config.read().await.panic_hotkey_enabled;
     if !armed {
-        return Err("panic hotkey is not armed".to_string());
+        return Err(AppError::invalid("panic hotkey is not armed"));
     }
     tracing::warn!("PANIC WIPE triggered via hotkey");
     execute_duress_wipe(&state).await;
@@ -1242,7 +1243,7 @@ pub async fn panic_wipe(
 /// After calling this, the user must unlock the vault again to perform
 /// sensitive operations. Active connections remain open.
 #[tauri::command]
-pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), AppError> {
     // Unlock mlock'd pages BEFORE dropping (zeroization happens in Drop).
     {
         let mut id_lock = state.identity.write().await;
@@ -1299,10 +1300,10 @@ pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), String> {
 pub async fn set_duress_passphrase(
     state: State<'_, Arc<AppState>>,
     passphrase: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let unlocked = *state.vault_unlocked.read().await;
     if !unlocked {
-        return Err("vault must be unlocked to register a duress passphrase".to_string());
+        return Err(AppError::invalid("vault must be unlocked to register a duress passphrase"));
     }
     // Same strength gates as unlock: the duress passphrase must be able to
     // pass them too, or it could never trigger (unlock checks run first).
@@ -1318,10 +1319,10 @@ pub async fn set_duress_passphrase(
 
 /// Remove the duress passphrase registration.
 #[tauri::command]
-pub async fn clear_duress_passphrase(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn clear_duress_passphrase(state: State<'_, Arc<AppState>>) -> Result<(), AppError> {
     let unlocked = *state.vault_unlocked.read().await;
     if !unlocked {
-        return Err("vault must be unlocked to change duress settings".to_string());
+        return Err(AppError::invalid("vault must be unlocked to change duress settings"));
     }
     let ks_guard = state.key_store.lock().await;
     let key_store = ks_guard.as_ref().ok_or("key store not initialized")?;
@@ -1330,7 +1331,7 @@ pub async fn clear_duress_passphrase(state: State<'_, Arc<AppState>>) -> Result<
 
 /// Whether a duress passphrase is registered (UI display only).
 #[tauri::command]
-pub async fn is_duress_configured(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+pub async fn is_duress_configured(state: State<'_, Arc<AppState>>) -> Result<bool, AppError> {
     let unlocked = *state.vault_unlocked.read().await;
     if !unlocked {
         return Ok(false);
@@ -1344,14 +1345,14 @@ pub async fn is_duress_configured(state: State<'_, Arc<AppState>>) -> Result<boo
 
 /// Check if this is the first launch (onboarding not yet shown).
 #[tauri::command]
-pub async fn is_first_run(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+pub async fn is_first_run(state: State<'_, Arc<AppState>>) -> Result<bool, AppError> {
     let fr = state.first_run.read().await;
     Ok(*fr)
 }
 
 /// Mark first-run onboarding as complete.
 #[tauri::command]
-pub async fn set_first_run_complete(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+pub async fn set_first_run_complete(state: State<'_, Arc<AppState>>) -> Result<(), AppError> {
     let mut fr = state.first_run.write().await;
     *fr = false;
     Ok(())

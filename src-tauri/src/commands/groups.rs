@@ -1,3 +1,4 @@
+use crate::error::AppError;
 //! Group chat commands (Phase 3).
 //!
 //! Tauri IPC bridge for group creation, member management,
@@ -35,7 +36,7 @@ pub async fn create_group(
     state: State<'_, Arc<AppState>>,
     group_name: String,
     member_peer_keys: Vec<String>,
-) -> Result<super::GroupInfo, String> {
+) -> Result<super::GroupInfo, AppError> {
     // Validate: members must exist as contacts
     // Snapshot our own public key, releasing `identity` before any
     // `group_manager` access — see `AppState::our_peer_key_hex`.
@@ -43,7 +44,7 @@ pub async fn create_group(
     let identity_kp = state.our_identity_kp().await?;
 
     if member_peer_keys.is_empty() {
-        return Err("group must have at least one member besides yourself".to_string());
+        return Err(AppError::invalid("group must have at least one member besides yourself"));
     }
 
     let group_id = uuid::Uuid::new_v4().to_string();
@@ -166,13 +167,13 @@ pub async fn send_group_message(
     state: State<'_, Arc<AppState>>,
     group_id: String,
     content: String,
-) -> Result<ChatMessage, String> {
+) -> Result<ChatMessage, AppError> {
     if content.len() > crate::protocol::MAX_TEXT_MESSAGE_SIZE {
-        return Err(format!(
+        return Err(AppError::invalid(format!(
             "message too large: {} bytes exceeds {} byte limit",
             content.len(),
             crate::protocol::MAX_TEXT_MESSAGE_SIZE
-        ));
+        )));
     }
 
     let now = std::time::SystemTime::now()
@@ -291,7 +292,7 @@ pub async fn send_group_message(
 
 /// List all groups.
 #[tauri::command]
-pub async fn list_groups(state: State<'_, Arc<AppState>>) -> Result<Vec<super::GroupInfo>, String> {
+pub async fn list_groups(state: State<'_, Arc<AppState>>) -> Result<Vec<super::GroupInfo>, AppError> {
     let gm = state.group_manager.read().await;
     let groups = gm.list_groups();
 
@@ -313,7 +314,7 @@ pub async fn list_groups(state: State<'_, Arc<AppState>>) -> Result<Vec<super::G
 pub async fn get_group_info(
     state: State<'_, Arc<AppState>>,
     group_id: String,
-) -> Result<super::GroupDetail, String> {
+) -> Result<super::GroupDetail, AppError> {
     let gm = state.group_manager.read().await;
     let group = gm.get_group(&group_id).ok_or("group not found")?;
 
@@ -347,7 +348,7 @@ pub async fn invite_to_group(
     state: State<'_, Arc<AppState>>,
     group_id: String,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -449,7 +450,7 @@ pub async fn remove_from_group(
     state: State<'_, Arc<AppState>>,
     group_id: String,
     peer_key_hex: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Snapshot our own public key, releasing `identity` before any
     // `group_manager` access — see `AppState::our_peer_key_hex`.
     let our_peer_key_hex = state.our_peer_key_hex().await?;
@@ -532,7 +533,7 @@ pub async fn leave_group(
     app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     group_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Snapshot our own public key, releasing `identity` before any
     // `group_manager` access — see `AppState::our_peer_key_hex`.
     let our_peer_key_hex = state.our_peer_key_hex().await?;
@@ -604,7 +605,7 @@ pub async fn load_group_messages(
     state: State<'_, Arc<AppState>>,
     group_id: String,
     limit: Option<i64>,
-) -> Result<Vec<ChatMessage>, String> {
+) -> Result<Vec<ChatMessage>, AppError> {
     state
         .ensure_message_store(&state.data_dir)
         .await
@@ -661,7 +662,7 @@ pub async fn update_group_name(
     state: State<'_, Arc<AppState>>,
     group_id: String,
     new_name: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Snapshot our own public key, releasing `identity` before any
     // `group_manager` access — see `AppState::our_peer_key_hex`.
     let our_peer_key_hex = state.our_peer_key_hex().await?;
@@ -670,7 +671,7 @@ pub async fn update_group_name(
         let mut gm = state.group_manager.write().await;
         let group = gm.get_group_mut(&group_id).ok_or("group not found")?;
         if !group.is_admin(&our_peer_key_hex) {
-            return Err("only admins can change the group name".to_string());
+            return Err(AppError::invalid("only admins can change the group name"));
         }
         group.name = new_name.clone();
     }
