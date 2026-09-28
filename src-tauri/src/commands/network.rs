@@ -151,7 +151,22 @@ where
         .ok_or_else(|| "no signed prekey for X3DH handshake".to_string())?;
 
     let opk_consumed = frame_presented_one_time_prekey(init_frame);
-    let opk_lock = state.active_one_time_prekey.read().await;
+
+    // ── Reserve the one-time prekey atomically ──
+    //
+    // The prekey slot is taken under a *write* guard held for the whole
+    // handshake, not read-then-later-write. Reading availability under a read
+    // guard and retiring under a write guard afterwards left a TOCTOU window:
+    // two concurrent inbound handshakes could both observe the prekey as
+    // present, both apply DH4 with the same secret, and only then serialise on
+    // the write lock — where the loser's `take()` returns `None` and the
+    // damage is already done. That defeats the entire purpose of a one-time
+    // prekey, which is to guarantee at most one session derives DH4 from it.
+    //
+    // Serialising inbound X3DH handshakes is the correct trade: they are rare
+    // (one per new connection) and already bounded by the per-IP and global
+    // connection limiters.
+    let mut opk_lock = state.active_one_time_prekey.write().await;
     let opk_available = opk_lock.is_some();
     let use_opk = opk_available && opk_consumed;
 
@@ -175,17 +190,18 @@ where
             local_candidates,
         )
         .await;
+
+    // Still under the write guard: retire only on success, so a stream of
+    // failing attempts cannot be used to grief the user by burning prekeys.
+    if result.is_ok() && use_opk {
+        // `take()` + drop: EphemeralKeypair's Drop zeroizes the secret.
+        drop(opk_lock.take());
+        tracing::info!("one-time prekey consumed and retired");
+    }
     drop(opk_lock);
     drop(spk_lock);
 
     result.map_err(|e| format!("X3DH handshake failed: {e}"))?;
-
-    if use_opk {
-        let mut opk_slot = state.active_one_time_prekey.write().await;
-        // `take()` + drop: EphemeralKeypair's Drop zeroizes the secret.
-        drop(opk_slot.take());
-        tracing::info!("one-time prekey consumed and retired");
-    }
     Ok(())
 }
 
