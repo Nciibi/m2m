@@ -25,6 +25,7 @@ pub mod crypto;
 pub mod dht;
 pub mod dial;
 mod duress;
+pub mod error;
 mod ephemeral_id;
 mod group;
 mod hole_punch;
