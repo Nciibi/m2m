@@ -944,8 +944,19 @@ pub async fn connect_to_peer(
                     .map_err(|e| format!("initiator handshake failed: {e}"))?;
             }
         }
+        // Unreachable: the outbound dialer is connect-only (see
+        // `punch_connect_only`). An inbound arrival is served by the
+        // listener in `start_listening` → `complete_inbound_connection`, so
+        // this arm exists only to make an impossible role an explicit error
+        // rather than a silently-skipped handshake.
         hole_punch::Role::Responder => {
-            tracing::debug!("hole-punch role: Responder (incoming accept won)");
+            return Err(
+                "internal: outbound dial reported the responder role, which it cannot produce"
+                    .to_string(),
+            );
+        }
+        #[allow(unreachable_patterns)]
+        {
             let frame = network::read_frame(&mut stream)
                 .await
                 .map_err(|e| format!("failed to read initial frame: {e}"))?;

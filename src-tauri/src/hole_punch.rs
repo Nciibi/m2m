@@ -335,9 +335,8 @@ async fn run_relay(s: Strategy, auth_token: &str) -> Result<StrategyResult, Conn
     })
 }
 
-// ─── Internal: Race Accept vs Connect ───────────────────────────────────────
+// ─── Internal: Reflexive candidate dialing ────────────────────────────────────
 
-/// True TCP hole punch: race an incoming accept against outgoing connects.
 /// Attempt the server-reflexive / peer-reflexive candidates.
 ///
 /// ## There is deliberately no local accept leg
@@ -374,7 +373,6 @@ async fn punch_connect_only(
     // Retained for symmetry with the other strategies; unused by design.
     let _ = our_listener_addr;
     connect_sequential(&peer_candidates.to_vec()).await
-}
 }
 
 /// Try all peer candidates sequentially (simple connect).
