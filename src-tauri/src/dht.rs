@@ -545,9 +545,40 @@ pub async fn announce_loop(
             tracing::info!("Network changed — DHT ephemeral peer ID rotated");
         }
 
-        let nodes = {
+        // Node list: explicit bootstrap nodes, plus — when none are
+        // configured — peers learned from LAN discovery.
+        //
+        // This module previously read `config.bootstrap_nodes` and nothing
+        // ever wrote it, so the loop woke every `ANNOUNCE_INTERVAL`, found an
+        // empty list, and iterated zero times, forever. The DHT toggle in
+        // Settings therefore started a task that announced nothing while the
+        // UI and the module docs described a working subsystem.
+        //
+        // There is no public bootstrap set for M2M, and borrowing a public
+        // BitTorrent DHT would contradict the threat model outright: it would
+        // hand the node's address to an unrelated third party on every start.
+        // So the only coherent seed source is peers we already trust enough to
+        // have found by ourselves on the LAN.
+        let (nodes, warned) = {
             let state = dht_state.read().await;
-            state.config.bootstrap_nodes.clone()
+            (state.config.bootstrap_nodes.clone(), state.warned_no_bootstrap)
+        };
+
+        let nodes = if nodes.is_empty() {
+            let lan = lan_dht_seeds(&*lan_state.read().await);
+            if lan.is_empty() && !warned {
+                tracing::warn!(
+                    "DHT enabled but no bootstrap nodes are configured and no LAN peers \
+                     have been discovered yet — nothing to announce to. M2M ships no \
+                     public bootstrap set on purpose (joining a public DHT would disclose \
+                     this node's address to an unrelated third party). Peer gossip will \
+                     populate the node list once LAN discovery finds a peer, or set \
+                     dht bootstrap_nodes explicitly. Discovery will stay inert until then."
+                );
+            }
+            lan
+        } else {
+            nodes
         };
 
         let addr = *listen_addr.read().await;
