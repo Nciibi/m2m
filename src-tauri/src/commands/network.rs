@@ -89,6 +89,37 @@ pub(crate) async fn check_contact_gate(state: &AppState, peer_key_hex: &str) -> 
     }
 }
 
+/// Advance the sender's confirmed-chunk watermark from one `ChunkAck`.
+///
+/// Returns the new `(last_acked_index, chunks_acked)`, or `None` when the ACK
+/// should be ignored.
+///
+/// The sender transmits chunks strictly in order and waits for each ACK before
+/// sending the next, so a correct peer's ACKs are contiguous by construction.
+/// Only a contiguous next-chunk ACK is honoured.
+///
+/// The previous code accepted any `chunk_index >= last_acked_index` and added
+/// the whole span, assuming no gaps. That had two consequences:
+///
+/// * A gap over-counted: ACK 0 then ACK 5 set `chunks_acked = 6` when chunks
+///   1-4 were never acknowledged.
+/// * Worse, one frame was enough to finish the transfer. `wait_for_ack`
+///   treats a confirmed watermark past `chunk_index` as "this chunk is
+///   delivered", so a single authenticated peer — the very party being asked
+///   to confirm delivery — could send `chunk_index = total_chunks - 1` once and
+///   have every subsequent chunk treated as delivered, with the file declared
+///   sent without a byte being written.
+///
+/// Extracted as a pure function so the rule is unit-testable; the previous form
+/// was inline in a `connections`-lock-held block, which is not.
+fn advance_ack_watermark(last_acked_index: u32, acked_index: u32) -> Option<u32> {
+    if acked_index == last_acked_index + 1 {
+        Some(acked_index)
+    } else {
+        None
+    }
+}
+
 /// Did the initiator's handshake frame claim to have used a one-time prekey?
 ///
 /// Inspects the `used_opk` field of the X3DH `HandshakeInit`. A malformed
@@ -1808,9 +1839,11 @@ async fn handle_file_transfer_packet(
                                 // already did — the sender now holds a
                                 // conservative mirror of it instead of a
                                 // separately-invented count.
-                                if ack.chunk_index == t.last_acked_index + 1 {
-                                    t.last_acked_index = ack.chunk_index;
-                                    t.chunks_acked = t.last_acked_index + 1;
+                                if let Some(next) =
+                                    advance_ack_watermark(t.last_acked_index, ack.chunk_index)
+                                {
+                                    t.last_acked_index = next;
+                                    t.chunks_acked = next + 1;
                                     t.last_activity_at = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
