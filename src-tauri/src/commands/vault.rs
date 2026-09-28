@@ -864,11 +864,6 @@ pub async fn export_identity(
     passphrase: String,
 ) -> Result<(), String> {
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
-        return Err(format!(
-            "passphrase too weak: ~{:.0} bits. Use a stronger passphrase (aim for 60+).",
-            entropy
-        ));
-    }
 
     // Get identity from state
     let identity = state.identity.read().await;
