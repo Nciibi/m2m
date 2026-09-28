@@ -1332,13 +1332,7 @@ pub async fn set_duress_passphrase(
     }
     // Same strength gates as unlock: the duress passphrase must be able to
     // pass them too, or it could never trigger (unlock checks run first).
-    if passphrase.len() < 12 {
-        return Err("duress passphrase must be at least 12 characters".to_string());
-    }
-    let entropy = util::estimate_passphrase_entropy(&passphrase);
-    if entropy < 40.0 {
-        return Err(format!("duress passphrase too weak: ~{:.0} bits", entropy));
-    }
+    util::validate_passphrase(&passphrase, util::PassphraseKind::Duress)?;
 
     let ks_guard = state.key_store.lock().await;
     let key_store = ks_guard.as_ref().ok_or("key store not initialized")?;
