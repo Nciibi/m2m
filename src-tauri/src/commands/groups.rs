@@ -40,6 +40,7 @@ pub async fn create_group(
     // Snapshot our own public key, releasing `identity` before any
     // `group_manager` access — see `AppState::our_peer_key_hex`.
     let our_peer_key_hex = state.our_peer_key_hex().await?;
+    let identity_kp = state.our_identity_kp().await?;
 
     if member_peer_keys.is_empty() {
         return Err("group must have at least one member besides yourself".to_string());
@@ -360,6 +361,7 @@ pub async fn invite_to_group(
     // read while `group_manager` is held.
     let identity_kp = state.our_identity_kp().await?;
     let our_peer_key_hex = state.our_peer_key_hex().await?;
+    let identity_kp = state.our_identity_kp().await?;
 
     // Add member in GroupManager
     let bundles = {
@@ -452,6 +454,7 @@ pub async fn remove_from_group(
     // Snapshot our own public key, releasing `identity` before any
     // `group_manager` access — see `AppState::our_peer_key_hex`.
     let our_peer_key_hex = state.our_peer_key_hex().await?;
+    let identity_kp = state.our_identity_kp().await?;
 
     let bundles = {
         let mut gm = state.group_manager.write().await;
