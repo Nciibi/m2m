@@ -110,6 +110,33 @@ pub struct KeyStore {
     conn: Connection,
 }
 
+/// Connection-level pragmas applied to every store.
+///
+/// These are *connection* settings, not schema settings, so they must be set at
+/// open time. Two of the three were previously missing entirely:
+///
+/// * `secure_delete` was only turned on by the three delete paths
+///   (`delete_message`, `delete_conversation`, `delete_expired_messages`). It
+///   was therefore OFF for every read, every ordinary `UPDATE`, and every freed
+///   page until a user happened to delete something — so routine churn (an
+///   edited message, a self-destruct timer firing) left exactly the freed-page
+///   remnants that per-message CEK shredding exists to make harmless. For a tool
+///   built around seizure scenarios, it belongs at `open()`.
+/// * `foreign_keys` defaults to OFF in SQLite, which made every
+///   `FOREIGN KEY ... REFERENCES` clause in this file purely decorative.
+/// * `busy_timeout` turns a cross-process `SQLITE_BUSY` (two instances on one
+///   profile) into a wait rather than an error.
+fn apply_connection_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
+    // Zero freed pages and overwritten cells rather than leaving the old bytes
+    // in place. This is a *performance* trade (every delete scrubs), which is
+    // the right trade for this threat model.
+    conn.pragma_update(None, "secure_delete", "ON")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "busy_timeout", 5000)?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    Ok(())
+}
+
 impl KeyStore {
     /// Open or create the key store.
     /// Note: the private key stored here must already be encrypted by the caller
@@ -119,6 +146,7 @@ impl KeyStore {
 
         // Enable WAL mode for better concurrent read performance
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        apply_connection_pragmas(&conn)?;
 
         // Initialize schema
         conn.execute_batch(
@@ -937,6 +965,7 @@ impl MessageStore {
     pub fn open(db_path: &Path) -> Result<Self, StorageError> {
         let conn = Connection::open(db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        apply_connection_pragmas(&conn)?;
 
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS conversations (
@@ -2232,6 +2261,7 @@ impl TransferStore {
     pub fn open(db_path: &Path) -> Result<Self, StorageError> {
         let conn = Connection::open(db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        apply_connection_pragmas(&conn)?;
 
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS transfers (
