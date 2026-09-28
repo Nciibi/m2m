@@ -636,17 +636,36 @@ async fn send_file_chunks_inner(
     for chunk_index in 0..total_chunks {
         let mut retries = 0;
         let chunk_success = loop {
-            // Read this chunk from disk (seeking each time to avoid holding the file open)
-            let mut buf = vec![0u8; chunk_size];
-            let mut f = std::fs::File::open(file_path)
-                .map_err(|e| format!("failed to re-open file: {e}"))?;
-
-            use std::io::{Read, Seek};
-            let offset = (chunk_index as u64) * (chunk_size as u64);
-            f.seek(std::io::SeekFrom::Start(offset))
-                .map_err(|e| format!("seek failed: {e}"))?;
-            let n = f.read(&mut buf).map_err(|e| format!("read failed: {e}"))?;
-            buf.truncate(n);
+            // Read this chunk from disk (seeking each time to avoid holding the
+            // file open).
+            //
+            // On `spawn_blocking`, for the same reason the initial hashing pass
+            // is (`files.rs`, M5): `open` + `seek` + `read` are blocking
+            // syscalls, and a tokio worker that blocks on a slow or full volume
+            // stops polling every other socket and timer on that thread. The
+            // receive-loop task on the *peer's* side has the same problem at
+            // the same moment, so a single slow disk can stall both halves of a
+            // transfer. `compute_file_hashes` already established the
+            // discipline; the per-chunk loop never adopted it.
+            let (mut buf, read_err) = {
+                let path = file_path.to_path_buf();
+                let size = chunk_size;
+                let off = (chunk_index as u64) * (chunk_size as u64);
+                tokio::task::spawn_blocking(move || -> std::io::Result<Vec<u8>> {
+                    use std::io::{Read, Seek};
+                    let mut f = std::fs::File::open(path)?;
+                    f.seek(std::io::SeekFrom::Start(off))?;
+                    let mut buf = vec![0u8; size];
+                    let n = f.read(&mut buf)?;
+                    buf.truncate(n);
+                    Ok(buf)
+                })
+                .await
+                .map_err(|e| format!("chunk read task failed: {e}"))?
+            };
+            if let Some(e) = read_err {
+                return Err(format!("failed to read chunk {chunk_index}: {e}"));
+            }
 
             // Verify chunk hash (integrity check against pre-computed hash)
             let expected_hash = chunk_hashes
