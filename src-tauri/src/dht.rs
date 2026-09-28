@@ -164,12 +164,16 @@ pub struct DhtState {
     pub bootstrapped: bool,
     /// Whether the DHT background task is running.
     pub running: bool,
+    /// Whether the "no bootstrap nodes available" warning has been emitted, so
+    /// it is logged once rather than on every announce tick.
+    pub warned_no_bootstrap: bool,
 }
 
 impl DhtState {
     pub fn new(config: DhtConfig) -> Self {
         Self {
             peers: HashMap::new(),
+            warned_no_bootstrap: false,
             config,
             bootstrapped: false,
             running: false,
@@ -501,6 +505,7 @@ pub async fn lookup_peer(
 /// or on network change. Old IDs expire from the DHT automatically.
 pub async fn announce_loop(
     dht_state: Arc<RwLock<DhtState>>,
+    lan_state: Arc<RwLock<crate::lan_discovery::LanDiscoveryState>>,
     ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
     network_monitor: Arc<RwLock<crate::ephemeral_id::NetworkMonitor>>,
     listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
@@ -594,6 +599,30 @@ pub async fn announce_loop(
             }
         }
     }
+}
+
+/// Derive DHT bootstrap seeds from peers already discovered on the LAN.
+///
+/// A DHT needs somewhere to bootstrap *from*, and M2M ships no public node set:
+/// joining a public BitTorrent DHT would disclose this node's address to an
+/// unrelated third party on every start, which is the opposite of what the
+/// privacy model is for. The peers we have already found ourselves, on our own
+/// LAN, are the only seeds we can trust to already know us.
+///
+/// Returns an empty vector when LAN discovery is off or has found nothing —
+/// callers must treat that as "not yet bootstrapped", not as "no peers".
+fn lan_dht_seeds(lan: &crate::lan_discovery::LanDiscoveryState) -> Vec<BootstrapNode> {
+    let mut seeds: Vec<BootstrapNode> = lan
+        .peers
+        .values()
+        .map(|p| BootstrapNode {
+            address: p.connect_addr,
+        })
+        .collect();
+    // Stable order so successive ticks do not reshuffle the announce order.
+    seeds.sort_by_key(|n| (n.address.ip(), n.address.port()));
+    seeds.dedup_by_key(|n| n.address);
+    seeds
 }
 
 // ─── Auxiliary ─────────────────────────────────────────────────────────────────
