@@ -321,13 +321,12 @@ pub async fn create_invite(
     // the user's real IP address. Inbound connections will bypass Tor
     // entirely. We refuse to create the invite rather than just warning.
     if crate::tor::is_enabled() && !private_mode {
-        return Err(
+        return Err(AppError::blocked(
             "Tor is enabled for outbound connections but Private Mode is off. \
              This invite would contain your real IP address, and inbound connections \
              would bypass Tor entirely. Enable Private Mode in Settings to generate \
-             invites that exclude your public IP."
-                .to_string(),
-        );
+             invites that exclude your public IP.",
+        ));
     }
 
     // ─── Try NAT port mapping (UPnP / NAT-PMP / PCP) ───
@@ -1167,7 +1166,7 @@ pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<Connectio
 pub async fn get_listen_address(state: State<'_, Arc<AppState>>) -> Result<String, AppError> {
     let addr = state.listen_addr.read().await;
     addr.map(|a| a.to_string())
-        .ok_or("not listening".to_string())
+        .ok_or_else(|| AppError::invalid("not listening"))
 }
 
 // ─── Message Receive Loop ───

@@ -1326,7 +1326,8 @@ pub async fn clear_duress_passphrase(state: State<'_, Arc<AppState>>) -> Result<
     }
     let ks_guard = state.key_store.lock().await;
     let key_store = ks_guard.as_ref().ok_or("key store not initialized")?;
-    crate::duress::clear(key_store)
+    crate::duress::clear(key_store)?;
+    Ok(())
 }
 
 /// Whether a duress passphrase is registered (UI display only).
