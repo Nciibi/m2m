@@ -833,7 +833,6 @@ pub async fn connect_to_peer(
     // Whichever succeeds first determines our handshake role.
     let hole_punch::StrategyResult {
         mut stream,
-        role,
         remote_addr,
         strategy_name,
         latency,
@@ -908,8 +907,10 @@ pub async fn connect_to_peer(
     let x25519 = state.x25519_identity.read().await;
     let x25519_kp = x25519.as_ref();
 
-    match role {
-        hole_punch::Role::Initiator => {
+    // The dialer only ever produces `Role::Initiator` (see below), so this is
+    // not a match — there is exactly one handshake to perform here.
+    {
+        {
             tracing::debug!("hole-punch role: Initiator (outgoing connect won)");
             if has_x3dh {
                 let xkp = x25519_kp.ok_or("X25519 key not initialized for X3DH")?;
