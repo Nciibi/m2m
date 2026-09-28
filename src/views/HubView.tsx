@@ -205,8 +205,14 @@ export default function HubView() {
  *  This was `any` with 18 destructured properties — which is not a style
  *  complaint: with `any` props, TypeScript could not catch
  *  `onDeleteConversation(c.id)` being called against a handler declared as
- *  `() => void`, and the `conversationId` was silently discarded. The bug it
- *  allowed is still in the codebase's history.
+ *  `() => void`, and the `conversationId` was silently discarded.
+ *
+ *  Adding the annotation was not sufficient on its own. A zero-parameter
+ *  function is assignable to `(id: string) => void`, so the compiler stayed
+ *  quiet while the id continued to be dropped: the delete only happened because
+ *  `invoke("delete_conversation_cmd")` was inlined at the call site, and
+ *  `handleDeleteConversation` merely reloaded the list. The handler now accepts
+ *  and uses the id itself.
  */
 interface ConnectTabProps {
   generatedInvite: string;
@@ -488,7 +494,7 @@ function ChatsTab({
                 <BellIcon size={16} off={isMuted} />
               </button>
               <button className="btn btn--icon btn--icon-sm"
-                onClick={e => { e.stopPropagation(); invoke("delete_conversation_cmd", { conversationId: c.id }).then(() => onDeleteConversation(c.id)).catch(console.error); }}
+                onClick={e => { e.stopPropagation(); void onDeleteConversation(c.id); }}
                 aria-label="Delete">
                 <TrashIcon size={16} />
               </button>

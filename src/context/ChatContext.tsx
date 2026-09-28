@@ -19,6 +19,7 @@ import {
 } from "../events";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "./AppContext";
+import { errorMessage } from "../utils";
 import { useT } from "../i18n/I18nContext";
 import type {
   ChatMessage,
