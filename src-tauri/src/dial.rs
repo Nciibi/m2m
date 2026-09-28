@@ -81,6 +81,16 @@ pub enum DialError {
     /// A LAN-only protocol (UPnP/NAT-PMP/PCP) was attempted while Tor is on.
     #[error("LAN port mapping is disabled while Tor is enabled (would disclose the real IP)")]
     TorLanUnsupported(SocketAddr),
+
+    /// An outbound UDP query (STUN / PCP / NAT-PMP / SSDP) was attempted
+    /// while Tor is on. Tor has no UDP transport, so the query would go out
+    /// directly from the real address — the one class of leak the TCP
+    /// chokepoint could not catch.
+    #[error(
+        "outbound UDP query blocked while Tor is enabled (STUN, PCP, NAT-PMP and \
+         SSDP would go out from your real address and leak your IP)"
+    )]
+    TorUdpUnsupported,
 }
 
 /// Returns `true` when `ip` can never be reached over the public internet,
@@ -237,6 +247,46 @@ pub async fn dial_lan_only(addr: SocketAddr, timeout: Duration) -> Result<TcpStr
 /// Tor, rather than producing an invite whose candidates are all unreachable.
 pub fn lan_port_mapping_allowed() -> bool {
     !tor::is_enabled()
+}
+
+// ─── UDP chokepoint ───────────────────────────────────────────────────────────
+//
+// `dial_with_timeout` above is the single outbound TCP path, and
+// `test_no_module_bypasses_the_dial_chokepoint` keeps it that way. There was
+// no equivalent for UDP, which is where the remaining IP-disclosure
+// primitives live: a STUN Binding Request carries the sender's source address
+// to a third party by construction, and PCP / NAT-PMP / SSDP talk to the
+// user's own router. All of them bypassed the TCP guard entirely, so enabling
+// Tor did not stop M2M from disclosing the user's real address — five
+// production call sites reached `stun::discover_public_addrs` unguarded.
+//
+// `bind_udp_for_external_query` is the corresponding seam: it binds the
+// ephemeral socket those protocols need and refuses under Tor. A bound UDP
+// socket sends nothing on its own, so binding is safe; the *send* is the
+// disclosure, which is why the guard belongs on the function that exists
+// solely to feed an off-host query.
+//
+// This is deliberately narrower than the TCP guard: a datagram to a peer
+// address we have already chosen to talk to needs no special handling.
+
+/// Bind an ephemeral UDP socket for a query that will leave this host.
+///
+/// Refuses while Tor is enabled. STUN, PCP, NAT-PMP and SSDP all fall in this
+/// category: each is either an explicit request to a third party that resolves
+/// to this machine's real address, or a request to the local router that
+/// discloses that the host wants to be reachable inbound.
+pub async fn bind_udp_for_external_query() -> Result<tokio::net::UdpSocket, DialError> {
+    if tor::is_enabled() {
+        return Err(DialError::TorUdpUnsupported);
+    }
+    // Try IPv4 first; on an IPv6-only network fall back to the wildcard v6
+    // address, mirroring what the STUN client did inline before.
+    match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+        Ok(s) => Ok(s),
+        Err(_) => tokio::net::UdpSocket::bind("[::]:0")
+            .await
+            .map_err(DialError::Io),
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
