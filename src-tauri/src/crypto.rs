@@ -739,9 +739,19 @@ impl TentativeReceive {
         dr.recv_chain_key = Some(take(&mut self.recv_chain_key));
         dr.their_ratchet_pub = take(&mut self.their_ratchet_pub);
         dr.recv_message_number = self.recv_message_number;
-        if self.skipped_clear {
-            // Cached keys belong to the superseded receiving chain.
-            dr.skipped_keys.clear();
+        if let Some(superseded_upto) = self.ratchet_reset {
+            // The previous chain is superseded, but only up to the point we
+            // had reached on it. Keys at or below that point correspond to
+            // messages the sender has already moved past and will never
+            // resend, so they are genuinely unrecoverable. Keys *above* it are
+            // still in flight and remain decryptable via the skipped-key cache
+            // in `decrypt`.
+            //
+            // The previous implementation cleared the entire cache here, which
+            // silently and permanently dropped every message that crossed a DH
+            // ratchet in flight — roughly one in every 100 sends, since
+            // `ratchet_interval` is 100.
+            dr.skipped_keys.retain(|&num, _| num > superseded_upto);
         }
         let staged = take(&mut self.staged_skips);
         for (num, key) in staged {
