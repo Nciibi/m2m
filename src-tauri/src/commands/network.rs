@@ -944,54 +944,12 @@ pub async fn connect_to_peer(
                     .map_err(|e| format!("initiator handshake failed: {e}"))?;
             }
         }
-        // Unreachable: the outbound dialer is connect-only (see
-        // `punch_connect_only`). An inbound arrival is served by the
-        // listener in `start_listening` → `complete_inbound_connection`, so
-        // this arm exists only to make an impossible role an explicit error
-        // rather than a silently-skipped handshake.
-        hole_punch::Role::Responder => {
-            return Err(
-                "internal: outbound dial reported the responder role, which it cannot produce"
-                    .to_string(),
-            );
-        }
-        #[allow(unreachable_patterns)]
-        {
-            let frame = network::read_frame(&mut stream)
-                .await
-                .map_err(|e| format!("failed to read initial frame: {e}"))?;
-
-            if frame.packet_type == protocol::PacketType::X3DHHandshakeInit {
-                let xkp = x25519_kp.ok_or("X25519 key not initialized for X3DH")?;
-                // Same consume-on-use prekey handling as the direct inbound
-                // path — shared so the two cannot drift.
-                x3dh_responder_handshake_consume_opk(
-                    &state,
-                    &mut session,
-                    &mut stream,
-                    kp,
-                    xkp,
-                    &frame,
-                    our_candidates.clone(),
-                )
-                .await?;
-            } else if frame.packet_type == protocol::PacketType::HandshakeInit {
-                let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
-                session
-                    .handshake_as_responder(&mut stream, kp, &frame, our_candidates, x25519_pub)
-                    .await
-                    .map_err(|e| format!("responder handshake failed: {e}"))?;
-            } else {
-                return Err(format!(
-                    "expected HandshakeInit or X3DHHandshakeInit, got {:?}",
-                    frame.packet_type
-                ));
-            }
-
-            if session.peer_identity_pub != expected_peer_pub {
-                return Err("peer identity does not match invite".to_string());
-            }
-        }
+        // `Role::Responder` is intentionally not matched here. The outbound
+        // dialer is connect-only — see `punch_connect_only` for why the local
+        // accept leg was removed — so it can only ever return `Initiator`. An
+        // inbound arrival is served by the listener in `start_listening`,
+        // which hands off to `complete_inbound_connection` and does the
+        // responder handshake there.
     }
 
     let peer_fingerprint = session.peer_fingerprint();
