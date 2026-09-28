@@ -111,6 +111,11 @@ fn dial_err(e: crate::dial::DialError) -> DhtError {
         | crate::dial::DialError::TorLanUnsupported(a) => {
             DhtError::BadResponse(format!("bootstrap node {a} is not reachable over Tor"))
         }
+        // Cannot arise on a TCP connect path; kept for exhaustiveness as the
+        // UDP chokepoint grows.
+        crate::dial::DialError::TorUdpUnsupported => {
+            DhtError::BadResponse("outbound UDP queries are blocked in this transport mode".into())
+        }
         crate::dial::DialError::Dial(msg) => DhtError::BadResponse(msg),
     }
 }
