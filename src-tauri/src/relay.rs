@@ -332,6 +332,11 @@ fn relay_dial_err(e: crate::dial::DialError) -> RelayError {
             "relay address {a} is not reachable over Tor — \
              self-hosted relays must use a public hostname or IP"
         )),
+        // Cannot arise on a TCP connect path; kept for exhaustiveness as the
+        // UDP chokepoint grows.
+        crate::dial::DialError::TorUdpUnsupported => RelayError::Config(
+            "outbound UDP queries are blocked in the current transport mode".into(),
+        ),
     }
 }
 
