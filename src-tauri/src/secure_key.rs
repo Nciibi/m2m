@@ -6,6 +6,7 @@
 ///
 /// This prevents the storage encryption key from being written to disk
 /// via swapping, which would defeat the at-rest encryption.
+
 use zeroize::Zeroize;
 
 #[cfg(unix)]
@@ -55,27 +56,49 @@ impl StorageKey {
         &self.key
     }
 
-    /// Lock the key memory into RAM.
+    /// Lock the key memory into RAM, best-effort.
+    ///
+    /// This used to `panic!` on failure, and `StorageKey::new` calls it on
+    /// *every* Argon2id derivation — i.e. on every vault unlock and every
+    /// duress-verifier check. `RLIMIT_MEMLOCK` commonly defaults to 64–8192 KB
+    /// (and is tight inside containers), so a machine could abort on unlock
+    /// because swap protection was unavailable. With `panic = "abort"` that is
+    /// a process kill, not a catchable error.
+    ///
+    /// Failing to mlock means the key *may* be paged to swap. That is a real
+    /// loss of protection, but it is not a correctness failure, and refusing to
+    /// release a key the user asked for is the worse outcome. The failure is
+    /// logged at `warn` so it is visible rather than silent.
+    ///
+    /// This also makes `StorageKey` consistent with the other two mlock paths in
+    /// the codebase, which were already best-effort:
+    /// `secure_key::lock_range` returns `bool`, and
+    /// `IdentityKeypair::lock_memory` logs a warning.
     fn lock(&self) {
         let ptr = self.key.as_ptr() as *const std::ffi::c_void;
         let len = std::mem::size_of::<[u8; 32]>();
         #[cfg(unix)]
         // SAFETY: mlock is safe to call on any valid memory.
-        // Our memory is stack-allocated in this struct and valid for our lifetime.
+        // Our memory is owned by this struct and valid for its lifetime.
         unsafe {
-            let ret = mlock(ptr, len);
-            if ret != 0 {
+            if mlock(ptr, len) != 0 {
                 let err = std::io::Error::last_os_error();
-                panic!("mlock failed: {err}");
+                tracing::warn!(
+                    error = %err,
+                    "mlock failed — the storage key may be paged to swap. \
+                     Raise RLIMIT_MEMLOCK (ulimit -l) to restore swap protection."
+                );
             }
         }
         #[cfg(windows)]
         // SAFETY: VirtualLock is safe to call on any committed memory in our process.
         unsafe {
-            let ret = VirtualLock(ptr, len);
-            if ret == 0 {
+            if VirtualLock(ptr, len) == 0 {
                 let err = std::io::Error::last_os_error();
-                panic!("VirtualLock failed: {err}");
+                tracing::warn!(
+                    error = %err,
+                    "VirtualLock failed — the storage key may be paged to swap"
+                );
             }
         }
         #[cfg(not(any(unix, windows)))]

@@ -38,11 +38,20 @@ pub enum IdentityError {
 }
 
 /// Get the current Unix timestamp in seconds.
+/// A clock before the Unix epoch is an environment problem, not a reason to
+/// crash. `session.rs` already made this exact call fail-safe with a comment
+/// naming the issue; this was a second, panicking copy of the same function,
+/// reached from `create_invite` and from `validate_invite` (a Tauri command).
+/// A machine with its clock set wrong would abort the process on
+/// `panic = "abort"`.
+///
+/// Falling back to `0` also fails the invite freshness check rather than
+/// silently minting a long-lived one.
 fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("system clock before Unix epoch")
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// Create a signed invite link.
