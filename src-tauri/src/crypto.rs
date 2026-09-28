@@ -1481,7 +1481,7 @@ pub(crate) mod golden {
 ///
 /// Out-of-order messages are handled by caching intermediate message keys
 /// (same design as DoubleRatchet's skipped_keys cache).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SenderKeyChain {
     chain_key: [u8; 32],
     message_number: u64,
@@ -1590,7 +1590,7 @@ impl SenderKeyTentative {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct CachedSenderKey {
     nonce: [u8; 24],
     key: [u8; 32],

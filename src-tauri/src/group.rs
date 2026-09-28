@@ -50,7 +50,15 @@ pub struct GroupMember {
 }
 
 /// Full state for a single group.
-#[derive(Debug, Clone)]
+///
+/// `Debug` is hand-written below rather than derived. The derived
+/// implementation printed `our_initial_chain_key`, the full Ed25519
+/// `our_signing_key` seed, every member's `SenderKeyChain` (and through it
+/// every cached message key and nonce), and all verification keys — i.e. a
+/// single `tracing::debug!(?group)` in a future patch would write the group's
+/// entire secret state to a log file. `secure_key::StorageKey` already sets
+/// the redacting-Debug standard for this codebase; these types now meet it.
+#[derive(Clone)]
 pub struct Group {
     /// UUID v4 identifying the group.
     pub group_id: String,
