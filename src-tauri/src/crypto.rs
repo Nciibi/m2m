@@ -35,7 +35,6 @@ const MAX_ENCRYPT_SIZE: usize = 16 * 1024 * 1024;
 
 /// Context string for HKDF session key derivation (reserved).
 #[expect(dead_code, reason = "Reserved for HKDF session key derivation")]
-const SESSION_KEY_CONTEXT: &[u8] = b"m2m-v1-session-key";
 
 /// Maximum number of out-of-order message keys to cache per DH ratchet phase.
 /// Follows the Signal Protocol's design: when messages arrive out of order,

@@ -50,9 +50,6 @@ use thiserror::Error;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/// DHT protocol version.
-const DHT_PROTOCOL_VERSION: u8 = 0x01;
-
 /// Maximum DHT message body size (64 KiB).
 const MAX_DHT_BODY: u32 = 65536;
 
@@ -64,8 +61,6 @@ const ANNOUNCE_INTERVAL: Duration = Duration::from_secs(600);
 
 /// How long until a peer's announcement expires (30 minutes).
 const PEER_EXPIRY_SECS: u64 = 1800;
-
-const MAX_BOOTSTRAP_NODES: usize = 5;
 
 const MAX_LOOKUP_PARALLEL: usize = 3;
 
