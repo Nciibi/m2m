@@ -124,23 +124,10 @@ impl std::error::Error for AppError {}
 // calls. Every variant is listed, so adding a variant to any of these enums is
 // a compile error here rather than a silent `unreachable!()` or a lost code.
 
-use crate::crypto::CryptoError;
-use crate::dht::DhtError;
-use crate::hole_punch::ConnectionError;
-use crate::identity::IdentityError;
-use crate::network::NetworkError;
-use crate::port_mapping::PortMapError;
-use crate::protocol::ProtocolError;
-use crate::relay::RelayError;
-use crate::session::SessionError;
-use crate::storage::StorageError;
-use crate::stun::StunError;
-use crate::tor::TorError;
-
 impl From<CryptoError> for AppError {
     fn from(e: CryptoError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
             CryptoError::InitFailed => "crypto.init_failed",
@@ -148,13 +135,13 @@ impl From<CryptoError> for AppError {
             CryptoError::DecryptionFailed => "crypto.decryption_failed",
             CryptoError::SignatureInvalid => "crypto.signature_invalid",
             CryptoError::KeyDerivationFailed => "crypto.key_derivation_failed",
-            CryptoError::RandomnessUnavailable => "crypto.randomness_unavailable",
-            CryptoError::InputTooLarge => "crypto.input_too_large",
+            CryptoError::RandomnessUnavailable(..) => "crypto.randomness_unavailable",
+            CryptoError::InputTooLarge { .. } => "crypto.input_too_large",
             CryptoError::InvalidKeyLength => "crypto.invalid_key_length",
             CryptoError::X3DHFailed => "crypto.x3dh_failed",
-            CryptoError::DoubleRatchetError => "crypto.double_ratchet_error",
+            CryptoError::DoubleRatchetError(..) => "crypto.double_ratchet_error",
             CryptoError::PrekeySignatureInvalid => "crypto.prekey_signature_invalid",
-            CryptoError::MaxSkippedKeysExceeded => "crypto.max_skipped_keys_exceeded",
+            CryptoError::MaxSkippedKeysExceeded(..) => "crypto.max_skipped_keys_exceeded",
         };
         AppError::new(code, message)
     }
@@ -162,16 +149,16 @@ impl From<CryptoError> for AppError {
 
 impl From<SessionError> for AppError {
     fn from(e: SessionError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            SessionError::Crypto => "session.crypto",
-            SessionError::Protocol => "session.protocol",
-            SessionError::Network => "session.network",
-            SessionError::HandshakeFailed => "session.handshake_failed",
+            SessionError::Crypto(..) => "session.crypto",
+            SessionError::Protocol(..) => "session.protocol",
+            SessionError::Network(..) => "session.network",
+            SessionError::HandshakeFailed(..) => "session.handshake_failed",
             SessionError::SessionExpired => "session.session_expired",
-            SessionError::ReplayDetected => "session.replay_detected",
+            SessionError::ReplayDetected { .. } => "session.replay_detected",
             SessionError::InvalidState => "session.invalid_state",
         };
         AppError::new(code, message)
@@ -180,17 +167,17 @@ impl From<SessionError> for AppError {
 
 impl From<NetworkError> for AppError {
     fn from(e: NetworkError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            NetworkError::Io => "network.io",
+            NetworkError::Io(..) => "network.io",
             NetworkError::ConnectionTimeout => "network.connection_timeout",
             NetworkError::ReadTimeout => "network.read_timeout",
             NetworkError::WriteTimeout => "network.write_timeout",
             NetworkError::PeerClosed => "network.peer_closed",
-            NetworkError::Protocol => "network.protocol",
-            NetworkError::InvalidState => "network.invalid_state",
+            NetworkError::Protocol(..) => "network.protocol",
+            NetworkError::InvalidState(..) => "network.invalid_state",
             NetworkError::RateLimitExceeded => "network.rate_limit_exceeded",
         };
         AppError::new(code, message)
@@ -199,17 +186,17 @@ impl From<NetworkError> for AppError {
 
 impl From<ProtocolError> for AppError {
     fn from(e: ProtocolError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            ProtocolError::UnsupportedVersion => "protocol.unsupported_version",
-            ProtocolError::ReservedVersion => "protocol.reserved_version",
-            ProtocolError::FrameTooLarge => "protocol.frame_too_large",
-            ProtocolError::FrameTooSmall => "protocol.frame_too_small",
-            ProtocolError::UnknownPacketType => "protocol.unknown_packet_type",
-            ProtocolError::SerializationError => "protocol.serialization_error",
-            ProtocolError::DeserializationError => "protocol.deserialization_error",
+            ProtocolError::UnsupportedVersion(..) => "protocol.unsupported_version",
+            ProtocolError::ReservedVersion(..) => "protocol.reserved_version",
+            ProtocolError::FrameTooLarge { .. } => "protocol.frame_too_large",
+            ProtocolError::FrameTooSmall { .. } => "protocol.frame_too_small",
+            ProtocolError::UnknownPacketType(..) => "protocol.unknown_packet_type",
+            ProtocolError::SerializationError(..) => "protocol.serialization_error",
+            ProtocolError::DeserializationError(..) => "protocol.deserialization_error",
             ProtocolError::InvalidHandshake => "protocol.invalid_handshake",
             ProtocolError::InvalidInvite => "protocol.invalid_invite",
             ProtocolError::InviteExpired => "protocol.invite_expired",
@@ -223,16 +210,16 @@ impl From<ProtocolError> for AppError {
 
 impl From<StorageError> for AppError {
     fn from(e: StorageError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            StorageError::Database => "storage.database",
-            StorageError::PathError => "storage.path_error",
+            StorageError::Database(..) => "storage.database",
+            StorageError::PathError(..) => "storage.path_error",
             StorageError::KeyNotFound => "storage.key_not_found",
             StorageError::DecryptionFailed => "storage.decryption_failed",
             StorageError::EncryptionFailed => "storage.encryption_failed",
-            StorageError::DirCreationFailed => "storage.dir_creation_failed",
+            StorageError::DirCreationFailed(..) => "storage.dir_creation_failed",
         };
         AppError::new(code, message)
     }
@@ -240,18 +227,18 @@ impl From<StorageError> for AppError {
 
 impl From<StunError> for AppError {
     fn from(e: StunError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            StunError::Io => "stun.io",
-            StunError::Timeout => "stun.timeout",
-            StunError::InvalidResponse => "stun.invalid_response",
-            StunError::NoMappedAddress => "stun.no_mapped_address",
+            StunError::Io(..) => "stun.io",
+            StunError::Timeout { .. } => "stun.timeout",
+            StunError::InvalidResponse { .. } => "stun.invalid_response",
+            StunError::NoMappedAddress { .. } => "stun.no_mapped_address",
             StunError::AllServersFailed => "stun.all_servers_failed",
-            StunError::DnsError => "stun.dns_error",
-            StunError::TransactionIdMismatch => "stun.transaction_id_mismatch",
-            StunError::TorBlocked => "stun.tor_blocked",
+            StunError::DnsError { .. } => "stun.dns",
+            StunError::TransactionIdMismatch { .. } => "stun.transaction_id_mismatch",
+            StunError::TorBlocked(..) => "stun.tor_blocked",
         };
         AppError::new(code, message)
     }
@@ -259,15 +246,15 @@ impl From<StunError> for AppError {
 
 impl From<PortMapError> for AppError {
     fn from(e: PortMapError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            PortMapError::Io => "portmap.io",
+            PortMapError::Io(..) => "portmap.io",
             PortMapError::NoGateway => "portmap.no_gateway",
-            PortMapError::Pcp => "portmap.pcp",
-            PortMapError::NatPmp => "portmap.nat_pmp",
-            PortMapError::Upnp => "portmap.upnp",
+            PortMapError::Pcp(..) => "portmap.pcp",
+            PortMapError::NatPmp(..) => "portmap.nat_pmp",
+            PortMapError::Upnp(..) => "portmap.upnp",
             PortMapError::AllFailed => "portmap.all_failed",
             PortMapError::TorUnsupported => "portmap.tor_unsupported",
         };
@@ -277,14 +264,14 @@ impl From<PortMapError> for AppError {
 
 impl From<ConnectionError> for AppError {
     fn from(e: ConnectionError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            ConnectionError::Io => "holepunch.io",
-            ConnectionError::AllFailed => "holepunch.all_failed",
+            ConnectionError::Io(..) => "holepunch.io",
+            ConnectionError::AllFailed(..) => "holepunch.all_failed",
             ConnectionError::NoCandidates => "holepunch.no_candidates",
-            ConnectionError::TimedOut => "holepunch.timed_out",
+            ConnectionError::TimedOut(..) => "holepunch.timed_out",
         };
         AppError::new(code, message)
     }
@@ -292,13 +279,13 @@ impl From<ConnectionError> for AppError {
 
 impl From<DhtError> for AppError {
     fn from(e: DhtError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            DhtError::Io => "dht.io",
+            DhtError::Io(..) => "dht.io",
             DhtError::Timeout => "dht.timeout",
-            DhtError::BadResponse => "dht.bad_response",
+            DhtError::BadResponse(..) => "dht.bad_response",
             DhtError::PeerNotFound => "dht.peer_not_found",
             DhtError::NotBootstrapped => "dht.not_bootstrapped",
             DhtError::NotEnabled => "dht.not_enabled",
@@ -309,18 +296,18 @@ impl From<DhtError> for AppError {
 
 impl From<RelayError> for AppError {
     fn from(e: RelayError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            RelayError::Io => "relay.io",
+            RelayError::Io(..) => "relay.io",
             RelayError::TimedOut => "relay.timed_out",
-            RelayError::FrameTooLarge => "relay.frame_too_large",
-            RelayError::Protocol => "relay.protocol",
-            RelayError::ServerError => "relay.server_error",
+            RelayError::FrameTooLarge { .. } => "relay.frame_too_large",
+            RelayError::Protocol(..) => "relay.protocol",
+            RelayError::ServerError { .. } => "relay.server_error",
             RelayError::ConnectionClosed => "relay.connection_closed",
-            RelayError::UnexpectedFrame => "relay.unexpected_frame",
-            RelayError::Config => "relay.config",
+            RelayError::UnexpectedFrame(..) => "relay.unexpected_frame",
+            RelayError::Config(..) => "relay.config",
         };
         AppError::new(code, message)
     }
@@ -328,13 +315,13 @@ impl From<RelayError> for AppError {
 
 impl From<TorError> for AppError {
     fn from(e: TorError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            TorError::ConnectionFailed => "tor.connection_failed",
-            TorError::ProxyUnreachable => "tor.proxy_unreachable",
-            TorError::Io => "tor.io",
+            TorError::ConnectionFailed(..) => "tor.connection_failed",
+            TorError::ProxyUnreachable(..) => "tor.proxy_unreachable",
+            TorError::Io(..) => "tor.io",
         };
         AppError::new(code, message)
     }
@@ -342,17 +329,17 @@ impl From<TorError> for AppError {
 
 impl From<IdentityError> for AppError {
     fn from(e: IdentityError) -> Self {
-        // Message first: the enum is matched by reference so the
-        // rendered chain survives for the user and the log.
+        // Message first: the enum is matched by reference so the rendered
+        // chain survives for the user and the log.
         let message = e.to_string();
         let code = match &e {
-            IdentityError::Crypto => "identity.crypto",
-            IdentityError::Protocol => "identity.protocol",
+            IdentityError::Crypto(..) => "identity.crypto",
+            IdentityError::Protocol(..) => "identity.protocol",
             IdentityError::InviteExpired => "identity.invite_expired",
             IdentityError::InviteFutureTimestamp => "identity.invite_future_timestamp",
             IdentityError::InviteValidityTooLarge => "identity.invite_validity_too_large",
             IdentityError::InviteSignatureInvalid => "identity.invite_signature_invalid",
-            IdentityError::InviteFormatInvalid => "identity.invite_format_invalid",
+            IdentityError::InviteFormatInvalid(..) => "identity.invite_format_invalid",
             IdentityError::InviteAlreadyConsumed => "identity.invite_already_consumed",
             IdentityError::AddressHintTooLong => "identity.address_hint_too_long",
         };
