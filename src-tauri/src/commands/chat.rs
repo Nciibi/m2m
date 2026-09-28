@@ -38,7 +38,7 @@ pub async fn send_message(
     // If peer has an active connection, try to send immediately.
     // send_text generates the msg_id internally — use the one it returns.
     // If send fails or peer is offline, generate our own msg_id and queue.
-    let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
+    let (msg_id, delivered) = match state.peer_connection(&peer_key_hex).await {
         Some(conn_arc) => {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
@@ -534,7 +534,7 @@ pub async fn send_message_with_timer(
     let expires_at = disappear_after.map(|secs| (now + secs) as i64);
 
     // Try to send via active connection; if offline, queue with delivered=0.
-    let (msg_id, delivered) = match state.connections.read().await.get(&peer_key_hex) {
+    let (msg_id, delivered) = match state.peer_connection(&peer_key_hex).await {
         Some(conn_arc) => {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {

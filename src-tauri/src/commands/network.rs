@@ -1235,8 +1235,7 @@ async fn handle_incoming_text(
             // slow disk I/O cannot head-of-line block concurrent
             // sends to this peer (audit secondary fix).
             let decrypted = {
-                let conns = state.connections.read().await;
-                match conns.get(&peer_key_hex) {
+                match state.peer_connection(&peer_key_hex).await {
                     Some(conn_arc) => {
                         let mut conn = conn_arc.lock().await;
                         Some(conn.session.decrypt_message(frame))
@@ -1876,8 +1875,7 @@ async fn handle_heartbeat_frame(
             // counts as liveness (plaintext/injected acks must not
             // defeat the timeout).
             let decrypted = {
-                let conns = state.connections.read().await;
-                match conns.get(&peer_key_hex) {
+                match state.peer_connection(&peer_key_hex).await {
                     Some(conn_arc) => {
                         let mut conn = conn_arc.lock().await;
                         Some(conn.session.decrypt_typed_frame(frame))
@@ -1917,8 +1915,7 @@ async fn handle_conversation_meta(
             // Decrypt under the per-peer lock only; SQLite writes run
             // after both guards are released (head-of-line blocking fix).
             let decrypted = {
-                let conns = state.connections.read().await;
-                match conns.get(&peer_key_hex) {
+                match state.peer_connection(&peer_key_hex).await {
                     Some(conn_arc) => {
                         let mut conn = conn_arc.lock().await;
                         Some(conn.session.decrypt_typed_frame(frame))
@@ -1983,8 +1980,7 @@ async fn handle_message_update_frame(
         PacketType::MessageReaction => {
             // Decrypt under the per-peer lock only (head-of-line fix).
             let decrypted = {
-                let conns = state.connections.read().await;
-                match conns.get(&peer_key_hex) {
+                match state.peer_connection(&peer_key_hex).await {
                     Some(conn_arc) => {
                         let mut conn = conn_arc.lock().await;
                         Some(conn.session.decrypt_typed_frame(frame))
@@ -2058,8 +2054,7 @@ async fn handle_message_update_frame(
         PacketType::MessageEdit => {
             // Decrypt under the per-peer lock only (head-of-line fix).
             let decrypted = {
-                let conns = state.connections.read().await;
-                match conns.get(&peer_key_hex) {
+                match state.peer_connection(&peer_key_hex).await {
                     Some(conn_arc) => {
                         let mut conn = conn_arc.lock().await;
                         Some(conn.session.decrypt_typed_frame(frame))
@@ -2138,8 +2133,7 @@ async fn handle_message_update_frame(
         PacketType::MessageDelete => {
             // Decrypt under the per-peer lock only (head-of-line fix).
             let decrypted = {
-                let conns = state.connections.read().await;
-                match conns.get(&peer_key_hex) {
+                match state.peer_connection(&peer_key_hex).await {
                     Some(conn_arc) => {
                         let mut conn = conn_arc.lock().await;
                         Some(conn.session.decrypt_typed_frame(frame))
@@ -3308,8 +3302,7 @@ pub fn spawn_receive_loop(
                     // whose session is already broken cannot announce its
                     // departure; it is reaped by the heartbeat timeout anyway.
                     let authenticated = {
-                        let conns = state.connections.read().await;
-                        match conns.get(&peer_key_hex) {
+                        match state.peer_connection(&peer_key_hex).await {
                             Some(c) => {
                                 let mut c = c.lock().await;
                                 c.session.decrypt_typed_frame(&frame).is_ok()
@@ -3359,8 +3352,7 @@ pub fn spawn_receive_loop(
                 PacketType::TypingIndicator | PacketType::TypingIndicatorClear => {
                     let typing = frame.packet_type == PacketType::TypingIndicator;
                     let authenticated = {
-                        let conns = state.connections.read().await;
-                        match conns.get(&peer_key_hex) {
+                        match state.peer_connection(&peer_key_hex).await {
                             Some(c) => {
                                 let mut c = c.lock().await;
                                 c.session.decrypt_typed_frame(&frame).is_ok()

@@ -115,9 +115,8 @@ pub async fn create_group(
         protocol::serialize(&create_payload).map_err(|e| format!("serialization failed: {e}"))?;
 
     {
-        let conns = state.connections.read().await;
         for member_key in &member_peer_keys {
-            if let Some(conn_arc) = conns.get(member_key) {
+            if let Some(conn_arc) = state.peer_connection(member_key).await {
                 let mut conn = conn_arc.lock().await;
                 let PeerConnection {
                     session,
@@ -204,9 +203,8 @@ pub async fn send_group_message(
 
     let mut delivered_count = 0u32;
     {
-        let conns = state.connections.read().await;
         for member_key in &members {
-            if let Some(conn_arc) = conns.get(member_key) {
+            if let Some(conn_arc) = state.peer_connection(member_key).await {
                 let mut conn = conn_arc.lock().await;
                 let PeerConnection {
                     session,
@@ -692,9 +690,8 @@ pub async fn update_group_name(
         .unwrap_or_default();
     drop(gm_read);
 
-    let conns = state.connections.read().await;
     for member_key in &member_keys {
-        if let Some(conn_arc) = conns.get(member_key) {
+        if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
                 session,
