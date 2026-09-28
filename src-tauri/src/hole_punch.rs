@@ -16,7 +16,7 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use tokio::task::JoinSet;
 use tokio::time;
 
@@ -109,7 +109,7 @@ pub struct StrategyResult {
     pub latency: Duration,
 }
 
-// ─── Legacy result (used by race_accept_or_connect) ─────────────────────────
+// ─── Legacy result (used by punch_connect_only) ─────────────────────────────────
 
 pub struct HolePunchResult {
     pub stream: TcpStream,
@@ -143,7 +143,7 @@ impl ConnectionManager {
     /// | `DirectTcp`             | `TcpStream::connect`             |
     /// | `Ipv6Direct`            | `TcpStream::connect`             |
     /// | `PortMapped`            | `TcpStream::connect`             |
-    /// | `TcpHolePunch`          | `race_accept_or_connect` (below) |
+    /// | `TcpHolePunch`          | `punch_connect_only` (below) |
     /// | `TcpRelay`              | `relay::connect_via_relay`    |
     ///
     /// All `DirectTcp` / `Ipv6Direct` / `PortMapped` candidates are each
@@ -285,7 +285,7 @@ async fn run_hole_punch(
 ) -> Result<StrategyResult, ConnectionError> {
     let start = Instant::now();
 
-    let result = race_accept_or_connect(peer_candidates, our_listener_addr).await?;
+    let result = punch_connect_only(peer_candidates, our_listener_addr).await?;
 
     tracing::info!(
         peer = %result.remote_addr,
@@ -338,56 +338,43 @@ async fn run_relay(s: Strategy, auth_token: &str) -> Result<StrategyResult, Conn
 // ─── Internal: Race Accept vs Connect ───────────────────────────────────────
 
 /// True TCP hole punch: race an incoming accept against outgoing connects.
-async fn race_accept_or_connect(
+/// Attempt the server-reflexive / peer-reflexive candidates.
+///
+/// ## There is deliberately no local accept leg
+///
+/// This previously raced a local `TcpListener::accept()` against the outgoing
+/// connects. That accept leg could never succeed: it bound
+/// `our_listener_addr`, which is the address `start_listening` is *already*
+/// holding with no `SO_REUSEADDR`, so the bind returned `EADDRINUSE`, the `?`
+/// propagated, and the whole function returned before a single byte moved.
+/// Every `srflx` / `prflx` candidate was therefore discarded, and
+/// `Role::Responder` was unreachable dead code presented as a working
+/// feature.
+///
+/// A second bind to that port could not be the fix even if it had succeeded: a
+/// TCP hole punch needs *both* peers to open the same port simultaneously,
+/// which requires a port both sides have agreed on and that is still unclaimed.
+/// The wire protocol has no such coordination message.
+///
+/// The accept path that actually works is the one the app always had — the
+/// inbound listener in `start_listening`, handing off to
+/// `complete_inbound_connection`. So this is connect-only, and the
+/// responder-side handshake lives there.
+///
+/// Doing this properly — a coordinated simultaneous open over an agreed
+/// ephemeral port, negotiated inside the signed handshake — is a protocol
+/// change rather than a patch, and is left for a future version.
+async fn punch_connect_only(
     peer_candidates: &[SocketAddr],
     our_listener_addr: Option<SocketAddr>,
 ) -> Result<HolePunchResult, ConnectionError> {
     if peer_candidates.is_empty() {
         return Err(ConnectionError::NoCandidates);
     }
-
-    let peer_candidates = peer_candidates.to_vec();
-
-    match our_listener_addr {
-        None => connect_sequential(&peer_candidates).await,
-        Some(addr) => {
-            let std = std::net::TcpListener::bind(addr)?;
-            std.set_nonblocking(true)?;
-            let listener = TcpListener::from_std(std)?;
-
-            let accept = async {
-                let (stream, peer) = time::timeout(OVERALL_TIMEOUT, listener.accept())
-                    .await
-                    .map_err(|_| ConnectionError::TimedOut(OVERALL_TIMEOUT))?
-                    .map_err(ConnectionError::Io)?;
-                let _ = stream.set_nodelay(true);
-                tracing::info!(peer = %peer, "hole-punch accept won the race");
-                Ok(HolePunchResult {
-                    stream,
-                    role: Role::Responder,
-                    remote_addr: peer,
-                })
-            };
-
-            let connect = async {
-                let result = connect_sequential(&peer_candidates).await;
-                tracing::info!(
-                    outcome = if result.is_ok() {
-                        "succeeded"
-                    } else {
-                        "failed"
-                    },
-                    "hole-punch connect leg finished"
-                );
-                result
-            };
-
-            tokio::select! {
-                result = accept => result,
-                result = connect => result,
-            }
-        }
-    }
+    // Retained for symmetry with the other strategies; unused by design.
+    let _ = our_listener_addr;
+    connect_sequential(&peer_candidates.to_vec()).await
+}
 }
 
 /// Try all peer candidates sequentially (simple connect).
