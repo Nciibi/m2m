@@ -808,11 +808,14 @@ impl DoubleRatchet {
 
     /// Derive a message key from a chain key and advance the chain.
     fn derive_message_key(chain_key: &[u8; 32]) -> (MessageKey, [u8; 32]) {
-        let out = hkdf(chain_key, b"", b"M2M-MSG-KEY", 64);
+        // The HKDF buffer holds both the message key and the successor chain
+        // key; zeroize it rather than leaving live key material in freed heap.
+        let mut out = hkdf(chain_key, b"", b"M2M-MSG-KEY", 64);
         let mut msg_key = [0u8; 32];
         let mut next_key = [0u8; 32];
         msg_key.copy_from_slice(&out[..32]);
         next_key.copy_from_slice(&out[32..]);
+        out.zeroize();
         (MessageKey(msg_key), next_key)
     }
 
@@ -843,11 +846,14 @@ impl DoubleRatchet {
             let new_pub = new_kp.public_key_bytes();
             // DH(new_sk, their_old_pk) — the sender advances with their NEW key
             let shared = new_kp.diffie_hellman(&self.their_ratchet_pub)?;
-            let out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
+            let mut out = hkdf(&self.root_key, &shared, b"M2M-DH-RATCHET", 64);
             let mut new_root = [0u8; 32];
             let mut new_chain = [0u8; 32];
             new_root.copy_from_slice(&out[..32]);
             new_chain.copy_from_slice(&out[32..]);
+            out.zeroize();
+            let mut shared_scrub = shared;
+            shared_scrub.zeroize();
             self.root_key = new_root;
             self.send_chain_key = Some(new_chain);
             self.send_message_number = 0;
@@ -1616,15 +1622,17 @@ impl SenderKeyChain {
     /// Returns (nonce, aead_key) for use with XChaCha20-Poly1305.
     pub fn next_message_key(&mut self) -> Result<([u8; 24], [u8; 32]), CryptoError> {
         // Derive message key
-        let msg_key_out = hkdf(&self.chain_key, b"", SENDER_MSG_KEY_INFO, 56);
+        let mut msg_key_out = hkdf(&self.chain_key, b"", SENDER_MSG_KEY_INFO, 56);
         let mut msg_key = [0u8; 32];
         let mut aead_nonce = [0u8; 24];
         aead_nonce.copy_from_slice(&msg_key_out[..24]);
         msg_key.copy_from_slice(&msg_key_out[24..56]);
+        msg_key_out.zeroize();
 
         // Advance chain key
-        let next_key_out = hkdf(&self.chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
+        let mut next_key_out = hkdf(&self.chain_key, b"", SENDER_NEXT_KEY_INFO, 32);
         self.chain_key.copy_from_slice(&next_key_out);
+        next_key_out.zeroize();
 
         let _msg_num = self.message_number;
         self.message_number += 1;
