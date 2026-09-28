@@ -572,6 +572,7 @@ pub async fn announce_loop(
         let nodes = if nodes.is_empty() {
             let lan = lan_dht_seeds(&*lan_state.read().await);
             if lan.is_empty() && !warned {
+                dht_state.write().await.warned_no_bootstrap = true;
                 tracing::warn!(
                     "DHT enabled but no bootstrap nodes are configured and no LAN peers \
                      have been discovered yet — nothing to announce to. M2M ships no \

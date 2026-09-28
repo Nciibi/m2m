@@ -122,6 +122,11 @@ pub async fn set_discovery_config(
             let val = state.listen_addr.read().await;
             Arc::new(RwLock::new(*val))
         };
+        // Share the live LAN state so the DHT can seed from peers LAN
+        // discovery finds. Previously the two discovery mechanisms were
+        // completely unbridged, which is part of why the DHT never
+        // bootstrapped.
+        let lan_state_shared = state.lan_state.clone();
         let dht_state_clone = dht_state.clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
         let network_monitor = Arc::new(RwLock::new(ephemeral_id::NetworkMonitor::new()));
