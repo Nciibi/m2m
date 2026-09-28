@@ -552,6 +552,14 @@ impl AppState {
     /// Ensure the message store is opened (lazy init).
     /// Called on first message load/send, not during vault unlock.
     pub async fn ensure_message_store(&self, data_dir: &str) -> Result<(), String> {
+        // Fast path: probe without taking the mutex, so the common
+        // already-open case does not serialise every caller behind the global
+        // store lock. The previous implementation took the lock
+        // unconditionally and then checked — double-checked locking done
+        // backwards, with the lock in the fast path.
+        if self.message_store.try_lock().map(|g| g.is_some()).unwrap_or(false) {
+            return Ok(());
+        }
         let mut ms = self.message_store.lock().await;
         if ms.is_none() {
             let path = std::path::Path::new(data_dir).join("messages.db");
@@ -566,6 +574,10 @@ impl AppState {
     /// Ensure the transfer store is opened (lazy init).
     /// Called on first file transfer, not during vault unlock.
     pub async fn ensure_transfer_store(&self, data_dir: &str) -> Result<(), String> {
+        // Fast path without the global lock — see `ensure_message_store`.
+        if self.transfer_store.try_lock().map(|g| g.is_some()).unwrap_or(false) {
+            return Ok(());
+        }
         let mut ts = self.transfer_store.lock().await;
         if ts.is_none() {
             let path = std::path::Path::new(data_dir).join("transfers.db");
