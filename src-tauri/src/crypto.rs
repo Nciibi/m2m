@@ -2353,6 +2353,82 @@ mod crypto_tests {
         }
     }
 
+    /// A message still in flight when a DH ratchet lands must remain
+    /// decryptable.
+    ///
+    /// The skipped-key cache lookup was gated on
+    /// `message_number < recv_message_number`. A ratchet resets that counter to
+    /// zero, so a frame from the *superseded* chain that was still in flight
+    /// had a number far above the counter, never consulted the cache, and was
+    /// instead gap-derived against the new chain — where its key can never
+    /// match. Compounding it, `commit` cleared the entire cache on every
+    /// ratchet. Net effect: every message crossing a DH ratchet in flight was
+    /// silently and permanently dropped, roughly one in 100 sends.
+    ///
+    /// Sequence: msg 0 (delivered), msg 1 (skipped, cached), then a ratcheted
+    /// msg 2 (delivered), then msg 1 finally arrives.
+    #[test]
+    fn test_in_flight_message_survives_dh_ratchet() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        // msg 0: delivered, establishes the chain.
+        let (rk0, n0, nonce0, ct0) = alice.encrypt(b"msg 0", &aad, false).unwrap();
+        assert_eq!(
+            &bob.decrypt(&ct0, &nonce0, &aad, n0, rk0.as_ref()).unwrap(),
+            b"msg 0"
+        );
+
+        // msg 1: encrypted but NOT delivered — this is the in-flight message.
+        let (rk1, n1, nonce1, ct1) = alice.encrypt(b"msg 1", &aad, false).unwrap();
+
+        // msg 2: ratcheted, and delivered. The ratchet supersedes the old chain
+        // and resets the receive counter.
+        let (rk2, n2, nonce2, ct2) = alice.encrypt(b"msg 2", &aad, true).unwrap();
+        assert!(rk2.is_some(), "msg 2 must carry a new ratchet key");
+        assert_eq!(
+            &bob.decrypt(&ct2, &nonce2, &aad, n2, rk2.as_ref()).unwrap(),
+            b"msg 2"
+        );
+
+        // msg 1 now arrives late. It has no ratchet key and its number is far
+        // above the post-ratchet receive counter, so the old counter-gated
+        // lookup missed it entirely.
+        match bob.decrypt(&ct1, &nonce1, &aad, n1, rk1.as_ref()) {
+            Ok(pt) => assert_eq!(&pt, b"msg 1", "in-flight message must decrypt intact"),
+            Err(e) => panic!("an in-flight message must survive a DH ratchet, got: {e}"),
+        }
+    }
+
+    /// The cache must stay bounded across ratchet phases.
+    ///
+    /// Removing the blanket `clear()` on ratchet means keys from superseded
+    /// chains are retained (that is what makes in-flight delivery work), so the
+    /// `MAX_SKIP` cap is now the only thing bounding total growth. This pins
+    /// that the cap is still enforced against the *combined* cache, not just
+    /// the keys staged by the current call.
+    #[test]
+    fn test_skipped_cache_stays_bounded_across_ratchets() {
+        let (mut alice, mut bob) = make_dr_pair();
+        let aad = [PacketType::EncryptedMessage.to_byte()];
+
+        // Fill the cache with skipped keys, then cross a ratchet so the old
+        // entries are retained rather than cleared.
+        let (_, n0, nonce0, ct0) = alice.encrypt(b"first", &aad, false).unwrap();
+        let _ = bob.decrypt(&ct0, &nonce0, &aad, n0, None).unwrap();
+        for _ in 0..10 {
+            alice.encrypt(b"skipped", &aad, false).unwrap();
+        }
+        let (rk, n, nonce, ct) = alice.encrypt(b"after ratchet", &aad, true).unwrap();
+        let _ = bob.decrypt(&ct, &nonce, &aad, n, rk.as_ref()).unwrap();
+
+        assert!(
+            bob.skipped_keys.len() <= MAX_SKIP,
+            "cache must remain bounded at MAX_SKIP, got {}",
+            bob.skipped_keys.len()
+        );
+    }
+
     #[test]
     fn test_dh_ratchet_advances_keys() {
         let (mut alice, mut bob) = make_dr_pair();
