@@ -58,7 +58,7 @@ pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], String> {
             hex_str.len()
         )));
     }
-    let bytes = hex::decode(hex_str).map_err(|e| format!("invalid peer key hex: {e}"))?;
+    let bytes = hex::decode(hex_str).map_err(||e| AppError::invalid(|e| format!("invalid peer key hex: {e}"))?;
     let mut key = [0u8; 32];
     key.copy_from_slice(&bytes);
     Ok(key)
@@ -450,13 +450,13 @@ pub fn derive_storage_key_from_passphrase(
         4,     // 4 parallelism lanes
         Some(32),
     )
-    .map_err(|e| format!("argon2 params error: {e}"))?;
+    .map_err(||e| AppError::invalid(|e| format!("argon2 params error: {e}"))?;
 
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut key = [0u8; 32];
     argon
         .hash_password_into(passphrase.as_bytes(), salt, &mut key)
-        .map_err(|e| format!("argon2 hash failed: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("argon2 hash failed: {e}"))?;
     Ok(crate::secure_key::StorageKey::new(key))
 }
 

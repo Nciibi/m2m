@@ -35,7 +35,7 @@ pub async fn add_manual_forward(
     // Validate the address parses as a SocketAddr.
     let _: SocketAddr = public_addr
         .parse()
-        .map_err(|e| format!("invalid address: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("invalid address: {e}"))?;
 
     let mut forwards = state.manual_forwards.write().await;
     // Assign an order higher than any existing one.

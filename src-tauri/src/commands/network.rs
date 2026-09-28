@@ -231,7 +231,7 @@ where
     drop(opk_lock);
     drop(spk_lock);
 
-    result.map_err(|e| format!("X3DH handshake failed: {e}"))?;
+    result.map_err(||e| AppError::invalid(|e| format!("X3DH handshake failed: {e}"))?;
     Ok(())
 }
 
@@ -281,7 +281,7 @@ pub async fn create_invite(
 
     let listen_addr: SocketAddr = address
         .parse()
-        .map_err(|e| format!("invalid address: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("invalid address: {e}"))?;
 
     let private_mode = *state.private_mode.read().await;
 
@@ -461,14 +461,14 @@ pub async fn create_invite(
             one_time_prekey: Some(opk_pub),
         }),
     )
-    .map_err(|e| format!("invite creation failed: {e}"))
+    .map_err(||e| AppError::invalid(|e| format!("invite creation failed: {e}"))
 }
 
 /// Validate a received invite link.
 #[tauri::command]
 pub async fn validate_invite(invite_str: String) -> Result<InviteInfo, AppError> {
     let signed = identity::validate_invite(&invite_str)
-        .map_err(|e| format!("invite validation failed: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("invite validation failed: {e}"))?;
 
     let fingerprint = crypto::fingerprint_from_public_key(&signed.payload.identity_pub);
 
@@ -490,22 +490,22 @@ pub async fn start_listening(
 ) -> Result<String, AppError> {
     let addr: SocketAddr = address
         .parse()
-        .map_err(|e| format!("invalid address: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("invalid address: {e}"))?;
 
     // Use std TcpListener first to set a custom backlog (128 for DoS resilience),
     // then convert to tokio for async usage.
     let std_listener =
-        std::net::TcpListener::bind(addr).map_err(|e| format!("failed to bind listener: {e}"))?;
+        std::net::TcpListener::bind(addr).map_err(||e| AppError::invalid(|e| format!("failed to bind listener: {e}"))?;
     std_listener
         .set_nonblocking(true)
-        .map_err(|e| format!("failed to set non-blocking: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("failed to set non-blocking: {e}"))?;
 
     let listener = tokio::net::TcpListener::from_std(std_listener)
-        .map_err(|e| format!("failed to create async listener: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("failed to create async listener: {e}"))?;
 
     let bound_addr = listener
         .local_addr()
-        .map_err(|e| format!("failed to get local address: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("failed to get local address: {e}"))?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<(tokio::net::TcpStream, SocketAddr)>(8);
 
@@ -845,7 +845,7 @@ pub async fn connect_to_peer(
     invite_str: String,
 ) -> Result<ConnectionInfo, AppError> {
     let signed =
-        identity::validate_invite(&invite_str).map_err(|e| format!("invite invalid: {e}"))?;
+        identity::validate_invite(&invite_str).map_err(||e| AppError::invalid(|e| format!("invite invalid: {e}"))?;
 
     let peer_addrs = hole_punch::extract_candidates_from_invite(
         &signed.payload.address_hint,
@@ -977,7 +977,7 @@ pub async fn connect_to_peer(
                         identity::is_one_time(&signed),
                     )
                     .await
-                    .map_err(|e| format!("X3DH initiator handshake failed: {e}"))?;
+                    .map_err(||e| AppError::invalid(|e| format!("X3DH initiator handshake failed: {e}"))?;
             } else {
                 let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
                 session
@@ -989,7 +989,7 @@ pub async fn connect_to_peer(
                         x25519_pub,
                     )
                     .await
-                    .map_err(|e| format!("initiator handshake failed: {e}"))?;
+                    .map_err(||e| AppError::invalid(|e| format!("initiator handshake failed: {e}"))?;
             }
         }
         // `Role::Responder` is intentionally not matched here. The outbound
@@ -1240,7 +1240,7 @@ pub(crate) async fn send_own_bundle(
     }
 
     let serialized =
-        protocol::serialize(&bundle).map_err(|e| format!("serialize sender key: {e}"))?;
+        protocol::serialize(&bundle).map_err(||e| AppError::invalid(|e| format!("serialize sender key: {e}"))?;
 
     let conn_arc = state
         .peer_connection(target_peer)
@@ -1255,7 +1255,7 @@ pub(crate) async fn send_own_bundle(
     session
         .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
         .await
-        .map_err(|e| format!("send sender key failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("send sender key failed: {e}"))
 }
 
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).

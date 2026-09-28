@@ -69,7 +69,7 @@ pub async fn send_message(
         state
             .ensure_message_store(&state.data_dir)
             .await
-            .map_err(|e| format!("message store init: {e}"))?;
+            .map_err(||e| AppError::invalid(|e| format!("message store init: {e}"))?;
 
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
@@ -109,7 +109,7 @@ pub async fn load_messages(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| format!("message store init: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("message store init: {e}"))?;
 
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
@@ -119,11 +119,11 @@ pub async fn load_messages(
     let stored = if let Some(before) = before_timestamp {
         store
             .load_messages_before(&peer_key_hex, before, limit.unwrap_or(100))
-            .map_err(|e| format!("failed to load older messages: {e}"))?
+            .map_err(||e| AppError::invalid(|e| format!("failed to load older messages: {e}"))?
     } else {
         store
             .load_messages(&peer_key_hex, limit.unwrap_or(100))
-            .map_err(|e| format!("failed to load messages: {e}"))?
+            .map_err(||e| AppError::invalid(|e| format!("failed to load messages: {e}"))?
     };
 
     let mut messages = Vec::with_capacity(stored.len());
@@ -192,7 +192,7 @@ pub async fn list_conversations(
 
     let convos = store
         .list_conversations()
-        .map_err(|e| format!("failed to list conversations: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("failed to list conversations: {e}"))?;
 
     let mut items = Vec::with_capacity(convos.len());
     for c in convos {
@@ -254,7 +254,7 @@ pub async fn rename_conversation(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
         .rename_conversation(&conversation_id, &display_name)
-        .map_err(|e| format!("rename failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("rename failed: {e}"))
 }
 
 /// Delete a conversation and all its messages (securely).
@@ -267,7 +267,7 @@ pub async fn delete_conversation_cmd(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
         .delete_conversation(&conversation_id)
-        .map_err(|e| format!("delete failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("delete failed: {e}"))
 }
 
 /// Set per-conversation retention policy.
@@ -290,7 +290,7 @@ pub async fn set_conversation_retention(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
         .set_conversation_retention(&conversation_id, &policy, duration_secs)
-        .map_err(|e| format!("retention update failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("retention update failed: {e}"))
 }
 
 /// Send conversation naming metadata to a connected peer.
@@ -315,7 +315,7 @@ pub async fn send_conversation_names(
     session
         .send_conversation_meta(&mut *write_half, &my_name, &their_name)
         .await
-        .map_err(|e| format!("failed to send conversation meta: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("failed to send conversation meta: {e}"))
 }
 
 /// Export a conversation as an encrypted JSON file.
@@ -335,13 +335,13 @@ pub async fn export_conversation(
     // Get conversation metadata
     let conv = store
         .get_conversation(&conversation_id)
-        .map_err(|e| format!("failed to get conversation: {e}"))?
+        .map_err(||e| AppError::invalid(|e| format!("failed to get conversation: {e}"))?
         .ok_or("conversation not found")?;
 
     // Load all messages
     let messages = store
         .export_conversation_messages(&conversation_id)
-        .map_err(|e| format!("failed to export messages: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("failed to export messages: {e}"))?;
 
     // Build the export payload (messages stay encrypted — the export
     // is a faithful copy of the encrypted blobs plus metadata)
@@ -372,16 +372,16 @@ pub async fn export_conversation(
 
     // Serialize the JSON, then encrypt the entire export with the storage key
     let export_json = serde_json::to_vec_pretty(&export_data)
-        .map_err(|e| format!("serialization failed: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("serialization failed: {e}"))?;
     let (nonce, ciphertext) = util::crypto_encrypt_storage(&export_json, key, util::AAD_EXPORT)
-        .map_err(|e| format!("encryption failed: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("encryption failed: {e}"))?;
 
     // Build the final file: nonce (24 bytes) || ciphertext
     let mut file_data = Vec::with_capacity(nonce.len() + ciphertext.len());
     file_data.extend_from_slice(&nonce);
     file_data.extend_from_slice(&ciphertext);
 
-    std::fs::write(&export_path, &file_data).map_err(|e| format!("failed to write export: {e}"))?;
+    std::fs::write(&export_path, &file_data).map_err(||e| AppError::invalid(|e| format!("failed to write export: {e}"))?;
 
     Ok(export_path)
 }
@@ -415,7 +415,7 @@ pub async fn send_reaction(
                     &peer_key_hex,
                     sk.as_ref(),
                 )
-                .map_err(|e| format!("failed to store reaction: {e}"))?;
+                .map_err(||e| AppError::invalid(|e| format!("failed to store reaction: {e}"))?;
         }
     }
 
@@ -431,7 +431,7 @@ pub async fn send_reaction(
         remove: false,
     };
     let plaintext =
-        crate::protocol::serialize(&data).map_err(|e| format!("serialize reaction: {e}"))?;
+        crate::protocol::serialize(&data).map_err(||e| AppError::invalid(|e| format!("serialize reaction: {e}"))?;
     let crate::state::PeerConnection {
         session,
         write_half,
@@ -444,7 +444,7 @@ pub async fn send_reaction(
             &plaintext,
         )
         .await
-        .map_err(|e| format!("send reaction failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("send reaction failed: {e}"))
 }
 
 /// Remove a reaction from a message.
@@ -469,7 +469,7 @@ pub async fn remove_reaction(
                     &peer_key_hex,
                     sk.as_ref(),
                 )
-                .map_err(|e| format!("failed to remove reaction: {e}"))?;
+                .map_err(||e| AppError::invalid(|e| format!("failed to remove reaction: {e}"))?;
         }
     }
 
@@ -485,7 +485,7 @@ pub async fn remove_reaction(
         remove: true,
     };
     let plaintext =
-        crate::protocol::serialize(&data).map_err(|e| format!("serialize reaction: {e}"))?;
+        crate::protocol::serialize(&data).map_err(||e| AppError::invalid(|e| format!("serialize reaction: {e}"))?;
     let crate::state::PeerConnection {
         session,
         write_half,
@@ -498,7 +498,7 @@ pub async fn remove_reaction(
             &plaintext,
         )
         .await
-        .map_err(|e| format!("remove reaction failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("remove reaction failed: {e}"))
 }
 
 // ─── Read Receipts ──────────────────────────────────────────────────────────
@@ -517,7 +517,7 @@ pub async fn mark_messages_read(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
         .mark_messages_read(&conversation_id)
-        .map_err(|e| format!("mark read failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("mark read failed: {e}"))
 }
 
 /// Send a message with an optional self-destruct timer.
@@ -582,7 +582,7 @@ pub async fn send_message_with_timer(
         state
             .ensure_message_store(&state.data_dir)
             .await
-            .map_err(|e| format!("message store init: {e}"))?;
+            .map_err(||e| AppError::invalid(|e| format!("message store init: {e}"))?;
 
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
@@ -666,7 +666,7 @@ pub async fn edit_message(
             edited_at: now,
         };
         let serialized =
-            protocol::serialize(&edit_data).map_err(|e| format!("serialization error: {e}"))?;
+            protocol::serialize(&edit_data).map_err(||e| AppError::invalid(|e| format!("serialization error: {e}"))?;
         let PeerConnection {
             session,
             write_half,
@@ -675,7 +675,7 @@ pub async fn edit_message(
         session
             .send_encrypted_typed(write_half, protocol::PacketType::MessageEdit, &serialized)
             .await
-            .map_err(|e| format!("send edit failed: {e}"))?;
+            .map_err(||e| AppError::invalid(|e| format!("send edit failed: {e}"))?;
     }
 
     Ok(
@@ -699,7 +699,7 @@ pub async fn delete_message(
         if let Some(ref store) = *ms {
             let owned = store
                 .message_in_conversation(&message_id, &peer_key_hex, "sent")
-                .map_err(|e| format!("delete failed: {e}"))?;
+                .map_err(||e| AppError::invalid(|e| format!("delete failed: {e}"))?;
             if !owned && !state.security_config.read().await.ephemeral_mode {
                 return Err(AppError::invalid("message not found in this conversation"));
             }
@@ -718,7 +718,7 @@ pub async fn delete_message(
             message_id: message_id.clone(),
         };
         let serialized =
-            protocol::serialize(&delete_data).map_err(|e| format!("serialization error: {e}"))?;
+            protocol::serialize(&delete_data).map_err(||e| AppError::invalid(|e| format!("serialization error: {e}"))?;
         let PeerConnection {
             session,
             write_half,
@@ -727,7 +727,7 @@ pub async fn delete_message(
         session
             .send_encrypted_typed(write_half, protocol::PacketType::MessageDelete, &serialized)
             .await
-            .map_err(|e| format!("send delete failed: {e}"))?;
+            .map_err(||e| AppError::invalid(|e| format!("send delete failed: {e}"))?;
     }
 
     Ok(())
@@ -740,7 +740,7 @@ pub async fn cleanup_expired_messages(state: State<'_, Arc<AppState>>) -> Result
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
         .delete_expired_messages()
-        .map_err(|e| format!("cleanup failed: {e}"))
+        .map_err(||e| AppError::invalid(|e| format!("cleanup failed: {e}"))
 }
 
 /// Flush all undelivered messages for a peer after successful reconnection.
@@ -754,7 +754,7 @@ pub async fn flush_offline_queue(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| format!("message store init: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("message store init: {e}"))?;
 
     // Load and decrypt undelivered messages while holding the store lock.
     // Drop all locks before trying to send so RefCell-backed Connection doesn't
@@ -767,7 +767,7 @@ pub async fn flush_offline_queue(
 
         let stored = store
             .load_undelivered_messages(peer_key_hex)
-            .map_err(|e| format!("load undelivered: {e}"))?;
+            .map_err(||e| AppError::invalid(|e| format!("load undelivered: {e}"))?;
 
         let mut decrypted = Vec::with_capacity(stored.len());
         for msg in &stored {
@@ -881,7 +881,7 @@ pub async fn toggle_favorite(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let new_val = store
         .toggle_favorite(&peer_key_hex)
-        .map_err(|e| format!("db error: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("db error: {e}"))?;
     Ok(new_val)
 }
 
@@ -895,7 +895,7 @@ pub async fn toggle_archive(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let new_val = store
         .toggle_archive(&peer_key_hex)
-        .map_err(|e| format!("db error: {e}"))?;
+        .map_err(||e| AppError::invalid(|e| format!("db error: {e}"))?;
     Ok(new_val)
 }
 
@@ -931,7 +931,7 @@ pub async fn send_typing_indicator(
         session
             .send_encrypted_typed(write_half, packet_type, b"")
             .await
-            .map_err(|e| format!("failed to send typing indicator: {e}"))?;
+            .map_err(||e| AppError::invalid(|e| format!("failed to send typing indicator: {e}"))?;
     }
     Ok(())
 }
@@ -952,7 +952,7 @@ pub async fn search_messages(
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
             let stored = store
                 .load_messages(&peer_key_hex, 500)
-                .map_err(|e| format!("db error: {e}"))?;
+                .map_err(||e| AppError::invalid(|e| format!("db error: {e}"))?;
             let query_lower = query.to_lowercase();
             stored
                 .into_iter()
