@@ -1212,7 +1212,7 @@ impl SessionKeys {
         }
         let mut nonce = [0u8; 24];
         nonce.copy_from_slice(nonce_bytes);
-        aead_open(&self.rx_key.clone(), &nonce, ciphertext, aad)
+        aead_open(&self.rx_key, &nonce, ciphertext, aad)
     }
 
     /// Ratchet the sending key forward after encrypting a message.
@@ -1221,12 +1221,22 @@ impl SessionKeys {
     /// reveal previously encrypted messages, because the old key is zeroized.
     ///
     /// Construction: new_tx_key = SHA256(old_tx_key || ratchet_context)
-    /// This is the HKDF-Expand step using SHA256 as the PRF.
+    ///
+    /// Note on naming: this is a raw hash of `key || constant`, NOT
+    /// HKDF-Expand. HKDF-Expand is `HMAC(PRK, T(n-1) || info || n)`; there is
+    /// no HMAC here. The previous doc comment described it as "the HKDF-Expand
+    /// step using SHA256 as the PRF", which is wrong and misleading on a
+    /// crypto primitive. It is still a sound one-way derivation of the key
+    /// (a preimage-resistant hash), so forward secrecy within the chain holds;
+    /// it simply is not a KDF in the HKDF sense and should not be audited as
+    /// one.
     pub fn ratchet_tx(&mut self) {
+        // `input` holds the live key; it is zeroized before return.
         let mut input = Vec::with_capacity(32 + 14);
         input.extend_from_slice(&self.tx_key);
         input.extend_from_slice(b"m2m-ratchet-v1");
         let hash = sha2::Sha256::digest(&input);
+        input.zeroize();
         self.tx_key.zeroize();
         self.tx_key.copy_from_slice(&hash[..32]);
     }
@@ -1238,6 +1248,7 @@ impl SessionKeys {
         input.extend_from_slice(&self.rx_key);
         input.extend_from_slice(b"m2m-ratchet-v1");
         let hash = sha2::Sha256::digest(&input);
+        input.zeroize();
         self.rx_key.zeroize();
         self.rx_key.copy_from_slice(&hash[..32]);
     }
