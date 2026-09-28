@@ -311,13 +311,13 @@ pub async fn attempt_reconnect(
         let hint: std::net::SocketAddr = info
             .peer_address_hint
             .parse()
-            .map_err(||e| AppError::invalid(|e| format!("invalid peer address hint: {e}"))?;
+            .map_err(|e| AppError::invalid(format!("invalid peer address hint: {e}")))?;
 
         match crate::dial::dial_with_timeout(hint, RECONNECT_CONNECT_TIMEOUT).await {
             Ok(mut stream) => {
                 // ── Real cryptographic handshake before claiming success (M4) ──
                 let expected_peer_pub: [u8; 32] = hex::decode(&info.peer_key_hex)
-                    .map_err(||e| AppError::invalid(|e| format!("invalid peer key: {e}"))?
+                    .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?
                     .try_into()
                     .map_err(|_| "peer key length mismatch")?;
 
