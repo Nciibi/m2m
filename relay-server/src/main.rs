@@ -889,6 +889,46 @@ mod tests {
         );
     }
 
+    /// A registration must expire on *idleness*, not on age.
+    ///
+    /// The reaper previously compared `created_at.elapsed()`, so a client that
+    /// was connected and answering keepalives was still evicted after
+    /// `READER_IDLE_TIMEOUT` — the keepalive handler refreshed nothing. On the
+    /// client side `relay_state.connected` stayed `true` and the dead
+    /// `relay_id` kept being advertised in newly generated invites, so peers
+    /// dialled a registration the relay had already dropped.
+    #[test]
+    fn keepalive_refreshes_idle_timer() {
+        let (_tx, _rx) = oneshot::channel::<TcpStream>();
+        let reg = Registration {
+            bridge_tx: _tx,
+            peer_addr: "127.0.0.1:1".parse().unwrap(),
+            created_at: Instant::now(),
+            last_seen: Arc::new(StdMutex::new(Instant::now())),
+        };
+        assert!(reg.idle_for() < Duration::from_secs(1));
+
+        // Simulate a keepalive arriving: only `last_seen` moves, `created_at`
+        // stays put. The reaper reads `idle_for()`, so this is what keeps the
+        // registration alive.
+        std::thread::sleep(Duration::from_millis(20));
+        *reg.last_seen.lock().unwrap() = Instant::now();
+        assert!(reg.idle_for() < Duration::from_secs(1));
+
+        // And without a keepalive, idleness does grow past the threshold even
+        // though the registration itself is young.
+        let reg2 = Registration {
+            bridge_tx: {
+                let (tx, _rx) = oneshot::channel::<TcpStream>();
+                tx
+            },
+            peer_addr: "127.0.0.1:1".parse().unwrap(),
+            created_at: Instant::now(),
+            last_seen: Arc::new(StdMutex::new(Instant::now() - READER_IDLE_TIMEOUT)),
+        };
+        assert!(reg2.idle_for() >= READER_IDLE_TIMEOUT);
+    }
+
     #[test]
     fn limits_are_sane() {
         assert!(MAX_PENDING_REGISTRATIONS > 0);
