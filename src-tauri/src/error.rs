@@ -116,150 +116,249 @@ impl std::error::Error for AppError {}
 // is the point: it is the only place that needs to know the whole taxonomy, and
 // it is a `match` per variant rather than 309 scattered `format!` calls.
 
-macro_rules! from_error {
-    ($ty:ty, $default:literal, { $($variant:ident => $code:literal),* $(,)? }) => {
-        impl From<$ty> for AppError {
-            fn from(e: $ty) -> Self {
-                let code = match e {
-                    $(<$ty>::$variant { .. } => $code,)*
-                };
-                AppError::new(code, e.to_string())
-            }
-        }
-    };
+// ── Conversions from the existing taxonomy ───────────────────────────────────
+//
+// Each `From` maps one enum to a code family. Keeping the mapping in one place
+// is the point: it is the only place that needs to know the whole taxonomy, and
+// it is one exhaustive `match` per enum rather than 309 scattered `format!`
+// calls. Every variant is listed, so adding a variant to any of these enums is
+// a compile error here rather than a silent `unreachable!()` or a lost code.
+
+use crate::crypto::CryptoError;
+use crate::dht::DhtError;
+use crate::hole_punch::ConnectionError;
+use crate::identity::IdentityError;
+use crate::network::NetworkError;
+use crate::port_mapping::PortMapError;
+use crate::protocol::ProtocolError;
+use crate::relay::RelayError;
+use crate::session::SessionError;
+use crate::storage::StorageError;
+use crate::stun::StunError;
+use crate::tor::TorError;
+
+impl From<CryptoError> for AppError {
+    fn from(e: CryptoError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            CryptoError::InitFailed => "crypto.init_failed",
+            CryptoError::EncryptionFailed => "crypto.encryption_failed",
+            CryptoError::DecryptionFailed => "crypto.decryption_failed",
+            CryptoError::SignatureInvalid => "crypto.signature_invalid",
+            CryptoError::KeyDerivationFailed => "crypto.key_derivation_failed",
+            CryptoError::RandomnessUnavailable => "crypto.randomness_unavailable",
+            CryptoError::InputTooLarge => "crypto.input_too_large",
+            CryptoError::InvalidKeyLength => "crypto.invalid_key_length",
+            CryptoError::X3DHFailed => "crypto.x3dh_failed",
+            CryptoError::DoubleRatchetError => "crypto.double_ratchet_error",
+            CryptoError::PrekeySignatureInvalid => "crypto.prekey_signature_invalid",
+            CryptoError::MaxSkippedKeysExceeded => "crypto.max_skipped_keys_exceeded",
+        };
+        AppError::new(code, message)
+    }
 }
 
-from_error!(crate::crypto::CryptoError, "crypto.error", {
-    DecryptionFailed => "crypto.decryption_failed",
-    EncryptionFailed => "crypto.encryption_failed",
-    SignatureInvalid => "crypto.signature_invalid",
-    KeyDerivationFailed => "crypto.key_derivation_failed",
-    NonceReuse => "crypto.nonce_reuse",
-    DoubleRatchetError => "crypto.ratchet",
-    MaxSkippedKeysExceeded => "crypto.too_many_skipped_keys",
-    InputTooLarge => "crypto.input_too_large",
-    RandomnessUnavailable => "crypto.randomness_unavailable",
-    InvalidKeyLength => "crypto.invalid_key_length",
-    X3DHFailed => "crypto.x3dh_failed",
-    PrekeySignatureInvalid => "crypto.prekey_signature_invalid",
-    InitFailed => "crypto.init_failed",
-});
+impl From<SessionError> for AppError {
+    fn from(e: SessionError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            SessionError::Crypto => "session.crypto",
+            SessionError::Protocol => "session.protocol",
+            SessionError::Network => "session.network",
+            SessionError::HandshakeFailed => "session.handshake_failed",
+            SessionError::SessionExpired => "session.session_expired",
+            SessionError::ReplayDetected => "session.replay_detected",
+            SessionError::InvalidState => "session.invalid_state",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::session::SessionError, "session.error", {
-    HandshakeFailed => "session.handshake_failed",
-    ReplayDetected => "session.replay_detected",
-    NotEstablished => "session.not_established",
-    Io => "session.io",
-    Network => "session.network",
-    Serialization => "session.serialization",
-    Crypto => "session.crypto",
-    NotConnected => "session.not_connected",
-});
+impl From<NetworkError> for AppError {
+    fn from(e: NetworkError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            NetworkError::Io => "network.io",
+            NetworkError::ConnectionTimeout => "network.connection_timeout",
+            NetworkError::ReadTimeout => "network.read_timeout",
+            NetworkError::WriteTimeout => "network.write_timeout",
+            NetworkError::PeerClosed => "network.peer_closed",
+            NetworkError::Protocol => "network.protocol",
+            NetworkError::InvalidState => "network.invalid_state",
+            NetworkError::RateLimitExceeded => "network.rate_limit_exceeded",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::network::NetworkError, "network.error", {
-    Io => "network.io",
-    Timeout => "network.timeout",
-    ConnectionRefused => "network.refused",
-    ConnectionReset => "network.reset",
-    FrameTooLarge => "network.frame_too_large",
-    RateLimited => "network.rate_limited",
-    Protocol => "network.protocol",
-    InvalidAddress => "network.invalid_address",
-    NotConnected => "network.not_connected",
-});
+impl From<ProtocolError> for AppError {
+    fn from(e: ProtocolError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            ProtocolError::UnsupportedVersion => "protocol.unsupported_version",
+            ProtocolError::ReservedVersion => "protocol.reserved_version",
+            ProtocolError::FrameTooLarge => "protocol.frame_too_large",
+            ProtocolError::FrameTooSmall => "protocol.frame_too_small",
+            ProtocolError::UnknownPacketType => "protocol.unknown_packet_type",
+            ProtocolError::SerializationError => "protocol.serialization_error",
+            ProtocolError::DeserializationError => "protocol.deserialization_error",
+            ProtocolError::InvalidHandshake => "protocol.invalid_handshake",
+            ProtocolError::InvalidInvite => "protocol.invalid_invite",
+            ProtocolError::InviteExpired => "protocol.invite_expired",
+            ProtocolError::InviteSignatureInvalid => "protocol.invite_signature_invalid",
+            ProtocolError::InvalidSequence => "protocol.invalid_sequence",
+            ProtocolError::MessageTooLarge => "protocol.message_too_large",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::protocol::ProtocolError, "protocol.error", {
-    SerializationError => "protocol.serialization",
-    DeserializationError => "protocol.deserialization",
-    InvalidPacketType => "protocol.invalid_packet_type",
-    ReservedVersion => "protocol.reserved_version",
-    UnsupportedVersion => "protocol.unsupported_version",
-    FrameTooLarge => "protocol.frame_too_large",
-    InvalidSignature => "protocol.invalid_signature",
-    InvalidNonce => "protocol.invalid_nonce",
-});
+impl From<StorageError> for AppError {
+    fn from(e: StorageError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            StorageError::Database => "storage.database",
+            StorageError::PathError => "storage.path_error",
+            StorageError::KeyNotFound => "storage.key_not_found",
+            StorageError::DecryptionFailed => "storage.decryption_failed",
+            StorageError::EncryptionFailed => "storage.encryption_failed",
+            StorageError::DirCreationFailed => "storage.dir_creation_failed",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::storage::StorageError, "storage.error", {
-    Database => "storage.database",
-    NotFound => "storage.not_found",
-    InvalidData => "storage.invalid_data",
-    PathError => "storage.path",
-    Crypto => "storage.crypto",
-    Serialization => "storage.serialization",
-    Busy => "storage.busy",
-    Constraint => "storage.constraint",
-});
+impl From<StunError> for AppError {
+    fn from(e: StunError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            StunError::Io => "stun.io",
+            StunError::Timeout => "stun.timeout",
+            StunError::InvalidResponse => "stun.invalid_response",
+            StunError::NoMappedAddress => "stun.no_mapped_address",
+            StunError::AllServersFailed => "stun.all_servers_failed",
+            StunError::DnsError => "stun.dns_error",
+            StunError::TransactionIdMismatch => "stun.transaction_id_mismatch",
+            StunError::TorBlocked => "stun.tor_blocked",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::stun::StunError, "stun.error", {
-    Io => "stun.io",
-    Timeout => "stun.timeout",
-    InvalidResponse => "stun.invalid_response",
-    NoMappedAddress => "stun.no_mapped_address",
-    AllServersFailed => "stun.all_servers_failed",
-    DnsError => "stun.dns",
-    TransactionIdMismatch => "stun.transaction_id_mismatch",
-    TorBlocked => "stun.blocked_by_tor",
-});
+impl From<PortMapError> for AppError {
+    fn from(e: PortMapError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            PortMapError::Io => "portmap.io",
+            PortMapError::NoGateway => "portmap.no_gateway",
+            PortMapError::Pcp => "portmap.pcp",
+            PortMapError::NatPmp => "portmap.nat_pmp",
+            PortMapError::Upnp => "portmap.upnp",
+            PortMapError::AllFailed => "portmap.all_failed",
+            PortMapError::TorUnsupported => "portmap.tor_unsupported",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::port_mapping::PortMapError, "portmap.error", {
-    Io => "portmap.io",
-    NoGateway => "portmap.no_gateway",
-    Pcp => "portmap.pcp",
-    NatPmp => "portmap.nat_pmp",
-    Upnp => "portmap.upnp",
-    AllFailed => "portmap.all_failed",
-    TorUnsupported => "portmap.blocked_by_tor",
-});
+impl From<ConnectionError> for AppError {
+    fn from(e: ConnectionError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            ConnectionError::Io => "holepunch.io",
+            ConnectionError::AllFailed => "holepunch.all_failed",
+            ConnectionError::NoCandidates => "holepunch.no_candidates",
+            ConnectionError::TimedOut => "holepunch.timed_out",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::hole_punch::ConnectionError, "holepunch.error", {
-    NoCandidates => "holepunch.no_candidates",
-    AllFailed => "holepunch.all_failed",
-    TimedOut => "holepunch.timeout",
-    Io => "holepunch.io",
-    Relay => "holepunch.relay",
-});
+impl From<DhtError> for AppError {
+    fn from(e: DhtError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            DhtError::Io => "dht.io",
+            DhtError::Timeout => "dht.timeout",
+            DhtError::BadResponse => "dht.bad_response",
+            DhtError::PeerNotFound => "dht.peer_not_found",
+            DhtError::NotBootstrapped => "dht.not_bootstrapped",
+            DhtError::NotEnabled => "dht.not_enabled",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::dht::DhtError, "dht.error", {
-    Io => "dht.io",
-    Timeout => "dht.timeout",
-    BadResponse => "dht.bad_response",
-    NotFound => "dht.not_found",
-    Protocol => "dht.protocol",
-    Disabled => "dht.disabled",
-});
+impl From<RelayError> for AppError {
+    fn from(e: RelayError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            RelayError::Io => "relay.io",
+            RelayError::TimedOut => "relay.timed_out",
+            RelayError::FrameTooLarge => "relay.frame_too_large",
+            RelayError::Protocol => "relay.protocol",
+            RelayError::ServerError => "relay.server_error",
+            RelayError::ConnectionClosed => "relay.connection_closed",
+            RelayError::UnexpectedFrame => "relay.unexpected_frame",
+            RelayError::Config => "relay.config",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::relay::RelayError, "relay.error", {
-    Config => "relay.config",
-    Io => "relay.io",
-    Timeout => "relay.timeout",
-    Protocol => "relay.protocol",
-    NotConnected => "relay.not_connected",
-    ServerError => "relay.server_error",
-});
+impl From<TorError> for AppError {
+    fn from(e: TorError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            TorError::ConnectionFailed => "tor.connection_failed",
+            TorError::ProxyUnreachable => "tor.proxy_unreachable",
+            TorError::Io => "tor.io",
+        };
+        AppError::new(code, message)
+    }
+}
 
-from_error!(crate::tor::TorError, "tor.error", {
-    Config => "tor.config",
-    Io => "tor.io",
-    NotEnabled => "tor.not_enabled",
-    ProxyUnreachable => "tor.proxy_unreachable",
-});
-
-from_error!(crate::identity::IdentityError, "identity.error", {
-    NoIdentity => "identity.missing",
-    InvalidKeyLength => "identity.invalid_key_length",
-    InvalidSignature => "identity.invalid_signature",
-    MalformedInvite => "identity.malformed_invite",
-    InviteExpired => "identity.invite_expired",
-    InviteTooLong => "identity.invite_too_long",
-    AddressHintTooLong => "identity.address_hint_too_long",
-    InviteValidityTooLarge => "identity.invalidity_too_large",
-    InviteAlreadyConsumed => "identity.invite_consumed",
-    InviteReplay => "identity.invite_replay",
-    Serialization => "identity.serialization",
-    KeyGeneration => "identity.key_generation",
-    VersionMismatch => "identity.version_mismatch",
-    Fingerprint => "identity.fingerprint",
-});
+impl From<IdentityError> for AppError {
+    fn from(e: IdentityError) -> Self {
+        // Message first: the enum is matched by reference so the
+        // rendered chain survives for the user and the log.
+        let message = e.to_string();
+        let code = match &e {
+            IdentityError::Crypto => "identity.crypto",
+            IdentityError::Protocol => "identity.protocol",
+            IdentityError::InviteExpired => "identity.invite_expired",
+            IdentityError::InviteFutureTimestamp => "identity.invite_future_timestamp",
+            IdentityError::InviteValidityTooLarge => "identity.invite_validity_too_large",
+            IdentityError::InviteSignatureInvalid => "identity.invite_signature_invalid",
+            IdentityError::InviteFormatInvalid => "identity.invite_format_invalid",
+            IdentityError::InviteAlreadyConsumed => "identity.invite_already_consumed",
+            IdentityError::AddressHintTooLong => "identity.address_hint_too_long",
+        };
+        AppError::new(code, message)
+    }
+}
 
 impl From<String> for AppError {
     /// A bare `String` from a command body that has not been given a code yet.
