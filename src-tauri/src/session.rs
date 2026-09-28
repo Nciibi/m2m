@@ -2370,6 +2370,7 @@ mod session_tests {
                     &bob_pub,
                     &bob_bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             // Send a text message over the DR path
@@ -2439,6 +2440,7 @@ mod session_tests {
                     &bob_pub,
                     &bob_bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             session
@@ -2503,6 +2505,7 @@ mod session_tests {
                     &bob_pub,
                     &bob_bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             session
@@ -2557,6 +2560,7 @@ mod session_tests {
                     &bob_pub,
                     &bob_bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             // Send 105 messages to trigger DH ratchet at 100
@@ -2617,6 +2621,7 @@ mod session_tests {
                     &bob_pub,
                     &bob_bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             session.send_text(&mut alice_io, "Message 1").await?;
@@ -2919,6 +2924,7 @@ mod session_tests {
                     &bob_pub,
                     &bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             session.send_text(&mut alice_io, "hello with DH4").await?;
@@ -2989,6 +2995,7 @@ mod session_tests {
                     &bob_pub,
                     &bundle,
                     vec![],
+                    false,
                 )
                 .await;
         });
@@ -3051,6 +3058,7 @@ mod session_tests {
                     &bob_pub,
                     &bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             session.send_text(&mut alice_io, "no opk path").await?;
@@ -3113,6 +3121,7 @@ mod session_tests {
                     &bob_pub,
                     &bundle,
                     vec![],
+                    false,
                 )
                 .await?;
             session.send_heartbeat(&mut alice_io).await?;
