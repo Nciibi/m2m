@@ -1,5 +1,6 @@
 //! Chat messaging and conversation management commands.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use tauri::State;
