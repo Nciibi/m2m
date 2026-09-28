@@ -876,6 +876,7 @@ mod tests {
                     bridge_tx: tx,
                     peer_addr: "127.0.0.1:1".parse().unwrap(),
                     created_at: Instant::now(),
+                    last_seen: Arc::new(StdMutex::new(Instant::now())),
                 },
             );
         }
