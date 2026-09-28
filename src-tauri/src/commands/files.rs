@@ -773,9 +773,12 @@ async fn wait_for_ack(
         {
             let outgoing = state.outgoing_transfers.read().await;
             if let Some(t) = outgoing.get(transfer_id) {
-                if t.chunks_acked > chunk_index
-                    || (t.chunks_acked > 0 && t.last_acked_index >= chunk_index)
-                {
+                // `chunks_acked` is the contiguous confirmed prefix, so
+                // `last_acked_index >= chunk_index` is the single correct
+                // predicate. The old `chunks_acked > chunk_index ||` disjunct
+                // was satisfied by a span-inflated count, which is what let one
+                // out-of-order ACK confirm chunks that were never sent.
+                if t.last_acked_index >= chunk_index {
                     return true;
                 }
             }

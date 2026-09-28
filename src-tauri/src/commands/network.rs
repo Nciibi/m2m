@@ -1744,14 +1744,50 @@ async fn handle_file_transfer_packet(
                         {
                             let mut outgoing = state.outgoing_transfers.write().await;
                             if let Some(t) = outgoing.get_mut(&ack.transfer_id) {
-                                if ack.chunk_index >= t.last_acked_index {
-                                    t.chunks_acked +=
-                                        ack.chunk_index.saturating_sub(t.last_acked_index) + 1;
+                                // Advance only on a *contiguous* next-chunk ACK.
+                                //
+                                // The previous code accepted any `ack.chunk_index
+                                // >= last_acked_index` and added the whole span,
+                                // which assumed strictly increasing ACKs with no
+                                // gaps. Two consequences:
+                                //
+                                // 1. A gap over-counted. ACK 0 then ACK 5 set
+                                //    `chunks_acked = 6` when chunks 1-4 were
+                                //    never acknowledged.
+                                // 2. Worse, one frame was enough to finish the
+                                //    transfer. `wait_for_ack` treats
+                                //    `chunks_acked > chunk_index` as "this chunk
+                                //    is confirmed", so a single authenticated
+                                //    peer — the very party being asked to
+                                //    confirm delivery — could send
+                                //    `chunk_index = total_chunks - 1` once and
+                                //    have every subsequent chunk treated as
+                                //    delivered. The file would be declared sent
+                                //    without a byte ever being written.
+                                //
+                                // The sender transmits chunks strictly in order
+                                // and waits for each ACK before sending the next,
+                                // so a well-behaved peer's ACKs are contiguous by
+                                // construction and this accepts them unchanged. A
+                                // gap or a duplicate is now ignored, which is
+                                // also what the receiver's `chunks_bitmask`
+                                // already did — the sender now holds a
+                                // conservative mirror of it instead of a
+                                // separately-invented count.
+                                if ack.chunk_index == t.last_acked_index + 1 {
                                     t.last_acked_index = ack.chunk_index;
+                                    t.chunks_acked = t.last_acked_index + 1;
                                     t.last_activity_at = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
                                         .as_secs();
+                                } else if ack.chunk_index > t.last_acked_index + 1 {
+                                    tracing::warn!(
+                                        transfer_id = %ack.transfer_id,
+                                        expected = t.last_acked_index + 1,
+                                        got = ack.chunk_index,
+                                        "non-contiguous chunk ack ignored"
+                                    );
                                 }
                                 tracing::trace!(
                                     transfer_id = %ack.transfer_id,
