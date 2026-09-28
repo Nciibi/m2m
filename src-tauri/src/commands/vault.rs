@@ -136,14 +136,7 @@ pub async fn unlock_vault(
     passphrase: String,
 ) -> Result<VaultStatus, String> {
     // ─── Passphrase Strength Check ───
-    if passphrase.len() < 12 {
-        return Err(
-            "passphrase must be at least 12 characters — longer is more secure".to_string(),
-        );
-    }
-    // Estimate entropy: if weaker than 40 bits, reject.
-    let entropy = util::estimate_passphrase_entropy(&passphrase);
-    if entropy < 40.0 {
+    util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
         return Err(format!(
             "passphrase too weak: ~{:.0} bits of entropy. \
              Use a longer passphrase (aim for 60+ bits). \
@@ -521,13 +514,7 @@ pub async fn create_vault_account(
     passphrase: String,
 ) -> Result<IdentityInfo, String> {
     // ─── Passphrase Strength Check ───
-    if passphrase.len() < 12 {
-        return Err(
-            "passphrase must be at least 12 characters — longer is more secure".to_string(),
-        );
-    }
-    let entropy = util::estimate_passphrase_entropy(&passphrase);
-    if entropy < 40.0 {
+    util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
         return Err(format!(
             "passphrase too weak: ~{:.0} bits of entropy. \
              Use a longer passphrase (aim for 60+ bits). \
@@ -890,11 +877,7 @@ pub async fn export_identity(
     path: String,
     passphrase: String,
 ) -> Result<(), String> {
-    if passphrase.len() < 12 {
-        return Err("passphrase must be at least 12 characters".to_string());
-    }
-    let entropy = util::estimate_passphrase_entropy(&passphrase);
-    if entropy < 40.0 {
+    util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
         return Err(format!(
             "passphrase too weak: ~{:.0} bits. Use a stronger passphrase (aim for 60+).",
             entropy
@@ -967,13 +950,7 @@ pub async fn import_identity(
 ) -> Result<IdentityInfo, String> {
     // The passphrase becomes the vault passphrase for the imported identity,
     // so it must meet the same strength requirements as unlock_vault.
-    if passphrase.len() < 12 {
-        return Err(
-            "passphrase must be at least 12 characters — longer is more secure".to_string(),
-        );
-    }
-    let entropy = util::estimate_passphrase_entropy(&passphrase);
-    if entropy < 40.0 {
+    util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
         return Err(format!(
             "passphrase too weak: ~{:.0} bits of entropy. \
              Use a longer passphrase (aim for 60+ bits). \

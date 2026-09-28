@@ -133,6 +133,61 @@ pub fn resolve_local_ip() -> Option<std::net::IpAddr> {
 /// overestimates, while being lenient for diceware-style phrases.
 ///
 /// Returns an entropy estimate in bits. Minimum is 0.0.
+/// Which passphrase is being validated, for error-message wording.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PassphraseKind {
+    /// The vault passphrase (unlock, account creation, identity import).
+    Vault,
+    /// The duress passphrase that unlocks the decoy vault.
+    Duress,
+}
+
+impl PassphraseKind {
+    fn label(self) -> &'static str {
+        match self {
+            PassphraseKind::Vault => "passphrase",
+            PassphraseKind::Duress => "duress passphrase",
+        }
+    }
+}
+
+/// Minimum acceptable length for any passphrase.
+pub const MIN_PASSPHRASE_CHARS: usize = 12;
+
+/// Minimum acceptable estimated entropy, in bits.
+pub const MIN_PASSPHRASE_BITS: f64 = 40.0;
+
+/// Enforce the passphrase strength policy in one place.
+///
+/// This check existed in five places — `unlock_vault`, `create_vault_account`,
+/// `export_identity`, `import_identity` and `set_duress_passphrase` — and had
+/// already drifted: `export_identity` and `set_duress_passphrase` dropped the
+/// "longer is more secure" suffix, and the duress variant diverged further. A
+/// policy change needed five edits and one miss would have been silent.
+///
+/// Centralising it means the gate cannot drift again, and the duress passphrase
+/// is held to the same bar as the vault one — which it must be, because
+/// `unlock_vault` runs the identical check first, so a weaker duress passphrase
+/// could never have triggered.
+pub fn validate_passphrase(passphrase: &str, kind: PassphraseKind) -> Result<(), String> {
+    if passphrase.len() < MIN_PASSPHRASE_CHARS {
+        return Err(format!(
+            "{} must be at least {} characters — longer is more secure",
+            kind.label(),
+            MIN_PASSPHRASE_CHARS
+        ));
+    }
+    let entropy = estimate_passphrase_entropy(passphrase);
+    if entropy < MIN_PASSPHRASE_BITS {
+        return Err(format!(
+            "{} too weak: ~{:.0} bits. Use a stronger passphrase (aim for 60+).",
+            kind.label(),
+            entropy
+        ));
+    }
+    Ok(())
+}
+
 pub fn estimate_passphrase_entropy(passphrase: &str) -> f64 {
     let bytes = passphrase.as_bytes();
     let len = passphrase.len();
