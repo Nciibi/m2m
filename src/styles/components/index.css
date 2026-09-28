@@ -14,7 +14,20 @@
 @import './spinner.css';
 @import './progress.css';
 
-/* View-Specific & Utilities */
+/* View-Specific & Utilities
+ *
+ * `hub.css` and `chat.css` were removed. Every class selector in both files
+ * was unreferenced from `src/` and `index.html` — 11 classes in hub.css, 7 in
+ * chat.css — so the "@import modular architecture" they implied was a directory
+ * convention rather than a boundary. The real chat and hub styles live in
+ * utilities.css.
+ *
+ * hub.css was also actively harmful: its `body` block referenced
+ * `var(--indigo-glow)`, which is not defined anywhere in the repository. Per
+ * CSS that makes the declaration invalid at computed-value time, so
+ * `background-image` computed to `none` — and because the block used
+ * `!important`, it beat `reset.css`'s `background-image: var(--canvas-gradient)`.
+ * The whole canvas gradient, and its light-theme override, were dead. It was
+ * invisible only because `index.html`'s opaque `.app-backdrop` sat on top.
+ */
 @import './utilities.css';
-@import './hub.css';
-@import './chat.css';
