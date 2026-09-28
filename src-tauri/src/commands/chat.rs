@@ -166,7 +166,17 @@ pub async fn load_messages(
 pub async fn list_conversations(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<ConversationListItem>, String> {
-    let conns = state.connections.read().await;
+    // Snapshot the connected-peer set and drop the connection-map guard before
+    // taking the storage locks. Holding it across the message-store work
+    // blocked every connection writer in the process for the duration of a
+    // full-table scan plus a per-conversation decrypt.
+    let connected: HashSet<String> = state
+        .connections
+        .read()
+        .await
+        .keys()
+        .cloned()
+        .collect();
     let sk = state.storage_key.read().await;
 
     // Lazy init: open message store on first list if not already opened
@@ -185,7 +195,7 @@ pub async fn list_conversations(
     let mut items = Vec::with_capacity(convos.len());
     for c in convos {
         let peer_key_hex = hex::encode(&c.peer_id);
-        let is_online = conns.contains_key(&c.id);
+        let is_online = connected.contains(&c.id);
 
         // Try to decrypt the last message for a preview
         let last_message_preview = if let Some(key) = sk.as_ref() {

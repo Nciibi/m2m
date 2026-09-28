@@ -53,9 +53,9 @@ pub async fn send_file(
 
     // Determine adaptive chunk size from the peer's connection strategy.
     let chunk_size = {
-        let conns = state.connections.read().await;
-        let strategy = conns
-            .get(&peer_key_hex)
+        let strategy = state
+            .peer_connection(&peer_key_hex)
+            .await
             .and_then(|c| {
                 let cg = c.try_lock().ok()?;
                 Some(cg.strategy_name.clone())
