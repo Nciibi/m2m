@@ -45,6 +45,20 @@ const MAX_SKIP: usize = 2000;
 /// of one incoming message (each derivation is an HKDF evaluation).
 const MAX_GAP_DERIVATION: usize = 1000;
 
+/// How many message keys to capture from a chain at the moment it is
+/// superseded by a DH ratchet.
+///
+/// The sender stops using a chain once it ratchets, but messages already
+/// encrypted on that chain may still be in flight. Deriving their keys at the
+/// ratchet point is what keeps them decryptable, because the counter resets
+/// and the new chain would otherwise derive different keys for the same
+/// numbers.
+///
+/// 64 covers a realistic reordering window at a cost of 64 HKDF evaluations
+/// per ratchet — and a ratchet happens every `ratchet_interval` (100)
+/// messages, so this is under one derivation per message amortised.
+const RATCHET_INFLIGHT_WINDOW: usize = 64;
+
 #[derive(Debug, Error)]
 pub enum CryptoError {
     #[error("initialization failed")]
@@ -670,11 +684,22 @@ pub struct DoubleRatchet {
     our_ratchet_keypair: EphemeralKeypair,
     /// Peer's current DH ratchet public key.
     their_ratchet_pub: [u8; 32],
-    /// Message keys for out-of-order messages.
-    /// Keys are cached when deriving through a gap and consumed when
-    /// the corresponding message arrives. Capped at MAX_SKIP entries
-    /// to limit memory usage.
-    skipped_keys: HashMap<u64, [u8; 32]>,
+    /// Message keys for out-of-order messages, keyed by
+    /// `(ratchet_epoch, message_number)`.
+    ///
+    /// The epoch exists because a DH ratchet resets the message counter to
+    /// zero, so the old and new chains index the *same* numbers. With a bare
+    /// `u64` key a superseded chain's in-flight message and a new chain's
+    /// message collide: whichever arrives first consumes the entry and the
+    /// other is undecryptable. Since a frame carries its ratchet public only
+    /// on the first message of a chain, a ratchet-less frame is ambiguous
+    /// between "current chain" and "still in flight from the previous one", so
+    /// the cache has to be able to hold both.
+    ///
+    /// Capped at [`MAX_SKIP`] entries to limit memory usage.
+    skipped_keys: HashMap<(u64, u64), [u8; 32]>,
+    /// Incremented on every accepted DH ratchet. Distinguishes chains.
+    ratchet_epoch: u64,
 }
 
 impl Drop for DoubleRatchet {
@@ -716,8 +741,9 @@ struct TentativeReceive {
     /// reset so `commit` can prune exactly the now-unreachable keys instead of
     /// dropping the whole cache.
     ratchet_reset: Option<u64>,
-    /// Skipped-message keys derived while filling the gap to this frame.
-    staged_skips: Vec<(u64, [u8; 32])>,
+    /// Skipped-message keys derived while filling the gap to this frame, as
+    /// `(ratchet_epoch, message_number, key)`.
+    staged_skips: Vec<(u64, u64, [u8; 32])>,
     plaintext: Vec<u8>,
 }
 
@@ -726,7 +752,7 @@ impl Drop for TentativeReceive {
         self.root_key.zeroize();
         self.recv_chain_key.zeroize();
         self.their_ratchet_pub.zeroize();
-        for (_, k) in self.staged_skips.iter_mut() {
+        for (_, _, k) in self.staged_skips.iter_mut() {
             k.zeroize();
         }
     }
@@ -740,23 +766,23 @@ impl TentativeReceive {
         dr.recv_chain_key = Some(take(&mut self.recv_chain_key));
         dr.their_ratchet_pub = take(&mut self.their_ratchet_pub);
         dr.recv_message_number = self.recv_message_number;
-        if let Some(superseded_upto) = self.ratchet_reset {
-            // The previous chain is superseded, but only up to the point we
-            // had reached on it. Keys at or below that point correspond to
-            // messages the sender has already moved past and will never
-            // resend, so they are genuinely unrecoverable. Keys *above* it are
-            // still in flight and remain decryptable via the skipped-key cache
-            // in `decrypt`.
-            //
-            // The previous implementation cleared the entire cache here, which
-            // silently and permanently dropped every message that crossed a DH
-            // ratchet in flight — roughly one in every 100 sends, since
-            // `ratchet_interval` is 100.
-            dr.skipped_keys.retain(|&num, _| num > superseded_upto);
+        if self.ratchet_reset.is_some() {
+            dr.ratchet_epoch = dr.ratchet_epoch.wrapping_add(1);
         }
+        // Note: there is deliberately no `retain` here any more.
+        //
+        // The old code tried to keep "in-flight" keys with
+        // `retain(|&num, _| num > superseded_upto)`, but every key in the
+        // cache is by construction `<= superseded_upto` — they were skipped
+        // while advancing *to* that counter — so the predicate was never true
+        // and the call was a full `clear()`. The real defect was upstream: the
+        // superseded chain's pending keys were never staged in the first
+        // place, so there was nothing for a `retain` to preserve. `receive_tentative`
+        // now stages them at the ratchet point, under the previous epoch, so
+        // they survive here and are still reachable after the counter resets.
         let staged = take(&mut self.staged_skips);
-        for (num, key) in staged {
-            dr.skipped_keys.insert(num, key);
+        for (epoch, num, key) in staged {
+            dr.skipped_keys.insert((epoch, num), key);
         }
         take(&mut self.plaintext)
     }
@@ -787,6 +813,7 @@ impl DoubleRatchet {
                 our_ratchet_keypair: dh_ratchet_keypair,
                 their_ratchet_pub: dh_remote_public,
                 skipped_keys: HashMap::with_capacity(64),
+                ratchet_epoch: 0,
             }
         } else {
             Self {
@@ -798,6 +825,7 @@ impl DoubleRatchet {
                 our_ratchet_keypair: dh_ratchet_keypair,
                 their_ratchet_pub: dh_remote_public,
                 skipped_keys: HashMap::with_capacity(64),
+                ratchet_epoch: 0,
             }
         }
     }
@@ -947,38 +975,57 @@ impl DoubleRatchet {
     ) -> Result<Vec<u8>, CryptoError> {
         // ── Check skipped message key cache for out-of-order messages ──
         //
-        // The lookup is unconditional for ratchet-less frames, which is what
-        // the Signal spec does. A frame with no ratchet header can only have
-        // come from the chain we are currently receiving on, and if we are
-        // missing that message key the only way to read it is the cache.
+        // A frame with no ratchet header can only have come from a chain we
+        // are still receiving on, and if we are missing that message key the
+        // only way to read it is the cache. That is either the *current* chain
+        // or a chain superseded by a ratchet whose messages are still in
+        // flight — the two are indistinguishable from the frame, since only
+        // the first message of a chain carries a ratchet public. So both
+        // epochs are tried.
         //
-        // Gating this on `message_number < recv_message_number` (as the
-        // previous implementation did) is unsound once a DH ratchet lands: the
-        // counter resets to zero, so a frame from the *superseded* chain that
-        // is still in flight has a number far above the counter, never consults
-        // the cache, and is instead run through gap-derivation against the
-        // wrong chain — where its key can never match. That silently and
-        // permanently dropped every message crossing a ratchet in flight.
+        // Gating this on `message_number < recv_message_number` (as an
+        // earlier implementation did) is unsound once a DH ratchet lands: the
+        // counter resets to zero, so a frame from the superseded chain has a
+        // number far above the counter, never consults the cache, and is run
+        // through gap-derivation against the wrong chain — where its key can
+        // never match.
         //
         // Ratcheted frames are excluded: a new ratchet key means a new chain,
         // whose keys are not in this cache.
         if ratchet_key.is_none() {
-            if let Some(&saved_key) = self.skipped_keys.get(&message_number) {
-                // Rebuild the same header-derived AAD the sender used. A
-                // skipped-key message always comes from the current chain, so
-                // the ratchet flag is 0 and no public key is present.
-                let full_aad = Self::dr_header_aad(aad, None, message_number);
+            // Rebuild the same header-derived AAD the sender used. A
+            // skipped-key message always comes from a chain we are receiving
+            // on, so the ratchet flag is 0 and no public key is present.
+            let full_aad = Self::dr_header_aad(aad, None, message_number);
+
+            // Candidate keys for this message number: the current epoch first,
+            // then any superseded epoch. A chain can only be in flight for one
+            // ratchet generation — the sender moves forward, never backward —
+            // so the stale set is small.
+            let mut candidates: Vec<(u64, [u8; 32])> = Vec::new();
+            if let Some(k) = self.skipped_keys.get(&(self.ratchet_epoch, message_number)) {
+                candidates.push((self.ratchet_epoch, *k));
+            }
+            candidates.extend(
+                self.skipped_keys
+                    .iter()
+                    .filter(|((epoch, num), _)| {
+                        *num == message_number && *epoch != self.ratchet_epoch
+                    })
+                    .map(|((epoch, _), k)| (*epoch, *k)),
+            );
+
+            for (epoch, saved_key) in candidates {
                 let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, &full_aad);
                 if result.is_ok() {
-                    self.skipped_keys.remove(&message_number);
-                } else {
-                    // Consume-on-success only: a corrupted or forged
-                    // retransmission must not burn the key the genuine frame
-                    // needs.
-                    let mut discard = saved_key;
-                    discard.zeroize();
+                    // Consume exactly the entry that worked, so a genuine
+                    // message from the other chain can still be read. A failed
+                    // attempt above deliberately leaves its key in place: a
+                    // corrupted or forged retransmission must not burn the key
+                    // the genuine frame needs.
+                    self.skipped_keys.remove(&(epoch, message_number));
+                    return result;
                 }
-                return result;
             }
             // Not cached. Fall through: the main path either derives the key
             // normally or reports the number as behind the receive counter.
@@ -1016,7 +1063,8 @@ impl DoubleRatchet {
         let mut tent_chain_opt = dr.recv_chain_key;
         let mut tent_their_pub = dr.their_ratchet_pub;
         let mut tent_recv_num = dr.recv_message_number;
-        let mut staged_skips: Vec<(u64, [u8; 32])> = Vec::new();
+        let mut tent_epoch = dr.ratchet_epoch;
+        let mut staged_skips: Vec<(u64, u64, [u8; 32])> = Vec::new();
 
         // Scrub all tentative secrets (helper for the error exits below).
         // Note: zeroizing an Option<[u8; 32]> clears the bytes when present.
@@ -1024,7 +1072,7 @@ impl DoubleRatchet {
             ($err:expr) => {{
                 tent_root.zeroize();
                 tent_chain_opt.zeroize();
-                for (_, k) in staged_skips.iter_mut() {
+                for (_, _, k) in staged_skips.iter_mut() {
                     k.zeroize();
                 }
                 return Err($err);
@@ -1048,13 +1096,51 @@ impl DoubleRatchet {
             shared_scrub.zeroize();
             tent_root.zeroize();
             tent_root = new_root;
+
+            // ── Stage the superseded chain's in-flight window ──
+            //
+            // The sender stops using the old chain at this point, but every
+            // message it encrypted there before ratcheting may still be on the
+            // wire. Those keys become unreachable the moment the counter
+            // resets — the new chain derives different keys for the very same
+            // numbers — so they have to be captured now, while the old chain
+            // key is in hand.
+            //
+            // Without this, every message that crossed a DH ratchet in flight
+            // was permanently lost: roughly one in every 100 sends, because
+            // `ratchet_interval` is 100.
+            //
+            // They are staged under the *previous* epoch so they cannot
+            // collide with the new chain's identically-numbered keys; see the
+            // `skipped_keys` doc comment.
+            if let Some(old_chain) = tent_chain_opt {
+                let mut chain = old_chain;
+                let mut n = tent_recv_num;
+                // Bounded window. A sender cannot get arbitrarily far ahead
+                // before ratcheting, and deriving the whole MAX_SKIP range
+                // here would be far more expensive than the loss it prevents —
+                // this runs on every ratchet, i.e. every `ratchet_interval`
+                // messages.
+                let window = RATCHET_INFLIGHT_WINDOW.min(MAX_SKIP);
+                for _ in 0..window {
+                    if dr.skipped_keys.len() + staged_skips.len() >= MAX_SKIP {
+                        break;
+                    }
+                    let (msg_key, next) = Self::derive_message_key(&chain);
+                    staged_skips.push((tent_epoch, n, msg_key.0));
+                    chain.zeroize();
+                    chain = next;
+                    n = n.saturating_add(1);
+                }
+                chain.zeroize();
+            }
+
             tent_chain_opt.zeroize();
             tent_chain_opt = Some(new_chain);
             tent_their_pub = *new_pub;
-            // Recorded so `commit` can prune the superseded chain's cached
-            // keys up to this point, keeping only the in-flight ones.
             ratchet_reset = Some(tent_recv_num);
             tent_recv_num = 0;
+            tent_epoch = tent_epoch.wrapping_add(1);
         }
 
         let mut tent_chain = match tent_chain_opt {
@@ -1087,7 +1173,7 @@ impl DoubleRatchet {
                 scrub_and!(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
             }
             let (msg_key, next_chain) = Self::derive_message_key(&tent_chain);
-            staged_skips.push((tent_recv_num, msg_key.0));
+            staged_skips.push((tent_epoch, tent_recv_num, msg_key.0));
             tent_chain.zeroize();
             tent_chain = next_chain;
             tent_recv_num += 1;
