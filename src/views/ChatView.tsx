@@ -210,8 +210,16 @@ export default function ChatView() {
       setTimerSecs(0);
       // Mark sent message with "sent" status
       setMsgStatus((prev) => ({ ...prev, [msg.id]: "sent" }));
-    } catch {
-      // Message failed to send
+    } catch (e) {
+      // Was an empty block. A rejected send — not connected, vault locked, Tor
+      // refusing the address, storage full — left the text sitting in the
+      // composer with no indication that anything went wrong, so the user
+      // cannot distinguish a delivered message from an undelivered one. Under
+      // a deadline that is a real data-integrity failure, and the obvious
+      // response (press Enter again) does not help.
+      //
+      // The composer is intentionally left intact so the message is not lost.
+      addToast("Failed to send: " + errorMessage(e), "error");
     } finally { setSending(false); }
   };
 
