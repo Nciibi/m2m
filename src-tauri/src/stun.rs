@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
 // ─── Defaults ───────────────────────────────────────────────────────────────
