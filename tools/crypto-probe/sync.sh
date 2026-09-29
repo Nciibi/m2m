@@ -10,7 +10,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$REPO/src-tauri/src"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-for m in crypto group protocol secure_key; do
+for m in crypto group protocol secure_key storage; do
   if [ -L "$HERE/src/$m.rs" ]; then
     echo "FATAL: $HERE/src/$m.rs is a symlink — refusing." >&2
     echo "A harness wrote through a symlink here before and truncated the live tree." >&2
@@ -18,7 +18,7 @@ for m in crypto group protocol secure_key; do
   fi
 done
 
-for m in crypto group protocol secure_key; do
+for m in crypto group protocol secure_key storage; do
   cp "$SRC/$m.rs" "$HERE/src/$m.rs"
 done
 cd "$HERE"

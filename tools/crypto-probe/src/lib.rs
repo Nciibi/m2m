@@ -11,8 +11,16 @@
 //! GTK-capable machine. It is the one place where a crypto change can be
 //! executed rather than merely compiled.
 //!
+//! `storage.rs` is included so the storage-cap accounting and eviction tests
+//! actually execute — that is the whole point of the cap, and untested eviction
+//! is a silent data-loss feature. It reaches outside itself for `ChatMessage`
+//! and two AEAD helpers, which `commands.rs` provides as documented stand-ins.
+//!
 //! Run: `./sync.sh && cargo test --offline --lib`
+pub mod commands;
 pub mod crypto;
+pub mod error;
 pub mod group;
 pub mod protocol;
 pub mod secure_key;
+pub mod storage;

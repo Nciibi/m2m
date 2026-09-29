@@ -24,5 +24,6 @@ thiserror = "2"
 tracing = "0.1"
 rand = "0.9"
 hex = "0.4"
+rusqlite = { version = "0.33", features = ["bundled"] }
 rmp-serde = "1"
 serde = { version = "1", features = ["derive"] }
