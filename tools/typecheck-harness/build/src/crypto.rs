@@ -2777,7 +2777,8 @@ mod crypto_tests {
             .decrypt(&sent[1].3, &[0u8; 5], &aad, sent[1].1, sent[1].0.as_ref())
             .is_err());
         assert!(
-            bob.skipped_keys.contains_key(&sent[1].1),
+            bob.skipped_keys
+                .contains_key(&(bob.ratchet_epoch, sent[1].1)),
             "a rejected (bad-nonce) attempt must not consume the cached key"
         );
 

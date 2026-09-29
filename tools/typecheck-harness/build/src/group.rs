@@ -10,7 +10,7 @@
 //! On member removal, all remaining members rotate their Sender Keys
 //! to prevent the removed member from decrypting future messages.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::crypto::{
     self, derive_receiver_chain, generate_sender_key_pair, generate_sender_signing_keypair,
@@ -84,6 +84,22 @@ pub struct Group {
     /// Verification keys for other members (peer_key_hex -> 32 bytes).
     /// Used to verify message signatures FROM those members.
     pub verification_keys: HashMap<String, [u8; 32]>,
+    /// Senders whose bundle we have already accepted (peer_key_hex).
+    ///
+    /// A sender-key bundle is a *repeatable* statement: it carries a chain key
+    /// and nothing that orders it against what we already hold. Rebuilding the
+    /// receiver chain from a bundle we have already acted on rewinds the chain
+    /// to position 0, and anyone holding the original chain key can then
+    /// encrypt a *different* message under a (key, nonce) pair we have already
+    /// consumed. Under XChaCha20-Poly1305 that leaks the XOR of the two
+    /// plaintexts and the Poly1305 one-time key, which recovers the message key
+    /// and allows forging further messages attributed to that sender.
+    ///
+    /// So a bundle is accepted at most once per sender, and only while the
+    /// chain derived from it has not yet been used. Deliberate re-keying (after
+    /// a member is removed) rotates our *own* chain; a replacement from a peer
+    /// is refused.
+    accepted_bundles: HashSet<String>,
     // ─── Metadata ───
     /// Timestamp of the last message (0 = none).
     pub last_message_at: u64,
@@ -153,6 +169,7 @@ impl Group {
             our_verification_key: Some(verification_key),
             receiver_chains: HashMap::new(),
             verification_keys: HashMap::new(),
+            accepted_bundles: HashSet::new(),
             last_message_at: 0,
             last_message_preview: None,
         }
@@ -534,6 +551,9 @@ impl GroupManager {
         // Remove their receiver chain and verification key
         group.receiver_chains.remove(removed_key_hex);
         group.verification_keys.remove(removed_key_hex);
+        // Cleared so a genuine re-join is not blocked forever by the
+        // one-shot acceptance guard in `handle_sender_key`.
+        group.accepted_bundles.remove(removed_key_hex);
 
         // Rotate OUR sender key (forward secrecy for removed member)
         let (new_initial_key, new_verification_key) = group.rotate_own_sender_key()?;
@@ -573,6 +593,9 @@ impl GroupManager {
         group.members.remove(pos);
         group.receiver_chains.remove(leaving_key_hex);
         group.verification_keys.remove(leaving_key_hex);
+        // Cleared so a genuine re-join is not blocked forever by the
+        // one-shot acceptance guard in `handle_sender_key`.
+        group.accepted_bundles.remove(leaving_key_hex);
 
         Ok(())
     }
@@ -620,11 +643,49 @@ impl GroupManager {
             .get_mut(&data.group_id)
             .ok_or("group not found")?;
 
+        // ── Membership ──
+        //
+        // A bundle arriving from a non-member is how a removed member gets
+        // re-admitted: the checks above only prove the transport peer owns the
+        // key they claim, not that they still belong to this group. Without
+        // this, an ejected member re-sends their original bundle, `is_new` is
+        // true, and the caller replies with our *current* group chain key.
+        if !group.is_member(&data.sender_peer_key_hex) {
+            return Err("rejected sender key bundle: sender is not a member of this group".into());
+        }
+
+        // ── One-shot acceptance ──
+        //
+        // See `accepted_bundles`. A bundle is a repeatable statement, so
+        // rebuilding the chain from one we have already acted on rewinds it to
+        // position 0 and invites (key, nonce) reuse against whoever still
+        // holds the original chain key — including a member we removed.
+        if group.accepted_bundles.contains(&data.sender_peer_key_hex) {
+            let chain_used = group
+                .receiver_chains
+                .get(&data.sender_peer_key_hex)
+                .is_some_and(|c| c.current_message_number() > 0);
+            if chain_used {
+                return Err(
+                    "rejected sender key bundle: this sender's chain is already in use, and \
+                     re-accepting it would rewind the chain and reuse a (key, nonce) pair"
+                        .into(),
+                );
+            }
+            // Accepted before but the chain has not been used yet — an
+            // idempotent re-announcement, which is what a late-joining peer
+            // legitimately resends. Fall through and refresh the key material.
+        }
+
+        // Membership is now required above, so "new" reduces to "we hold no
+        // verification key for them yet" — i.e. this is our first bundle from
+        // them, and the caller should reply with ours so they can read us.
         let is_new = !group
             .verification_keys
-            .contains_key(&data.sender_peer_key_hex)
-            && !group.is_member(&data.sender_peer_key_hex);
+            .contains_key(&data.sender_peer_key_hex);
 
+        group.accepted_bundles
+            .insert(data.sender_peer_key_hex.clone());
         group.store_receiver_key(
             &data.sender_peer_key_hex,
             &data.chain_key,

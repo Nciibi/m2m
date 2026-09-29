@@ -551,6 +551,9 @@ impl GroupManager {
         // Remove their receiver chain and verification key
         group.receiver_chains.remove(removed_key_hex);
         group.verification_keys.remove(removed_key_hex);
+        // Cleared so a genuine re-join is not blocked forever by the
+        // one-shot acceptance guard in `handle_sender_key`.
+        group.accepted_bundles.remove(removed_key_hex);
 
         // Rotate OUR sender key (forward secrecy for removed member)
         let (new_initial_key, new_verification_key) = group.rotate_own_sender_key()?;
@@ -590,6 +593,9 @@ impl GroupManager {
         group.members.remove(pos);
         group.receiver_chains.remove(leaving_key_hex);
         group.verification_keys.remove(leaving_key_hex);
+        // Cleared so a genuine re-join is not blocked forever by the
+        // one-shot acceptance guard in `handle_sender_key`.
+        group.accepted_bundles.remove(leaving_key_hex);
 
         Ok(())
     }
