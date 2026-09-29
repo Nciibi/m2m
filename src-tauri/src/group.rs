@@ -1396,9 +1396,19 @@ mod group_tests {
         let bob_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let bob_hex = hex::encode(bob_id.public_key_bytes());
 
+        // Bob is created as an initial member, so Alice's roster knows about
+        // him. `handle_sender_key` requires membership — a bundle from someone
+        // who is not on the roster is refused, because otherwise a removed
+        // member could re-announce and be re-admitted.
         let mut gm_alice = make_group_manager();
         gm_alice
-            .create_group("g".to_string(), "G".to_string(), 1, alice_hex.clone(), &[])
+            .create_group(
+                "g".to_string(),
+                "G".to_string(),
+                1,
+                alice_hex.clone(),
+                std::slice::from_ref(&bob_hex),
+            )
             .unwrap();
 
         // Bob joins with his own keys and announces a signed bundle.
