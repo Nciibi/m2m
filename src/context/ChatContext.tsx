@@ -591,7 +591,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // no unread indicator and the user never learns a message arrived.
         setConversations((prev) =>
           prev.map((c) =>
-            c.peer_key_hex === peerKeyHex ? { ...c, last_message: message.content, last_message_at: message.timestamp } : c,
+            c.peer_key_hex === peerKeyHex
+              ? { ...c, last_message_preview: message.content, last_message_at: message.timestamp }
+              : c,
           ),
         );
       }
