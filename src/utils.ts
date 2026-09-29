@@ -150,14 +150,24 @@ export const DEFAULT_STUN_SERVERS: readonly string[] = [
 /**
  * Extract a human-readable message from an unknown thrown value.
  *
- * Tauri command rejections arrive as a bare string (the `Err(String)` side of
- * `Result<T, String>`), while in-process throws are `Error` instances. A
- * `catch (e: any)` was used to read `e.message` off both — which is exactly
- * the unsound access this helper replaces, and it silently yielded `undefined`
- * for the string case.
+ * Tauri command rejections arrive as an `AppError` — `{ code, message }`, the
+ * serialised form of `src-tauri/src/error.rs`. They used to arrive as a bare
+ * string, the `Err(String)` side of `Result<T, String>`, and in-process throws
+ * are `Error` instances. All three are handled, so this keeps working across
+ * the transition and for any command that still rejects with a string.
+ *
+ * A `catch (e: any)` was used to read `e.message` off all of them — which is
+ * exactly the unsound access this helper replaces, and it silently yielded
+ * `undefined` for the string case.
  *
  * Returning a non-empty string means the caller can always render something,
  * rather than showing "undefined" to a user.
+ *
+ * This is the *display* path and deliberately does not validate. For the
+ * `{code, message}` shape where a caller wants to branch on the code, use
+ * `asAppError()` from `./events` — the `message` check here is intentionally
+ * loose so a slightly-off payload still shows the user something instead of
+ * falling back to a generic string.
  */
 export function errorMessage(e: unknown, fallback = "Unknown error"): string {
   // An empty string is a *possible* rejection value, so `typeof e === "string"`
@@ -166,6 +176,9 @@ export function errorMessage(e: unknown, fallback = "Unknown error"): string {
   if (typeof e === "string") return e || fallback;
   if (e instanceof Error) return e.message || fallback;
   if (e && typeof e === "object" && "message" in e) {
+    // `AppError` from the Rust side. Reading `.message` — not `String(e)`,
+    // which is `"[object Object]"` for every command failure since the error
+    // taxonomy landed.
     const m = (e as { message: unknown }).message;
     if (typeof m === "string" && m) return m;
   }
