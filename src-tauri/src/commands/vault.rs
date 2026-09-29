@@ -1289,6 +1289,15 @@ pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), AppError>
     *vu = false;
     drop(vu);
 
+    // Tell the frontend. Without this the Rust keys are zeroized while the
+    // webview is still on the chat view showing every decrypted message, the
+    // peer fingerprints and the conversation previews — and the "Lock Now"
+    // button reports success, so the user is told they are looking at an empty
+    // unlocked app when they are not. The frontend handler in `AppContext`
+    // clears state and routes to the unlock screen; it has existed and was
+    // correct, but nothing ever emitted this.
+    let _ = tauri::Emitter::emit(&app_handle, "m2m://vault-locked", serde_json::json!({}));
+
     tracing::info!("Vault locked — keys zeroized, stores closed");
     Ok(())
 }
