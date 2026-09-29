@@ -1514,6 +1514,7 @@ mod group_tests {
         assert_eq!(b1.chain_key, b2.chain_key);
         assert!(b1.signing_key.is_none() && b2.signing_key.is_none());
         assert_eq!(gm_bob.get_group("g").unwrap().members.len(), 2); // bob + alice
+    }
 
     /// A group with Alice as creator and Bob as a member, plus a correctly
     /// signed sender-key bundle from Bob, and Bob's manager so the test can
