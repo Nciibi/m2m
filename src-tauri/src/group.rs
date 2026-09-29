@@ -637,11 +637,47 @@ impl GroupManager {
             .get_mut(&data.group_id)
             .ok_or("group not found")?;
 
+        // ── Membership ──
+        //
+        // A bundle arriving from a non-member is how a removed member gets
+        // re-admitted: the checks above only prove the transport peer owns the
+        // key they claim, not that they still belong to this group. Without
+        // this, an ejected member re-sends their original bundle, `is_new` is
+        // true, and the caller replies with our *current* group chain key.
+        if !group.is_member(&data.sender_peer_key_hex) {
+            return Err("rejected sender key bundle: sender is not a member of this group".into());
+        }
+
+        // ── One-shot acceptance ──
+        //
+        // See `accepted_bundles`. A bundle is a repeatable statement, so
+        // rebuilding the chain from one we have already acted on rewinds it to
+        // position 0 and invites (key, nonce) reuse against whoever still
+        // holds the original chain key — including a member we removed.
+        if group.accepted_bundles.contains(&data.sender_peer_key_hex) {
+            let chain_used = group
+                .receiver_chains
+                .get(&data.sender_peer_key_hex)
+                .is_some_and(|c| c.current_message_number() > 0);
+            if chain_used {
+                return Err(
+                    "rejected sender key bundle: this sender's chain is already in use, and \
+                     re-accepting it would rewind the chain and reuse a (key, nonce) pair"
+                        .into(),
+                );
+            }
+            // Accepted before but the chain has not been used yet — an
+            // idempotent re-announcement, which is what a late-joining peer
+            // legitimately resends. Fall through and refresh the key material.
+        }
+
         let is_new = !group
             .verification_keys
             .contains_key(&data.sender_peer_key_hex)
             && !group.is_member(&data.sender_peer_key_hex);
 
+        group.accepted_bundles
+            .insert(data.sender_peer_key_hex.clone());
         group.store_receiver_key(
             &data.sender_peer_key_hex,
             &data.chain_key,
