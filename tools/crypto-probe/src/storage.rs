@@ -1439,7 +1439,7 @@ impl MessageStore {
     /// if some write path forgot to maintain the counter, which is the failure
     /// mode a cached total cannot catch.
     pub fn stored_bytes_verified(&self) -> Result<u64, StorageError> {
-        self.stored_bytes()
+        self.recompute_stored_bytes()
     }
 
     /// Add to the running byte counter (clamped at zero).
