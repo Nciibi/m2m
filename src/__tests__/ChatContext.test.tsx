@@ -471,7 +471,10 @@ describe("ChatContext — inbound 1:1 messages", () => {
     await openConversation();
     act(() => {
       eventHandlers.get("m2m://message")?.({
-        payload: directMessage({ peer_key_hex: "d".repeat(64), content: "WRONG PEER" }),
+        payload: {
+          ...directMessage({ content: "WRONG PEER" }),
+          peer_key_hex: "d".repeat(64),
+        },
       });
     });
     expect(screen.getByTestId("messages-count")).toHaveTextContent("0");
