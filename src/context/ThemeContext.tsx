@@ -1,6 +1,7 @@
 import type { ThemePreference } from "../types";
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { errorMessage } from "../utils";
 import { useApp } from "./AppContext";
 
 export type ThemeMode = "light" | "dark" | "system";

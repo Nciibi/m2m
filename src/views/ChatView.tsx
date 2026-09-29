@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { errorMessage } from "../utils";
 import { listen } from "@tauri-apps/api/event";
 import { asArray, asTransferCancelledEvent, asTransferCompletedEvent, asTransferProgressEvent } from "../events";
 import { Button, Badge, Modal, ToastContainer, ProgressBar } from "../components/ui";

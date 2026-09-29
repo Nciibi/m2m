@@ -3,6 +3,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "./AppContext";
+import { errorMessage } from "../utils";
 import { useT } from "../i18n/I18nContext";
 import type {
   CaptureCapability,
