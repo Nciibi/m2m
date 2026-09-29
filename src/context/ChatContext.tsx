@@ -289,9 +289,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast]);
 
-  const copyInvite = useCallback(() => {
-    navigator.clipboard.writeText(generatedInvite);
-  }, [generatedInvite]);
+  const copyInvite = useCallback(async () => {
+    // Was fire-and-forget: `writeText` rejects if the window is unfocused or
+    // permission is denied, and the caller unconditionally showed a green ✓
+    // afterwards — so a one-time invite that never reached the clipboard was
+    // reported as shared. In a Tauri webview this rejection is routine.
+    try {
+      await navigator.clipboard.writeText(generatedInvite);
+      setInviteCopied(true);
+    } catch (e) {
+      addToast("Could not copy to the clipboard: " + errorMessage(e, "clipboard unavailable"), "error");
+    }
+  }, [generatedInvite, addToast]);
 
   const handleConnect = useCallback(async () => {
     if (!inviteToConnect) return;
@@ -399,8 +408,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
         return { ...m, reactions };
       }));
-    } catch { /* noop */ }
-  }, [peerKeyHex]);
+    } catch (e) {
+      // The optimistic update above was the whole point, but it must be undone
+      // on failure — otherwise the user sees a reaction that the peer will
+      // never receive, and believes it was delivered.
+      addToast("Reaction failed: " + errorMessage(e), "error");
+      setMessages((prev) => prev.map((m) =>
+        m.id === messageId
+          ? { ...m, reactions: { ...m.reactions, [reaction]: (m.reactions[reaction] ?? []).filter((r) => r !== "self") } }
+          : m,
+      ));
+    }
+  }, [peerKeyHex, addToast]);
 
   const handleRemoveReaction = useCallback(async (messageId: string, reaction: string) => {
     if (!peerKeyHex) return;
