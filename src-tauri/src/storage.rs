@@ -1703,6 +1703,20 @@ impl MessageStore {
     /// second round of changes.
     pub fn delete_conversation(&self, conversation_id: &str) -> Result<(), StorageError> {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
+        // Measure the rows about to be freed so the storage-cap counter can be
+        // decremented exactly. Scoped to this conversation, so it stays cheap
+        // even on a large store.
+        let freed: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(content_encrypted)
+                                    + LENGTH(content_nonce)
+                                    + ?2), 0)
+                   FROM messages WHERE conversation_id = ?1",
+                params![conversation_id, Self::MSG_ROW_OVERHEAD],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
         self.conn.execute(
             "UPDATE messages SET content_key_wrapped = ?2 WHERE conversation_id = ?1 AND content_key_wrapped IS NOT NULL",
             params![conversation_id, vec![0u8; WRAPPED_CEK_LEN]],
@@ -1716,6 +1730,7 @@ impl MessageStore {
             "DELETE FROM conversations WHERE id = ?1",
             params![conversation_id],
         )?;
+        self.add_stored_bytes(-freed);
         self.wal_checkpoint_truncate()?;
         Ok(())
     }
