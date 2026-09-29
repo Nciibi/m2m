@@ -2616,7 +2616,7 @@ async fn handle_group_frame(
                             // thread, with the peer's connection mutex still held
                             // (`drop(conn)` comes after).
                             let initial = &create.initial_members;
-                            if initial.len() > MAX_GROUP_MEMBERS - 1 {
+                            if initial.len() > crate::group::MAX_GROUP_MEMBERS - 1 {
                                 tracing::warn!(
                                     peers = %peer_key_hex,
                                     members = initial.len(),
