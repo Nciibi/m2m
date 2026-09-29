@@ -84,6 +84,22 @@ pub struct Group {
     /// Verification keys for other members (peer_key_hex -> 32 bytes).
     /// Used to verify message signatures FROM those members.
     pub verification_keys: HashMap<String, [u8; 32]>,
+    /// Senders whose bundle we have already accepted (peer_key_hex).
+    ///
+    /// A sender-key bundle is a *repeatable* statement: it carries a chain key
+    /// and nothing that orders it against what we already hold. Rebuilding the
+    /// receiver chain from a bundle we have already acted on rewinds the chain
+    /// to position 0, and anyone holding the original chain key can then
+    /// encrypt a *different* message under a (key, nonce) pair we have already
+    /// consumed. Under XChaCha20-Poly1305 that leaks the XOR of the two
+    /// plaintexts and the Poly1305 one-time key, which recovers the message key
+    /// and allows forging further messages attributed to that sender.
+    ///
+    /// So a bundle is accepted at most once per sender, and only while the
+    /// chain derived from it has not yet been used. Deliberate re-keying (after
+    /// a member is removed) rotates our *own* chain; a replacement from a peer
+    /// is refused.
+    accepted_bundles: HashSet<String>,
     // ─── Metadata ───
     /// Timestamp of the last message (0 = none).
     pub last_message_at: u64,
