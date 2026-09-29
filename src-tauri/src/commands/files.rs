@@ -559,16 +559,21 @@ async fn finish_and_chain(
                     transfer_id,
                     "failed",
                     Some(now as i64),
-                    Some(e),
+                    Some(e.message.as_str()),
                     sk.as_ref(),
                 );
             }
 
+            // `error` stays a string: the frontend's `asTransferErrorEvent`
+            // guard rejects a non-string, and a rejected payload means the
+            // failure toast is silently dropped — the user sees the transfer
+            // vanish with no explanation. The code rides along separately.
             let _ = app_handle.emit(
                 "m2m://transfer-error",
                 serde_json::json!({
                     "transfer_id": transfer_id,
-                    "error": e,
+                    "error": e.message,
+                    "error_code": e.code,
                 }),
             );
         }
