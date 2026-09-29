@@ -1136,8 +1136,30 @@ impl MessageStore {
                 FOREIGN KEY (group_id) REFERENCES groups(group_id)
             );
             CREATE INDEX IF NOT EXISTS idx_group_messages_group
-                ON group_messages(group_id, timestamp);",
+                ON group_messages(group_id, timestamp);
+
+            -- Byte accounting for the storage cap.
+            --
+            -- A single row holding the running total of on-disk message bytes.
+            -- It exists because the alternative — SUM(LENGTH(...)) over the
+            -- whole table on every inbound message — is O(rows), and the
+            -- receive loop admits up to 30 messages/second, so a full scan per
+            -- message is not viable. The counter is re-derived from SQL
+            -- whenever usage approaches the cap (see `recompute_stored_bytes`),
+            -- so drift from an un-audited write path self-corrects exactly
+            -- where being wrong would matter.
+            CREATE TABLE IF NOT EXISTS storage_stats (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                total_bytes INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT OR IGNORE INTO storage_stats (id, total_bytes) VALUES (1, 0);
+
+            -- Oldest-first eviction walks this ordering.
+            CREATE INDEX IF NOT EXISTS idx_messages_oldest
+                ON messages(timestamp);",
         )?;
+        // Backfill the counter for a store that predates it. Cheap once, at open.
+        self.recompute_stored_bytes()?;
         Ok(())
     }
 
@@ -1204,6 +1226,13 @@ impl MessageStore {
                 "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
                 params![timestamp, conversation_id],
             )?;
+            // Maintain the storage-cap counter. `INSERT OR IGNORE` means a
+            // duplicate id is a no-op, so only add bytes when a row was
+            // actually created — otherwise a redelivered message would inflate
+            // the count forever.
+            if self.conn.changes() > 0 {
+                self.add_stored_bytes(Self::msg_row_bytes(ciphertext.len(), nonce.len()));
+            }
             Ok(())
         })();
         use zeroize::Zeroize;
@@ -1302,6 +1331,91 @@ impl MessageStore {
             |row| row.get(0),
         );
         Ok(result.unwrap_or(0))
+    }
+
+    // ─── Storage-cap byte accounting ────────────────────────────────────────
+    //
+    // The cap exists because the receive loop's limits are *rate* limits: 30
+    // frames/s and 16 MiB/s bound how fast a peer can write, not how much in
+    // total. A peer that simply keeps going fills the disk unattended, and
+    // `retention_policy = 'none'` is the default, so nothing ever reclaims it.
+    //
+    // Per-row size is exact rather than estimated. Every message is sealed as
+    // `content_encrypted || content_nonce || content_key_wrapped`, and the
+    // wrapped key is a fixed 72 bytes (`WRAPPED_CEK_LEN = 24 + 32 + 16`).
+    //
+    // Group messages are counted too. `group_messages` is a separate table
+    // with its own delete paths, so leaving it out would make the cap
+    // trivially bypassable: an attacker fills it while the 1:1 store sits at
+    // zero.
+
+    /// Bytes occupied by one 1:1 message row.
+    const MSG_ROW_OVERHEAD: i64 = WRAPPED_CEK_LEN as i64;
+
+    /// Re-derive the byte total from the tables and overwrite the counter.
+    ///
+    /// Called at open (to backfill a store that predates the counter) and
+    /// whenever usage approaches the cap, so that drift accumulated by a write
+    /// path nobody remembered to update cannot cause the cap to be overshot.
+    pub fn recompute_stored_bytes(&self) -> Result<u64, StorageError> {
+        let total: i64 = self.conn.query_row(
+            "SELECT COALESCE((SELECT SUM(LENGTH(content_encrypted)
+                                    + LENGTH(content_nonce)
+                                    + ?1)
+                             FROM messages), 0)
+                  + COALESCE((SELECT SUM(LENGTH(content_encrypted)
+                                           + LENGTH(content_nonce)
+                                           + ?1)
+                              FROM group_messages), 0)",
+            params![Self::MSG_ROW_OVERHEAD],
+            |row| row.get(0),
+        )?;
+        let total = total.max(0) as u64;
+        self.conn.execute(
+            "INSERT INTO storage_stats (id, total_bytes) VALUES (1, ?1)
+             ON CONFLICT(id) DO UPDATE SET total_bytes = ?1",
+            params![total as i64],
+        )?;
+        Ok(total)
+    }
+
+    /// Current stored message bytes, from the running counter.
+    ///
+    /// O(1). The counter is authoritative between recomputes; callers that are
+    /// about to enforce a limit should use [`Self::stored_bytes_verified`], which
+    /// re-derives from SQL first so a stale low count cannot overshoot the cap.
+    pub fn stored_bytes(&self) -> Result<u64, StorageError> {
+        let total: i64 = self
+            .conn
+            .query_row("SELECT total_bytes FROM storage_stats WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0);
+        Ok(total.max(0) as u64)
+    }
+
+    /// Current stored bytes, re-derived from SQL so the number is exact.
+    ///
+    /// Used on the enforcement path. The scan is the point: it is correct even
+    /// if some write path forgot to maintain the counter, which is the failure
+    /// mode a cached total cannot catch.
+    pub fn stored_bytes_verified(&self) -> Result<u64, StorageError> {
+        self.recompute_stored_bytes()
+    }
+
+    /// Add to the running byte counter (clamped at zero).
+    fn add_stored_bytes(&self, delta: i64) {
+        let _ = self.conn.execute(
+            "UPDATE storage_stats
+                SET total_bytes = MAX(0, total_bytes + ?1)
+              WHERE id = 1",
+            params![delta],
+        );
+    }
+
+    /// Size in bytes of a single message body as stored.
+    fn msg_row_bytes(content_encrypted_len: usize, content_nonce_len: usize) -> i64 {
+        content_encrypted_len as i64 + content_nonce_len as i64 + Self::MSG_ROW_OVERHEAD
     }
 
     /// Create or get a conversation.

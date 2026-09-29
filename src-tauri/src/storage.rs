@@ -1226,6 +1226,13 @@ impl MessageStore {
                 "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
                 params![timestamp, conversation_id],
             )?;
+            // Maintain the storage-cap counter. `INSERT OR IGNORE` means a
+            // duplicate id is a no-op, so only add bytes when a row was
+            // actually created — otherwise a redelivered message would inflate
+            // the count forever.
+            if self.conn.changes() > 0 {
+                self.add_stored_bytes(Self::msg_row_bytes(ciphertext.len(), nonce.len()));
+            }
             Ok(())
         })();
         use zeroize::Zeroize;
