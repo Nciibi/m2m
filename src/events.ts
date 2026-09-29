@@ -165,6 +165,72 @@ export function asChatMessage(v: unknown): ChatMessage | null {
   } as ChatMessage;
 }
 
+// ─── AppError ────────────────────────────────────────────────────────────────
+
+/**
+ * A command failure crossing the IPC boundary.
+ *
+ * Every `#[tauri::command]` returns `Result<T, AppError>` on the Rust side
+ * (`src-tauri/src/error.rs`), and `AppError` serialises to
+ * `{ code, message }`. Before that, commands returned `Result<T, String>`, and
+ * the frontend could only ever show prose.
+ *
+ * ## Why the type is not a closed union
+ *
+ * The backend defines ~91 codes and adds more as subsystems grow, and it can
+ * add one without changing the app version. A closed union would therefore be
+ * a lie that breaks at runtime, silently rejecting new codes.
+ *
+ * `AppErrorCode` names the codes this app actually *branches* on — those get
+ * autocomplete and exhaustiveness — and the `(string & {})` arm keeps every
+ * other code assignable. Widening a closed union is then a compile error at
+ * each `switch`, which is the point.
+ */
+export type AppErrorCode =
+  // Actionable: the UI offers to unlock the vault, then retry.
+  | "vault_locked"
+  // Actionable: the family member's saved address is stale; offer a fresh invite.
+  | "family.unreachable"
+  // The passphrase did not meet the strength policy.
+  | "weak_passphrase"
+  // Well-formed but refused by policy — e.g. Tor refusing a non-routable address.
+  | "blocked"
+  // Not a failure to retry, but not a bad request either.
+  | "not_connected"
+  // Any other code the backend may add without changing the app version.
+  | (string & {});
+
+export interface AppErrorShape {
+  code: AppErrorCode;
+  message: string;
+}
+
+/** An error code: bounded, printable, and free of control characters. */
+function isErrorCode(v: unknown): v is string {
+  return isString(v) && v.length > 0 && v.length <= 128 && /^[\x20-\x7e]+$/.test(v);
+}
+
+/**
+ * Validate an `AppError` from `invoke()`.
+ *
+ * Same threat model as the event guards: this value is rendered to the user and
+ * is the thing callers switch on, so it gets the same treatment. `code` is
+ * additionally required to look like an identifier — if a peer or a corrupted
+ * frame can put arbitrary text in the position a caller switches on, that
+ * switch is no longer trustworthy.
+ *
+ * Returns `null` for anything malformed. Callers that only want to display the
+ * failure should use `errorMessage()` from `./utils`, which does not require
+ * the shape to be valid.
+ */
+export function asAppError(v: unknown): AppErrorShape | null {
+  if (typeof v !== "object" || v === null) return null;
+  const p = v as Record<string, unknown>;
+  if (!isErrorCode(p.code)) return null;
+  if (!isDisplayText(p.message)) return null;
+  return { code: p.code, message: p.message };
+}
+
 // ─── Events ─────────────────────────────────────────────────────────────────
 
 /** `m2m://message` — an inbound chat message. */
