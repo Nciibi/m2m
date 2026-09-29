@@ -18,16 +18,37 @@ export default function SetupView() {
   const [step, setStep] = useState(0);
   const [isFirstRun, setIsFirstRun] = useState(false);
   const [slideDir, setSlideDir] = useState<"right" | "left">("right");
+  // Distinguishes "the backend says this is not a first run" from "we could not
+  // ask". Both leave `isFirstRun` false, so without this a rejected
+  // `is_first_run` — vault locked, DB error, IPC unavailable — dropped the user
+  // into an endless "Initializing Secure Enclave" spinner with no error, no
+  // retry and no way out. The same pattern as `GroupChatView`'s `loadFailed`.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadFailed(false);
+    setLoading(true);
     invoke<boolean>("is_first_run")
       .then((first) => {
+        if (cancelled) return;
         setIsFirstRun(first);
         if (!first) setStep(3);
       })
-      .catch(() => {})
-      .finally(() => setTimeout(() => setLoading(false), 2200));
-  }, []);
+      .catch((e) => {
+        if (cancelled) return;
+        console.error("is_first_run failed", e);
+        setLoadFailed(true);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        // A minimum display time for the splash, not a fixed one: the old code
+        // waited exactly 2200 ms whether or not the command had answered.
+        setTimeout(() => { if (!cancelled) setLoading(false); }, 2200);
+      });
+    return () => { cancelled = true; };
+  }, [retry]);
 
   const goNext = () => { setSlideDir("right"); if (step < STEPS.length - 1) setStep(s => s + 1); };
   const goBack = () => { setSlideDir("left"); if (step > 0) setStep(s => s - 1); };
@@ -62,8 +83,21 @@ export default function SetupView() {
             <LockIcon size={36} color="white" />
             <div className="sonar-ring sonar-ring--1" />
           </div>
-          <h2 className="setup-title">Initializing Secure Enclave</h2>
-          <div className="loading-dots" role="status"><span /><span /><span /></div>
+          <h2 className="setup-title">
+            {loadFailed ? "Could not check this device" : "Initializing Secure Enclave"}
+          </h2>
+          {loadFailed ? (
+            <>
+              <p className="setup-desc">
+                M2M could not read the vault state. Nothing has been changed or
+                deleted. This usually means the vault is locked or its database
+                is unreadable.
+              </p>
+              <Button onClick={() => setRetry((n) => n + 1)}>Retry</Button>
+            </>
+          ) : (
+            <div className="loading-dots" role="status"><span /><span /><span /></div>
+          )}
         </div>
         <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
