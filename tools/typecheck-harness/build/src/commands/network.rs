@@ -1285,6 +1285,33 @@ pub(crate) async fn send_own_bundle(
         .map_err(|e| AppError::invalid(format!("send sender key failed: {e}")))
 }
 
+
+/// Tell the frontend that the storage cap permanently evicted history.
+///
+/// Silent history loss is the failure mode this codebase keeps shipping —
+/// a control that changes state and reports nothing. The user is told how many
+/// messages went, and which conversations had a retention preference
+/// overridden, so the loss is attributable rather than mysterious.
+///
+/// `AppError` is deliberately NOT used for the per-conversation ids: they are
+/// peer key hexes, and they travel as a plain string array validated by
+/// `asStorageEvicted` on the way in.
+fn emit_storage_evicted(
+    app_handle: &AppHandle,
+    report: &crate::storage::EvictionReport,
+) {
+    let _ = tauri::Emitter::emit(
+        app_handle,
+        "m2m://storage-evicted",
+        serde_json::json!({
+            "messages_evicted": report.messages_evicted,
+            "group_messages_evicted": report.group_messages_evicted,
+            "bytes_freed": report.bytes_freed,
+            "overrode_retention": report.overrode_retention,
+        }),
+    );
+}
+
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 #[allow(clippy::single_match)] // uniform handler signature across packet domains
 async fn handle_incoming_text(
@@ -1353,12 +1380,51 @@ async fn handle_incoming_text(
 
                         // Persist received message
                         // Ephemeral mode: nothing touches SQLite.
-                        let history = *state.history_enabled.read().await
-                            && !state.security_config.read().await.ephemeral_mode;
+                        //
+                        // The security config is read once, here, and released
+                        // before any store lock is taken. Reading it again inside
+                        // the `message_store` scope would nest `security_config`
+                        // under `message_store` — a pair with no documented
+                        // acquisition order, which is how the two deadlocks in
+                        // this codebase were shaped.
+                        let ephemeral_mode =
+                            state.security_config.read().await.ephemeral_mode;
+                        let storage_cap =
+                            state.security_config.read().await.effective_storage_cap();
+                        let history = *state.history_enabled.read().await && !ephemeral_mode;
                         if history {
                             let sk = state.storage_key.read().await;
                             let ms = state.message_store.lock().await;
                             if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                // Enforce the storage cap before writing, so a
+                                // peer already over the ceiling cannot push the
+                                // store further past it.
+                                //
+                                // `stored_bytes()` is an O(1) counter read; the
+                                // expensive part of `evict_to_cap` only runs once
+                                // the ceiling is genuinely crossed.
+                                let over_cap = store
+                                    .stored_bytes()
+                                    .map(|used| used > storage_cap)
+                                    .unwrap_or(false);
+                                if over_cap {
+                                    match store.evict_to_cap(storage_cap) {
+                                        Ok(report) => {
+                                            if report.messages_evicted > 0
+                                                || report.group_messages_evicted > 0
+                                            {
+                                                emit_storage_evicted(
+                                                    app_handle, &report,
+                                                );
+                                            }
+                                        }
+                                        Err(e) => tracing::warn!(
+                                            error = %e,
+                                            "storage-cap eviction failed"
+                                        ),
+                                    }
+                                }
+
                                 if let Some(peer_bytes) =
                                     util::decode_peer_key_logged(&peer_key_hex)
                                 {

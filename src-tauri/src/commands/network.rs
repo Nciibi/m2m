@@ -1294,6 +1294,33 @@ pub(crate) async fn send_own_bundle(
         .map_err(|e| AppError::invalid(format!("send sender key failed: {e}")))
 }
 
+
+/// Tell the frontend that the storage cap permanently evicted history.
+///
+/// Silent history loss is the failure mode this codebase keeps shipping —
+/// a control that changes state and reports nothing. The user is told how many
+/// messages went, and which conversations had a retention preference
+/// overridden, so the loss is attributable rather than mysterious.
+///
+/// `AppError` is deliberately NOT used for the per-conversation ids: they are
+/// peer key hexes, and they travel as a plain string array validated by
+/// `asStorageEvicted` on the way in.
+fn emit_storage_evicted(
+    app_handle: &AppHandle,
+    report: &crate::storage::EvictionReport,
+) {
+    let _ = tauri::Emitter::emit(
+        app_handle,
+        "m2m://storage-evicted",
+        serde_json::json!({
+            "messages_evicted": report.messages_evicted,
+            "group_messages_evicted": report.group_messages_evicted,
+            "bytes_freed": report.bytes_freed,
+            "overrode_retention": report.overrode_retention,
+        }),
+    );
+}
+
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 #[allow(clippy::single_match)] // uniform handler signature across packet domains
 async fn handle_incoming_text(
