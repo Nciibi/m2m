@@ -758,6 +758,27 @@ impl KeyStore {
 
 /// The message store: holds chat history (optional).
 /// Message contents are encrypted at the application level before storage.
+/// Outcome of a storage-cap eviction pass, for reporting to the user.
+///
+/// Modelled at module scope rather than inside `impl MessageStore` because Rust
+/// does not allow struct definitions in an `impl` block.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EvictionReport {
+    /// How many 1:1 messages were permanently destroyed.
+    pub messages_evicted: u32,
+    /// How many group messages were permanently destroyed.
+    pub group_messages_evicted: u32,
+    /// Conversations whose retention policy the cap overrode.
+    ///
+    /// A user who set "delete after 7 days" and then loses messages to a
+    /// full disk has had a preference silently overridden. Naming the
+    /// conversation is the difference between a policy the app states and one
+    /// the user has to infer.
+    pub overrode_retention: Vec<String>,
+    /// Bytes actually released.
+    pub bytes_freed: u64,
+}
+
 pub struct MessageStore {
     conn: Connection,
 }
@@ -1420,24 +1441,6 @@ impl MessageStore {
     /// Size in bytes of a single message body as stored.
     fn msg_row_bytes(content_encrypted_len: usize, content_nonce_len: usize) -> i64 {
         content_encrypted_len as i64 + content_nonce_len as i64 + Self::MSG_ROW_OVERHEAD
-    }
-
-    /// Outcome of an eviction pass, for reporting to the user.
-    #[derive(Debug, Clone, Default, PartialEq, Eq)]
-    pub struct EvictionReport {
-        /// How many 1:1 messages were permanently destroyed.
-        pub messages_evicted: u32,
-        /// How many group messages were permanently destroyed.
-        pub group_messages_evicted: u32,
-        /// Conversations whose retention policy was overridden by eviction.
-        ///
-        /// A user who set "delete after 7 days" and then loses messages to the
-        /// cap has had a preference silently overridden. Naming the
-        /// conversation is the difference between a policy the app states and
-        /// one the user has to infer.
-        pub overrode_retention: Vec<String>,
-        /// Bytes actually released.
-        pub bytes_freed: u64,
     }
 
     /// Permanently evict the oldest stored messages until usage is at or below
