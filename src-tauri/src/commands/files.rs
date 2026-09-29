@@ -891,12 +891,12 @@ fn compute_file_hashes(
     file_path: &str,
     total_chunks: u32,
     chunk_size: usize,
-) -> Result<([u8; 32], Vec<[u8; 32]>), String> {
+) -> Result<([u8; 32], Vec<[u8; 32]>), AppError> {
     use sha2::Digest;
     use std::io::Read;
 
-    let mut file =
-        std::fs::File::open(file_path).map_err(|e| AppError::invalid(format!("failed to open file: {e}")))?;
+    let mut file = std::fs::File::open(file_path)
+        .map_err(|e| AppError::new("io", format!("failed to open file: {e}")))?;
 
     let mut full_hasher = sha2::Sha256::new();
     let mut chunk_hashes = Vec::with_capacity(total_chunks as usize);
