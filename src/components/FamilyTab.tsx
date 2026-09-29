@@ -6,6 +6,7 @@ import { PlusIcon, AlertTriangleIcon } from "./ui/Icons";
 import { useApp } from "../context/AppContext";
 import type { FamilyMember } from "../types";
 import { errorMessage, hashToColor } from "../utils";
+import { asAppError } from "../events";
 
 interface FamilyTabProps {
   family: FamilyMember[];
@@ -113,8 +114,16 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
                     try {
                       await onConnect(m.public_key_hex);
                     } catch (e) {
-                      if (e?.toString().includes("CANNOT_REACH")) {
+                      // Branch on the code. This used to substring-match
+                      // `String(e).includes("CANNOT_REACH")`, which cannot match
+                      // any more: the rejection is now `{code, message}`, so
+                      // `String(e)` is `"[object Object]"`. It also swallowed
+                      // every *other* failure silently — connecting to a family
+                      // member who was simply offline showed the user nothing.
+                      if (asAppError(e)?.code === "family.unreachable") {
                         setShowUpdate(m.public_key_hex);
+                      } else {
+                        addToast(errorMessage(e), "error");
                       }
                     }
                   }}>Msg</Button>
