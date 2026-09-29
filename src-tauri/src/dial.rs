@@ -553,4 +553,65 @@ mod dial_tests {
              use crate::dial::dial() instead: {offenders:?}"
         );
     }
+
+    fn wc(address: &str, candidate_type: u8, relay_id: Option<&str>) -> crate::protocol::WireCandidate {
+        crate::protocol::WireCandidate {
+            address: address.to_string(),
+            candidate_type,
+            relay_id: relay_id.map(str::to_string),
+        }
+    }
+
+    /// The handshake frame carrying these candidates is *plaintext* — it
+    /// precedes session establishment, so there is no key to encrypt it with.
+    /// Advertising a directly-routable address under Tor therefore hands the
+    /// peer, the Tor exit and every AS on the path a way to bypass the proxy
+    /// on a later attempt.
+    #[test]
+    fn advertised_candidates_withhold_direct_addresses_under_tor() {
+        crate::tor::set_enabled(true);
+
+        let lan = wc("192.168.1.57:52341", 0, None);
+        let ipv6 = wc("[2001:db8::1]:52341", 5, None);
+        let srflx = wc("203.0.113.9:40000", 1, None);
+        let relay = wc("relay.invalid:0", 3, Some("abc123"));
+
+        let kept = filter_advertised_candidates(vec![lan.clone(), ipv6, srflx, relay.clone()]);
+
+        assert_eq!(
+            kept.len(),
+            1,
+            "only the relay candidate may survive under Tor, got {kept:?}"
+        );
+        assert_eq!(kept[0].relay_id.as_deref(), Some("abc123"));
+
+        crate::tor::set_enabled(false);
+    }
+
+    /// With Tor off this must be the identity function, or direct P2P and LAN
+    /// connectivity break for every user who has not enabled Tor.
+    #[test]
+    fn advertised_candidates_are_unchanged_without_tor() {
+        crate::tor::set_enabled(false);
+        let all = vec![
+            wc("192.168.1.57:52341", 0, None),
+            wc("203.0.113.9:40000", 1, None),
+            wc("relay.invalid:0", 3, Some("abc123")),
+        ];
+        let kept = filter_advertised_candidates(all.clone());
+        assert_eq!(kept.len(), all.len());
+        for (a, b) in all.iter().zip(kept.iter()) {
+            assert_eq!(a.address, b.address);
+        }
+    }
+
+    /// An all-direct set under Tor must yield an empty list rather than
+    /// panicking or silently keeping something.
+    #[test]
+    fn advertised_candidates_can_be_empty_under_tor() {
+        crate::tor::set_enabled(true);
+        let kept = filter_advertised_candidates(vec![wc("198.51.100.4:1", 0, None)]);
+        assert!(kept.is_empty());
+        crate::tor::set_enabled(false);
+    }
 }
