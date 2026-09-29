@@ -2294,6 +2294,16 @@ impl MessageStore {
                 delivered as i32,
             ],
         )?;
+        // Counted toward the storage cap for the same reason 1:1 messages are:
+        // `group_messages` has its own delete paths, so leaving it out of the
+        // accounting would let the cap be bypassed entirely by an attacker who
+        // only sends group traffic.
+        if self.conn.changes() > 0 {
+            self.add_stored_bytes(Self::msg_row_bytes(
+                content_encrypted.len(),
+                content_nonce.len(),
+            ));
+        }
         Ok(())
     }
 
