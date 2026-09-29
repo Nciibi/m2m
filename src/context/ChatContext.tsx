@@ -320,12 +320,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setActiveConversationId(conv.peer_key_hex);
     setRetentionPolicy(conv.retention_policy || "none");
     setView("chat");
+    // The backend is the only thing that knows whether this peer was ever
+    // fingerprint-verified, and it is not persisted in the conversation list —
+    // so ask it. This used to hard-code `peer_verified: true`, which put a
+    // green "Verified" badge on every conversation opened from the Hub (the
+    // most common way in), and, because the fingerprint modal hides its
+    // "Confirm Match & Verify" button once `peer_verified` is set, removed the
+    // user's only way to actually verify. Opening a conversation is not a
+    // verification event.
     setConnection({
       state: conv.is_online ? "established" : "disconnected",
       peer_fingerprint: null,
-      peer_verified: true,
+      peer_verified: false,
       peer_key_hex: conv.peer_key_hex,
     });
+    try {
+      const live = await invoke<ConnectionInfo>("get_connection_state", {
+        peerKeyHex: conv.peer_key_hex,
+      });
+      if (live) {
+        setConnection({
+          state: live.state ?? "disconnected",
+          peer_fingerprint: live.peer_fingerprint ?? null,
+          peer_verified: live.peer_verified === true,
+          peer_key_hex: conv.peer_key_hex,
+        });
+      }
+    } catch {
+      // No live session, or the command failed. The disconnected/unverified
+      // state set above is the honest fallback: a peer with no session has not
+      // been verified in this session.
+    }
     try {
       setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: conv.peer_key_hex })));
     } catch { /* noop */ }
