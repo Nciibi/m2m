@@ -1,5 +1,5 @@
 import { errorMessage } from "../utils";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { asArray, asGroupEvent, asGroupMessageEvent } from "../events";
@@ -27,6 +27,10 @@ export default function GroupChatView() {
   // when the store is in fact locked or unreadable — which reads as data loss
   // rather than as an error, and there is no way to tell the two apart.
   const [loadFailed, setLoadFailed] = useState(false);
+  // Mirrors `activeGroup` for the `m2m://group-message` listener, which is
+  // registered once and therefore cannot close over the state value.
+  const activeGroupRef = useRef<GroupDetail | null>(null);
+  useEffect(() => { activeGroupRef.current = activeGroup; }, [activeGroup]);
 
   const loadGroups = useCallback(async () => {
     try {
