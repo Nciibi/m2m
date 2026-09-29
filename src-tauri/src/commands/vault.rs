@@ -732,14 +732,15 @@ pub async fn connect_family_member(
                 all.extend(ipv6_candidates);
                 all.extend(reflexive_candidates);
                 all.sort_by_key(|c| std::cmp::Reverse(c.priority));
-                let our_candidates: Vec<crate::protocol::WireCandidate> = all
-                    .iter()
-                    .map(|c| crate::protocol::WireCandidate {
-                        address: c.address.clone(),
-                        candidate_type: c.candidate_type as u8,
-                        relay_id: None,
-                    })
-                    .collect();
+                let our_candidates = crate::dial::filter_advertised_candidates(
+                    all.iter()
+                        .map(|c| crate::protocol::WireCandidate {
+                            address: c.address.clone(),
+                            candidate_type: c.candidate_type as u8,
+                            relay_id: None,
+                        })
+                        .collect(),
+                );
 
                 let x25519 = state.x25519_identity.read().await;
                 let x25519_pub = x25519
