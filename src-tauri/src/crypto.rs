@@ -975,38 +975,52 @@ impl DoubleRatchet {
     ) -> Result<Vec<u8>, CryptoError> {
         // ── Check skipped message key cache for out-of-order messages ──
         //
-        // The lookup is unconditional for ratchet-less frames, which is what
-        // the Signal spec does. A frame with no ratchet header can only have
-        // come from the chain we are currently receiving on, and if we are
-        // missing that message key the only way to read it is the cache.
+        // A frame with no ratchet header can only have come from a chain we
+        // are still receiving on, and if we are missing that message key the
+        // only way to read it is the cache. That is either the *current* chain
+        // or a chain superseded by a ratchet whose messages are still in
+        // flight — the two are indistinguishable from the frame, since only
+        // the first message of a chain carries a ratchet public. So both
+        // epochs are tried.
         //
-        // Gating this on `message_number < recv_message_number` (as the
-        // previous implementation did) is unsound once a DH ratchet lands: the
-        // counter resets to zero, so a frame from the *superseded* chain that
-        // is still in flight has a number far above the counter, never consults
-        // the cache, and is instead run through gap-derivation against the
-        // wrong chain — where its key can never match. That silently and
-        // permanently dropped every message crossing a ratchet in flight.
+        // Gating this on `message_number < recv_message_number` (as an
+        // earlier implementation did) is unsound once a DH ratchet lands: the
+        // counter resets to zero, so a frame from the superseded chain has a
+        // number far above the counter, never consults the cache, and is run
+        // through gap-derivation against the wrong chain — where its key can
+        // never match.
         //
         // Ratcheted frames are excluded: a new ratchet key means a new chain,
         // whose keys are not in this cache.
         if ratchet_key.is_none() {
-            if let Some(&saved_key) = self.skipped_keys.get(&message_number) {
-                // Rebuild the same header-derived AAD the sender used. A
-                // skipped-key message always comes from the current chain, so
-                // the ratchet flag is 0 and no public key is present.
-                let full_aad = Self::dr_header_aad(aad, None, message_number);
-                let result = Self::decrypt_with_key(&saved_key, ciphertext, nonce, &full_aad);
+            // Rebuild the same header-derived AAD the sender used. A
+            // skipped-key message always comes from a chain we are receiving
+            // on, so the ratchet flag is 0 and no public key is present.
+            let full_aad = Self::dr_header_aad(aad, None, message_number);
+
+            let current = self.skipped_keys.get(&(self.ratchet_epoch, message_number));
+            // Superseded epochs. A chain can only be in flight for one ratchet
+            // generation — the sender moves forward, never backward — so this
+            // is at most a handful of candidates.
+            let stale: Vec<[u8; 32]> = self
+                .skipped_keys
+                .iter()
+                .filter(|((epoch, num), _)| *num == message_number && *epoch != self.ratchet_epoch)
+                .map(|(_, k)| *k)
+                .collect();
+
+            for saved_key in current.into_iter().chain(stale.iter()) {
+                let result = Self::decrypt_with_key(saved_key, ciphertext, nonce, &full_aad);
                 if result.is_ok() {
-                    self.skipped_keys.remove(&message_number);
-                } else {
-                    // Consume-on-success only: a corrupted or forged
-                    // retransmission must not burn the key the genuine frame
-                    // needs.
-                    let mut discard = saved_key;
-                    discard.zeroize();
+                    self.skipped_keys
+                        .retain(|(epoch, num), _| !(*epoch == self.ratchet_epoch || *epoch != self.ratchet_epoch) || *num != message_number || {
+                            // Remove only the entry that actually worked.
+                            std::ptr::eq(*self.skipped_keys.get(&(*epoch, *num)).unwrap(), &*saved_key)
+                        });
+                    return result;
                 }
-                return result;
+                // Consume-on-success only: a corrupted or forged
+                // retransmission must not burn the key the genuine frame needs.
             }
             // Not cached. Fall through: the main path either derives the key
             // normally or reports the number as behind the receive counter.
