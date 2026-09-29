@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { estimateEntropy, hashToColor, formatTime, DEFAULT_STUN_SERVERS } from "../utils";
+import {
+  estimateEntropy,
+  errorMessage,
+  hashToColor,
+  formatTime,
+  DEFAULT_STUN_SERVERS,
+} from "../utils";
 
 describe("estimateEntropy", () => {
   it("returns 0 for empty input", () => {
@@ -100,5 +106,53 @@ describe("DEFAULT_STUN_SERVERS", () => {
     for (const s of DEFAULT_STUN_SERVERS) {
       expect(s).toMatch(/^[\w.-]+:\d+$/);
     }
+  });
+});
+
+/**
+ * `errorMessage` is the display path for every command rejection.
+ *
+ * These cases are load-bearing rather than incidental: commands stopped
+ * rejecting with a bare string when the `AppError` type landed, so
+ * `"Failed to send: " + e` renders `"Failed to send: [object Object]"` — a
+ * silent, universal regression across 45 call sites that `tsc` cannot see,
+ * because `invoke<T>` does not type its rejection value.
+ */
+describe("errorMessage", () => {
+  it("returns the message from an AppError-shaped rejection", () => {
+    expect(errorMessage({ code: "network.io", message: "connection reset" })).toBe(
+      "connection reset",
+    );
+  });
+
+  it("never renders [object Object] for any object rejection", () => {
+    // The specific failure the mechanical pass had to prevent.
+    for (const e of [
+      { code: "a", message: "boom" },
+      { code: "a", message: "" },
+      { message: "no code" },
+      { code: "a" },
+    ]) {
+      expect(errorMessage(e)).not.toBe("[object Object]");
+    }
+  });
+
+  it("falls back when an AppError carries no usable message", () => {
+    // Display must degrade to the fallback, not to `""` or "undefined".
+    expect(errorMessage({ code: "a" }, "Something went wrong")).toBe("Something went wrong");
+    expect(errorMessage({ code: "a", message: "" })).toBe("Unknown error");
+  });
+
+  it("still handles the pre-taxonomy string rejection", () => {
+    expect(errorMessage("plain failure")).toBe("plain failure");
+    expect(errorMessage("", "fallback")).toBe("fallback");
+  });
+
+  it("handles Error instances and other thrown values", () => {
+    expect(errorMessage(new Error("boom"))).toBe("boom");
+    expect(errorMessage(new Error(""), "fallback")).toBe("fallback");
+    expect(errorMessage(null)).toBe("Unknown error");
+    expect(errorMessage(undefined, "fallback")).toBe("fallback");
+    expect(errorMessage(42)).toBe("Unknown error");
   });
 });
