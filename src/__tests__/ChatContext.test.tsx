@@ -380,6 +380,31 @@ describe("ChatContext — inbound 1:1 messages", () => {
     );
   }
 
+  /**
+   * Open the conversation the inbound message belongs to.
+   *
+   * The listener now only appends to the transcript on screen, so a test that
+   * fires `m2m://message` without opening a conversation is no longer a
+   * realistic scenario — and the four tests below were passing *because* of the
+   * cross-conversation contamination they never exercised.
+   */
+  async function openConversation(peerKeyHex = "b".repeat(64)) {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_connection_state") {
+        return Promise.resolve({ state: "established", peer_verified: false, peer_key_hex: peerKeyHex });
+      }
+      if (cmd === "list_conversations") return Promise.resolve([]);
+      if (cmd === "load_messages") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /Open conversation/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-state")).toHaveTextContent("established"),
+    );
+    return user;
+  }
+
   it("appends an inbound direct message with an empty sender key", async () => {
     await mount();
     act(() => {
