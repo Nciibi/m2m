@@ -395,6 +395,39 @@ describe("GroupChatView — create group", () => {
     // The form must stay open so the input is not lost.
     expect(screen.getByPlaceholderText("My Group")).toBeInTheDocument();
   });
+
+  it("surfaces an AppError-shaped rejection without rendering [object Object]", async () => {
+    // Commands reject with `{code, message}` since the error taxonomy landed.
+    // Concatenating that with a string yields "[object Object]" — invisible to
+    // `tsc`, because `invoke<T>` does not type its rejection value, and
+    // therefore only catchable by a test that actually rejects with the real
+    // shape.
+    mockInvoke.mockImplementation((cmd: string) =>
+      cmd === "list_groups"
+        ? Promise.resolve(GROUPS)
+        : cmd === "create_group"
+          ? Promise.reject({
+              code: "network.io",
+              message: "not authorised to create groups",
+            })
+          : Promise.resolve(null),
+    );
+    render(<GroupChatView />);
+    await userEvent.click(await screen.findByRole("button", { name: /New Group/ }));
+    await userEvent.type(screen.getByPlaceholderText("My Group"), "Team");
+    await userEvent.type(screen.getByPlaceholderText(/aabbccdd/), KEY_A);
+    await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        expect.stringContaining("not authorised"),
+        "error",
+      ),
+    );
+    expect(addToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("[object Object]"),
+      expect.anything(),
+    );
+  });
 });
 
 describe("GroupChatView — sending", () => {
