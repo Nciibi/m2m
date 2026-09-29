@@ -74,11 +74,14 @@ export default function GroupChatView() {
       // used to be destructured and then discarded, so a message arriving for
       // any *other* group was appended to the open group's transcript — the
       // same cross-conversation contamination the 1:1 path had.
-      setActiveGroupRef((active) => {
-        if (active && active.group_id !== payload.group_id) return active;
+      //
+      // Read through a ref, not a state updater: the listener is registered
+      // once, so it cannot close over `activeGroup`, and calling setState from
+      // inside another setState's updater is a side effect in what must be a
+      // pure function.
+      if (activeGroupRef.current?.group_id === payload.group_id) {
         setMessages((prev) => [...prev, msg]);
-        return active;
-      });
+      }
     });
     return () => {
       unlisten.then((f) => f());
