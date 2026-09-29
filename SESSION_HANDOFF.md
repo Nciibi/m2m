@@ -287,6 +287,13 @@ believing they pass — neither binary is installed in this environment.**
 
 ---
 
+---
+
+# ═══ Session 2 archive ═══
+# Everything below is the previous session's record, kept because it documents
+# the four-agent audit and the Tier 1 fixes. §0.1 is the item-by-item list of
+# what session 2 fixed and verified; §5 lists what it deliberately left open.
+
 ## 0. Verification (all green as of this session)
 
 | Check | Result |
