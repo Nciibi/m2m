@@ -571,13 +571,35 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return;
       }
       const message = payload.message;
-      setMessages((prev) => [...prev, message]);
+      const peerKeyHex = payload.peer_key_hex;
+
+      // Only append to the transcript if this message belongs to the
+      // conversation actually on screen.
+      //
+      // Without this, a message from any peer was appended to whatever
+      // conversation was open: reading source B while informant C writes, and
+      // C's message appears in B's transcript — with C's sender label but
+      // inside B's session banner, and any reply goes to B. Reactions, edits
+      // and deletes then resolve by `message_id` against a message from a
+      // different conversation. The peer key was read two lines below, but
+      // only to decide whether to fire an OS notification.
+      const forActiveConversation = peerKeyHex === activeConversationIdRef.current;
+      if (forActiveConversation) {
+        setMessages((prev) => [...prev, message]);
+      } else {
+        // The conversation list still has to learn about it, or the Hub shows
+        // no unread indicator and the user never learns a message arrived.
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.peer_key_hex === peerKeyHex ? { ...c, last_message: message.content, last_message_at: message.timestamp } : c,
+          ),
+        );
+      }
 
       // Send native OS notification if:
       // 1. Notification permission granted
       // 2. Not currently viewing this conversation
       // 3. Conversation is not muted
-      const peerKeyHex = payload.peer_key_hex;
       if (
         notifPermissionRef.current
         && peerKeyHex !== activeConversationIdRef.current
