@@ -916,7 +916,17 @@ pub async fn connect_to_peer(
     all.extend(ipv6_candidates);
     all.extend(reflexive_candidates);
     all.sort_by_key(|c| std::cmp::Reverse(c.priority));
-    let all = dial::filter_advertised_candidates(
+
+    // Update state with the full gathered set. This is used for the settings
+    // diagnostics display and as the source for the responder-side
+    // advertisement below; it is NOT what gets published, because under Tor
+    // the published set is filtered.
+    {
+        let mut cand_state = state.candidates.write().await;
+        *cand_state = all.clone();
+    }
+
+    let our_candidates = dial::filter_advertised_candidates(
         all.iter()
             .map(|c| WireCandidate {
                 address: c.address.clone(),
@@ -925,12 +935,6 @@ pub async fn connect_to_peer(
             })
             .collect(),
     );
-
-    // Update state with gathered candidates
-    {
-        let mut cand_state = state.candidates.write().await;
-        *cand_state = all;
-    }
 
     let expected_peer_pub = signed.payload.identity_pub;
     let mut session = Session::new();
