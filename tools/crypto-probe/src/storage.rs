@@ -1247,15 +1247,17 @@ impl MessageStore {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 rusqlite::params![id, conversation_id, direction, ciphertext, nonce, timestamp, expires_at, delivered as i32, wrapped],
             )?;
+            // `changes()` reflects the *most recent* statement, so it has to be
+            // read here — after the following `UPDATE conversations` it would
+            // report that update's row count (always 1) instead, and every
+            // ignored duplicate would inflate the total. Only add bytes when a
+            // row was actually created.
+            let inserted = self.conn.changes();
             self.conn.execute(
                 "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
                 params![timestamp, conversation_id],
             )?;
-            // Maintain the storage-cap counter. `INSERT OR IGNORE` means a
-            // duplicate id is a no-op, so only add bytes when a row was
-            // actually created — otherwise a redelivered message would inflate
-            // the count forever.
-            if self.conn.changes() > 0 {
+            if inserted > 0 {
                 self.add_stored_bytes(Self::msg_row_bytes(ciphertext.len(), nonce.len()));
             }
             Ok(())
@@ -1499,10 +1501,32 @@ impl MessageStore {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
 
         while used > target {
+            // How many rows does getting to `target` actually require? Taking a
+            // fixed batch instead would evict a whole 200-row batch when only a
+            // handful of rows are needed, destroying far more history than the
+            // cap demanded. Estimated from the current average row size and
+            // then clamped to BATCH, with +1 so rounding cannot leave the loop
+            // unable to make progress.
+            let rows_total: i64 = self
+                .conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM messages)
+                          + (SELECT COUNT(*) FROM group_messages)",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if rows_total == 0 || used == 0 {
+                break;
+            }
+            let avg = (used / rows_total as u64).max(1);
+            let needed = used - target;
+            let want = needed.div_ceil(avg).saturating_add(1) as usize;
+
             // 1:1 first, then group. Both tables count toward the cap, so
             // evicting only one would let an attacker park everything in the
             // other.
-            let (ids, freed) = self.oldest_message_batch(BATCH, &mut report)?;
+            let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
                 self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
@@ -1519,7 +1543,7 @@ impl MessageStore {
                 continue;
             }
 
-            let (gids, gfreed) = self.oldest_group_message_batch(BATCH)?;
+            let (gids, gfreed) = self.oldest_group_message_batch(want.min(BATCH))?;
             if gids.is_empty() {
                 // Nothing left to evict at all. Guard against a cap we cannot
                 // satisfy rather than spinning.

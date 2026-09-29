@@ -1543,7 +1543,7 @@ impl MessageStore {
                 continue;
             }
 
-            let (gids, gfreed) = self.oldest_group_message_batch(BATCH)?;
+            let (gids, gfreed) = self.oldest_group_message_batch(want.min(BATCH))?;
             if gids.is_empty() {
                 // Nothing left to evict at all. Guard against a cap we cannot
                 // satisfy rather than spinning.
