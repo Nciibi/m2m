@@ -81,7 +81,23 @@ function AppInner() {
       setCaptureWarning(payload.active);
     }).catch(() => () => {});
 
-    return () => { unlisten.then((fn) => fn()).catch(() => {}); };
+    // `m2m://security-error` — emitted by the backend when a security control
+    // FAILS to apply, e.g. screen-capture protection could not be established.
+    // The event and its validator both existed and nothing listened, so the
+    // exact case the mechanism was built for — a protection silently not
+    // applying — reached the user as complete silence. Surfaced as an
+    // assertive banner rather than a toast, because it is a standing condition,
+    // not a transient event.
+    const unlistenSec = listen("m2m://security-error", (event) => {
+      const payload = asSecurityError(event.payload);
+      if (!payload) return;  // malformed → drop, never render
+      setSecurityError(`${payload.source}: ${payload.message}`);
+    }).catch(() => () => {});
+
+    return () => {
+      unlisten.then((fn) => fn()).catch(() => {});
+      unlistenSec.then((fn) => fn()).catch(() => {});
+    };
   }, []);
 
   // Auto-lock on idle.
