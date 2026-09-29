@@ -502,7 +502,7 @@ pub async fn attempt_reconnect(
         },
     );
 
-    Err(AppError::invalid("reconnection failed after max attempts — the peer may be offline or the network changed"))
+    Err(AppError::not_connected("reconnection failed after max attempts — the peer may be offline or the network changed"))
 }
 
 /// List all peers with pending reconnection info.

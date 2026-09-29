@@ -233,7 +233,7 @@ async fn collect_network_diagnostics(
 ) -> Result<candidate::NetworkDiagnostics, AppError> {
     state.ensure_not_air_gapped().await?;
     if tor_enabled {
-        return Err(AppError::invalid("Tor routing is enabled — direct STUN diagnostics are blocked"));
+        return Err(AppError::blocked("Tor routing is enabled — direct STUN diagnostics are blocked"));
     }
 
     let nat_type = *state.nat_type.read().await;

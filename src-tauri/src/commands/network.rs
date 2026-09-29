@@ -1166,7 +1166,7 @@ pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<Connectio
 pub async fn get_listen_address(state: State<'_, Arc<AppState>>) -> Result<String, AppError> {
     let addr = state.listen_addr.read().await;
     addr.map(|a| a.to_string())
-        .ok_or_else(|| AppError::invalid("not listening"))
+        .ok_or_else(|| AppError::not_connected("not listening for incoming connections"))
 }
 
 // ─── Message Receive Loop ───

@@ -671,7 +671,7 @@ pub async fn update_group_name(
         let mut gm = state.group_manager.write().await;
         let group = gm.get_group_mut(&group_id).ok_or("group not found")?;
         if !group.is_admin(&our_peer_key_hex) {
-            return Err(AppError::invalid("only admins can change the group name"));
+            return Err(AppError::blocked("only admins can change the group name"));
         }
         group.name = new_name.clone();
     }
