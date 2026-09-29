@@ -4092,12 +4092,21 @@ mod tests {
         fill_messages(&store, "c1", 3, 200);
         let truth = store.stored_bytes_verified().unwrap();
 
-        // Corrupt the counter, as a missing update would.
+        // Corrupt the counter, as a missing update would. Off by one rather
+        // than zeroed, so the assertion below cannot pass by the two paths
+        // coincidentally agreeing.
         store
             .conn
-            .execute("UPDATE storage_stats SET total_bytes = 0 WHERE id = 1", [])
+            .execute(
+                "UPDATE storage_stats SET total_bytes = total_bytes + 1 WHERE id = 1",
+                [],
+            )
             .unwrap();
-        assert_eq!(store.stored_bytes().unwrap(), 0, "cache is now wrong");
+        assert_eq!(
+            store.stored_bytes().unwrap(),
+            truth + 1,
+            "the cache is now off by one"
+        );
         assert_eq!(
             store.stored_bytes_verified().unwrap(),
             truth,
