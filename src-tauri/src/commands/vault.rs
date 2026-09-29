@@ -1308,7 +1308,9 @@ pub async fn set_duress_passphrase(
 ) -> Result<(), AppError> {
     let unlocked = *state.vault_unlocked.read().await;
     if !unlocked {
-        return Err(AppError::invalid("vault must be unlocked to register a duress passphrase"));
+        return Err(AppError::vault_locked(
+            "unlock the vault to register a duress passphrase",
+        ));
     }
     // Same strength gates as unlock: the duress passphrase must be able to
     // pass them too, or it could never trigger (unlock checks run first).
@@ -1327,7 +1329,9 @@ pub async fn set_duress_passphrase(
 pub async fn clear_duress_passphrase(state: State<'_, Arc<AppState>>) -> Result<(), AppError> {
     let unlocked = *state.vault_unlocked.read().await;
     if !unlocked {
-        return Err(AppError::invalid("vault must be unlocked to change duress settings"));
+        return Err(AppError::vault_locked(
+            "unlock the vault to change duress settings",
+        ));
     }
     let ks_guard = state.key_store.lock().await;
     let key_store = ks_guard.as_ref().ok_or("key store not initialized")?;
