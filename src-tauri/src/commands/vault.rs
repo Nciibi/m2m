@@ -1246,7 +1246,10 @@ pub async fn panic_wipe(
 /// After calling this, the user must unlock the vault again to perform
 /// sensitive operations. Active connections remain open.
 #[tauri::command]
-pub async fn lock_vault(state: State<'_, Arc<AppState>>) -> Result<(), AppError> {
+pub async fn lock_vault(
+    app_handle: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), AppError> {
     // Unlock mlock'd pages BEFORE dropping (zeroization happens in Drop).
     {
         let mut id_lock = state.identity.write().await;
