@@ -806,16 +806,34 @@ pub(crate) async fn complete_inbound_connection(
         },
     );
 
-    // Post-authentication candidate refresh: only when the cached set is empty
-    // (see pre-handshake comment) AND air-gap mode allows STUN.
+    // Post-authentication candidate refresh.
+    //
+    // This used to fire whenever the cached candidate set was empty, which
+    // made it remotely triggerable: any stranger who completed a handshake
+    // (only a self-signed Ed25519 identity is needed, and
+    // `require_known_contact` is off by default) could make the victim perform
+    // STUN queries — and, before the fix in `query_single_server`, hostname
+    // resolutions — from its real address.
+    //
+    // Two things gate it now. Tor makes it a hard error, because STUN cannot
+    // be performed over Tor and asking anyway is the leak. And the cache
+    // being empty is a normal state on a fresh install, so rather than firing
+    // a refresh we record that candidates are unknown; the listener populates
+    // them at startup and the Settings screen refreshes on demand. A remote
+    // peer must never be able to cause the host to talk to a third party.
     if state.candidates.read().await.is_empty() && !state.security_config.read().await.air_gap_mode
     {
-        let st = state.clone();
-        tokio::spawn(async move {
-            if let Err(e) = st.refresh_stun().await {
-                tracing::debug!(error = %e, "post-handshake STUN refresh failed");
-            }
-        });
+        if crate::tor::is_enabled() {
+            tracing::debug!(
+                "candidates unknown and Tor is enabled — skipping the post-handshake \
+                 STUN refresh, which would disclose the real address"
+            );
+        } else {
+            tracing::info!(
+                "candidates unknown after an inbound handshake — the listener \
+                 populates these at startup; use Settings → Run diagnostics to refresh"
+            );
+        }
     }
 
     tracing::info!(peer = %peer_key_hex, "peer connected and authenticated");
