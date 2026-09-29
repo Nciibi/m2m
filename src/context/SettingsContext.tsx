@@ -463,12 +463,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleAirGapToggle = useCallback(async () => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false,
-      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, air_gap_mode: !current.air_gap_mode };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -485,12 +480,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleEphemeralModeToggle = useCallback(async () => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false,
-      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, ephemeral_mode: !current.ephemeral_mode };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -507,12 +497,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleSendBatchingChange = useCallback(async (ms: number) => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false,
-      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, send_batching_ms: ms };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -523,12 +508,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleCoverTypingToggle = useCallback(async () => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false,
-      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, cover_typing_traffic: !current.cover_typing_traffic };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -569,12 +549,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
 
   const handlePanicHotkeyArmToggle = useCallback(async () => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false,
-      blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false,
-      send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const arming = !current.panic_hotkey_enabled;
     const newConfig: SecurityConfig = { ...current, panic_hotkey_enabled: arming };
     try {
