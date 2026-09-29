@@ -1362,12 +1362,51 @@ async fn handle_incoming_text(
 
                         // Persist received message
                         // Ephemeral mode: nothing touches SQLite.
-                        let history = *state.history_enabled.read().await
-                            && !state.security_config.read().await.ephemeral_mode;
+                        //
+                        // The security config is read once, here, and released
+                        // before any store lock is taken. Reading it again inside
+                        // the `message_store` scope would nest `security_config`
+                        // under `message_store` — a pair with no documented
+                        // acquisition order, which is how the two deadlocks in
+                        // this codebase were shaped.
+                        let ephemeral_mode =
+                            state.security_config.read().await.ephemeral_mode;
+                        let storage_cap =
+                            state.security_config.read().await.effective_storage_cap();
+                        let history = *state.history_enabled.read().await && !ephemeral_mode;
                         if history {
                             let sk = state.storage_key.read().await;
                             let ms = state.message_store.lock().await;
                             if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                // Enforce the storage cap before writing, so a
+                                // peer already over the ceiling cannot push the
+                                // store further past it.
+                                //
+                                // `stored_bytes()` is an O(1) counter read; the
+                                // expensive part of `evict_to_cap` only runs once
+                                // the ceiling is genuinely crossed.
+                                let over_cap = store
+                                    .stored_bytes()
+                                    .map(|used| used > storage_cap)
+                                    .unwrap_or(false);
+                                if over_cap {
+                                    match store.evict_to_cap(storage_cap) {
+                                        Ok(report) => {
+                                            if report.messages_evicted > 0
+                                                || report.group_messages_evicted > 0
+                                            {
+                                                emit_storage_evicted(
+                                                    app_handle, &report,
+                                                );
+                                            }
+                                        }
+                                        Err(e) => tracing::warn!(
+                                            error = %e,
+                                            "storage-cap eviction failed"
+                                        ),
+                                    }
+                                }
+
                                 if let Some(peer_bytes) =
                                     util::decode_peer_key_logged(&peer_key_hex)
                                 {
