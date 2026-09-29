@@ -1006,7 +1006,13 @@ impl MessageStore {
         Self::migrate_conversations_table(&conn)?;
         Self::migrate_messages_table(&conn)?;
 
-        Ok(Self { conn })
+        let store = Self { conn };
+        // Seed the storage-cap counter from the tables. Done once, at open, so
+        // a database that already holds messages is accounted for from its
+        // first launch — otherwise the cap would appear to be 0 bytes and
+        // nothing would ever be evicted.
+        store.recompute_stored_bytes()?;
+        Ok(store)
     }
 
     /// Add new columns to the conversations table if they don't exist yet.
