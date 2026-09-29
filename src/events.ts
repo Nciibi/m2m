@@ -614,15 +614,20 @@ export function asStorageEvicted(v: unknown): StorageEvictedEventPayload | null 
   if (!isU32(p.group_messages_evicted)) return null;
   // Bytes freed can exceed u32 for a large eviction, so it is bounded wider.
   if (!isU64(p.bytes_freed)) return null;
-  const list = asArray<unknown>(p.overrode_retention);
-  if (!list) return null;
-  // Conversation ids are peer key hex; anything else is a malformed payload.
-  if (!list.every((x) => isPeerKeyHex(x))) return null;
+  // Checked with `Array.isArray`, not `asArray`: that helper coerces a
+  // non-array to `[]`, so using it here would silently drop the
+  // conversation list rather than rejecting a malformed payload.
+  if (!Array.isArray(p.overrode_retention)) return null;
+  // Bounded printable strings rather than strict 64-char hex. These ids are
+  // only counted and shown, and this payload exists to *tell the user
+  // something* — a guard strict enough to reject a future id format would
+  // become the reason the eviction is never mentioned.
+  if (!p.overrode_retention.every((x) => isOpaqueId(x))) return null;
   return {
     messages_evicted: p.messages_evicted,
     group_messages_evicted: p.group_messages_evicted,
     bytes_freed: p.bytes_freed,
-    overrode_retention: list as string[],
+    overrode_retention: p.overrode_retention as string[],
   };
 }
 
