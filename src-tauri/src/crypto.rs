@@ -727,8 +727,9 @@ struct TentativeReceive {
     /// reset so `commit` can prune exactly the now-unreachable keys instead of
     /// dropping the whole cache.
     ratchet_reset: Option<u64>,
-    /// Skipped-message keys derived while filling the gap to this frame.
-    staged_skips: Vec<(u64, [u8; 32])>,
+    /// Skipped-message keys derived while filling the gap to this frame, as
+    /// `(ratchet_epoch, message_number, key)`.
+    staged_skips: Vec<(u64, u64, [u8; 32])>,
     plaintext: Vec<u8>,
 }
 
@@ -737,7 +738,7 @@ impl Drop for TentativeReceive {
         self.root_key.zeroize();
         self.recv_chain_key.zeroize();
         self.their_ratchet_pub.zeroize();
-        for (_, k) in self.staged_skips.iter_mut() {
+        for (_, _, k) in self.staged_skips.iter_mut() {
             k.zeroize();
         }
     }
