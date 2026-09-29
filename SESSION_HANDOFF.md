@@ -1,9 +1,289 @@
 # SESSION HANDOFF — M2M architecture remediation
 
-**Date:** 2026-09-29 (session 2)
+**Date:** 2026-09-29 (session 3 — storage cap)
 **Repo:** `/mnt/hdd/projects/M2M` (branch `main`)
-**Previous handoff:** 2026-09-28
-**Goal:** a deep multi-agent audit, then fix Tier 1 by severity.
+**Goal this session:** build the storage cap with permanent oldest-first
+eviction, per the spec agreed in session 2: a **user-visible 10 GiB default
+cap**, **oldest-first permanent eviction** when full, and deletion that is
+**unrecoverable by all means**.
+
+---
+
+## 0. ⚠️ READ THIS FIRST — the frontend half is UNVERIFIED
+
+The session ended mid-verification. Here is exactly what is known:
+
+| Check | State |
+|---|---|
+| `./tools/typecheck-harness/check.sh --run` | **0 errors** as of the last full run (after the backend work) |
+| `./tools/crypto-probe/sync.sh` | **163 passed** as of the last full run (after the backend work) |
+| `tsc --noEmit` | **clean**, but checked *before* the last three frontend edits |
+| `pnpm test` (vitest) | **NOT RUN since the frontend changes** — the run was aborted |
+| `pnpm lint` | **NOT RUN since the frontend changes** |
+| relay | not re-run this session |
+
+**So: the backend is verified. The frontend is written and typechecks, but no
+test has confirmed it.** The very first thing to do next session is run the
+full suite and expect failures — see §5.1, which lists the three places I
+already know are risky.
+
+Nothing is committed. The tree auto-commits on its own, so check `git log -p`
+rather than `git diff`.
+
+---
+
+## 1. What the user decided (do not relitigate)
+
+1. **Cap is user-visible and configurable. Default 10 GiB.**
+2. **When full, evict oldest-first. Permanent, not a soft-delete tombstone.**
+3. **Eviction overrides a conversation's retention policy** — a full disk
+   outranks a preference — **but the notification must name the conversation
+   whose policy was overridden.**
+4. **The cap is pausable / raisable before it takes effect**, so someone
+   archiving evidence is not silently destroying it.
+5. **There are no existing users**, so no migration path, no first-run
+   special case, and no upgrade concern.
+6. Deletion is "unrecoverable by all means" — with the honest caveat that it
+   **cannot reach a backup taken before the eviction**, which is stated in the
+   UI rather than glossed over.
+
+---
+
+## 2. What is built and verified
+
+### 2.1 Byte accounting (`storage.rs`)
+
+- `storage_stats` table (one row) + `idx_messages_oldest` index on
+  `messages(timestamp)`.
+- Per-row size is **exact**, not estimated:
+  `LENGTH(content_encrypted) + LENGTH(content_nonce) + 72`
+  (`WRAPPED_CEK_LEN = 24 + 32 + 16`).
+- `recompute_stored_bytes()` — re-derives from SQL, covering **both** `messages`
+  and `group_messages`. Called at `MessageStore::open()` so a store that already
+  holds messages is accounted for from its first launch.
+- `stored_bytes()` — O(1) counter read, for the hot path.
+- `stored_bytes_verified()` — re-derives before enforcing. **The counter is a
+  cache; enforcement must not trust it**, because a counter that drifted low
+  overshoots the cap.
+- `add_stored_bytes()` / `msg_row_bytes()` helpers.
+- Incremented in `store_message_secure` and `store_group_message`; decremented
+  in `delete_conversation` and `delete_expired_messages`, each measuring the
+  rows about to be freed with a scoped `SUM()` so the arithmetic is obvious
+  and the common case never scans the whole table.
+
+### 2.2 Eviction (`storage.rs`)
+
+`evict_to_cap(cap_bytes) -> EvictionReport`, at module scope for `EvictionReport`
+(Rust does not allow structs in an `impl` block).
+
+- Oldest-first, `timestamp ASC`, across **1:1 then group**. Group is included
+  because it is a separate table — leaving it out makes the cap bypassable by an
+  attacker who only sends group traffic.
+- Low-water mark at 90% of cap, so it does not re-fire on every subsequent write.
+- **Batch size is bounded by what the cap actually requires**, computed from the
+  current average row size — not a fixed 200. See §4.2; a fixed batch was a real
+  bug.
+- `shred_message_keys()` then `wal_checkpoint(TRUNCATE)` then `DELETE` then
+  `wal_checkpoint(TRUNCATE)` — the same four-step sequence as
+  `delete_conversation`, which was already correct.
+- `shredded_keys: AtomicU64` on `MessageStore`, with `shredded_key_count()`.
+  This exists purely so the *wiring* is assertable — see §4.3.
+- `overrode_retention: Vec<String>` — conversation ids whose `retention_policy`
+  is not `none`, deduped, one policy lookup per *distinct* conversation per batch.
+
+### 2.3 The setting (`state.rs`)
+
+`#[serde(default)] storage_cap_bytes: u64` on `SecurityConfig`, plus
+`DEFAULT_STORAGE_CAP_BYTES = 10 * 1024^3` and
+`effective_storage_cap()` which maps `0` → the default.
+
+**The `0` → default mapping is not cosmetic.** `AppState::new`
+(`state.rs:454`) constructs `SecurityConfig::default()` on every launch with no
+config file, and `Default` derives `0` for a `u64`. If `0` meant "no limit",
+**the cap would never apply to a fresh install.** An explicit opt-out is a large
+finite value from the UI, not an absence.
+
+### 2.4 Enforcement on the inbound path (`commands/network.rs`)
+
+In `handle_incoming_text`, before `store_message_secure`. `security_config` is
+read **once, before the store lock is taken** — reading it inside the
+`message_store` scope would nest `security_config` under `message_store`, a
+pair with no documented order, which is how the two existing deadlocks were
+shaped. `emit_storage_evicted()` fires the event.
+
+### 2.5 Command + event + frontend
+
+- `commands::chat::get_storage_usage` → `StorageUsage { used_bytes, cap_bytes }`,
+  registered in `generate_handler!`. A closed store reports `0`, not an error —
+  otherwise the settings row would be blank on first run.
+- `m2m://storage-evicted` emitted with
+  `{ messages_evicted, group_messages_evicted, bytes_freed, overrode_retention }`.
+- `asStorageEvicted()` in `events.ts`.
+- `SecurityConfig.storage_cap_bytes` + `StorageUsage` in `types.ts`.
+- `DEFAULT_SECURITY_CONFIG` in `SettingsContext.tsx`, replacing **9**
+  hand-written copies of the default object.
+- `handleStorageCapChange` + `storageUsage` + `refreshStorageUsage` on the
+  settings context.
+- `SettingsView`: a usage row and a cap `<select>` (1/5/10/25/100 GB,
+  Unlimited), with the "cannot be recovered, including from backups taken
+  beforehand" caveat in the hint text.
+- `App.tsx`: a listener that turns the event into a **dismissible standing
+  banner**, not a toast — a toast disappears, and the user needs to understand
+  that history is gone and that raising the cap is how to stop it recurring.
+
+---
+
+## 3. Tests — 163 passing, all mutations verified
+
+10 new tests in `storage.rs`, **executed** via `./tools/crypto-probe/sync.sh`
+(see §6 for how that harness was extended this session):
+
+- `test_stored_bytes_counts_and_releases`
+- `test_stored_bytes_ignores_duplicate_inserts`
+- `test_stored_bytes_verified_recovers_from_drift`
+- `test_evict_is_oldest_first`
+- `test_evict_is_permanent_not_soft_delete`
+- `test_evict_reports_overridden_retention`
+- `test_evict_includes_group_messages`
+- `test_evict_is_a_noop_under_the_cap`
+- `test_shred_message_keys_destroys_the_cek`
+- `test_evict_shreds_every_evicted_message`
+
+Five mutations were applied to the live source and each was confirmed caught:
+
+| Mutation | Caught by |
+|---|---|
+| fixed 200-row batch instead of need-based | `test_evict_is_oldest_first` |
+| `ORDER BY timestamp DESC` (newest first) | `test_evict_is_oldest_first` |
+| **skip `shred_message_keys` in `evict_to_cap`** | `test_evict_shreds_every_evicted_message` |
+| shred zeroes `content_nonce` instead of `content_key_wrapped` | `test_shred_message_keys_destroys_the_cek` |
+| `stored_bytes_verified` returns the cache | `test_stored_bytes_verified_recovers_from_drift` |
+
+**The third one initially was not caught**, which is the most important thing to
+know from this session: eviction shreds and then deletes, so after a pass there
+is nothing left to inspect. A test that only called `shred_message_keys`
+directly passed unchanged with the call removed from `evict_to_cap`. The
+`AtomicU64` counter exists specifically to close that hole. If you touch the
+eviction path, re-run the mutations — the tests are only as good as that check.
+
+---
+
+## 4. Three real bugs the tests caught in my own new code
+
+Worth recording, because the pattern is what made the tests worth writing.
+
+**4.1 `conn.changes()` read after the wrong statement.** I read it after the
+`UPDATE conversations`, so it reported *that* update's row count (always 1)
+instead of the insert's. Every ignored duplicate inflated the byte counter — a
+peer looping one frame id would have tripped the cap without adding anything.
+Fixed by capturing the count immediately after the `INSERT`.
+
+**4.2 Evicting far more than the cap required.** The batch was a fixed 200 rows
+even when only 4 needed to go, so a 10-message store had all 10 destroyed to
+satisfy a cap that required ~6. Fixed by computing the batch size from the
+needed byte delta over the current average row size, clamped to 200.
+
+**4.3 `group_messages_evicted` was never incremented** — the first draft of
+`evict_to_cap` only looped over `messages` while declaring a group counter. The
+field was dead, which would have made the group path silently untested. Rewrote
+the loop to drain 1:1 first, then group, with a break when both are empty.
+
+---
+
+## 5. What remains
+
+### 5.1 Verify the frontend — do this first
+
+```bash
+export PATH="/nix/store/lfaydgacdyngci7p60s8wwvgdm74fjkx-nodejs-24.19.0/bin:$PATH"
+cd /mnt/hdd/projects/M2M
+./node_modules/.bin/tsc --noEmit
+./node_modules/.bin/vitest run
+./node_modules/.bin/eslint src --max-warnings 10
+```
+
+Three known-risky places, all guessable without running anything:
+
+1. **`SettingsView.test.tsx`** — the `useSettings` mock was extended with
+   `handleStorageCapChange`, `refreshStorageUsage` and `storageUsage`. All 22
+   tests in that file were failing with `refreshStorageUsage is not a function`
+   before the mock was fixed. If the mock is incomplete the *whole view* dies,
+   because the call is in a mount effect.
+2. **`App.tsx`** — `refreshStorageUsage` is invoked from a `useEffect` in
+   `SettingsView`; any other test that mounts it needs the same mock field.
+   `SecurityBanner` also gained an optional `onDismiss`, so any test asserting
+   its exact markup may need updating.
+3. **eslint budget** — `SettingsView` gained a `useEffect` that calls
+   `void refreshStorageUsage()`. That is an async load, not derivable state, so
+   it *should* land in the existing 10 `set-state-in-effect` budget — but if it
+   pushes the count to 11, restructure (move the reset into the handler) rather
+   than raising the pinned number. See `CLAUDE.md`.
+
+### 5.2 Step 3 — the background task (NOT STARTED)
+
+This is the substantive remaining work. Two triggers in one task:
+
+- **Periodic**, which also relocates `delete_expired_messages` off the
+  `ChatView` `setInterval`. **Right now expiry only runs while the chat screen
+  is mounted**, so "auto-delete after 24h" silently does nothing if the app is
+  closed. That is a broken promise independent of any attacker and is the single
+  highest-value thing left in this feature.
+- **Immediate on crossing the cap**, so a wait for the timer cannot be used to
+  fill the disk.
+
+Implementation notes:
+- Spawn from `lib.rs` `setup`, which already does `blocking_write` on the config.
+- **Must tolerate the store not being open.** `ensure_message_store` is lazy —
+  called from ~5 command sites, never at startup. So the task has to handle
+  `None` gracefully on every tick.
+- Read the cap from `security_config` **outside** any store lock, per §2.4.
+- Do not hold the store lock across the whole sweep; `evict_to_cap` is already
+  batched and checkpointed, so a tick should call it once and let it finish.
+
+### 5.3 Frontend test for the new surface
+
+None written yet. Minimum valuable set:
+- `asStorageEvicted` guard: accepts the real shape; rejects a non-array
+  `overrode_retention` (note `asArray` coerces to `[]`, which is why the guard
+  uses `Array.isArray` directly — a regression here would silently drop the
+  conversation list rather than rejecting).
+- The banner renders the eviction message and the dismiss button clears it.
+- The cap `<select>` persists through `set_security_config`.
+
+---
+
+## 6. Tooling added this session
+
+**`tools/crypto-probe/`** now also runs `storage.rs`, so the storage-cap tests
+actually execute. It previously covered only crypto/group/protocol/secure_key
+(113 tests → 163).
+
+To do that it needed two stubs, both in `tools/crypto-probe/src/`:
+- `commands.rs` — `ChatMessage` plus mirrors of the two AEAD helpers in
+  `commands/util.rs`. `storage.rs` reaches for them only on the *identity* path,
+  never the message path, so the cap tests do not depend on them.
+- `error.rs` — a two-constructor `AppError`.
+
+**Known limit, already documented in `commands.rs`:** the two AEAD helpers are a
+faithful *reimplementation*, not the original, because the real ones return
+`AppError` which maps all twelve backend error enums. A change to the real
+helper would not be caught by this probe. Same trade as
+`tools/typecheck-harness/tauri_stub`: a stub that lets real code be *executed*
+beats no execution, provided the limit is written down.
+
+Also new deps in `tools/crypto-probe/Cargo.toml`: `rusqlite`, `chrono`, `uuid`.
+
+---
+
+## 7. Everything from session 2 is still true
+
+The four IP-leakage fixes, the ratchet in-flight fix, the group (key,nonce)
+reuse fix, the roster cap, the false-safety UI class, and the four lock fixes
+are all in. Two stale `CLAUDE.md` claims were corrected. Session 2's notes are
+below this section and remain accurate.
+
+**Do not raise the two Rust suites to 0 warnings with `cargo fmt`/`cargo clippy`
+believing they pass — neither binary is installed in this environment.**
 
 ---
 
