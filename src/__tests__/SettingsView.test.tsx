@@ -30,6 +30,9 @@ const settingsState = {
   handleDhtToggle: vi.fn(),
   handleConnectDiscoveredPeer: vi.fn(),
   handleRefreshDiscovery: vi.fn(),
+  handleStorageCapChange: vi.fn(),
+  refreshStorageUsage: vi.fn(),
+  storageUsage: { used_bytes: 3_221_225_472, cap_bytes: 10_737_418_240 } as const,
 };
 
 // State for AppContext mock
