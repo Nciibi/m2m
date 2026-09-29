@@ -146,6 +146,20 @@ export interface SecurityConfig {
   send_batching_ms: number;
   cover_typing_traffic: boolean;
   panic_hotkey_enabled: boolean;
+  /**
+   * Maximum stored message history in bytes. `0` means "use the default"
+   * (10 GiB), NOT "unlimited" — the backend resolves it via
+   * `effective_storage_cap()`, and `SecurityConfig::default()` produces 0.
+   *
+   * When usage exceeds the cap, the oldest messages are permanently evicted.
+   */
+  storage_cap_bytes: number;
+}
+
+/** Storage usage reported by `get_storage_usage`. */
+export interface StorageUsage {
+  used_bytes: number;
+  cap_bytes: number;
 }
 
 /** Honest per-platform capability report for screen-capture protection. */

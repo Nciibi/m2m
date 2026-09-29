@@ -66,6 +66,35 @@ interface SettingsContextValue {
   scheduleClipboardClear: (secs: number) => void;
 }
 
+/**
+ * The single source of truth for "no config loaded yet".
+ *
+ * This was four hand-written copies of the same object literal, one per toggle
+ * handler. Adding a field to `SecurityConfig` and updating three of the four
+ * would have compiled cleanly and left one toggle sending a config that
+ * silently reset the new field on save — the same hand-synchronised-copy
+ * failure as the duplicated `AAD_MSG_STORE` constant.
+ *
+ * `storage_cap_bytes` is 0 here, which `effective_storage_cap()` on the Rust
+ * side resolves to the 10 GiB default rather than to "no limit". A 0 in the
+ * default is deliberate: it is the value `SecurityConfig::default()` produces,
+ * so the two sides agree.
+ */
+export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
+  screen_capture_protection: false,
+  clipboard_clear_secs: 0,
+  idle_lock_secs: 0,
+  require_known_contact: false,
+  capture_process_detection: false,
+  blur_on_focus_loss: false,
+  air_gap_mode: false,
+  ephemeral_mode: false,
+  send_batching_ms: 0,
+  cover_typing_traffic: false,
+  panic_hotkey_enabled: false,
+  storage_cap_bytes: 0,
+};
+
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function useSettings(): SettingsContextValue {
@@ -346,7 +375,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // ── Security handlers ──
 
   const handleScreenCaptureToggle = useCallback(async () => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = {
       ...current,
       screen_capture_protection: !current.screen_capture_protection,
@@ -364,11 +393,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleCaptureDetectionToggle = useCallback(async () => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
-      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, capture_process_detection: !current.capture_process_detection };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -385,11 +410,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleBlurOnFocusLossToggle = useCallback(async () => {
-    const current = securityConfig ?? {
-      screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0,
-      require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false,
-      air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false,
-    };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, blur_on_focus_loss: !current.blur_on_focus_loss };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -400,7 +421,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleClipboardClearSecsChange = useCallback(async (secs: number) => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, clipboard_clear_secs: secs };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -411,7 +432,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleIdleLockSecsChange = useCallback(async (secs: number) => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = { ...current, idle_lock_secs: secs };
     try {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
@@ -422,7 +443,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [securityConfig, addToast]);
 
   const handleRequireKnownContactToggle = useCallback(async () => {
-    const current = securityConfig ?? { screen_capture_protection: false, clipboard_clear_secs: 0, idle_lock_secs: 0, require_known_contact: false, capture_process_detection: false, blur_on_focus_loss: false, air_gap_mode: false, ephemeral_mode: false, send_batching_ms: 0, cover_typing_traffic: false, panic_hotkey_enabled: false };
+    const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
     const newConfig: SecurityConfig = {
       ...current,
       require_known_contact: !current.require_known_contact,
