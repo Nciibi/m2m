@@ -610,8 +610,16 @@ impl AppState {
     }
 
     /// Refresh STUN discovery and update stored candidates/NAT type.
-    pub async fn refresh_stun(&self) -> Result<stun::StunMultiResult, stun::StunError> {
-        let config = self.stun_config.read().await;
+    pub async fn refresh_stun(&self) -> Result<stun::StunMultiResult, stun::Error> {
+        // The config is snapshotted and released before the discovery runs.
+        //
+        // Holding it across `discover_public_addrs` (up to ~5s of awaiting) and
+        // then taking `candidates.write()` a few lines later is a deadlock cycle
+        // with `collect_network_diagnostics`, which takes `candidates.read()`
+        // and then wants `stun_config.read()`. Both are write-preferring tokio
+        // RwLocks, so a single queued writer on either side wedged both, and
+        // `refresh_stun` runs on every inbound connection.
+        let config = { self.stun_config.read().await.clone() };
         let multi = stun::discover_public_addrs(&config).await?;
 
         // Update public IP
