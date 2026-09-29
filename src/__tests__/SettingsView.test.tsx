@@ -76,6 +76,13 @@ vi.mock("../context/SettingsContext", () => ({
     handleDhtToggle: settingsState.handleDhtToggle,
     handleConnectDiscoveredPeer: settingsState.handleConnectDiscoveredPeer,
     handleRefreshDiscovery: settingsState.handleRefreshDiscovery,
+    // Storage cap. The component reads the cap off the live config and
+    // fetches usage on mount, so both must exist in the mock — a missing one
+    // throws inside the effect and takes the whole view down, which is exactly
+    // how this was caught.
+    handleStorageCapChange: settingsState.handleStorageCapChange,
+    refreshStorageUsage: settingsState.refreshStorageUsage,
+    storageUsage: settingsState.storageUsage,
   }),
 }));
 
