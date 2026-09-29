@@ -671,10 +671,12 @@ impl GroupManager {
             // legitimately resends. Fall through and refresh the key material.
         }
 
+        // Membership is now required above, so "new" reduces to "we hold no
+        // verification key for them yet" — i.e. this is our first bundle from
+        // them, and the caller should reply with ours so they can read us.
         let is_new = !group
             .verification_keys
-            .contains_key(&data.sender_peer_key_hex)
-            && !group.is_member(&data.sender_peer_key_hex);
+            .contains_key(&data.sender_peer_key_hex);
 
         group.accepted_bundles
             .insert(data.sender_peer_key_hex.clone());
