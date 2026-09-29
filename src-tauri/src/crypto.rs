@@ -1028,7 +1028,8 @@ impl DoubleRatchet {
         let mut tent_chain_opt = dr.recv_chain_key;
         let mut tent_their_pub = dr.their_ratchet_pub;
         let mut tent_recv_num = dr.recv_message_number;
-        let mut staged_skips: Vec<(u64, [u8; 32])> = Vec::new();
+        let mut tent_epoch = dr.ratchet_epoch;
+        let mut staged_skips: Vec<(u64, u64, [u8; 32])> = Vec::new();
 
         // Scrub all tentative secrets (helper for the error exits below).
         // Note: zeroizing an Option<[u8; 32]> clears the bytes when present.
@@ -1036,7 +1037,7 @@ impl DoubleRatchet {
             ($err:expr) => {{
                 tent_root.zeroize();
                 tent_chain_opt.zeroize();
-                for (_, k) in staged_skips.iter_mut() {
+                for (_, _, k) in staged_skips.iter_mut() {
                     k.zeroize();
                 }
                 return Err($err);
@@ -1060,13 +1061,51 @@ impl DoubleRatchet {
             shared_scrub.zeroize();
             tent_root.zeroize();
             tent_root = new_root;
+
+            // ── Stage the superseded chain's in-flight window ──
+            //
+            // The sender stops using the old chain at this point, but every
+            // message it encrypted there before ratcheting may still be on the
+            // wire. Those keys become unreachable the moment the counter
+            // resets — the new chain derives different keys for the very same
+            // numbers — so they have to be captured now, while the old chain
+            // key is in hand.
+            //
+            // Without this, every message that crossed a DH ratchet in flight
+            // was permanently lost: roughly one in every 100 sends, because
+            // `ratchet_interval` is 100.
+            //
+            // They are staged under the *previous* epoch so they cannot
+            // collide with the new chain's identically-numbered keys; see the
+            // `skipped_keys` doc comment.
+            if let Some(old_chain) = tent_chain_opt {
+                let mut chain = old_chain;
+                let mut n = tent_recv_num;
+                // Bounded window. A sender cannot get arbitrarily far ahead
+                // before ratcheting, and deriving the whole MAX_SKIP range
+                // here would be far more expensive than the loss it prevents —
+                // this runs on every ratchet, i.e. every `ratchet_interval`
+                // messages.
+                let window = RATCHET_INFLIGHT_WINDOW.min(MAX_SKIP);
+                for _ in 0..window {
+                    if dr.skipped_keys.len() + staged_skips.len() >= MAX_SKIP {
+                        break;
+                    }
+                    let (msg_key, next) = Self::derive_message_key(&chain);
+                    staged_skips.push((tent_epoch, n, msg_key.0));
+                    chain.zeroize();
+                    chain = next;
+                    n = n.saturating_add(1);
+                }
+                chain.zeroize();
+            }
+
             tent_chain_opt.zeroize();
             tent_chain_opt = Some(new_chain);
             tent_their_pub = *new_pub;
-            // Recorded so `commit` can prune the superseded chain's cached
-            // keys up to this point, keeping only the in-flight ones.
             ratchet_reset = Some(tent_recv_num);
             tent_recv_num = 0;
+            tent_epoch = tent_epoch.wrapping_add(1);
         }
 
         let mut tent_chain = match tent_chain_opt {
