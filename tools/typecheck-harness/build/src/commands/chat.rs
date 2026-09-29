@@ -727,6 +727,41 @@ pub async fn cleanup_expired_messages(state: State<'_, Arc<AppState>>) -> Result
         .map_err(|e| AppError::invalid(format!("cleanup failed: {e}")))
 }
 
+/// Current storage usage against the configured cap.
+///
+/// `used_bytes` is read from the O(1) counter, so this is cheap enough to call
+/// whenever the settings screen opens. The cap comes from
+/// [`SecurityConfig::effective_storage_cap`], which maps an unset or
+/// default-constructed config to the 10 GiB default rather than to "no limit".
+pub async fn get_storage_usage(state: State<'_, Arc<AppState>>) -> Result<StorageUsage, AppError> {
+    let cap = state
+        .security_config
+        .read()
+        .await
+        .effective_storage_cap();
+    // The store is opened lazily, so a fresh install has none yet. That is a
+    // legitimate "0 bytes used", not an error — reporting it as a failure would
+    // leave the settings screen blank on first run.
+    let used = {
+        let ms = state.message_store.lock().await;
+        match ms.as_ref() {
+            Some(store) => store.stored_bytes().unwrap_or(0),
+            None => 0,
+        }
+    };
+    Ok(StorageUsage {
+        used_bytes: used,
+        cap_bytes: cap,
+    })
+}
+
+/// Storage usage, as shown in Settings.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StorageUsage {
+    pub used_bytes: u64,
+    pub cap_bytes: u64,
+}
+
 /// Flush all undelivered messages for a peer after successful reconnection.
 /// Reads queued messages from storage and re-sends them in order.
 /// Does NOT take a State reference — designed to be called from attempt_reconnect.

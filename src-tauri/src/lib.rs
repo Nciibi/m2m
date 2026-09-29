@@ -359,6 +359,7 @@ pub fn run() {
             commands::chat::edit_message,
             commands::chat::delete_message,
             commands::chat::cleanup_expired_messages,
+            commands::chat::get_storage_usage,
             // Mute
             commands::chat::mute_conversation,
             commands::chat::unmute_conversation,
