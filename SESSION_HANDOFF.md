@@ -296,6 +296,13 @@ believing they pass — neither binary is installed in this environment.**
 
 ## 0. Verification (all green as of this session)
 
+> ⚠️ **Superseded.** These numbers were true at the end of session 2. The
+> storage-cap work in session 3 (above) changed `types.ts`,
+> `SettingsContext.tsx`, `SettingsView.tsx`, `App.tsx` and
+> `SettingsView.test.tsx` **without a completed test run** — see §0 at the top
+> of this file. The backend numbers below still hold; the `pnpm test` count of
+> 329 is now unverified.
+
 | Check | Result |
 |---|---|
 | `./tools/typecheck-harness/check.sh --run` (all 50 modules) | **0 errors, 0 warnings** |
