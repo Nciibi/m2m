@@ -4209,4 +4209,55 @@ mod tests {
         assert_eq!(report.bytes_freed, 0);
         assert_eq!(store.stored_bytes().unwrap(), before, "nothing may be lost");
     }
+
+    #[test]
+    fn test_shred_message_keys_destroys_the_cek() {
+        // The guarantee the whole feature rests on. Eviction removes the row,
+        // so the shredded key cannot be inspected after the fact — which means
+        // a test that only checks "the row is gone" would pass even if the
+        // shred step were deleted entirely. This pins the shred itself.
+        //
+        // Mutation-verified: commenting out the `shred_message_keys` call in
+        // `evict_to_cap` does not fail any other test in this file.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 2, 200);
+
+        let before: Vec<u8> = store
+            .conn
+            .query_row("SELECT content_key_wrapped FROM messages WHERE id = 'm0'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(before.iter().any(|&b| b != 0), "a real wrapped key is not all zeros");
+
+        store.shred_message_keys(&["m0".to_string()]).unwrap();
+
+        let after: Vec<u8> = store
+            .conn
+            .query_row("SELECT content_key_wrapped FROM messages WHERE id = 'm0'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(after.len(), WRAPPED_CEK_LEN);
+        assert!(
+            after.iter().all(|&b| b == 0),
+            "the wrapped content key must be overwritten with zeros"
+        );
+
+        // And the consequence: the content can no longer be decrypted, even
+        // though the row and its ciphertext are still there.
+        let msgs = store.load_messages("c1", 10).unwrap();
+        let m0 = msgs.iter().find(|m| m.id == "m0").expect("row still present");
+        assert!(
+            MessageStore::decrypt_stored_content(
+                &m0.content_encrypted,
+                &m0.content_nonce,
+                Some(&after),
+                &test_key(),
+            )
+            .is_err(),
+            "shredded content must be undecryptable while the row survives"
+        );
+    }
 }
