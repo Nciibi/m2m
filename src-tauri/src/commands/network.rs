@@ -684,14 +684,19 @@ pub(crate) async fn complete_inbound_connection(
     // refresh below.
     let wire_candidates: Vec<WireCandidate> = {
         let cached = state.candidates.read().await;
-        cached
-            .iter()
-            .map(|c| WireCandidate {
-                address: c.address.clone(),
-                candidate_type: c.candidate_type as u8,
-                relay_id: None,
-            })
-            .collect()
+        // Filtered for the same reason as the initiator side: this frame is
+        // plaintext, and under Tor these addresses would let the peer bypass
+        // the proxy entirely.
+        crate::dial::filter_advertised_candidates(
+            cached
+                .iter()
+                .map(|c| WireCandidate {
+                    address: c.address.clone(),
+                    candidate_type: c.candidate_type as u8,
+                    relay_id: None,
+                })
+                .collect(),
+        )
     };
 
     if is_x3dh {
