@@ -916,14 +916,15 @@ pub async fn connect_to_peer(
     all.extend(ipv6_candidates);
     all.extend(reflexive_candidates);
     all.sort_by_key(|c| std::cmp::Reverse(c.priority));
-    let our_candidates: Vec<WireCandidate> = all
-        .iter()
-        .map(|c| WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-            relay_id: None,
-        })
-        .collect();
+    let all = dial::filter_advertised_candidates(
+        all.iter()
+            .map(|c| WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+                relay_id: None,
+            })
+            .collect(),
+    );
 
     // Update state with gathered candidates
     {
