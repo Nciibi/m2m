@@ -1528,7 +1528,7 @@ impl MessageStore {
             // other.
             let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
-                // self.shred_message_keys(&ids)?;  MUTATED
+                self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
                 for id in &ids {
                     self.conn
@@ -1591,7 +1591,7 @@ impl MessageStore {
                                  + LENGTH(m.content_nonce)
                                  + ?2, 0)
                    FROM messages m
-                  ORDER BY m.timestamp ASC
+                  ORDER BY m.timestamp DESC
                   LIMIT ?1",
             )?;
             let mapped = stmt.query_map(params![limit as i64, Self::MSG_ROW_OVERHEAD], |row| {
