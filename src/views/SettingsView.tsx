@@ -5,7 +5,7 @@ import { errorMessage } from "../utils";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
 import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
-import type { NetworkSettings, StorageUsage } from "../types";
+import type { NetworkSettings } from "../types";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useT } from "../i18n/I18nContext";
@@ -73,7 +73,7 @@ export default function SettingsView() {
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
     handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle,
     handlePanicHotkeyArmToggle,
-    handleStorageCapChange, storageUsage,
+    handleStorageCapChange, storageUsage, refreshStorageUsage,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
