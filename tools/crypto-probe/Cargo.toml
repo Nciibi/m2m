@@ -1,0 +1,28 @@
+[package]
+name = "crypto_probe"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+
+# crypto.rs has no GTK/tauri dependency — only tracing, which we stub. That
+# makes it the one file in the app that can be compiled AND executed outside
+# the Tauri build, which is what makes running its #[cfg(test)] suite possible.
+[lib]
+name = "crypto_probe"
+path = "src/lib.rs"
+
+[dependencies]
+ed25519-dalek = "2"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+getrandom = "0.2"
+hmac = "0.12"
+sha2 = "0.10"
+zeroize = { version = "1", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"
+rand = "0.9"
+hex = "0.4"
+rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
