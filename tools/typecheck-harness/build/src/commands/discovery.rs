@@ -63,6 +63,25 @@ pub async fn set_discovery_config(
     {
         return Err(AppError::blocked("air-gap mode is enabled — peer discovery is blocked"));
     }
+
+    // Tor routing: LAN multicast does not leave the L2 domain, so it is not an
+    // internet-IP leak — but it is still presence disclosure. The announcer
+    // broadcasts our listening port and a rotating token to every host on the
+    // local network every 30 seconds, indefinitely, and Tor gives no
+    // protection against a local observer. The two settings are separate
+    // toggles, so a user can plausibly have Tor on and LAN discovery left
+    // enabled from before.
+    //
+    // This is refused rather than warned about: the user asked for anonymity
+    // and this contradicts it, and the recovery is one toggle in the UI.
+    if config.lan_enabled && crate::tor::is_enabled() {
+        return Err(AppError::blocked(
+            "LAN discovery is disabled while Tor routing is enabled — it broadcasts your \
+             listening port and a rotating token to every host on this network, which Tor \
+             cannot protect against",
+        ));
+    }
+
     // ── LAN Discovery ──
     if config.lan_enabled && !state.lan_cancel.read().await.is_some() {
         // Start LAN discovery
@@ -264,14 +283,15 @@ pub async fn connect_discovered_peer(
     all.extend(ipv6_candidates);
     all.extend(reflexive_candidates);
     all.sort_by_key(|c| std::cmp::Reverse(c.priority));
-    let our_candidates: Vec<crate::protocol::WireCandidate> = all
-        .iter()
-        .map(|c| crate::protocol::WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-            relay_id: None,
-        })
-        .collect();
+    let our_candidates = crate::dial::filter_advertised_candidates(
+        all.iter()
+            .map(|c| crate::protocol::WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+                relay_id: None,
+            })
+            .collect(),
+    );
 
     let x25519 = state.x25519_identity.read().await;
     let x25519_pub = x25519

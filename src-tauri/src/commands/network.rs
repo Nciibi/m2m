@@ -949,7 +949,7 @@ pub async fn connect_to_peer(
         *cand_state = all.clone();
     }
 
-    let our_candidates = dial::filter_advertised_candidates(
+    let our_candidates = crate::dial::filter_advertised_candidates(
         all.iter()
             .map(|c| WireCandidate {
                 address: c.address.clone(),

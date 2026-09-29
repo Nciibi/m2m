@@ -290,6 +290,24 @@ async fn query_single_server(
     server: &str,
     query_timeout: Duration,
 ) -> Result<SocketAddr, StunError> {
+    // ── Refuse under Tor BEFORE resolving the name ──
+    //
+    // The order here is load-bearing. `tokio::net::lookup_host` uses the
+    // system resolver, so it emits a DNS query from the real address to
+    // whatever `/etc/resolv.conf` names — usually the ISP. Binding the socket
+    // through the chokepoint blocks the STUN *datagram*, but if that check
+    // comes after the resolution, the DNS query has already escaped and the
+    // user is deanonymised by exactly the setting they turned on.
+    //
+    // The default STUN servers are hostnames, so every call used to leak.
+    if crate::tor::is_enabled() {
+        return Err(StunError::TorBlocked(format!(
+            "STUN is disabled while Tor routing is enabled — a Binding Request \
+             discloses the real address, and so does resolving {}",
+            server
+        )));
+    }
+
     // ── DNS resolution with timeout ──
     let addr = timeout(query_timeout, tokio::net::lookup_host(server))
         .await
@@ -317,7 +335,8 @@ async fn query_single_server(
     // but only on the one path that nobody used automatically.
     //
     // Routing the bind through the UDP chokepoint makes the refusal structural
-    // rather than a check each call site has to remember.
+    // rather than a check each call site has to remember. The check above this
+    // one additionally prevents the *name resolution* that precedes it.
     let socket = crate::dial::bind_udp_for_external_query()
         .await
         .map_err(|e| StunError::TorBlocked(e.to_string()))?;

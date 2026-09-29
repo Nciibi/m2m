@@ -148,6 +148,65 @@ pub fn is_dialable(addr: SocketAddr) -> bool {
     !tor::is_enabled() || !is_non_tor_routable(addr.ip())
 }
 
+/// Filter the candidate list for advertisement in a **plaintext** handshake frame.
+///
+/// # Why this exists
+///
+/// `HandshakeInit` and `HandshakeResponse` are written through
+/// [`crate::network::write_frame`], which is *not* encrypted — they precede
+/// session establishment, so there is no key to encrypt them with. Every
+/// candidate in that frame is therefore readable by the destination peer, by
+/// the Tor exit, and by every AS on the path between them.
+///
+/// The list being published is built from [`crate::local_addr::gather_host_candidates`]
+/// (the host's real LAN address), `gather_ipv6_candidates` (global unicast
+/// IPv6), and the STUN server-reflexive address (the host's public IP as seen
+/// by a third party). Under Tor, publishing any of them makes the routing
+/// decorative: the peer can note the address and simply connect to it directly
+/// on a later attempt, and none of those connections touch Tor.
+///
+/// So under Tor we advertise **no** directly-routable candidates. Relay
+/// candidates are kept: they carry a `relay_id` rather than an address the
+/// peer can dial, and they are the only path that works for a Tor session
+/// anyway.
+///
+/// With Tor off this is the identity function, so direct P2P and LAN
+/// connectivity is unchanged.
+///
+/// # Safety note
+///
+/// This only withholds information. `Session::our_candidates` is recorded but
+/// never dialled — the connection is the one the handshake is running over —
+/// so an empty list cannot break an established session.
+pub fn filter_advertised_candidates(
+    candidates: Vec<crate::protocol::WireCandidate>,
+) -> Vec<crate::protocol::WireCandidate> {
+    if !tor::is_enabled() {
+        return candidates;
+    }
+
+    let kept: Vec<_> = candidates
+        .into_iter()
+        .filter(|c| {
+            // Relay candidates are identified by carrying a relay id. Anything
+            // else is a directly-routable address and is withheld under Tor.
+            c.relay_id.is_some()
+        })
+        .collect();
+
+    if !kept.is_empty() {
+        tracing::debug!(
+            advertised = kept.len(),
+            "Tor enabled — advertising relay candidates only, withholding direct addresses"
+        );
+    } else {
+        tracing::info!(
+            "Tor enabled — no candidates advertised; peers must use a relay to reach us"
+        );
+    }
+    kept
+}
+
 /// Connect to `addr`, honouring the Tor setting, with [`DEFAULT_DIAL_TIMEOUT`].
 ///
 /// This is the entry point every outbound peer connection should use.

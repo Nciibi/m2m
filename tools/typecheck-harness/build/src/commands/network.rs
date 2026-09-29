@@ -681,14 +681,19 @@ pub(crate) async fn complete_inbound_connection(
     // refresh below.
     let wire_candidates: Vec<WireCandidate> = {
         let cached = state.candidates.read().await;
-        cached
-            .iter()
-            .map(|c| WireCandidate {
-                address: c.address.clone(),
-                candidate_type: c.candidate_type as u8,
-                relay_id: None,
-            })
-            .collect()
+        // Filtered for the same reason as the initiator side: this frame is
+        // plaintext, and under Tor these addresses would let the peer bypass
+        // the proxy entirely.
+        crate::dial::filter_advertised_candidates(
+            cached
+                .iter()
+                .map(|c| WireCandidate {
+                    address: c.address.clone(),
+                    candidate_type: c.candidate_type as u8,
+                    relay_id: None,
+                })
+                .collect(),
+        )
     };
 
     if is_x3dh {
@@ -798,16 +803,34 @@ pub(crate) async fn complete_inbound_connection(
         },
     );
 
-    // Post-authentication candidate refresh: only when the cached set is empty
-    // (see pre-handshake comment) AND air-gap mode allows STUN.
+    // Post-authentication candidate refresh.
+    //
+    // This used to fire whenever the cached candidate set was empty, which
+    // made it remotely triggerable: any stranger who completed a handshake
+    // (only a self-signed Ed25519 identity is needed, and
+    // `require_known_contact` is off by default) could make the victim perform
+    // STUN queries — and, before the fix in `query_single_server`, hostname
+    // resolutions — from its real address.
+    //
+    // Two things gate it now. Tor makes it a hard error, because STUN cannot
+    // be performed over Tor and asking anyway is the leak. And the cache
+    // being empty is a normal state on a fresh install, so rather than firing
+    // a refresh we record that candidates are unknown; the listener populates
+    // them at startup and the Settings screen refreshes on demand. A remote
+    // peer must never be able to cause the host to talk to a third party.
     if state.candidates.read().await.is_empty() && !state.security_config.read().await.air_gap_mode
     {
-        let st = state.clone();
-        tokio::spawn(async move {
-            if let Err(e) = st.refresh_stun().await {
-                tracing::debug!(error = %e, "post-handshake STUN refresh failed");
-            }
-        });
+        if crate::tor::is_enabled() {
+            tracing::debug!(
+                "candidates unknown and Tor is enabled — skipping the post-handshake \
+                 STUN refresh, which would disclose the real address"
+            );
+        } else {
+            tracing::info!(
+                "candidates unknown after an inbound handshake — the listener \
+                 populates these at startup; use Settings → Run diagnostics to refresh"
+            );
+        }
     }
 
     tracing::info!(peer = %peer_key_hex, "peer connected and authenticated");
@@ -912,20 +935,25 @@ pub async fn connect_to_peer(
     all.extend(ipv6_candidates);
     all.extend(reflexive_candidates);
     all.sort_by_key(|c| std::cmp::Reverse(c.priority));
-    let our_candidates: Vec<WireCandidate> = all
-        .iter()
-        .map(|c| WireCandidate {
-            address: c.address.clone(),
-            candidate_type: c.candidate_type as u8,
-            relay_id: None,
-        })
-        .collect();
 
-    // Update state with gathered candidates
+    // Update state with the full gathered set. This is used for the settings
+    // diagnostics display and as the source for the responder-side
+    // advertisement below; it is NOT what gets published, because under Tor
+    // the published set is filtered.
     {
         let mut cand_state = state.candidates.write().await;
-        *cand_state = all;
+        *cand_state = all.clone();
     }
+
+    let our_candidates = dial::filter_advertised_candidates(
+        all.iter()
+            .map(|c| WireCandidate {
+                address: c.address.clone(),
+                candidate_type: c.candidate_type as u8,
+                relay_id: None,
+            })
+            .collect(),
+    );
 
     let expected_peer_pub = signed.payload.identity_pub;
     let mut session = Session::new();
