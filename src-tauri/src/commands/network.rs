@@ -1239,7 +1239,7 @@ pub(crate) async fn send_own_bundle(
     }
 
     let serialized =
-        protocol::serialize(&bundle).map_err(|e| AppError::invalid(format!("serialize sender key: {e}")))?;
+        protocol::serialize(&bundle).map_err(|e| AppError::serialization(format!("serialize sender key: {e}")))?;
 
     let conn_arc = state
         .peer_connection(target_peer)
