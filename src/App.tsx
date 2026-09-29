@@ -32,7 +32,13 @@ import SettingsView from "./views/SettingsView";
  * capture tooling, or a security control that failed to apply. `role="alert"`
  * because both are assertive — this is not something to notice in passing.
  */
-function SecurityBanner({ body }: { body: string | null }) {
+function SecurityBanner({
+  body,
+  onDismiss,
+}: {
+  body: string | null;
+  onDismiss?: () => void;
+}) {
   if (!body) return null;
   return (
     <div
@@ -50,7 +56,17 @@ function SecurityBanner({ body }: { body: string | null }) {
         padding: "6px 14px", fontSize: 13, textAlign: "center",
       }}
     >
-      {body}
+      <span>{body}</span>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss notice"
+          style={{ marginLeft: 10, color: "inherit", background: "none", border: 0, cursor: "pointer", font: "inherit" }}
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }
@@ -249,10 +265,12 @@ function AppInner() {
       <SecurityBanner
         body={
           securityError ??
+          evictionNotice ??
           (captureWarning.length > 0
             ? `⚠ Screen capture software detected: ${captureWarning.join(", ")} — your screen may be recorded.`
             : null)
         }
+        onDismiss={evictionNotice ? () => setEvictionNotice(null) : undefined}
       />
       <ErrorBoundary name={view}>
         <div className="view-fade" key={view}>
