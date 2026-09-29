@@ -79,7 +79,7 @@ interface ChatContextValue {
   handleExportConversation: () => Promise<void>;
   handleSetRetention: (policy: string, durationSecs: number | null) => Promise<void>;
   handleGenerateInvite: () => Promise<void>;
-  copyInvite: () => void;
+  copyInvite: () => Promise<boolean>;
   handleConnect: () => Promise<void>;
   handleOpenChat: (conv: ConversationEntry) => Promise<void>;
   handleDeleteConversation: (conversationId: string) => Promise<void>;
@@ -296,9 +296,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // reported as shared. In a Tauri webview this rejection is routine.
     try {
       await navigator.clipboard.writeText(generatedInvite);
-      setInviteCopied(true);
+      return true;
     } catch (e) {
       addToast("Could not copy to the clipboard: " + errorMessage(e, "clipboard unavailable"), "error");
+      return false;
     }
   }, [generatedInvite, addToast]);
 

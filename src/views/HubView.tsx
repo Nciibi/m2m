@@ -46,8 +46,12 @@ export default function HubView() {
   const [family, setFamily] = useState<FamilyMember[]>([]);
   const [_familyLoading, setFamilyLoading] = useState(false);
 
-  const handleCopy = () => {
-    copyInvite();
+  const handleCopy = async () => {
+    // `setCopied(true)` used to be unconditional, so the green ✓ — the user's
+    // only confirmation that a 60-minute one-time invite actually reached the
+    // clipboard — appeared even when the write was refused.
+    const ok = await copyInvite();
+    if (!ok) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
