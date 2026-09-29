@@ -610,7 +610,7 @@ impl AppState {
     }
 
     /// Refresh STUN discovery and update stored candidates/NAT type.
-    pub async fn refresh_stun(&self) -> Result<stun::StunMultiResult, stun::Error> {
+    pub async fn refresh_stun(&self) -> Result<stun::StunMultiResult, stun::StunError> {
         // The config is snapshotted and released before the discovery runs.
         //
         // Holding it across `discover_public_addrs` (up to ~5s of awaiting) and

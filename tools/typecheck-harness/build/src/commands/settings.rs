@@ -229,8 +229,12 @@ async fn collect_network_diagnostics(
     }
 
     let nat_type = *state.nat_type.read().await;
-    let candidates = state.candidates.read().await;
-    let config = state.stun_config.read().await;
+    // Snapshotted, not held. Taking `candidates.read()` and then blocking on
+    // `stun_config.read()` inverts the order `refresh_stun` uses, and both are
+    // write-preferring — one queued writer on either side is enough to wedge
+    // both permanently.
+    let candidates: Vec<_> = state.candidates.read().await.clone();
+    let config = { state.stun_config.read().await.clone() };
 
     let stun_servers = stun::check_all_servers(&config).await;
 

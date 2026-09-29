@@ -603,6 +603,13 @@ pub async fn load_group_messages(
         .await
         .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
+    // Snapshotted before any lock is taken. `our_peer_key_hex` reads
+    // `identity`, and calling it while `storage_key` is held is the
+    // `storage_key ⇄ identity` deadlock cycle: `export_identity` takes
+    // `identity` first and then wants `storage_key`. The helper exists to break
+    // exactly this, and only works if it is called before the window.
+    let our_peer_key_hex = state.our_peer_key_hex().await.ok();
+
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
     let store = ms.as_ref().ok_or("message store not initialised")?;
@@ -611,11 +618,7 @@ pub async fn load_group_messages(
     // Load stored messages with encrypted content
     let stored = store
         .load_group_messages_with_content(&group_id, limit.unwrap_or(100), 0)
-        .map_err(|e| AppError::invalid(format!("failed to load group messages: {e}")))?;
-
-    // `Option` here: messages can still be listed with a locked vault, and
-    // the key is only needed to attribute outgoing messages.
-    let our_peer_key_hex = state.our_peer_key_hex().await.ok();
+        .map_err(|e| AppError::storage(format!("failed to load group messages: {e}")))?;
 
     let mut messages: Vec<ChatMessage> = Vec::with_capacity(stored.len());
     for (mut m, enc_content, enc_nonce) in stored {
