@@ -275,7 +275,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (!activeConversationId) return;
     const conversationId = activeConversationId;
     const previousPolicy = retentionPolicy;
-    const previousDuration = retentionDurationSecs;
+    const previousDuration = retentionDuration;
     try {
       await invoke("set_conversation_retention", { conversationId, policy, durationSecs });
     } catch (e) {
@@ -286,10 +286,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // anything — and the messages stay on disk, indefinitely, while the UI
       // says otherwise. Roll the control back and say what happened.
       setRetentionPolicy(previousPolicy);
-      setRetentionDurationSecs(previousDuration);
+      setRetentionDuration(previousDuration);
       addToast("Retention policy not saved: " + errorMessage(e), "error");
     }
-  }, [activeConversationId, retentionPolicy, retentionDurationSecs, addToast]);
+  }, [activeConversationId, retentionPolicy, retentionDuration, addToast]);
 
   const handleGenerateInvite = useCallback(async () => {
     try {
