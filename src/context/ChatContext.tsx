@@ -438,8 +438,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
         return { ...m, reactions };
       }));
-    } catch { /* noop */ }
-  }, [peerKeyHex]);
+    } catch (e) {
+      addToast("Could not remove reaction: " + errorMessage(e), "error");
+      setMessages((prev) => prev.map((m) =>
+        m.id === messageId
+          ? { ...m, reactions: { ...m.reactions, [reaction]: [...new Set([...(m.reactions[reaction] ?? []), "self"])] } }
+          : m,
+      ));
+    }
+  }, [peerKeyHex, addToast]);
 
   const handleReconnect = useCallback(async () => {
     if (!connection?.peer_key_hex) return;
@@ -554,12 +561,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => { loadMutedConversations(); }, [loadMutedConversations]);
 
   const handleMuteConversation = useCallback(async (peerKeyHex: string) => {
-    try { await invoke("mute_conversation", { peerKeyHex }); await loadMutedConversations(); } catch { /* noop */ }
-  }, [loadMutedConversations]);
+    // Was a silent no-op on failure. Mute is a safety control — the user
+    // believes a conversation is suppressed when it is not, and learns that
+    // from the message they were counting on not seeing.
+    try {
+      await invoke("mute_conversation", { peerKeyHex });
+      await loadMutedConversations();
+    } catch (e) {
+      addToast("Could not mute: " + errorMessage(e), "error");
+    }
+  }, [loadMutedConversations, addToast]);
 
   const handleUnmuteConversation = useCallback(async (peerKeyHex: string) => {
-    try { await invoke("unmute_conversation", { peerKeyHex }); await loadMutedConversations(); } catch { /* noop */ }
-  }, [loadMutedConversations]);
+    try {
+      await invoke("unmute_conversation", { peerKeyHex });
+      await loadMutedConversations();
+    } catch (e) {
+      addToast("Could not unmute: " + errorMessage(e), "error");
+    }
+  }, [loadMutedConversations, addToast]);
 
   // ─── Tauri event listeners ───
   //
