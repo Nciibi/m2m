@@ -120,6 +120,19 @@ impl Strategy {
 pub struct StrategyResult {
     pub stream: TcpStream,
     pub remote_addr: SocketAddr,
+    /// Which end of the punch we were. Populated but not yet consumed.
+    ///
+    /// `HolePunchResult::role` (the type `punch_connect_only` actually returns)
+    /// *is* read — it is logged. This field is a copy of it one layer up, and
+    /// nothing reads it, so it is a write-only field rather than a dead
+    /// protocol concept. Kept and annotated rather than deleted because
+    /// `StrategyResult` is the per-strategy common denominator and dropping one
+    /// of its fields for being unread today would make the next strategy that
+    /// does report a role have to re-add it.
+    #[expect(
+        dead_code,
+        reason = "write-only: no caller reads StrategyResult::role yet"
+    )]
     pub role: Role,
     pub strategy_name: &'static str,
     pub latency: Duration,
