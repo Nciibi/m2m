@@ -130,15 +130,24 @@ function AppInner() {
     if (!securityConfig?.panic_hotkey_enabled) return;
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && e.shiftKey && (e.key === "W" || e.key === "w")) {
+        e.preventDefault();
         invoke("panic_wipe").catch((err) => {
-          // Not armed / backend refused — surface instead of failing silently.
+          // The backend refused (or the wipe itself failed). This was a bare
+          // `console.error`, so a user who just pressed the emergency wipe
+          // hotkey — mid-incident — saw nothing at all and would conclude they
+          // were safe. The catalog already has a string for this case.
           console.error("panic wipe refused:", err);
+          addToast(
+            "PANIC WIPE FAILED — your data was NOT wiped. " + errorMessage(err),
+            "error",
+            0,
+          );
         });
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [securityConfig?.panic_hotkey_enabled]);
+  }, [securityConfig?.panic_hotkey_enabled, addToast]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
