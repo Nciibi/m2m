@@ -59,6 +59,16 @@ interface SettingsContextValue {
   clearDuressPassphrase: () => Promise<void>;
   refreshDuressStatus: () => Promise<void>;
   handleClipboardClearSecsChange: (secs: number) => Promise<void>;
+  /**
+   * Raise or lower the ceiling on stored message history.
+   *
+   * Persisted via the shared `DEFAULT_SECURITY_CONFIG` so the new field is
+   * never dropped by a handler that spread a stale local default.
+   */
+  handleStorageCapChange: (bytes: number) => Promise<void>;
+  /** Current usage against the cap, or null until it has been read. */
+  storageUsage: StorageUsage | null;
+  refreshStorageUsage: () => Promise<void>;
   handleIdleLockSecsChange: (secs: number) => Promise<void>;
   handleRequireKnownContactToggle: () => Promise<void>;
   handleLockVault: () => Promise<void>;
@@ -430,6 +440,36 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       addToast("Failed to update clipboard setting: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
+
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+
+  const refreshStorageUsage = useCallback(async () => {
+    try {
+      setStorageUsage(await invoke<StorageUsage>("get_storage_usage"));
+    } catch (e) {
+      // Non-fatal: the settings row shows "Loading…" and the cap can still be
+      // changed. A failed read must not block the control.
+      console.warn("get_storage_usage failed", e);
+    }
+  }, []);
+
+  const handleStorageCapChange = useCallback(
+    async (bytes: number) => {
+      const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
+      const newConfig: SecurityConfig = { ...current, storage_cap_bytes: bytes };
+      try {
+        const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
+        setSecurityConfig(result);
+        // Re-read so the "x of y used" line reflects the new cap immediately
+        // rather than waiting for a remount.
+        await refreshStorageUsage();
+        addToast("Storage cap updated", "success");
+      } catch (e) {
+        addToast("Failed to update storage cap: " + errorMessage(e), "error");
+      }
+    },
+    [securityConfig, addToast, refreshStorageUsage],
+  );
 
   const handleIdleLockSecsChange = useCallback(async (secs: number) => {
     const current = securityConfig ?? DEFAULT_SECURITY_CONFIG;
