@@ -77,7 +77,7 @@ name = "m2m_lib"
 path = "src/lib.rs"
 
 [dependencies]
-tauri = { path = "tauri_stub" }
+tauri = { path = "../tauri_stub" }
 HEADER
 
   # Re-emit every non-GTK dependency line from the app manifest, dropping the
