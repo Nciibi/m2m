@@ -1540,7 +1540,7 @@ impl MessageStore {
             // other.
             let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
-                // MUTATED: shred skipped
+                self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
                 for id in &ids {
                     self.conn
