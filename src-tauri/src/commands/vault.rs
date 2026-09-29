@@ -759,7 +759,7 @@ pub async fn connect_family_member(
                         x25519_pub,
                     )
                     .await
-                    .map_err(|e| AppError::invalid(format!("handshake failed: {e}")))?;
+                    ?;
 
                 let actual_peer_key = hex::encode(session.peer_identity_pub);
                 let peer_fingerprint = session.peer_fingerprint();

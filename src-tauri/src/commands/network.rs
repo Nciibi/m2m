@@ -231,7 +231,7 @@ where
     drop(opk_lock);
     drop(spk_lock);
 
-    result.map_err(|e| AppError::invalid(format!("X3DH handshake failed: {e}")))?;
+    result?;
     Ok(())
 }
 
@@ -976,7 +976,7 @@ pub async fn connect_to_peer(
                         identity::is_one_time(&signed),
                     )
                     .await
-                    .map_err(|e| AppError::invalid(format!("X3DH initiator handshake failed: {e}")))?;
+                    ?;
             } else {
                 let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
                 session

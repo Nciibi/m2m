@@ -296,7 +296,7 @@ pub async fn connect_discovered_peer(
             x25519_pub,
         )
         .await
-        .map_err(|e| AppError::invalid(format!("handshake failed: {e}")))?;
+        ?;
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();
