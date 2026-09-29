@@ -325,6 +325,35 @@ describe("asTransferErrorEvent", () => {
       asTransferErrorEvent({ transfer_id: "t1", error: "x".repeat(513) }),
     ).toBeNull();
   });
+
+  it("keeps `error` a string so the failure toast is never dropped", () => {
+    // The regression this guards: the backend has an `AppError` and it would
+    // be natural to emit it wholesale. That makes `isDisplayText` fail, the
+    // guard returns null, and the user sees a transfer vanish with no
+    // explanation at all — strictly worse than an ugly message.
+    const p = { transfer_id: "t1", error: { code: "io", message: "disk full" } };
+    expect(asTransferErrorEvent(p)).toBeNull();
+  });
+
+  it("carries the optional error_code through", () => {
+    const parsed = asTransferErrorEvent({
+      transfer_id: "t1",
+      error: "connection reset",
+      error_code: "network.io",
+    });
+    expect(parsed?.error_code).toBe("network.io");
+    // Absent code is fine — it was added with the error taxonomy.
+    expect(asTransferErrorEvent({ transfer_id: "t1", error: "x" })?.error_code).toBeUndefined();
+  });
+
+  it("rejects a malformed error_code rather than passing it through", () => {
+    expect(
+      asTransferErrorEvent({ transfer_id: "t1", error: "x", error_code: 42 }),
+    ).toBeNull();
+    expect(
+      asTransferErrorEvent({ transfer_id: "t1", error: "x", error_code: "" }),
+    ).toBeNull();
+  });
 });
 
 describe("asCaptureWarning", () => {
