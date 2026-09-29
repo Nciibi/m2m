@@ -119,8 +119,9 @@ mkdir -p "$BUILD/icons"
 cp "$REPO/src-tauri/icons/icon.png" "$BUILD/icons/"
 
 # ── 5. Resolve against the workspace lockfile ────────────────────────────────
-# Without the real Cargo.lock, `--offline` resolution fails on crates that are
-# in the local registry cache only under the versions the app pins.
+# Seeds cargo's resolver with the versions the app actually pins. Without it,
+# `--offline` can only pick whatever is in the local registry cache, which may
+# be a different version than the app builds against.
 cp "$REPO/Cargo.lock" "$BUILD/Cargo.lock"
 
 # ── 6. Optionally check ──────────────────────────────────────────────────────
