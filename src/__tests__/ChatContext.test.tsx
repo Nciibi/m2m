@@ -74,6 +74,7 @@ function TestConsumer() {
           That mismatch is exactly what the parameterless signature hid. */}
       <button onClick={() => handleDeleteConversation("conv-1")}>Delete Conv</button>
       <button onClick={() => handleOpenChat({ id: "c1", peer_key_hex: "abc", display_name: null, peer_display_name: null, last_message_at: null, last_message_preview: null, message_count: 0, is_online: false, auto_delete_at: null, retention_policy: "none", created_at: 0 })}>Open Chat</button>
+      <button onClick={() => handleOpenChat({ id: "cb", peer_key_hex: "b".repeat(64), display_name: null, peer_display_name: null, last_message_at: null, last_message_preview: null, message_count: 0, is_online: true, auto_delete_at: null, retention_policy: "none", created_at: 0 })}>Open Peer B</button>
       <button onClick={() => handleSendReaction("msg-1", "👍")}>Send Reaction</button>
       <button onClick={() => handleRemoveReaction("msg-1", "👍")}>Remove Reaction</button>
       <button onClick={handleMarkConversationRead}>Mark Read</button>
@@ -352,7 +353,7 @@ describe("ChatContext — inbound 1:1 messages", () => {
    */
   function directMessage(over: Record<string, unknown> = {}) {
     return {
-      peer_key_hex: "abc",
+      peer_key_hex: "b".repeat(64),
       message: {
         id: "m1",
         content: "the real 1:1 message",
@@ -389,19 +390,19 @@ describe("ChatContext — inbound 1:1 messages", () => {
    * cross-conversation contamination they never exercised.
    */
   async function openConversation() {
-    // `TestConsumer`'s "Open Chat" button opens the conversation whose peer key
-    // is "abc", so that is the key the inbound message must carry to be
-    // appended.
+    // `TestConsumer`'s "Open Peer B" button opens the conversation whose peer
+    // key matches the inbound fixtures below, so a message addressed to it is
+    // the one that belongs on screen.
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "get_connection_state") {
-        return Promise.resolve({ state: "established", peer_verified: false, peer_key_hex: "abc" });
+        return Promise.resolve({ state: "established", peer_verified: false, peer_key_hex: "b".repeat(64) });
       }
       if (cmd === "list_conversations") return Promise.resolve([]);
       if (cmd === "load_messages") return Promise.resolve([]);
       return Promise.resolve(null);
     });
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /Open Chat/i }));
+    await user.click(screen.getByRole("button", { name: /Open Peer B/i }));
     await waitFor(() =>
       expect(screen.getByTestId("connection-state")).toHaveTextContent("established"),
     );
@@ -426,7 +427,7 @@ describe("ChatContext — inbound 1:1 messages", () => {
     const { sender_peer_key_hex: _omitted, ...message } = directMessage().message;
     act(() => {
       eventHandlers.get("m2m://message")?.({
-        payload: { peer_key_hex: "abc", message },
+        payload: { peer_key_hex: "b".repeat(64), message },
       });
     });
     expect(screen.getByTestId("messages-count")).toHaveTextContent("1");
