@@ -14,6 +14,7 @@ import type {
   NatTypeInfo,
   NetworkSettings,
   SecurityConfig,
+  StorageUsage,
   StunConfig,
 } from "../types";
 
@@ -659,6 +660,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     handlePanicHotkeyArmToggle: setPanicHotkeyArmed,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
     handleClipboardClearSecsChange,
+    handleStorageCapChange, storageUsage, refreshStorageUsage,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
     scheduleClipboardClear,
   }), [
@@ -677,6 +679,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     handleCoverTypingToggle,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase, refreshDuressStatus,
     handleClipboardClearSecsChange,
+    handleStorageCapChange, storageUsage, refreshStorageUsage,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault,
     handleClearClipboard, scheduleClipboardClear, setPanicHotkeyArmed,
   ]);

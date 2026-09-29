@@ -73,6 +73,7 @@ export default function SettingsView() {
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
     handleAirGapToggle, handleEphemeralModeToggle, handleSendBatchingChange, handleCoverTypingToggle,
     handlePanicHotkeyArmToggle,
+    handleStorageCapChange, storageUsage,
     duressConfigured, setDuressPassphrase, clearDuressPassphrase,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
@@ -82,6 +83,16 @@ export default function SettingsView() {
   const [ipCopied, setIpCopied] = useState(false);
   const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
   const [appVersion, setAppVersion] = useState<string>("");
+  // The cap the <select> shows. Derived from the persisted config rather than
+  // held as its own state, so it cannot drift out of step with what the backend
+  // actually has — the same mistake the Tor toggle used to make.
+  const storageCapChoice = capChoiceFor(
+    securityConfig?.storage_cap_bytes ? securityConfig.storage_cap_bytes : 10 * 1024 ** 3,
+  );
+
+  useEffect(() => {
+    void refreshStorageUsage();
+  }, [refreshStorageUsage]);
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion(""));
