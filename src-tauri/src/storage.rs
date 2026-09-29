@@ -1526,7 +1526,7 @@ impl MessageStore {
             // 1:1 first, then group. Both tables count toward the cap, so
             // evicting only one would let an attacker park everything in the
             // other.
-            let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
+            let (ids, freed) = self.oldest_message_batch(BATCH, &mut report)?;
             if !ids.is_empty() {
                 self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
