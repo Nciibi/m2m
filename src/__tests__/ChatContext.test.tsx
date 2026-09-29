@@ -410,6 +410,7 @@ describe("ChatContext — inbound 1:1 messages", () => {
 
   it("appends an inbound direct message with an empty sender key", async () => {
     await mount();
+    await openConversation();
     act(() => {
       eventHandlers.get("m2m://message")?.({ payload: directMessage() });
     });
@@ -421,6 +422,7 @@ describe("ChatContext — inbound 1:1 messages", () => {
 
   it("appends a direct message whose sender key field is absent", async () => {
     await mount();
+    await openConversation();
     const { sender_peer_key_hex: _omitted, ...message } = directMessage().message;
     act(() => {
       eventHandlers.get("m2m://message")?.({
@@ -432,6 +434,7 @@ describe("ChatContext — inbound 1:1 messages", () => {
 
   it("still appends group messages that carry a real sender key", async () => {
     await mount();
+    await openConversation();
     act(() => {
       eventHandlers.get("m2m://message")?.({
         payload: directMessage({
@@ -445,6 +448,7 @@ describe("ChatContext — inbound 1:1 messages", () => {
 
   it("appends several messages in arrival order", async () => {
     await mount();
+    await openConversation();
     act(() => {
       for (const n of [1, 2, 3]) {
         eventHandlers.get("m2m://message")?.({
@@ -454,6 +458,23 @@ describe("ChatContext — inbound 1:1 messages", () => {
     });
     expect(screen.getByTestId("messages-count")).toHaveTextContent("3");
     expect(screen.getByTestId("messages-text")).toHaveTextContent("msg 1|msg 2|msg 3");
+  });
+
+  it("does NOT append a message addressed to a different conversation", async () => {
+    // The contamination bug: `m2m://message` appended to whatever conversation
+    // was open, so reading source B while informant C writes put C's message
+    // in B's transcript — C's sender label inside B's session banner, with
+    // replies going to B. Six inbound tests existed and none of them opened a
+    // different conversation first, which is why it was invisible.
+    await mount();
+    await openConversation();
+    act(() => {
+      eventHandlers.get("m2m://message")?.({
+        payload: directMessage({ peer_key_hex: "d".repeat(64), content: "WRONG PEER" }),
+      });
+    });
+    expect(screen.getByTestId("messages-count")).toHaveTextContent("0");
+    expect(screen.getByTestId("messages-text")).not.toHaveTextContent("WRONG PEER");
   });
 
   it("still drops a malformed payload", async () => {
