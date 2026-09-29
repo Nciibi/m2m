@@ -914,7 +914,7 @@ pub async fn export_identity(
     });
 
     let payload_bytes =
-        serde_json::to_vec(&payload).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+        serde_json::to_vec(&payload).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     // Write: nonce || ciphertext
     std::fs::write(&path, &payload_bytes)

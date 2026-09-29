@@ -64,7 +64,7 @@ pub async fn create_group(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
     // Create group in GroupManager
     let bundles = {
@@ -96,7 +96,7 @@ pub async fn create_group(
         let mut signed = bundle_data.clone();
         finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
         let serialized =
-            protocol::serialize(&signed).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+            protocol::serialize(&signed).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
         if let Some(conn_arc) = state.peer_connection(peer_key_hex).await {
             let mut conn = conn_arc.lock().await;
@@ -123,7 +123,7 @@ pub async fn create_group(
         initial_members: member_peer_keys.clone(),
     };
     let create_bytes =
-        protocol::serialize(&create_payload).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+        protocol::serialize(&create_payload).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     {
         for member_key in &member_peer_keys {
@@ -210,7 +210,7 @@ pub async fn send_group_message(
     };
 
     let serialized =
-        protocol::serialize(&encrypted_data).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+        protocol::serialize(&encrypted_data).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     let mut delivered_count = 0u32;
     {
@@ -245,7 +245,7 @@ pub async fn send_group_message(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
@@ -374,7 +374,7 @@ pub async fn invite_to_group(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
         let _ = store.add_group_member(&group_id, &peer_key_hex, None, "member", now as i64);
@@ -393,7 +393,7 @@ pub async fn invite_to_group(
             let mut signed = bundle.clone();
             finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
             let serialized =
-                protocol::serialize(&signed).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+                protocol::serialize(&signed).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
                 .await;
@@ -424,7 +424,7 @@ pub async fn invite_to_group(
         drop(gm_read);
 
         let invite_bytes =
-            protocol::serialize(&invite).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+            protocol::serialize(&invite).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
         let _ = session
             .send_encrypted_typed(write_half, PacketType::GroupInvite, &invite_bytes)
             .await;
@@ -466,7 +466,7 @@ pub async fn remove_from_group(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
         let _ = store.remove_group_member(&group_id, &peer_key_hex);
@@ -478,7 +478,7 @@ pub async fn remove_from_group(
         let mut signed = bundle_data.clone();
         finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
         let serialized =
-            protocol::serialize(&signed).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+            protocol::serialize(&signed).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
         if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
@@ -501,7 +501,7 @@ pub async fn remove_from_group(
             new_sender_key: Some(signed),
         };
         let remove_bytes =
-            protocol::serialize(&remove_msg).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+            protocol::serialize(&remove_msg).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
         if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
@@ -548,7 +548,7 @@ pub async fn leave_group(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
         let _ = store.remove_group_member(&group_id, &our_peer_key_hex);
@@ -561,7 +561,7 @@ pub async fn leave_group(
         leaving_peer_key_hex: our_peer_key_hex.clone(),
     };
     let leave_bytes =
-        protocol::serialize(&leave_msg).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+        protocol::serialize(&leave_msg).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     let gm_read = state.group_manager.read().await;
     let group = gm_read.get_group(&group_id);
@@ -609,7 +609,7 @@ pub async fn load_group_messages(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
@@ -680,7 +680,7 @@ pub async fn update_group_name(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
     let ms = state.message_store.lock().await;
     if let Some(store) = ms.as_ref() {
         let _ = store.update_group_name(&group_id, &new_name);
@@ -694,7 +694,7 @@ pub async fn update_group_name(
         changed_by_peer_key_hex: our_peer_key_hex,
     };
     let info_bytes =
-        protocol::serialize(&info_msg).map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+        protocol::serialize(&info_msg).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     let gm_read = state.group_manager.read().await;
     let member_keys: Vec<String> = gm_read

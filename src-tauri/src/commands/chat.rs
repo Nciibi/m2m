@@ -69,7 +69,7 @@ pub async fn send_message(
         state
             .ensure_message_store(&state.data_dir)
             .await
-            .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+            .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
@@ -109,7 +109,7 @@ pub async fn load_messages(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
     let sk = state.storage_key.read().await;
     let ms = state.message_store.lock().await;
@@ -372,7 +372,7 @@ pub async fn export_conversation(
 
     // Serialize the JSON, then encrypt the entire export with the storage key
     let export_json = serde_json::to_vec_pretty(&export_data)
-        .map_err(|e| AppError::invalid(format!("serialization failed: {e}")))?;
+        .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
     let (nonce, ciphertext) = util::crypto_encrypt_storage(&export_json, key, util::AAD_EXPORT)
         .map_err(|e| AppError::invalid(format!("encryption failed: {e}")))?;
 
@@ -431,7 +431,7 @@ pub async fn send_reaction(
         remove: false,
     };
     let plaintext =
-        crate::protocol::serialize(&data).map_err(|e| AppError::invalid(format!("serialize reaction: {e}")))?;
+        crate::protocol::serialize(&data).map_err(|e| AppError::serialization(format!("serialize reaction: {e}")))?;
     let crate::state::PeerConnection {
         session,
         write_half,
@@ -485,7 +485,7 @@ pub async fn remove_reaction(
         remove: true,
     };
     let plaintext =
-        crate::protocol::serialize(&data).map_err(|e| AppError::invalid(format!("serialize reaction: {e}")))?;
+        crate::protocol::serialize(&data).map_err(|e| AppError::serialization(format!("serialize reaction: {e}")))?;
     let crate::state::PeerConnection {
         session,
         write_half,
@@ -582,7 +582,7 @@ pub async fn send_message_with_timer(
         state
             .ensure_message_store(&state.data_dir)
             .await
-            .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+            .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
@@ -666,7 +666,7 @@ pub async fn edit_message(
             edited_at: now,
         };
         let serialized =
-            protocol::serialize(&edit_data).map_err(|e| AppError::invalid(format!("serialization error: {e}")))?;
+            protocol::serialize(&edit_data).map_err(|e| AppError::serialization(format!("serialization error: {e}")))?;
         let PeerConnection {
             session,
             write_half,
@@ -718,7 +718,7 @@ pub async fn delete_message(
             message_id: message_id.clone(),
         };
         let serialized =
-            protocol::serialize(&delete_data).map_err(|e| AppError::invalid(format!("serialization error: {e}")))?;
+            protocol::serialize(&delete_data).map_err(|e| AppError::serialization(format!("serialization error: {e}")))?;
         let PeerConnection {
             session,
             write_half,
@@ -754,7 +754,7 @@ pub async fn flush_offline_queue(
     state
         .ensure_message_store(&state.data_dir)
         .await
-        .map_err(|e| AppError::invalid(format!("message store init: {e}")))?;
+        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
     // Load and decrypt undelivered messages while holding the store lock.
     // Drop all locks before trying to send so RefCell-backed Connection doesn't
