@@ -354,14 +354,31 @@ export function asTransferCompletedEvent(v: unknown): { transfer_id: string } | 
   return { transfer_id: p.transfer_id };
 }
 
-export function asTransferErrorEvent(
-  v: unknown,
-): { transfer_id: string; error: string } | null {
+/**
+ * `m2m://transfer-error` — a file transfer failed.
+ *
+ * `error` is deliberately kept as a *string*, not the serialised `AppError`.
+ * Emitting the object would fail `isDisplayText` below, and a rejected payload
+ * means the whole event is dropped — so the user would watch a transfer fail
+ * with no toast at all. The machine-readable `code` therefore rides alongside
+ * as a separate, optional field rather than replacing the text.
+ */
+export interface TransferErrorEventPayload {
+  transfer_id: string;
+  error: string;
+  error_code?: AppErrorCode;
+}
+
+export function asTransferErrorEvent(v: unknown): TransferErrorEventPayload | null {
   if (typeof v !== "object" || v === null) return null;
   const p = v as Record<string, unknown>;
   if (!isOpaqueId(p.transfer_id)) return null;
   if (!isDisplayText(p.error)) return null;
-  return { transfer_id: p.transfer_id, error: p.error };
+  // `error_code` is optional: it was added alongside the error taxonomy, and
+  // an absent one is not a reason to drop the failure notice.
+  const code = p.error_code === undefined ? undefined : p.error_code;
+  if (code !== undefined && !isErrorCode(code)) return null;
+  return { transfer_id: p.transfer_id, error: p.error, error_code: code };
 }
 
 export function asTransferCancelledEvent(v: unknown): { transfer_id: string } | null {
