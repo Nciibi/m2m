@@ -19,12 +19,20 @@
 | `pnpm lint` / eslint | **0 errors, 10 warnings** (at the pinned budget) |
 
 **The Rust suites are now actually *executed*, not just compiled.** `crypto.rs`,
-`group.rs`, `protocol.rs` and `secure_key.rs` have no GTK dependency, so a
-standalone crate can compile and *run* their `#[cfg(test)]` modules — the only
-way to execute Rust tests in this environment. A working runner lives at
-`/tmp/opencode/cryptotest` (crate + `sync.sh` that copies the four live files);
-it should be moved into `tools/crypto-probe/` next session, since `/tmp` is not
-durable. **Use it before claiming any crypto change works.**
+`group.rs`, `protocol.rs` and `secure_key.rs` have no GTK dependency, so
+`tools/crypto-probe/sync.sh` copies those four files into a standalone crate and
+**runs** their `#[cfg(test)]` modules — the only way to execute a Rust test in
+this environment.
+
+```bash
+./tools/crypto-probe/sync.sh        # 113 passed
+```
+
+It re-copies from `src-tauri/src/` on every run, so it cannot pass against a
+stale copy — verified by mutating the live `crypto.rs` and watching
+`test_in_flight_message_survives_dh_ratchet` fail. **Run it before claiming any
+crypto change works.** Mutation-verified in this session for: the ratchet
+staging, the group one-shot guard, and the group membership check.
 
 **Two documented claims were false. Both are now corrected in `CLAUDE.md`:**
 
