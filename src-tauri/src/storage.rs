@@ -1247,15 +1247,17 @@ impl MessageStore {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 rusqlite::params![id, conversation_id, direction, ciphertext, nonce, timestamp, expires_at, delivered as i32, wrapped],
             )?;
+            // `changes()` reflects the *most recent* statement, so it has to be
+            // read here — after the following `UPDATE conversations` it would
+            // report that update's row count (always 1) instead, and every
+            // ignored duplicate would inflate the total. Only add bytes when a
+            // row was actually created.
+            let inserted = self.conn.changes();
             self.conn.execute(
                 "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
                 params![timestamp, conversation_id],
             )?;
-            // Maintain the storage-cap counter. `INSERT OR IGNORE` means a
-            // duplicate id is a no-op, so only add bytes when a row was
-            // actually created — otherwise a redelivered message would inflate
-            // the count forever.
-            if self.conn.changes() > 0 {
+            if inserted > 0 {
                 self.add_stored_bytes(Self::msg_row_bytes(ciphertext.len(), nonce.len()));
             }
             Ok(())
