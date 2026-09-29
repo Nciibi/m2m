@@ -54,6 +54,7 @@ function AppInner() {
   const { view } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
   const [captureWarning, setCaptureWarning] = useState<string[]>([]);
+  const [securityError, setSecurityError] = useState<string | null>(null);
   const { securityConfig } = useSettings();
 
   // Focus-loss blur (off unless enabled in security settings).
