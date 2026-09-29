@@ -1501,10 +1501,32 @@ impl MessageStore {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
 
         while used > target {
+            // How many rows does getting to `target` actually require? Taking a
+            // fixed batch instead would evict a whole 200-row batch when only a
+            // handful of rows are needed, destroying far more history than the
+            // cap demanded. Estimated from the current average row size and
+            // then clamped to BATCH, with +1 so rounding cannot leave the loop
+            // unable to make progress.
+            let rows_total: i64 = self
+                .conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM messages)
+                          + (SELECT COUNT(*) FROM group_messages)",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if rows_total == 0 || used == 0 {
+                break;
+            }
+            let avg = (used / rows_total as u64).max(1);
+            let needed = used - target;
+            let want = needed.div_ceil(avg).saturating_add(1) as usize;
+
             // 1:1 first, then group. Both tables count toward the cap, so
             // evicting only one would let an attacker park everything in the
             // other.
-            let (ids, freed) = self.oldest_message_batch(BATCH, &mut report)?;
+            let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
                 self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
