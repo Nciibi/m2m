@@ -1138,7 +1138,7 @@ impl DoubleRatchet {
                 scrub_and!(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
             }
             let (msg_key, next_chain) = Self::derive_message_key(&tent_chain);
-            staged_skips.push((tent_recv_num, msg_key.0));
+            staged_skips.push((tent_epoch, tent_recv_num, msg_key.0));
             tent_chain.zeroize();
             tent_chain = next_chain;
             tent_recv_num += 1;
