@@ -1,10 +1,137 @@
 # SESSION HANDOFF — M2M architecture remediation
 
-**Date:** 2026-09-29
+**Date:** 2026-09-29 (session 2)
 **Repo:** `/mnt/hdd/projects/M2M` (branch `main`)
-**Previous handoff:** 2026-09-28 (`SESSION_HANDOFF.md` at HEAD `70cf7ed`)
-**Goal this session:** finish the `AppError` error taxonomy that the previous
-session left mid-flight.
+**Previous handoff:** 2026-09-28
+**Goal:** a deep multi-agent audit, then fix Tier 1 by severity.
+
+---
+
+## 0. Verification (all green as of this session)
+
+| Check | Result |
+|---|---|
+| `./tools/typecheck-harness/check.sh --run` (all 50 modules) | **0 errors, 0 warnings** |
+| `cargo test` (crypto + group + protocol + secure_key) | **113 passed** |
+| `cargo test` (relay-server) | **15 passed** |
+| `tsc --noEmit` | **clean** |
+| `pnpm test` / vitest | **329 passed** |
+| `pnpm lint` / eslint | **0 errors, 10 warnings** (at the pinned budget) |
+
+**The Rust suites are now actually *executed*, not just compiled.** `crypto.rs`,
+`group.rs`, `protocol.rs` and `secure_key.rs` have no GTK dependency, so a
+standalone crate can compile and *run* their `#[cfg(test)]` modules — the only
+way to execute Rust tests in this environment. A working runner lives at
+`/tmp/opencode/cryptotest` (crate + `sync.sh` that copies the four live files);
+it should be moved into `tools/crypto-probe/` next session, since `/tmp` is not
+durable. **Use it before claiming any crypto change works.**
+
+**Two documented claims were false. Both are now corrected in `CLAUDE.md`:**
+
+- `cargo test --all-targets` → "378 passed" was **never observed and was
+  wrong**. Two `HandshakeInit` literals in `protocol.rs`'s own test module were
+  missing the `one_time` field added the previous session, so the test binary
+  **did not compile at all**. Fixed — the suite now builds and runs.
+- `test_in_flight_message_survives_dh_ratchet` was recorded as fixed and
+  **could not have passed**: `receive_tentative` reset the counter at the
+  ratchet *before* staging the superseded chain's pending key, so the key was
+  never in the cache. The `retain(|num| num > superseded_upto)` "fix" was a
+  no-op by construction, since every cached key is `<=` that value. Fixed with
+  an epoch-keyed cache, and **mutation-verified**.
+
+**Also corrected:** my previous session claimed "all 45 `[object Object]` sites
+fixed". One was missed — `src/views/ChatView.tsx:574` uses `+ err`, and my grep
+used a word boundary after `e` that cannot match `err`. The lesson: a residue
+grep is only as good as the pattern, so `grep -rnE '\+ *(e|err|error|ex)\b'`
+is the one to use.
+
+---
+
+## 0.1 What this session fixed
+
+**Privacy — the product's premise (4 critical, all verified before and after):**
+
+| Fix | Where |
+|---|---|
+| `HandshakeInit`/`HandshakeResponse` published LAN IP, global IPv6 and public IP **in a plaintext frame**, unfiltered by Tor, on 4 call sites | `dial::filter_advertised_candidates()`; applied at `network.rs` ×2, `discovery.rs`, `vault.rs` |
+| STUN resolved the server hostname with the system resolver **27 lines before** the Tor guard | `stun.rs::query_single_server` |
+| An inbound handshake from any stranger spawned a STUN refresh when the candidate cache was empty — remotely forcing DNS + UDP from the real address | `network.rs::complete_inbound_connection` |
+| LAN discovery broadcast the listening port and a rotating token to every local host with no Tor guard | `commands/discovery.rs::set_discovery_config` |
+
+**Crypto:**
+
+- **Ratchet lost every message in flight across a DH ratchet** (~1 in 100
+  sends). `skipped_keys` is now keyed by `(ratchet_epoch, message_number)`, and
+  the superseded chain's next `RATCHET_INFLIGHT_WINDOW` (64) keys are staged at
+  the ratchet. Epoch keying is required, not cosmetic: the counter resets to
+  zero, so an old-chain and a new-chain message share a number and a bare `u64`
+  key made them collide.
+- **Group sender-key chain could be rewound ⇒ (key, nonce) reuse.** A bundle is
+  a repeatable statement; re-sending the original rebuilt the victim's chain at
+  position 0, and anyone holding the key could then encrypt under a consumed
+  (key, nonce) pair — which leaks the plaintext XOR and the Poly1305 one-time
+  key, and permits forgery. `handle_sender_key` now enforces **membership** and
+  **one-shot acceptance** (cleared on removal, so a genuine re-join still works).
+- **Group roster cap was bypassable**: `if roster.len() > 31` sat *below* the
+  `if let Some(existing)` early return, so an invite for a group we were already
+  in took the uncapped path — ~260k members, ~260k SQLite inserts, from one
+  512 KiB frame, at 30 frames/s. Cap moved above every branch, and
+  `GroupCreate`'s O(n²) `Vec::contains` dedup is now a `HashSet`.
+
+**The false-safety class (this app's most distinctive failure mode):**
+
+- `m2m://vault-locked` was **never emitted**, so idle-lock and "Lock Now"
+  zeroized the Rust keys while the webview still showed every decrypted
+  message — and the button toasted "Vault locked" as a success. The `AppContext`
+  handler was always correct; nothing ever fired it.
+- `m2m://security-error` was emitted and had no listener. A protection that
+  failed to apply was silent.
+- `handleOpenChat` hard-coded `peer_verified: true` → a green Verified badge on
+  every conversation opened from the Hub, and the verify button hidden. Now
+  asks `get_connection_state` for the real value.
+- **Cross-conversation contamination**: `m2m://message` appended to whatever
+  conversation was open, so an informant's message appeared in a source's
+  transcript and replies went to the source. Same bug in `GroupChatView` (the
+  `group_id` was destructured and discarded). Both fixed + regression test.
+- `ChatView.submit` had an empty `catch` — a failed send was indistinguishable
+  from a delivered one.
+- Retention / mute / reactions used `catch {}` on optimistic updates. Retention
+  was the worst: "Auto-Delete After 24h" that silently did nothing means the
+  messages are on disk forever. All now roll back and say so.
+- Clipboard writes were unawaited, so a one-time invite that never left the app
+  showed ✓.
+- `SetupView` `catch {}` → an unrecoverable startup hang with no error or retry.
+- `panic_wipe` failure was `console.error` only — the user who just pressed the
+  emergency hotkey mid-incident saw nothing and would assume they were safe.
+- `ChatView.tsx:574` — the one site I missed last session.
+
+**Concurrency:**
+
+- `state::connection_state` held the global `connections` **read** guard across
+  `conn.lock().await` — write-preferring, so one slow peer froze every
+  `disconnect_peer`, heartbeat teardown and new-connection insert. Now delegates
+  to `peer_state_snapshot`.
+- `disconnect_peer` held the **write** guard across a socket send (up to 10 s).
+  Now removes from the map first, then sends.
+- `refresh_stun` held `stun_config` across discovery then wanted
+  `candidates.write()`; `collect_network_diagnostics` did the inverse. A
+  confirmed 2-cycle, both sides now snapshot and release.
+- `load_group_messages` called `our_peer_key_hex()` (which reads `identity`)
+  while holding `storage_key` — the `storage_key ⇄ identity` cycle that the
+  snapshot helper was written to prevent. Hoisted above the locks.
+
+**Four more `#[expect(dead_code)]` attributes removed as stale**, and
+`protocol.rs`'s test module fixed so the suite compiles.
+
+### 0.2 Still open (ranked)
+
+See §5. The next ones are the LAN-discovery blocking `recv_from` inside
+`tokio::spawn` (pins a worker thread for the life of the feature), unbounded
+disk growth (rate limits cap rate, not total), zero file-permission hardening,
+temp files orphaned forever, no shutdown path, and the
+`connect_family_member` / `connect_discovered_peer` `[0u8; 32]` sentinel that
+makes both features non-functional while still leaking the plaintext
+`HandshakeInit` first.
 
 ---
 

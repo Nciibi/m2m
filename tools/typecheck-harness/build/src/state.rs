@@ -471,14 +471,16 @@ impl AppState {
 
     /// Get the connection state for a peer by their public key hex.
     pub async fn connection_state(&self, peer_key_hex: &str) -> ConnectionState {
-        let conns = self.connections.read().await;
-        match conns.get(peer_key_hex) {
-            Some(conn) => {
-                let c = conn.lock().await;
-                c.session.state
-            }
-            None => ConnectionState::Disconnected,
-        }
+        // Deliberately a thin wrapper over `peer_state_snapshot`.
+        //
+        // This used to take `connections.read()` and then `conn.lock().await`
+        // while still holding the map guard. `tokio::sync::RwLock` is
+        // write-preferring, so one *queued writer* blocks every later reader:
+        // while a peer was slow, this held the global read guard for the whole
+        // window and froze every `disconnect_peer`, every heartbeat teardown and
+        // every new-connection insert in the process. A UI poll of one slow peer
+        // was enough to stall the whole connection subsystem.
+        self.peer_state_snapshot(peer_key_hex).await
     }
 
     /// Borrow a peer's connection handle **without** holding the connection-map

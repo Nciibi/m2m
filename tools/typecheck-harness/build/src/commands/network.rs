@@ -1110,8 +1110,17 @@ pub async fn disconnect_peer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
 ) -> Result<(), AppError> {
-    let mut conns = state.connections.write().await;
-    if let Some(conn_arc) = conns.remove(&peer_key_hex) {
+    // Remove from the map first, then send — and never hold the map's *write*
+    // guard across the socket write.
+    //
+    // This held `connections.write()` for the whole send, up to the 10 s
+    // `NETWORK_TIMEOUT` if the peer was slow. That is the most exclusive lock in
+    // the process: every one of the ~65 `peer_connection()` call sites, every
+    // new-connection insert and every heartbeat teardown blocked behind it. So
+    // one unresponsive peer turned "disconnect this one chat" into a
+    // process-wide stall.
+    let conn_arc = state.connections.write().await.remove(&peer_key_hex);
+    if let Some(conn_arc) = conn_arc {
         let mut conn = conn_arc.lock().await;
         // Send the disconnect ENCRYPTED. A plaintext 0x30 frame is forgeable:
         // 14 bytes injected into an established TCP stream tear the session
