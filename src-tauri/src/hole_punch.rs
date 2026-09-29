@@ -40,9 +40,25 @@ pub enum ConnectionError {
 
 // ─── Role ────────────────────────────────────────────────────────────────────
 
+/// Which end of the hole-punch attempt we were.
+///
+/// ⚠️ `Responder` is currently **unconstructible**. The responder path was
+/// removed: it tried to bind the listener port that the app was already
+/// listening on, so it failed with `EADDRINUSE` and could never run. Punching
+/// is connect-only (`punch_connect_only`), which always yields `Initiator`.
+///
+/// The variant is kept so the type still describes the protocol rather than
+/// just the current implementation, and so restoring the responder is a matter
+/// of writing the path rather than reshaping the type. A real responder needs
+/// a *different* listener (or a coordinated simultaneous-open) — that is a
+/// protocol change, not a patch, which is why it was not attempted here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Initiator,
+    #[expect(
+        dead_code,
+        reason = "unreachable while punching is connect-only; see the Role doc"
+    )]
     Responder,
 }
 
