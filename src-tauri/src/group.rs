@@ -169,6 +169,7 @@ impl Group {
             our_verification_key: Some(verification_key),
             receiver_chains: HashMap::new(),
             verification_keys: HashMap::new(),
+            accepted_bundles: HashSet::new(),
             last_message_at: 0,
             last_message_preview: None,
         }
