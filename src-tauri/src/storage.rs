@@ -1136,8 +1136,30 @@ impl MessageStore {
                 FOREIGN KEY (group_id) REFERENCES groups(group_id)
             );
             CREATE INDEX IF NOT EXISTS idx_group_messages_group
-                ON group_messages(group_id, timestamp);",
+                ON group_messages(group_id, timestamp);
+
+            -- Byte accounting for the storage cap.
+            --
+            -- A single row holding the running total of on-disk message bytes.
+            -- It exists because the alternative — SUM(LENGTH(...)) over the
+            -- whole table on every inbound message — is O(rows), and the
+            -- receive loop admits up to 30 messages/second, so a full scan per
+            -- message is not viable. The counter is re-derived from SQL
+            -- whenever usage approaches the cap (see `recompute_stored_bytes`),
+            -- so drift from an un-audited write path self-corrects exactly
+            -- where being wrong would matter.
+            CREATE TABLE IF NOT EXISTS storage_stats (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                total_bytes INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT OR IGNORE INTO storage_stats (id, total_bytes) VALUES (1, 0);
+
+            -- Oldest-first eviction walks this ordering.
+            CREATE INDEX IF NOT EXISTS idx_messages_oldest
+                ON messages(timestamp);",
         )?;
+        // Backfill the counter for a store that predates it. Cheap once, at open.
+        self.recompute_stored_bytes()?;
         Ok(())
     }
 
