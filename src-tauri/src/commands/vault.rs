@@ -41,10 +41,10 @@ async fn derive_key_blocking(
 pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, AppError> {
     crypto::init().map_err(|e| AppError::invalid(format!("crypto init failed: {e}")))?;
 
-    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::invalid(format!("data dir error: {e}")))?;
+    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
     let keys_db_path = data_dir.join("keys.db");
 
-    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::invalid(format!("key store error: {e}")))?;
+    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::storage(format!("key store error: {e}")))?;
 
     let has_identity = key_store.has_identity().unwrap_or(false);
 
@@ -139,7 +139,7 @@ pub async fn unlock_vault(
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let _data_dir = storage::ensure_data_dir().map_err(|e| AppError::invalid(format!("data dir error: {e}")))?;
+    let _data_dir = storage::ensure_data_dir().map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
     // Note: messages.db and transfers.db paths are used by
     // ensure_message_store / ensure_transfer_store lazy init in chat.rs/state.rs
 
@@ -340,7 +340,7 @@ pub async fn unlock_vault(
             util::crypto_encrypt_storage(&sk_arr, &new_key, util::AAD_KEY_STORE)
                 .map_err(|e| AppError::invalid(format!("failed to re-encrypt identity: {e}")))?;
         let kp = IdentityKeypair::from_bytes(&pub_arr, &sk_arr)
-            .map_err(|e| AppError::invalid(format!("failed to reconstruct identity: {e}")))?;
+            .map_err(|e| AppError::storage(format!("failed to reconstruct identity: {e}")))?;
 
         let xkp = crate::crypto::X25519IdentityKeypair::generate();
 
@@ -365,7 +365,7 @@ pub async fn unlock_vault(
         let storage_key = derive_key_blocking(passphrase.clone(), pub_bytes.to_vec()).await?;
         let (nonce, encrypted_sk) =
             util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
-                .map_err(|e| AppError::invalid(format!("failed to encrypt identity: {e}")))?;
+                .map_err(|e| AppError::storage(format!("failed to encrypt identity: {e}")))?;
 
         let xkp = crate::crypto::X25519IdentityKeypair::generate();
         let x_sk_bytes = xkp.secret_key_bytes();
@@ -381,10 +381,10 @@ pub async fn unlock_vault(
         let key_store2 = ks_guard2.as_ref().ok_or("key store not initialized")?;
         key_store2
             .store_identity(&pub_bytes, &encrypted_sk, &nonce, now)
-            .map_err(|e| AppError::invalid(format!("failed to store identity: {e}")))?;
+            .map_err(|e| AppError::storage(format!("failed to store identity: {e}")))?;
         key_store2
             .set_vault_initialized()
-            .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
+            .map_err(|e| AppError::storage(format!("failed to mark vault initialized: {e}")))?;
         key_store2
             .store_x25519_key(&x_pub, &x_enc, &x_nonce)
             .map_err(|e| AppError::invalid(format!("failed to store X25519 key: {e}")))?;
@@ -469,7 +469,7 @@ pub async fn unlock_vault(
                     .map_err(|e| AppError::invalid(format!("failed to persist migrated identity: {e}")))?;
                 store
                     .set_vault_initialized()
-                    .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
+                    .map_err(|e| AppError::storage(format!("failed to mark vault initialized: {e}")))?;
                 if store
                     .insert_account(
                         lpub,
@@ -520,7 +520,7 @@ pub async fn create_vault_account(
     let storage_key = derive_key_blocking(passphrase, pub_bytes.to_vec()).await?;
     let (nonce, encrypted_sk) =
         util::crypto_encrypt_storage(&sk_bytes, &storage_key, util::AAD_KEY_STORE)
-            .map_err(|e| AppError::invalid(format!("failed to encrypt identity: {e}")))?;
+            .map_err(|e| AppError::storage(format!("failed to encrypt identity: {e}")))?;
 
     let now = chrono::Utc::now().timestamp();
     {
@@ -530,7 +530,7 @@ pub async fn create_vault_account(
             .ok_or("key store not initialized — call init_identity first")?;
         key_store
             .set_vault_initialized()
-            .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
+            .map_err(|e| AppError::storage(format!("failed to mark vault initialized: {e}")))?;
         key_store
             .insert_account(&pub_bytes, &encrypted_sk, &nonce, None, now)
             .map_err(|e| AppError::invalid(format!("failed to create account: {e}")))?;
@@ -701,7 +701,7 @@ pub async fn connect_family_member(
         }
         let members = store
             .list_family(sk.as_ref())
-            .map_err(|e| AppError::invalid(format!("list family: {e}")))?;
+            .map_err(|e| AppError::storage(format!("list family: {e}")))?;
         members
             .into_iter()
             .find(|m| m.public_key_hex == peer_key_hex)
@@ -886,7 +886,7 @@ pub async fn export_identity(
     let store = ks.as_ref().ok_or("key store not initialized")?;
     let family = store
         .list_family_all(sk.as_ref())
-        .map_err(|e| AppError::invalid(format!("list family: {e}")))?;
+        .map_err(|e| AppError::storage(format!("list family: {e}")))?;
     drop(ks);
 
     // Encrypt the secret key with export passphrase
@@ -1004,7 +1004,7 @@ pub async fn import_identity(
         Ok(kp) => kp,
         Err(e) => {
             sk_arr.zeroize();
-            return Err(AppError::invalid(format!("failed to reconstruct identity: {e}")));
+            return Err(AppError::storage(format!("failed to reconstruct identity: {e}")));
         }
     };
 
@@ -1012,9 +1012,9 @@ pub async fn import_identity(
     let pub_hex = hex::encode(&pub_bytes);
 
     // Store to vault
-    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::invalid(format!("data dir error: {e}")))?;
+    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
     let keys_db_path = data_dir.join("keys.db");
-    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::invalid(format!("key store error: {e}")))?;
+    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::storage(format!("key store error: {e}")))?;
 
     // Seal the private key under Argon2id(passphrase, salt = public key) —
     // the exact derivation unlock_vault uses for account lookup — so the
@@ -1103,7 +1103,7 @@ pub async fn import_identity(
     // Initialize transfer store
     let transfers_db_path = data_dir.join("transfers.db");
     let transfer_store = storage::TransferStore::open(&transfers_db_path)
-        .map_err(|e| AppError::invalid(format!("transfer store error: {e}")))?;
+        .map_err(|e| AppError::storage(format!("transfer store error: {e}")))?;
     {
         let mut ts = state.transfer_store.lock().await;
         *ts = Some(transfer_store);
@@ -1143,10 +1143,10 @@ fn seal_imported_identity(
     let now = chrono::Utc::now().timestamp();
     key_store
         .store_identity(pub_bytes, &new_enc_sk, &new_nonce, now)
-        .map_err(|e| AppError::invalid(format!("failed to store identity: {e}")))?;
+        .map_err(|e| AppError::storage(format!("failed to store identity: {e}")))?;
     key_store
         .set_vault_initialized()
-        .map_err(|e| AppError::invalid(format!("failed to mark vault initialized: {e}")))?;
+        .map_err(|e| AppError::storage(format!("failed to mark vault initialized: {e}")))?;
     // insert_account fails only on the UNIQUE(public_key) conflict — i.e.
     // this identity was already registered as an account. Refresh it.
     if key_store

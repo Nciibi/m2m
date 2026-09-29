@@ -151,7 +151,7 @@ pub async fn send_file(
             state
                 .ensure_transfer_store(&state.data_dir)
                 .await
-                .map_err(|e| AppError::invalid(format!("transfer store init: {e}")))?;
+                .map_err(|e| AppError::storage(format!("transfer store init: {e}")))?;
 
             // Persist initial transfer record
             {

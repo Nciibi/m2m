@@ -267,7 +267,7 @@ pub async fn delete_conversation_cmd(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     store
         .delete_conversation(&conversation_id)
-        .map_err(|e| AppError::invalid(format!("delete failed: {e}")))
+        .map_err(|e| AppError::storage(format!("delete failed: {e}")))
 }
 
 /// Set per-conversation retention policy.
@@ -699,7 +699,7 @@ pub async fn delete_message(
         if let Some(ref store) = *ms {
             let owned = store
                 .message_in_conversation(&message_id, &peer_key_hex, "sent")
-                .map_err(|e| AppError::invalid(format!("delete failed: {e}")))?;
+                .map_err(|e| AppError::storage(format!("delete failed: {e}")))?;
             if !owned && !state.security_config.read().await.ephemeral_mode {
                 return Err(AppError::invalid("message not found in this conversation"));
             }
@@ -881,7 +881,7 @@ pub async fn toggle_favorite(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let new_val = store
         .toggle_favorite(&peer_key_hex)
-        .map_err(|e| AppError::invalid(format!("db error: {e}")))?;
+        .map_err(|e| AppError::storage(format!("db error: {e}")))?;
     Ok(new_val)
 }
 
@@ -895,7 +895,7 @@ pub async fn toggle_archive(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let new_val = store
         .toggle_archive(&peer_key_hex)
-        .map_err(|e| AppError::invalid(format!("db error: {e}")))?;
+        .map_err(|e| AppError::storage(format!("db error: {e}")))?;
     Ok(new_val)
 }
 
@@ -952,7 +952,7 @@ pub async fn search_messages(
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
             let stored = store
                 .load_messages(&peer_key_hex, 500)
-                .map_err(|e| AppError::invalid(format!("db error: {e}")))?;
+                .map_err(|e| AppError::storage(format!("db error: {e}")))?;
             let query_lower = query.to_lowercase();
             stored
                 .into_iter()
