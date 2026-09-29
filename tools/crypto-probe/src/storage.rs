@@ -781,6 +781,15 @@ pub struct EvictionReport {
 
 pub struct MessageStore {
     conn: Connection,
+    /// Number of content keys destroyed by shredding, for audit and for tests.
+    ///
+    /// The count is what makes the shred *verifiable through the public path*.
+    /// `evict_to_cap` shreds and then deletes, so after a pass the rows are gone
+    /// and there is nothing left to inspect — which meant a test could only
+    /// call `shred_message_keys` directly, and would have passed unchanged if
+    /// `evict_to_cap` had stopped calling it altogether. This counter makes the
+    /// wiring itself assertable.
+    shredded_keys: std::sync::atomic::AtomicU64,
 }
 
 // ─── Crypto-shredding primitives (H7) ──────────────────────────────────────
@@ -1027,7 +1036,10 @@ impl MessageStore {
         Self::migrate_conversations_table(&conn)?;
         Self::migrate_messages_table(&conn)?;
 
-        let store = Self { conn };
+        let store = Self {
+            conn,
+            shredded_keys: std::sync::atomic::AtomicU64::new(0),
+        };
         // Seed the storage-cap counter from the tables. Done once, at open, so
         // a database that already holds messages is accounted for from its
         // first launch — otherwise the cap would appear to be 0 bytes and
@@ -1656,12 +1668,19 @@ impl MessageStore {
     /// later happens to the row or the file.
     fn shred_message_keys(&self, ids: &[String]) -> Result<(), StorageError> {
         for id in ids {
-            self.conn.execute(
+            let n = self.conn.execute(
                 "UPDATE messages SET content_key_wrapped = ?2 WHERE id = ?1",
                 params![id, vec![0u8; WRAPPED_CEK_LEN]],
             )?;
+            self.shredded_keys
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
+    }
+
+    /// How many content keys this store has destroyed by shredding.
+    pub fn shredded_key_count(&self) -> u64 {
+        self.shredded_keys.load(std::sync::atomic::Ordering::Relaxed)
     }
 
 
