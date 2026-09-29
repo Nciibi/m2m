@@ -112,6 +112,17 @@ impl AppError {
     pub fn peer_unreachable(message: impl Into<String>) -> Self {
         Self::new("family.unreachable", message)
     }
+
+    /// Encoding a payload failed.
+    ///
+    /// Almost always a bug rather than bad input — these types are
+    /// `Serialize` by construction, so a failure means a field that cannot be
+    /// represented, not a malformed request. Distinguished from `invalid_input`
+    /// so a caller can tell "you sent nonsense" from "we could not encode what
+    /// we were given".
+    pub fn serialization(message: impl Into<String>) -> Self {
+        Self::new("protocol.serialization_failed", message)
+    }
 }
 
 impl std::fmt::Display for AppError {
