@@ -26,21 +26,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time;
 
 use thiserror::Error;
 
-use crate::candidate;
 use crate::network;
-use crate::protocol::{self, PacketType, WireCandidate};
-use crate::session::Session;
-use crate::state::{AppState, PeerConnection};
-use crate::stun;
-
-use crate::commands::util;
+use crate::protocol::{self, PacketType};
+use crate::state::AppState;
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
