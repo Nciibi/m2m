@@ -3974,4 +3974,215 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    // ─── Storage cap: byte accounting and eviction ─────────────────────────
+    //
+    // The cap exists because the receive loop's limits are *rate* limits. 30
+    // frames/s and 16 MiB/s bound how fast a peer writes, not how much in
+    // total, and `retention_policy = 'none'` is the default, so nothing
+    // reclaims it. These tests pin the two properties that make the cap
+    // trustworthy: the byte count is exact, and eviction is permanent and
+    // oldest-first.
+
+    /// Store `n` messages of `size` bytes, oldest-first by timestamp.
+    fn fill_messages(store: &MessageStore, conv: &str, n: u32, size: usize) {
+        for i in 0..n {
+            store
+                .store_message_secure(
+                    &format!("m{i}"),
+                    conv,
+                    "received",
+                    &vec![b'x'; size],
+                    1_000 + i as i64,
+                    None,
+                    true,
+                    &test_key(),
+                )
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn test_stored_bytes_counts_and_releases() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        assert_eq!(store.stored_bytes().unwrap(), 0, "empty store is 0");
+
+        fill_messages(&store, "c1", 5, 1000);
+        let after = store.stored_bytes().unwrap();
+        // ciphertext (1000 + 16-byte tag) + 24-byte nonce + 72-byte wrapped key
+        let expected = 5 * (1000 + 16 + 24 + 72);
+        assert_eq!(after, expected as u64, "counter must equal exact row size");
+
+        store.delete_conversation("c1").unwrap();
+        assert_eq!(
+            store.stored_bytes().unwrap(),
+            0,
+            "deleting the conversation must release every byte"
+        );
+    }
+
+    #[test]
+    fn test_stored_bytes_ignores_duplicate_inserts() {
+        // `store_message_secure` is `INSERT OR IGNORE`, so a redelivered
+        // message must not inflate the count — otherwise a peer looping the
+        // same frame id would trip the cap without adding anything.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 1, 500);
+        let once = store.stored_bytes().unwrap();
+        for _ in 0..5 {
+            store
+                .store_message_secure("m0", "c1", "received", &vec![b'x'; 500], 1_000, None, true, &test_key())
+                .unwrap();
+        }
+        assert_eq!(store.stored_bytes().unwrap(), once);
+    }
+
+    #[test]
+    fn test_stored_bytes_verified_recovers_from_drift() {
+        // The counter is a cache. If a write path forgets to update it, the
+        // exact re-derivation on the enforcement path must still be right —
+        // a counter that drifted low would let the cap be overshot.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 200);
+        let truth = store.stored_bytes_verified().unwrap();
+
+        // Corrupt the counter, as a missing update would.
+        store
+            .conn
+            .execute("UPDATE storage_stats SET total_bytes = 0 WHERE id = 1", [])
+            .unwrap();
+        assert_eq!(store.stored_bytes().unwrap(), 0, "cache is now wrong");
+        assert_eq!(
+            store.stored_bytes_verified().unwrap(),
+            truth,
+            "re-derivation must restore the true total"
+        );
+    }
+
+    #[test]
+    fn test_evict_is_oldest_first() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 10, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 10;
+
+        // Cap that leaves room for 3 messages after the 90% low-water step.
+        let report = store.evict_to_cap(one_msg * 4).unwrap();
+        assert!(report.messages_evicted > 0, "something must be evicted");
+
+        // The survivors must be the *newest* ones.
+        let msgs = store.load_messages("c1", 100).unwrap();
+        let remaining: Vec<&str> = msgs.iter().map(|m| m.id.as_str()).collect();
+        assert!(
+            remaining.contains(&"m9"),
+            "newest message must survive, got {remaining:?}"
+        );
+        assert!(
+            !remaining.contains(&"m0"),
+            "oldest message must be gone, got {remaining:?}"
+        );
+        assert!(store.stored_bytes().unwrap() <= one_msg * 4);
+    }
+
+    #[test]
+    fn test_evict_is_permanent_not_soft_delete() {
+        // The user's own "delete for everyone" leaves a tombstone row; the cap
+        // must not, because the point is to release the bytes.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 6;
+
+        store.evict_to_cap(one_msg * 2).unwrap();
+
+        let count: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert!(count < 6, "rows must be removed, not tombstoned: {count}");
+        // And no residual CEK anywhere, for the rows that did go.
+        let live_keys: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages
+                  WHERE content_key_wrapped IS NOT NULL
+                    AND length(content_key_wrapped) != ?1",
+                params![WRAPPED_CEK_LEN],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(live_keys, 0, "surviving rows keep their keys; evicted keys are zeroed");
+    }
+
+    #[test]
+    fn test_evict_reports_overridden_retention() {
+        // A user who set "delete after 7 days" and then loses messages to a
+        // full disk has had a preference overridden. The conversation must be
+        // named so the UI can say which one.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        store.ensure_conversation("c2", &[0x22; 32]).unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE conversations SET retention_policy = 'delete', auto_delete_at = 999 WHERE id = 'c1'",
+                [],
+            )
+            .unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 6;
+
+        let report = store.evict_to_cap(one_msg * 2).unwrap();
+        assert!(
+            report.overrode_retention.contains(&"c1".to_string()),
+            "the conversation whose policy was overridden must be reported, got {:?}",
+            report.overrode_retention
+        );
+    }
+
+    #[test]
+    fn test_evict_includes_group_messages() {
+        // `group_messages` is a separate table. If it were not counted or not
+        // evicted, an attacker could park everything in group traffic and the
+        // cap would never fire.
+        let store = mem_messagestore();
+        store.upsert_group("g1", "G", 1, "member").unwrap();
+        for i in 0..6u32 {
+            store
+                .store_group_message(
+                    &format!("gm{i}"),
+                    "g1",
+                    &"a".repeat(64),
+                    &vec![b'y'; 1000],
+                    &[0u8; 24],
+                    1_000 + i as i64,
+                    true,
+                )
+                .unwrap();
+        }
+        let before = store.stored_bytes().unwrap();
+        assert!(before > 0, "group messages must count toward the cap");
+
+        let report = store.evict_to_cap(before / 4).unwrap();
+        assert!(
+            report.group_messages_evicted > 0,
+            "group messages must be evicted, got {report:?}"
+        );
+    }
+
+    #[test]
+    fn test_evict_is_a_noop_under_the_cap() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 100);
+        let before = store.stored_bytes().unwrap();
+
+        let report = store.evict_to_cap(before * 100).unwrap();
+        assert_eq!(report.messages_evicted, 0);
+        assert_eq!(report.bytes_freed, 0);
+        assert_eq!(store.stored_bytes().unwrap(), before, "nothing may be lost");
+    }
 }
