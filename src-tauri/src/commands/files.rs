@@ -668,7 +668,7 @@ async fn send_file_chunks_inner(
                 })
                 .await
             };
-            let mut buf = match read_result {
+            let buf = match read_result {
                 Ok(Ok(b)) => b,
                 Ok(Err(e)) => {
                     return Err(AppError::invalid(format!("failed to read chunk {chunk_index}: {e}")));
