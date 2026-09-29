@@ -66,6 +66,12 @@ autotests = false
 autoexamples = false
 autobenches = false
 
+# Standalone. Without this, cargo refuses to build it because the harness lives
+# inside the repo's directory tree and so appears to be a missing workspace
+# member. An empty table keeps it out of the real workspace entirely, so the
+# app's dependency graph and lockfile are never affected by harness crates.
+[workspace]
+
 [lib]
 name = "m2m_lib"
 path = "src/lib.rs"
