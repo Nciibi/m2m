@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { I18nProvider } from "./i18n/I18nContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { asCaptureWarning } from "./events";
+import { asCaptureWarning, asSecurityError } from "./events";
 import "./styles/tokens.css";
 import "./styles/theme.css";
 import "./styles/animations.css";
@@ -26,9 +26,13 @@ import ChatView from "./views/ChatView";
 import GroupChatView from "./views/GroupChatView";
 import SettingsView from "./views/SettingsView";
 
-/** Active capture tools reported by the backend monitor (empty = clear). */
-function CaptureWarningBanner({ active }: { active: string[] }) {
-  if (active.length === 0) return null;
+/**
+ * A standing security condition the user must be able to see: either active
+ * capture tooling, or a security control that failed to apply. `role="alert"`
+ * because both are assertive — this is not something to notice in passing.
+ */
+function SecurityBanner({ body }: { body: string | null }) {
+  if (!body) return null;
   return (
     <div
       role="alert"
@@ -45,7 +49,7 @@ function CaptureWarningBanner({ active }: { active: string[] }) {
         padding: "6px 14px", fontSize: 13, textAlign: "center",
       }}
     >
-      ⚠ Screen capture software detected: {active.join(", ")} — your screen may be recorded.
+      {body}
     </div>
   );
 }
@@ -205,7 +209,14 @@ function AppInner() {
     // and the tab order, and the underlying content is only blurred when the
     // window is not focused anyway.
     <div className={blurred ? "security-blur" : undefined} aria-hidden={blurred || undefined} inert={blurred || undefined}>
-      <CaptureWarningBanner active={captureWarning} />
+      <SecurityBanner
+        body={
+          securityError ??
+          (captureWarning.length > 0
+            ? `⚠ Screen capture software detected: ${captureWarning.join(", ")} — your screen may be recorded.`
+            : null)
+        }
+      />
       <ErrorBoundary name={view}>
         <div className="view-fade" key={view}>
           {viewComponent}
