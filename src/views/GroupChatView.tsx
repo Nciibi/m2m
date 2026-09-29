@@ -98,7 +98,7 @@ export default function GroupChatView() {
       setCreateMembers("");
       addToast("Group created!", "success");
     } catch (e) {
-      addToast("Failed to create group: " + (errorMessage(e) || "unknown"), "error");
+      addToast("Failed to create group: " + (e || "unknown"), "error");
     }
   };
 
