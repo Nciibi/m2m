@@ -752,23 +752,23 @@ impl TentativeReceive {
         dr.recv_chain_key = Some(take(&mut self.recv_chain_key));
         dr.their_ratchet_pub = take(&mut self.their_ratchet_pub);
         dr.recv_message_number = self.recv_message_number;
-        if let Some(superseded_upto) = self.ratchet_reset {
-            // The previous chain is superseded, but only up to the point we
-            // had reached on it. Keys at or below that point correspond to
-            // messages the sender has already moved past and will never
-            // resend, so they are genuinely unrecoverable. Keys *above* it are
-            // still in flight and remain decryptable via the skipped-key cache
-            // in `decrypt`.
-            //
-            // The previous implementation cleared the entire cache here, which
-            // silently and permanently dropped every message that crossed a DH
-            // ratchet in flight — roughly one in every 100 sends, since
-            // `ratchet_interval` is 100.
-            dr.skipped_keys.retain(|&num, _| num > superseded_upto);
+        if self.ratchet_reset.is_some() {
+            dr.ratchet_epoch = dr.ratchet_epoch.wrapping_add(1);
         }
+        // Note: there is deliberately no `retain` here any more.
+        //
+        // The old code tried to keep "in-flight" keys with
+        // `retain(|&num, _| num > superseded_upto)`, but every key in the
+        // cache is by construction `<= superseded_upto` — they were skipped
+        // while advancing *to* that counter — so the predicate was never true
+        // and the call was a full `clear()`. The real defect was upstream: the
+        // superseded chain's pending keys were never staged in the first
+        // place, so there was nothing for a `retain` to preserve. `receive_tentative`
+        // now stages them at the ratchet point, under the previous epoch, so
+        // they survive here and are still reachable after the counter resets.
         let staged = take(&mut self.staged_skips);
-        for (num, key) in staged {
-            dr.skipped_keys.insert(num, key);
+        for (epoch, num, key) in staged {
+            dr.skipped_keys.insert((epoch, num), key);
         }
         take(&mut self.plaintext)
     }
