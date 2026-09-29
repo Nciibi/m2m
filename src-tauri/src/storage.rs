@@ -2014,6 +2014,19 @@ impl MessageStore {
     pub fn delete_expired_messages(&self) -> Result<u32, StorageError> {
         let now = chrono::Utc::now().timestamp();
         self.conn.pragma_update(None, "secure_delete", "ON")?;
+        // Same accounting as `delete_conversation`: measure before freeing.
+        let freed: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(content_encrypted)
+                                    + LENGTH(content_nonce)
+                                    + ?1), 0)
+                   FROM messages
+                  WHERE expires_at IS NOT NULL AND expires_at <= ?2",
+                params![Self::MSG_ROW_OVERHEAD, now],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
         self.conn.execute(
             "UPDATE messages SET content_key_wrapped = ?2
              WHERE expires_at IS NOT NULL AND expires_at <= ?1 AND content_key_wrapped IS NOT NULL",
@@ -2024,6 +2037,7 @@ impl MessageStore {
             "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
             rusqlite::params![now],
         )?;
+        self.add_stored_bytes(-freed);
         self.wal_checkpoint_truncate()?;
         Ok(count as u32)
     }
