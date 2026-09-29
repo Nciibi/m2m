@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 ///
 /// Enforced on the *deserialized* roster rather than the signed `member_count`
 /// field, and before any allocation — see the note in `join_group`.
-const MAX_GROUP_MEMBERS: usize = 32;
+pub const MAX_GROUP_MEMBERS: usize = 32;
 
 use crate::crypto::{
     self, derive_receiver_chain, generate_sender_key_pair, generate_sender_signing_keypair,
