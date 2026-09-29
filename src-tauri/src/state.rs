@@ -286,6 +286,44 @@ pub struct SecurityConfig {
     /// app exits — no confirmation, by design. OFF by default.
     #[serde(default)]
     pub panic_hotkey_enabled: bool,
+    /// Maximum bytes of stored message history, in bytes. When exceeded, the
+    /// oldest messages are permanently evicted (see `MessageStore::evict_to_cap`).
+    ///
+    /// `0` means "use the default" rather than "unlimited" — deliberately.
+    /// `SecurityConfig` derives `Default`, and `AppState::new` constructs
+    /// `SecurityConfig::default()` on every launch that has no config file, so
+    /// a zero here is the value that would actually be in effect on a fresh
+    /// install. Mapping it to the default cap is what keeps the cap switched on
+    /// exactly where it matters. Read it through
+    /// [`SecurityConfig::effective_storage_cap`], never directly.
+    #[serde(default)]
+    pub storage_cap_bytes: u64,
+}
+
+/// Default ceiling on stored message history: 10 GiB.
+///
+/// Generous enough that no ordinary user reaches it, low enough that a peer
+/// flooding the store cannot fill a laptop disk before anyone notices. The
+/// receive loop's limits are *rate* limits (30 frames/s, 16 MiB/s) and bound
+/// nothing about the total, so without a ceiling a stranger can write
+/// unattended indefinitely.
+pub const DEFAULT_STORAGE_CAP_BYTES: u64 = 10 * 1024 * 1024 * 1024;
+
+impl SecurityConfig {
+    /// The storage cap actually in force, in bytes.
+    ///
+    /// `0` (or a partial write of the field) resolves to
+    /// [`DEFAULT_STORAGE_CAP_BYTES`] rather than to "no limit", so that a
+    /// missing or default-constructed config still gets a bounded store. An
+    /// explicit opt-out is a deliberately large value from the UI, not an
+    /// absence.
+    pub fn effective_storage_cap(&self) -> u64 {
+        if self.storage_cap_bytes == 0 {
+            DEFAULT_STORAGE_CAP_BYTES
+        } else {
+            self.storage_cap_bytes
+        }
+    }
 }
 
 /// Peer discovery method configuration.

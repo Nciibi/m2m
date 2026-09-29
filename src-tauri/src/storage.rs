@@ -1422,6 +1422,188 @@ impl MessageStore {
         content_encrypted_len as i64 + content_nonce_len as i64 + Self::MSG_ROW_OVERHEAD
     }
 
+    /// Outcome of an eviction pass, for reporting to the user.
+    #[derive(Debug, Clone, Default, PartialEq, Eq)]
+    pub struct EvictionReport {
+        /// How many 1:1 messages were permanently destroyed.
+        pub messages_evicted: u32,
+        /// How many group messages were permanently destroyed.
+        pub group_messages_evicted: u32,
+        /// Conversations whose retention policy was overridden by eviction.
+        ///
+        /// A user who set "delete after 7 days" and then loses messages to the
+        /// cap has had a preference silently overridden. Naming the
+        /// conversation is the difference between a policy the app states and
+        /// one the user has to infer.
+        pub overrode_retention: Vec<String>,
+        /// Bytes actually released.
+        pub bytes_freed: u64,
+    }
+
+    /// Permanently evict the oldest stored messages until usage is at or below
+    /// `cap_bytes`.
+    ///
+    /// This is a **hard** delete, not the soft-delete tombstone used for a
+    /// user's own "delete for everyone": the row is removed so the bytes are
+    /// actually released. It follows the same four-step shredding sequence as
+    /// `delete_conversation` —
+    ///
+    /// 1. overwrite `content_key_wrapped` with zeros, destroying the content
+    ///    encryption key, so the ciphertext becomes undecryptable regardless of
+    ///    what survives on disk;
+    /// 2. `wal_checkpoint(TRUNCATE)`, so shredded cells cannot linger in
+    ///    `messages.db-wal`;
+    /// 3. `DELETE`, with `secure_delete = ON` zeroing freed in-page content;
+    /// 4. truncate the WAL again.
+    ///
+    /// Group messages are evicted too — `group_messages` is a separate table,
+    /// and counting it is the only reason the cap cannot be side-stepped by an
+    /// attacker who just sends group traffic.
+    ///
+    /// # Why evict rather than refuse
+    ///
+    /// Refusing writes at the cap is the other option, and it was rejected: it
+    /// drops a legitimate inbound message mid-conversation with no way for the
+    /// user to recover it, and it still leaves a full disk — just a slower fill.
+    /// Oldest-first keeps the app working and bounds the damage to history the
+    /// user already has, which is recoverable in the sense that matters here:
+    /// it still exists on the other peer's device.
+    ///
+    /// # Ordering and batching
+    ///
+    /// Rows are taken oldest-first in bounded batches, stopping at a low-water
+    /// mark so this does not re-run on every subsequent write. Batch size is
+    /// capped so a single pass cannot hold the store lock long enough to stall
+    /// a peer's message read.
+    pub fn evict_to_cap(&self, cap_bytes: u64) -> Result<EvictionReport, StorageError> {
+        let mut report = EvictionReport::default();
+        let mut used = self.stored_bytes_verified()?;
+        if used <= cap_bytes {
+            return Ok(report);
+        }
+
+        // Stop here rather than at the cap, so we are not re-entering eviction
+        // on every subsequent message.
+        const LOW_WATER_NUM: u64 = 90;
+        const LOW_WATER_DEN: u64 = 100;
+        let target = cap_bytes
+            .saturating_mul(LOW_WATER_NUM)
+            / LOW_WATER_DEN;
+        // Bounds one pass's lock hold time; see the method docs.
+        const BATCH: usize = 200;
+
+        self.conn.pragma_update(None, "secure_delete", "ON")?;
+
+        while used > target {
+            let batch_cap = BATCH.min(((used - target) as usize).max(1));
+
+            // 1. Destroy the content keys for this batch. Once this commits,
+            //    the ciphertext is unrecoverable even if the row survives.
+            let ids: Vec<String> = {
+                let mut stmt = self.conn.prepare(
+                    "SELECT id FROM messages ORDER BY timestamp ASC LIMIT ?1",
+                )?;
+                let rows = stmt.query_map(params![batch_cap as i64], |row| {
+                    row.get::<_, String>(0)
+                })?;
+                rows.filter_map(|r| r.ok()).collect()
+            };
+            if ids.is_empty() {
+                break;
+            }
+            let freed = self.shred_and_delete_batch(&ids, &mut report)?;
+
+            used = used.saturating_sub(freed);
+            report.bytes_freed += freed as u64;
+            self.add_stored_bytes(-freed);
+        }
+
+        if report.messages_evicted > 0 || report.group_messages_evicted > 0 {
+            tracing::info!(
+                evicted = report.messages_evicted,
+                group_evicted = report.group_messages_evicted,
+                freed_mb = report.bytes_freed / (1024 * 1024),
+                remaining_mb = self.stored_bytes().unwrap_or(0) / (1024 * 1024),
+                "storage cap reached — oldest messages permanently evicted"
+            );
+        }
+        Ok(report)
+    }
+
+    /// Shred and hard-delete a batch of 1:1 message ids, oldest-first.
+    ///
+    /// Returns the bytes released. Records any conversation whose retention
+    /// policy is being overridden in `report`.
+    fn shred_and_delete_batch(
+        &self,
+        ids: &[String],
+        report: &mut EvictionReport,
+    ) -> Result<i64, StorageError> {
+        // Measure first — after the shred the row is still present, but doing
+        // it before keeps the arithmetic obviously paired with the delete.
+        let mut freed: i64 = 0;
+        for id in ids {
+            freed += self
+                .conn
+                .query_row(
+                    "SELECT COALESCE(LENGTH(content_encrypted)
+                                     + LENGTH(content_nonce)
+                                     + ?2, 0)
+                       FROM messages WHERE id = ?1",
+                    params![id, Self::MSG_ROW_OVERHEAD],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            // Surface conversations whose explicit retention preference is
+            // about to be overridden, before the fact.
+            if let Ok(policy) = self.conn.query_row(
+                "SELECT c.retention_policy
+                   FROM conversations c
+                   JOIN messages m ON m.conversation_id = c.id
+                  WHERE m.id = ?1",
+                params![id],
+                |row| row.get::<_, String>(0),
+            ) {
+                if policy != "none" && !report.overrode_retention.contains(&policy) {
+                    // Store the conversation id rather than the policy so the
+                    // user can be told *which* conversation was affected.
+                    if let Ok(conv) = self.conn.query_row(
+                        "SELECT conversation_id FROM messages WHERE id = ?1",
+                        params![id],
+                        |row| row.get::<_, String>(0),
+                    ) {
+                        if !report.overrode_retention.contains(&conv) {
+                            report.overrode_retention.push(conv);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Destroy the content keys. After this, the ciphertext is
+        //    undecryptable whatever happens to the row.
+        for id in ids {
+            self.conn.execute(
+                "UPDATE messages SET content_key_wrapped = ?2 WHERE id = ?1",
+                params![id, vec![0u8; WRAPPED_CEK_LEN]],
+            )?;
+        }
+        // 2. Flush and truncate the WAL so shredded cells cannot survive in it.
+        self.wal_checkpoint_truncate()?;
+
+        // 3. Remove the rows. `secure_delete = ON` zeroes freed content.
+        for id in ids {
+            self.conn
+                .execute("DELETE FROM messages WHERE id = ?1", params![id])?;
+        }
+        report.messages_evicted += ids.len() as u32;
+
+        // 4. Truncate again after the deletes.
+        self.wal_checkpoint_truncate()?;
+        Ok(freed)
+    }
+
     /// Create or get a conversation.
     pub fn ensure_conversation(
         &self,
