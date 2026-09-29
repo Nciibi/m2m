@@ -97,7 +97,7 @@ export default function SettingsView() {
                     await invoke("lock_vault");
                     setView("vault");
                   } catch (e) {
-                    addToast("Failed to sign out: " + e, "error");
+                    addToast("Failed to sign out: " + errorMessage(e), "error");
                   }
                 }}
               >
@@ -182,7 +182,7 @@ export default function SettingsView() {
                     torOk ? "success" : "warning",
                   );
                 } catch (e) {
-                  addToast(t("settings.torTestUnavailable", { err: String(e) }), "warning");
+                  addToast(t("settings.torTestUnavailable", { err: errorMessage(e) }), "warning");
                 }
               }}>Test Tor</Button>
             </div>

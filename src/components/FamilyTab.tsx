@@ -83,7 +83,7 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
                       await invoke("remove_family_member", { peerKeyHex: m.public_key_hex });
                       onRefresh();
                     } catch (e) {
-                      addToast("Failed to remove: " + e, "error");
+                      addToast("Failed to remove: " + errorMessage(e), "error");
                     }
                   }}>×</Button>
                 </>
@@ -103,7 +103,7 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
                       onRefresh();
                       addToast("Family member updated", "success");
                     } catch (e) {
-                      addToast("Update failed: " + e, "error");
+                      addToast("Update failed: " + errorMessage(e), "error");
                     }
                   }}>Update</Button>
                 </div>
@@ -123,7 +123,7 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
                       await invoke("remove_family_member", { peerKeyHex: m.public_key_hex });
                       onRefresh();
                     } catch (e) {
-                      addToast("Failed to remove: " + e, "error");
+                      addToast("Failed to remove: " + errorMessage(e), "error");
                     }
                   }}>×</Button>
                 </>
@@ -163,7 +163,7 @@ function AddFamilyModal({ onClose, onDone }: { onClose: () => void; onDone: () =
       await onDone();
       addToast("Added to family", "success");
     } catch (e) {
-      addToast("Failed to add: " + e, "error");
+      addToast("Failed to add: " + errorMessage(e), "error");
     } finally {
       setSaving(false);
     }

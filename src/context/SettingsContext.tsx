@@ -172,7 +172,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setPublicIp(await invoke<string>("discover_public_ip"));
       setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics"));
     } catch (e) {
-      addToast("STUN failed: " + e, "error");
+      addToast("STUN failed: " + errorMessage(e), "error");
     } finally {
       setStunLoading(false);
     }
@@ -186,7 +186,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setStunConfig({ ...stunConfig, servers: newServers });
       setStunServerInput("");
     } catch (e) {
-      addToast("Failed to add STUN server: " + e, "error");
+      addToast("Failed to add STUN server: " + errorMessage(e), "error");
     }
   }, [stunConfig, stunServerInput, addToast]);
 
@@ -201,7 +201,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       await invoke("set_stun_servers", { servers: newServers });
       setStunConfig({ ...stunConfig, servers: newServers });
     } catch (e) {
-      addToast("Failed to remove STUN server: " + e, "error");
+      addToast("Failed to remove STUN server: " + errorMessage(e), "error");
     }
   }, [stunConfig, addToast]);
 
@@ -211,7 +211,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       await invoke("set_stun_servers", { servers: defaults });
       setStunConfig(stunConfig ? { ...stunConfig, servers: defaults } : null);
     } catch (e) {
-      addToast("Failed to reset STUN servers: " + e, "error");
+      addToast("Failed to reset STUN servers: " + errorMessage(e), "error");
     }
   }, [stunConfig, addToast]);
 
@@ -224,7 +224,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       // Private mode is what keeps the real IP out of invites. Silently
       // failing to enable it would leave the user believing they are protected
       // while their address is broadcast.
-      addToast("Failed to " + (newVal ? "enable" : "disable") + " private mode: " + e, "error");
+      addToast("Failed to " + (newVal ? "enable" : "disable") + " private mode: " + errorMessage(e), "error");
     }
   }, [privateMode, addToast]);
 
@@ -233,7 +233,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setConnectivityResult(await invoke<ConnectivityStatus>("check_connectivity"));
       setNetworkDiagnostics(await invoke<NatTypeInfo>("get_network_diagnostics"));
     } catch (e) {
-      addToast("Connectivity check failed: " + e, "error");
+      addToast("Connectivity check failed: " + errorMessage(e), "error");
     }
   }, [addToast]);
 
@@ -244,7 +244,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       await invoke("set_tor_enabled", { enabled: newVal });
       setNetworkSettings({ ...networkSettings, tor_enabled: newVal });
     } catch (e) {
-      addToast("Tor toggle failed: " + e, "error");
+      addToast("Tor toggle failed: " + errorMessage(e), "error");
     }
   }, [networkSettings, addToast]);
 
@@ -262,7 +262,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const peers = await invoke<DiscoveredPeer[]>("get_discovered_peers");
       setDiscoveredPeers(peers);
     } catch (e) {
-      addToast("LAN discovery toggle failed: " + e, "error");
+      addToast("LAN discovery toggle failed: " + errorMessage(e), "error");
     }
   }, [discoveryConfig, addToast]);
 
@@ -278,7 +278,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const peers = await invoke<DiscoveredPeer[]>("get_discovered_peers");
       setDiscoveredPeers(peers);
     } catch (e) {
-      addToast("DHT discovery toggle failed: " + e, "error");
+      addToast("DHT discovery toggle failed: " + errorMessage(e), "error");
     }
   }, [discoveryConfig, addToast]);
 
@@ -290,7 +290,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       addToast("Connected to discovered peer", "success");
       return info;
     } catch (e) {
-      addToast("Connection to discovered peer failed: " + e, "error");
+      addToast("Connection to discovered peer failed: " + errorMessage(e), "error");
       throw e;
     }
   }, [addToast]);
@@ -303,7 +303,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       // the next render. Validate rather than trust.
       setDiscoveredPeers(Array.isArray(peers) ? peers : []);
     } catch (e) {
-      addToast("Refresh discovery failed: " + e, "error");
+      addToast("Refresh discovery failed: " + errorMessage(e), "error");
     }
   }, [addToast]);
 
@@ -358,7 +358,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "info",
       );
     } catch (e) {
-      addToast("Failed to toggle screen capture protection: " + e, "error");
+      addToast("Failed to toggle screen capture protection: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -379,7 +379,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "info",
       );
     } catch (e) {
-      addToast("Failed to toggle capture detection: " + e, "error");
+      addToast("Failed to toggle capture detection: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -394,7 +394,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
     } catch (e) {
-      addToast("Failed to toggle focus blur: " + e, "error");
+      addToast("Failed to toggle focus blur: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -405,7 +405,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
     } catch (e) {
-      addToast("Failed to update clipboard setting: " + e, "error");
+      addToast("Failed to update clipboard setting: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -416,7 +416,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
     } catch (e) {
-      addToast("Failed to update idle lock setting: " + e, "error");
+      addToast("Failed to update idle lock setting: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -436,7 +436,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "info",
       );
     } catch (e) {
-      addToast("Failed to toggle known contacts only: " + e, "error");
+      addToast("Failed to toggle known contacts only: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -458,7 +458,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         result.air_gap_mode ? "warning" : "info",
       );
     } catch (e) {
-      addToast("Failed to toggle air-gap mode: " + e, "error");
+      addToast("Failed to toggle air-gap mode: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -480,7 +480,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "info",
       );
     } catch (e) {
-      addToast("Failed to toggle ephemeral mode: " + e, "error");
+      addToast("Failed to toggle ephemeral mode: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -496,7 +496,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
     } catch (e) {
-      addToast("Failed to update send batching: " + e, "error");
+      addToast("Failed to update send batching: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -512,7 +512,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const result = await invoke<SecurityConfig>("set_security_config", { config: newConfig });
       setSecurityConfig(result);
     } catch (e) {
-      addToast("Failed to toggle typing cover traffic: " + e, "error");
+      addToast("Failed to toggle typing cover traffic: " + errorMessage(e), "error");
     }
   }, [securityConfig, addToast]);
 
@@ -524,7 +524,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setDuressConfigured(true);
       addToast("Duress passphrase registered — entering it at unlock will WIPE the vault", "warning");
     } catch (e) {
-      addToast("Failed to register duress passphrase: " + e, "error");
+      addToast("Failed to register duress passphrase: " + errorMessage(e), "error");
       throw e;
     }
   }, [addToast]);
@@ -535,7 +535,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setDuressConfigured(false);
       addToast("Duress passphrase removed", "info");
     } catch (e) {
-      addToast("Failed to remove duress passphrase: " + e, "error");
+      addToast("Failed to remove duress passphrase: " + errorMessage(e), "error");
       throw e;
     }
   }, [addToast]);
@@ -563,7 +563,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         arming ? "warning" : "info",
       );
     } catch (e) {
-      addToast(t("toast.panicToggleFailed", { err: String(e) }), "error");
+      addToast(t("toast.panicToggleFailed", { err: errorMessage(e) }), "error");
     }
   }, [securityConfig, addToast, t]);
 
@@ -581,7 +581,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       await invoke("lock_vault");
       addToast("Vault locked", "success");
     } catch (e) {
-      addToast("Failed to lock vault: " + e, "error");
+      addToast("Failed to lock vault: " + errorMessage(e), "error");
     }
   }, [addToast]);
 
@@ -591,7 +591,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       try { await navigator.clipboard.writeText(""); } catch { /* noop */ }
       addToast("Clipboard cleared", "info");
     } catch (e) {
-      addToast("Failed to clear clipboard: " + e, "error");
+      addToast("Failed to clear clipboard: " + errorMessage(e), "error");
     }
   }, [addToast]);
 

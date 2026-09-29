@@ -78,7 +78,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (!initialized) return;
     applyTheme(theme);
     invoke("set_theme_preference", { theme }).catch((e) => {
-      addToast("Failed to save theme: " + e, "error");
+      addToast("Failed to save theme: " + errorMessage(e), "error");
     });
   }, [theme, initialized, applyTheme, addToast]);
 

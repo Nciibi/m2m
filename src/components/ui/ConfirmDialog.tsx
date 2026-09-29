@@ -136,7 +136,7 @@ export function DuressPassphraseDialog({
               } catch (e) {
                 // Keep the typed value so the user can correct it, and say
                 // what went wrong rather than closing on them.
-                setError(String(e));
+                setError(errorMessage(e));
                 setBusy(false);
               }
             }}

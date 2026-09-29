@@ -310,9 +310,9 @@ export default function ChatView() {
               <div className="file-req__actions">
                 <Button size="xs" onClick={async () => {
                   const p = await save({ title: `Save "${r.filename}"`, defaultPath: r.filename });
-                  if (p) invoke("accept_file_transfer", { peerKeyHex: r.peer_key_hex, transferId: r.transfer_id, saveDir: p }).catch(e => addToast("Accept failed: " + e, "error"));
+                  if (p) invoke("accept_file_transfer", { peerKeyHex: r.peer_key_hex, transferId: r.transfer_id, saveDir: p }).catch(e => addToast("Accept failed: " + errorMessage(e), "error"));
                 }}>Accept</Button>
-                <Button variant="secondary" size="xs" onClick={() => invoke("reject_file_transfer", { peerKeyHex: r.peer_key_hex, transferId: r.transfer_id }).catch(e => addToast("Reject failed: " + e, "error"))}>Reject</Button>
+                <Button variant="secondary" size="xs" onClick={() => invoke("reject_file_transfer", { peerKeyHex: r.peer_key_hex, transferId: r.transfer_id }).catch(e => addToast("Reject failed: " + errorMessage(e), "error"))}>Reject</Button>
               </div>
             </div>
           ))}

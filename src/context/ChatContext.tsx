@@ -220,7 +220,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       };
       setMessages((prev) => [...prev, optimistic]);
     } catch (e) {
-      addToast("Failed to send file: " + e, "error");
+      addToast("Failed to send file: " + errorMessage(e), "error");
     }
   }, [peerKeyHex, addToast]);
 
@@ -237,7 +237,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setFileRequests((prev) => prev.filter((r) => r.transfer_id !== req.transfer_id));
       addToast("Downloading file...", "info");
     } catch (e) {
-      addToast("Failed to accept transfer: " + e, "error");
+      addToast("Failed to accept transfer: " + errorMessage(e), "error");
     }
   }, [addToast]);
 
@@ -250,7 +250,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setFileRequests((prev) => prev.filter((r) => r.transfer_id !== req.transfer_id));
       addToast("File transfer rejected", "info");
     } catch (e) {
-      addToast("Failed to reject transfer: " + e, "error");
+      addToast("Failed to reject transfer: " + errorMessage(e), "error");
     }
   }, [addToast]);
 
@@ -267,7 +267,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         addToast("Exported successfully", "success");
       }
     } catch (e) {
-      addToast("Export failed: " + e, "error");
+      addToast("Export failed: " + errorMessage(e), "error");
     }
   }, [activeConversationId, addToast]);
 
@@ -285,7 +285,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const invite = await invoke<string>("create_invite", { address, validityMinutes: 60, oneTime: true });
       setGeneratedInvite(invite);
     } catch (e) {
-      addToast(String(e), "error", 6000);
+      addToast(errorMessage(e), "error", 6000);
     }
   }, [addToast]);
 
@@ -310,7 +310,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: info.peer_key_hex })));
       } catch { /* noop */ }
     } catch (e) {
-      addToast("Connection failed: " + e, "error");
+      addToast("Connection failed: " + errorMessage(e), "error");
     } finally {
       setIsConnecting(false);
     }
@@ -447,7 +447,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       });
       setMessages((prev) => prev.map((m) => m.id === messageId ? updated : m));
     } catch (e) {
-      addToast("Edit failed: " + e, "error");
+      addToast("Edit failed: " + errorMessage(e), "error");
     }
   }, [peerKeyHex, addToast]);
 
@@ -463,7 +463,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         m.id === messageId ? { ...m, deleted: true, content: "[deleted]" } : m
       ));
     } catch (e) {
-      addToast("Delete failed: " + e, "error");
+      addToast("Delete failed: " + errorMessage(e), "error");
     }
   }, [peerKeyHex, addToast]);
 
@@ -556,7 +556,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setView("chat");
       invoke("load_messages", { peerKeyHex })
         .then((r) => setMessages(asList<ChatMessage>(r)))
-        .catch((e) => addToast("Could not open conversation: " + e, "error"));
+        .catch((e) => addToast("Could not open conversation: " + errorMessage(e), "error"));
     }
   }, [activeConversationId, setView, addToast]);
 
