@@ -817,13 +817,18 @@ pub async fn connect_family_member(
                 });
             }
             Err(_) => {
-                // Connection failed — address is stale
-                return Err(AppError::invalid("CANNOT_REACH"));
+                // Connection failed — the saved address is stale. Reported as a
+                // code rather than a string so the UI can offer a fresh invite.
+                return Err(AppError::peer_unreachable(
+                    "could not reach this family member — their saved address is out of date",
+                ));
             }
         }
     }
 
-    Err(AppError::invalid("CANNOT_REACH"))
+    Err(AppError::peer_unreachable(
+        "could not reach this family member — their saved address is out of date",
+    ))
 }
 
 /// Update a family member with a fresh invite (new key + address).

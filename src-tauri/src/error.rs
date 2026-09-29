@@ -100,6 +100,18 @@ impl AppError {
     pub fn weak_passphrase(message: impl Into<String>) -> Self {
         Self::new("weak_passphrase", message)
     }
+
+    /// A family member's saved address is stale — the address we have for them
+    /// no longer answers.
+    ///
+    /// Its own code rather than a bare string sentinel, because it is
+    /// actionable: the UI offers to request a fresh invite. The old
+    /// `"CANNOT_REACH"` literal had to be substring-matched against a
+    /// stringified error, which broke the moment the error type gained a
+    /// serialised shape.
+    pub fn peer_unreachable(message: impl Into<String>) -> Self {
+        Self::new("family.unreachable", message)
+    }
 }
 
 impl std::fmt::Display for AppError {
@@ -109,12 +121,6 @@ impl std::fmt::Display for AppError {
 }
 
 impl std::error::Error for AppError {}
-
-// ── Conversions from the existing taxonomy ───────────────────────────────────
-//
-// Each `From` maps one enum to a code family. Keeping the mapping in one place
-// is the point: it is the only place that needs to know the whole taxonomy, and
-// it is a `match` per variant rather than 309 scattered `format!` calls.
 
 // ── Conversions from the existing taxonomy ───────────────────────────────────
 //
