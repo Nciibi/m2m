@@ -670,11 +670,22 @@ pub struct DoubleRatchet {
     our_ratchet_keypair: EphemeralKeypair,
     /// Peer's current DH ratchet public key.
     their_ratchet_pub: [u8; 32],
-    /// Message keys for out-of-order messages.
-    /// Keys are cached when deriving through a gap and consumed when
-    /// the corresponding message arrives. Capped at MAX_SKIP entries
-    /// to limit memory usage.
-    skipped_keys: HashMap<u64, [u8; 32]>,
+    /// Message keys for out-of-order messages, keyed by
+    /// `(ratchet_epoch, message_number)`.
+    ///
+    /// The epoch exists because a DH ratchet resets the message counter to
+    /// zero, so the old and new chains index the *same* numbers. With a bare
+    /// `u64` key a superseded chain's in-flight message and a new chain's
+    /// message collide: whichever arrives first consumes the entry and the
+    /// other is undecryptable. Since a frame carries its ratchet public only
+    /// on the first message of a chain, a ratchet-less frame is ambiguous
+    /// between "current chain" and "still in flight from the previous one", so
+    /// the cache has to be able to hold both.
+    ///
+    /// Capped at [`MAX_SKIP`] entries to limit memory usage.
+    skipped_keys: HashMap<(u64, u64), [u8; 32]>,
+    /// Incremented on every accepted DH ratchet. Distinguishes chains.
+    ratchet_epoch: u64,
 }
 
 impl Drop for DoubleRatchet {
