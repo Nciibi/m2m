@@ -422,6 +422,41 @@ export default function SettingsView() {
             </div>
 
             <div className="settings-row">
+              <span className="settings-label">
+                <LockIcon size={16} /> Message Storage
+              </span>
+              <span className="settings-hint">
+                {storageUsage
+                  ? `${formatBytes(storageUsage.used_bytes)} of ${formatBytes(storageUsage.cap_bytes)} used`
+                  : "Loading…"}
+              </span>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">Storage Cap</span>
+              <select
+                className="select"
+                value={String(storageCapChoice)}
+                onChange={(e) => handleStorageCapChange(Number(e.target.value))}
+                aria-label="Maximum stored message history"
+                aria-describedby="storage-cap-hint"
+              >
+                <option value={STORAGE_CAP_CHOICES.gb1}>1 GB</option>
+                <option value={STORAGE_CAP_CHOICES.gb5}>5 GB</option>
+                <option value={STORAGE_CAP_CHOICES.gb10}>10 GB (default)</option>
+                <option value={STORAGE_CAP_CHOICES.gb25}>25 GB</option>
+                <option value={STORAGE_CAP_CHOICES.gb100}>100 GB</option>
+                <option value={STORAGE_CAP_CHOICES.unlimited}>Unlimited</option>
+              </select>
+              <span className="settings-hint" id="storage-cap-hint">
+                When the limit is reached, the oldest messages are{" "}
+                <strong>permanently deleted</strong> and cannot be recovered —
+                not from a backup you took beforehand, which this app cannot
+                reach. Raise it if you are archiving evidence.
+              </span>
+            </div>
+
+            <div className="settings-row">
               <span className="settings-label">Clipboard Auto-Clear</span>
               <select className="select--compact"
                 value={securityConfig?.clipboard_clear_secs ?? 0}
