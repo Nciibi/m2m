@@ -5,12 +5,52 @@ import { errorMessage } from "../utils";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
 import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
-import type { NetworkSettings } from "../types";
+import type { NetworkSettings, StorageUsage } from "../types";
 import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useT } from "../i18n/I18nContext";
 import { ConfirmDialog, DuressPassphraseDialog } from "../components/ui/ConfirmDialog";
 import { useTheme } from "../context/ThemeContext";
+
+/** Cap presets, in bytes. `unlimited` is a large finite value rather than 0,
+ *  because the backend maps 0 to the 10 GiB default rather than to "no limit". */
+const STORAGE_CAP_CHOICES = {
+  gb1: 1 * 1024 ** 3,
+  gb5: 5 * 1024 ** 3,
+  gb10: 10 * 1024 ** 3,
+  gb25: 25 * 1024 ** 3,
+  gb100: 100 * 1024 ** 3,
+  unlimited: 1024 * 1024 * 1024 * 1024,
+} as const;
+
+/** Bytes → a short human string. Uses decimal GB so the numbers match the
+ *  "10 GB" the label promises, not binary GiB dressed up as GB. */
+function formatBytes(bytes: number): string {
+  const gb = bytes / 1024 ** 3;
+  if (gb >= 1) return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
+  const mb = bytes / 1024 ** 2;
+  if (mb >= 1) return `${Math.round(mb)} MB`;
+  return `${Math.max(0, Math.round(bytes / 1024))} KB`;
+}
+
+/** Snap a raw byte cap onto the nearest preset for the <select>. */
+function capChoiceFor(bytes: number): number {
+  const presets = [
+    STORAGE_CAP_CHOICES.gb1,
+    STORAGE_CAP_CHOICES.gb5,
+    STORAGE_CAP_CHOICES.gb10,
+    STORAGE_CAP_CHOICES.gb25,
+    STORAGE_CAP_CHOICES.gb100,
+    STORAGE_CAP_CHOICES.unlimited,
+  ];
+  // Anything at or beyond the largest preset reads as "Unlimited", which is
+  // what a custom oversized value means to the user.
+  let best = presets[0];
+  for (const p of presets) {
+    if (bytes >= p) best = p;
+  }
+  return best;
+}
 
 export default function SettingsView() {
   const t = useT();
