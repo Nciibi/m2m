@@ -69,7 +69,16 @@ export default function GroupChatView() {
       // this flag), so keep the previous behaviour explicitly rather than
       // silently depending on the payload.
       const msg: ChatMessage = { ...payload.message, direction: "received" };
-      setMessages((prev) => [...prev, msg]);
+
+      // Only append when the message is for the group on screen. The group id
+      // used to be destructured and then discarded, so a message arriving for
+      // any *other* group was appended to the open group's transcript — the
+      // same cross-conversation contamination the 1:1 path had.
+      setActiveGroupRef((active) => {
+        if (active && active.group_id !== payload.group_id) return active;
+        setMessages((prev) => [...prev, msg]);
+        return active;
+      });
     });
     return () => {
       unlisten.then((f) => f());
