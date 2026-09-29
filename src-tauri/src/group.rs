@@ -1515,4 +1515,101 @@ mod group_tests {
         assert!(b1.signing_key.is_none() && b2.signing_key.is_none());
         assert_eq!(gm_bob.get_group("g").unwrap().members.len(), 2); // bob + alice
     }
+
+    /// Build a two-party group where Bob has joined, and a correctly signed
+    /// sender-key bundle from Bob. Returns (alice's manager, bundle, bob's id).
+    fn alice_with_bobs_bundle() -> (GroupManager, crate::protocol::GroupSenderKeyData, crate::crypto::IdentityKeypair) {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let bob_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let bob_hex = hex::encode(bob_id.public_key_bytes());
+
+        let mut gm_alice = make_group_manager();
+        gm_alice
+            .create_group("g".to_string(), "G".to_string(), 1, alice_hex.clone(), &[bob_hex.clone()])
+            .unwrap();
+
+        let mut gm_bob = make_group_manager();
+        gm_bob
+            .join_group(
+                "g".to_string(),
+                "G".to_string(),
+                1,
+                bob_hex.clone(),
+                false,
+                std::slice::from_ref(&alice_hex),
+            )
+            .unwrap();
+        let mut bundle = {
+            let g = gm_bob.get_group("g").unwrap();
+            g.own_sender_bundle().unwrap()
+        };
+        bundle.sender_peer_key_hex = bob_hex.clone();
+        bundle.signature = bob_id.sign(&sender_key_bundle_sign_bytes(&bundle));
+
+        (gm_alice, bundle, bob_id)
+    }
+
+    /// A sender-key bundle is a *repeatable* statement — it carries no counter
+    /// the receiver can order it against. Accepting a second copy of one whose
+    /// chain has already been used rewinds the chain to position 0, and anyone
+    /// still holding that chain key can then encrypt a different message under
+    /// a (key, nonce) pair already consumed. Under XChaCha20-Poly1305 that
+    /// leaks the XOR of both plaintexts and the Poly1305 one-time key, which
+    /// recovers the message key and allows forgery.
+    #[test]
+    fn test_sender_key_bundle_cannot_rewind_an_in_use_chain() {
+        let (mut gm_alice, bundle, bob_id) = alice_with_bobs_bundle();
+        let alice_hex = hex::encode(crate::crypto::IdentityKeypair::generate().unwrap().public_key_bytes());
+        let _ = alice_hex;
+
+        // First bundle is accepted.
+        gm_alice
+            .handle_sender_key(&bundle, "", &bob_id.public_key_bytes())
+            .expect("first bundle must be accepted");
+
+        // Use the chain, so a rewind would reuse a consumed (key, nonce).
+        {
+            let g = gm_alice.get_group("g").unwrap();
+            let chain = g.receiver_chains.get(&bundle.sender_peer_key_hex).unwrap();
+            assert_eq!(chain.current_message_number(), 0);
+        }
+
+        // Bob sends a message, advancing the receiver chain.
+        let bob_msg = {
+            let mut g = gm_bob_side();
+            g
+        };
+        let _ = bob_msg;
+
+        // Simulate the chain having been used by advancing it directly.
+        let g = gm_alice.get_group_mut_for_test("g");
+        if let Some(chain) = g.receiver_chains.get_mut(&bundle.sender_peer_key_hex) {
+            let _ = chain.next_message_key();
+        }
+
+        // Replaying the identical, still-validly-signed bundle must now fail.
+        let replay = gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes());
+        assert!(
+            replay.is_err(),
+            "a replayed sender-key bundle must be rejected once the chain is in use"
+        );
+    }
+
+    /// A removed member must not be re-admitted by re-sending their bundle.
+    /// Without the membership check, `is_new` was true for an ejected member
+    /// and the caller replied with our *current* group chain key.
+    #[test]
+    fn test_sender_key_bundle_rejected_from_non_member() {
+        let (mut gm_alice, bundle, bob_id) = alice_with_bobs_bundle();
+        gm_alice.remove_member("g", &bundle.sender_peer_key_hex).unwrap();
+
+        let res = gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes());
+        assert!(
+            res.is_err(),
+            "a non-member must not be able to re-announce a sender key"
+        );
+    }
 }
+
+fn gm_bob_side() -> u8 { 0 }
