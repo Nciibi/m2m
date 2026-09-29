@@ -2618,7 +2618,7 @@ async fn handle_group_frame(
                             let mut seen: std::collections::HashSet<&str> =
                                 std::collections::HashSet::with_capacity(initial.len() + 1);
                             let mut roster = vec![create.creator_peer_key_hex.clone()];
-                            seen.insert(roster[0].as_str());
+                            seen.insert(create.creator_peer_key_hex.as_str());
                             for m in initial {
                                 if seen.insert(m.as_str()) {
                                     roster.push(m.clone());

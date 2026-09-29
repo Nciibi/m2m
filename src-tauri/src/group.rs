@@ -1686,4 +1686,43 @@ mod group_tests {
         let res = gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes());
         assert!(res.is_ok(), "a re-joined member must be able to re-announce: {res:?}");
     }
+
+    /// A `GroupInvite` for a group we are *already in* used to skip the roster
+    /// cap entirely, because the check sat below the `if let Some(existing)`
+    /// early return. One 512 KiB frame therefore produced ~260k `GroupMember`
+    /// entries plus one SQLite insert each.
+    #[test]
+    fn test_oversized_roster_rejected_for_existing_group() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let mut gm = make_group_manager();
+        gm.create_group("g".into(), "G".into(), 1, alice_hex.clone(), &[])
+            .unwrap();
+
+        // Far beyond the cap, and short enough to keep the test fast.
+        let huge: Vec<String> = (0..500).map(|i| format!("peer{i}")).collect();
+        assert!(huge.len() > MAX_GROUP_MEMBERS);
+
+        let err = gm
+            .join_group("g".into(), "G".into(), 1, alice_hex.clone(), false, &huge)
+            .expect_err("an oversized roster must be rejected even for a group we are in");
+        assert!(err.contains("exceeds the maximum"), "unhelpful error: {err}");
+
+        // And nothing was added.
+        assert_eq!(gm.get_group("g").unwrap().members.len(), 1);
+    }
+
+    /// A roster at exactly the cap is accepted — the guard must not be off by
+    /// one, and must not reject a legitimate full group.
+    #[test]
+    fn test_roster_at_the_cap_is_accepted() {
+        let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
+        let alice_hex = hex::encode(alice_id.public_key_bytes());
+        let mut gm = make_group_manager();
+        // creator + (MAX-1) others == MAX total.
+        let others: Vec<String> = (1..MAX_GROUP_MEMBERS).map(|i| format!("peer{i}")).collect();
+        assert_eq!(others.len(), MAX_GROUP_MEMBERS - 1);
+        gm.create_group("g2".into(), "G2".into(), 1, alice_hex.clone(), &others)
+            .expect("a roster exactly at the cap must be accepted");
+    }
 }
