@@ -28,8 +28,6 @@ export default function SetupView() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoadFailed(false);
-    setLoading(true);
     invoke<boolean>("is_first_run")
       .then((first) => {
         if (cancelled) return;
@@ -93,7 +91,11 @@ export default function SetupView() {
                 deleted. This usually means the vault is locked or its database
                 is unreadable.
               </p>
-              <Button onClick={() => setRetry((n) => n + 1)}>Retry</Button>
+              <Button onClick={() => {
+                setLoadFailed(false);
+                setLoading(true);
+                setRetry((n) => n + 1);
+              }}>Retry</Button>
             </>
           ) : (
             <div className="loading-dots" role="status"><span /><span /><span /></div>
