@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { I18nProvider } from "./i18n/I18nContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { errorMessage } from "./utils";
 import { asCaptureWarning, asSecurityError } from "./events";
 import "./styles/tokens.css";
 import "./styles/theme.css";
