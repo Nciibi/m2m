@@ -571,7 +571,12 @@ export default function ChatView() {
             setShowFp(false);
             addToast("Peer verified", "success");
           } catch (err) {
-            addToast("Verification failed: " + err, "error");
+            // `err` is the serialised `AppError` `{code, message}`. String-
+            // concatenating an object yields "[object Object]", so the user
+            // learned verification failed but not why — which defeats the
+            // point of the typed error taxonomy. `errorMessage` is already
+            // imported in this file and used 30 lines below.
+            addToast("Verification failed: " + errorMessage(err), "error");
           }
         }}>Confirm Match & Verify</Button> : undefined}>
         <p className="fp-description">Compare fingerprints via a secure out-of-band channel.</p>
