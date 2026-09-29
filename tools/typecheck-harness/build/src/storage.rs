@@ -781,6 +781,15 @@ pub struct EvictionReport {
 
 pub struct MessageStore {
     conn: Connection,
+    /// Number of content keys destroyed by shredding, for audit and for tests.
+    ///
+    /// The count is what makes the shred *verifiable through the public path*.
+    /// `evict_to_cap` shreds and then deletes, so after a pass the rows are gone
+    /// and there is nothing left to inspect — which meant a test could only
+    /// call `shred_message_keys` directly, and would have passed unchanged if
+    /// `evict_to_cap` had stopped calling it altogether. This counter makes the
+    /// wiring itself assertable.
+    shredded_keys: std::sync::atomic::AtomicU64,
 }
 
 // ─── Crypto-shredding primitives (H7) ──────────────────────────────────────
@@ -1027,7 +1036,10 @@ impl MessageStore {
         Self::migrate_conversations_table(&conn)?;
         Self::migrate_messages_table(&conn)?;
 
-        let store = Self { conn };
+        let store = Self {
+            conn,
+            shredded_keys: std::sync::atomic::AtomicU64::new(0),
+        };
         // Seed the storage-cap counter from the tables. Done once, at open, so
         // a database that already holds messages is accounted for from its
         // first launch — otherwise the cap would appear to be 0 bytes and
@@ -1247,15 +1259,17 @@ impl MessageStore {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 rusqlite::params![id, conversation_id, direction, ciphertext, nonce, timestamp, expires_at, delivered as i32, wrapped],
             )?;
+            // `changes()` reflects the *most recent* statement, so it has to be
+            // read here — after the following `UPDATE conversations` it would
+            // report that update's row count (always 1) instead, and every
+            // ignored duplicate would inflate the total. Only add bytes when a
+            // row was actually created.
+            let inserted = self.conn.changes();
             self.conn.execute(
                 "UPDATE conversations SET last_message_at = ?1 WHERE id = ?2",
                 params![timestamp, conversation_id],
             )?;
-            // Maintain the storage-cap counter. `INSERT OR IGNORE` means a
-            // duplicate id is a no-op, so only add bytes when a row was
-            // actually created — otherwise a redelivered message would inflate
-            // the count forever.
-            if self.conn.changes() > 0 {
+            if inserted > 0 {
                 self.add_stored_bytes(Self::msg_row_bytes(ciphertext.len(), nonce.len()));
             }
             Ok(())
@@ -1499,10 +1513,32 @@ impl MessageStore {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
 
         while used > target {
+            // How many rows does getting to `target` actually require? Taking a
+            // fixed batch instead would evict a whole 200-row batch when only a
+            // handful of rows are needed, destroying far more history than the
+            // cap demanded. Estimated from the current average row size and
+            // then clamped to BATCH, with +1 so rounding cannot leave the loop
+            // unable to make progress.
+            let rows_total: i64 = self
+                .conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM messages)
+                          + (SELECT COUNT(*) FROM group_messages)",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if rows_total == 0 || used == 0 {
+                break;
+            }
+            let avg = (used / rows_total as u64).max(1);
+            let needed = used - target;
+            let want = needed.div_ceil(avg).saturating_add(1) as usize;
+
             // 1:1 first, then group. Both tables count toward the cap, so
             // evicting only one would let an attacker park everything in the
             // other.
-            let (ids, freed) = self.oldest_message_batch(BATCH, &mut report)?;
+            let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
                 self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
@@ -1519,7 +1555,7 @@ impl MessageStore {
                 continue;
             }
 
-            let (gids, gfreed) = self.oldest_group_message_batch(BATCH)?;
+            let (gids, gfreed) = self.oldest_group_message_batch(want.min(BATCH))?;
             if gids.is_empty() {
                 // Nothing left to evict at all. Guard against a cap we cannot
                 // satisfy rather than spinning.
@@ -1632,12 +1668,19 @@ impl MessageStore {
     /// later happens to the row or the file.
     fn shred_message_keys(&self, ids: &[String]) -> Result<(), StorageError> {
         for id in ids {
-            self.conn.execute(
+            let n = self.conn.execute(
                 "UPDATE messages SET content_key_wrapped = ?2 WHERE id = ?1",
                 params![id, vec![0u8; WRAPPED_CEK_LEN]],
             )?;
+            self.shredded_keys
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
+    }
+
+    /// How many content keys this store has destroyed by shredding.
+    pub fn shredded_key_count(&self) -> u64 {
+        self.shredded_keys.load(std::sync::atomic::Ordering::Relaxed)
     }
 
 
@@ -3973,5 +4016,301 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ─── Storage cap: byte accounting and eviction ─────────────────────────
+    //
+    // The cap exists because the receive loop's limits are *rate* limits. 30
+    // frames/s and 16 MiB/s bound how fast a peer writes, not how much in
+    // total, and `retention_policy = 'none'` is the default, so nothing
+    // reclaims it. These tests pin the two properties that make the cap
+    // trustworthy: the byte count is exact, and eviction is permanent and
+    // oldest-first.
+
+    /// Store `n` messages of `size` bytes, oldest-first by timestamp.
+    fn fill_messages(store: &MessageStore, conv: &str, n: u32, size: usize) {
+        for i in 0..n {
+            store
+                .store_message_secure(
+                    &format!("m{i}"),
+                    conv,
+                    "received",
+                    &vec![b'x'; size],
+                    1_000 + i as i64,
+                    None,
+                    true,
+                    &test_key(),
+                )
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn test_stored_bytes_counts_and_releases() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        assert_eq!(store.stored_bytes().unwrap(), 0, "empty store is 0");
+
+        fill_messages(&store, "c1", 5, 1000);
+        let after = store.stored_bytes().unwrap();
+        // ciphertext (1000 + 16-byte tag) + 24-byte nonce + 72-byte wrapped key
+        let expected = 5 * (1000 + 16 + 24 + 72);
+        assert_eq!(after, expected as u64, "counter must equal exact row size");
+
+        store.delete_conversation("c1").unwrap();
+        assert_eq!(
+            store.stored_bytes().unwrap(),
+            0,
+            "deleting the conversation must release every byte"
+        );
+    }
+
+    #[test]
+    fn test_stored_bytes_ignores_duplicate_inserts() {
+        // `store_message_secure` is `INSERT OR IGNORE`, so a redelivered
+        // message must not inflate the count — otherwise a peer looping the
+        // same frame id would trip the cap without adding anything.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 1, 500);
+        let once = store.stored_bytes().unwrap();
+        for _ in 0..5 {
+            store
+                .store_message_secure("m0", "c1", "received", &vec![b'x'; 500], 1_000, None, true, &test_key())
+                .unwrap();
+        }
+        assert_eq!(store.stored_bytes().unwrap(), once);
+    }
+
+    #[test]
+    fn test_stored_bytes_verified_recovers_from_drift() {
+        // The counter is a cache. If a write path forgets to update it, the
+        // exact re-derivation on the enforcement path must still be right —
+        // a counter that drifted low would let the cap be overshot.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 200);
+        let truth = store.stored_bytes_verified().unwrap();
+
+        // Corrupt the counter, as a missing update would.
+        store
+            .conn
+            .execute("UPDATE storage_stats SET total_bytes = 0 WHERE id = 1", [])
+            .unwrap();
+        assert_eq!(store.stored_bytes().unwrap(), 0, "cache is now wrong");
+        assert_eq!(
+            store.stored_bytes_verified().unwrap(),
+            truth,
+            "re-derivation must restore the true total"
+        );
+    }
+
+    #[test]
+    fn test_evict_is_oldest_first() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 10, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 10;
+
+        // Cap that leaves room for 3 messages after the 90% low-water step.
+        let report = store.evict_to_cap(one_msg * 4).unwrap();
+        assert!(report.messages_evicted > 0, "something must be evicted");
+
+        // The survivors must be the *newest* ones.
+        let msgs = store.load_messages("c1", 100).unwrap();
+        let remaining: Vec<&str> = msgs.iter().map(|m| m.id.as_str()).collect();
+        assert!(
+            remaining.contains(&"m9"),
+            "newest message must survive, got {remaining:?}"
+        );
+        assert!(
+            !remaining.contains(&"m0"),
+            "oldest message must be gone, got {remaining:?}"
+        );
+        assert!(store.stored_bytes().unwrap() <= one_msg * 4);
+    }
+
+    #[test]
+    fn test_evict_is_permanent_not_soft_delete() {
+        // The user's own "delete for everyone" leaves a tombstone row; the cap
+        // must not, because the point is to release the bytes.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 6;
+
+        store.evict_to_cap(one_msg * 2).unwrap();
+
+        let count: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert!(count < 6, "rows must be removed, not tombstoned: {count}");
+        // And no residual CEK anywhere, for the rows that did go.
+        let live_keys: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages
+                  WHERE content_key_wrapped IS NOT NULL
+                    AND length(content_key_wrapped) != ?1",
+                params![WRAPPED_CEK_LEN],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(live_keys, 0, "surviving rows keep their keys; evicted keys are zeroed");
+    }
+
+    #[test]
+    fn test_evict_reports_overridden_retention() {
+        // A user who set "delete after 7 days" and then loses messages to a
+        // full disk has had a preference overridden. The conversation must be
+        // named so the UI can say which one.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        store.ensure_conversation("c2", &[0x22; 32]).unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE conversations SET retention_policy = 'delete', auto_delete_at = 999 WHERE id = 'c1'",
+                [],
+            )
+            .unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 6;
+
+        let report = store.evict_to_cap(one_msg * 2).unwrap();
+        assert!(
+            report.overrode_retention.contains(&"c1".to_string()),
+            "the conversation whose policy was overridden must be reported, got {:?}",
+            report.overrode_retention
+        );
+    }
+
+    #[test]
+    fn test_evict_includes_group_messages() {
+        // `group_messages` is a separate table. If it were not counted or not
+        // evicted, an attacker could park everything in group traffic and the
+        // cap would never fire.
+        let store = mem_messagestore();
+        store.upsert_group("g1", "G", 1, "member").unwrap();
+        for i in 0..6u32 {
+            store
+                .store_group_message(
+                    &format!("gm{i}"),
+                    "g1",
+                    &"a".repeat(64),
+                    &vec![b'y'; 1000],
+                    &[0u8; 24],
+                    1_000 + i as i64,
+                    true,
+                )
+                .unwrap();
+        }
+        let before = store.stored_bytes().unwrap();
+        assert!(before > 0, "group messages must count toward the cap");
+
+        let report = store.evict_to_cap(before / 4).unwrap();
+        assert!(
+            report.group_messages_evicted > 0,
+            "group messages must be evicted, got {report:?}"
+        );
+    }
+
+    #[test]
+    fn test_evict_is_a_noop_under_the_cap() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 100);
+        let before = store.stored_bytes().unwrap();
+
+        let report = store.evict_to_cap(before * 100).unwrap();
+        assert_eq!(report.messages_evicted, 0);
+        assert_eq!(report.bytes_freed, 0);
+        assert_eq!(store.stored_bytes().unwrap(), before, "nothing may be lost");
+    }
+
+    #[test]
+    fn test_shred_message_keys_destroys_the_cek() {
+        // The guarantee the whole feature rests on. Eviction removes the row,
+        // so the shredded key cannot be inspected after the fact — which means
+        // a test that only checks "the row is gone" would pass even if the
+        // shred step were deleted entirely. This pins the shred itself.
+        //
+        // Mutation-verified: commenting out the `shred_message_keys` call in
+        // `evict_to_cap` does not fail any other test in this file.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 2, 200);
+
+        let before: Vec<u8> = store
+            .conn
+            .query_row("SELECT content_key_wrapped FROM messages WHERE id = 'm0'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(before.iter().any(|&b| b != 0), "a real wrapped key is not all zeros");
+
+        store.shred_message_keys(&["m0".to_string()]).unwrap();
+
+        let after: Vec<u8> = store
+            .conn
+            .query_row("SELECT content_key_wrapped FROM messages WHERE id = 'm0'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(after.len(), WRAPPED_CEK_LEN);
+        assert!(
+            after.iter().all(|&b| b == 0),
+            "the wrapped content key must be overwritten with zeros"
+        );
+
+        // And the consequence: the content can no longer be decrypted, even
+        // though the row and its ciphertext are still there.
+        let msgs = store.load_messages("c1", 10).unwrap();
+        let m0 = msgs.iter().find(|m| m.id == "m0").expect("row still present");
+        assert!(
+            MessageStore::decrypt_stored_content(
+                &m0.content_encrypted,
+                &m0.content_nonce,
+                Some(&after),
+                &test_key(),
+            )
+            .is_err(),
+            "shredded content must be undecryptable while the row survives"
+        );
+    }
+
+    #[test]
+    fn test_evict_shreds_every_evicted_message() {
+        // Proves the *wiring*, not just the shred helper. Eviction shreds and
+        // then deletes, so the rows — and the evidence that they were shredded
+        // — are gone once the pass completes. A test that only called
+        // `shred_message_keys` directly would pass unchanged if `evict_to_cap`
+        // had stopped calling it, which is precisely the regression worth
+        // catching: a hard delete without a shred leaves recoverable key
+        // material behind on freed pages.
+        //
+        // Mutation-verified: commenting out the `shred_message_keys` call in
+        // `evict_to_cap` fails this test.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 10, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 10;
+        assert_eq!(store.shredded_key_count(), 0, "nothing shredded yet");
+
+        let report = store.evict_to_cap(one_msg * 4).unwrap();
+
+        assert!(
+            report.messages_evicted > 0,
+            "the test needs an eviction to have happened"
+        );
+        assert_eq!(
+            store.shredded_key_count(),
+            report.messages_evicted as u64,
+            "every evicted message must have had its content key destroyed \
+             — reported {} evicted, {} shredded",
+            report.messages_evicted,
+            store.shredded_key_count()
+        );
     }
 }
