@@ -193,7 +193,7 @@ pub async fn send_group_message(
         let group = gm.get_group_mut(&group_id).ok_or("group not found")?;
         let data = group
             .encrypt_message(&our_peer_key_hex, content.as_bytes())
-            .map_err(|e| AppError::invalid(format!("encryption failed: {e}")))?;
+            .map_err(|e| AppError::new("crypto.encryption_failed", format!("encryption failed: {e}")))?;
         data
     };
 

@@ -357,7 +357,7 @@ pub async fn unlock_vault(
     } else if !has_identity {
         // Case 1: First run
         let kp =
-            IdentityKeypair::generate().map_err(|e| AppError::invalid(format!("keypair generation failed: {e}")))?;
+            IdentityKeypair::generate()?;
 
         let pub_bytes = kp.public_key_bytes();
         let sk_bytes = kp.secret_key_bytes();
@@ -371,8 +371,7 @@ pub async fn unlock_vault(
         let x_sk_bytes = xkp.secret_key_bytes();
         let x_pub = xkp.public_key_bytes();
         let (x_nonce, x_enc) =
-            util::crypto_encrypt_storage(&x_sk_bytes, &storage_key, util::AAD_KEY_STORE)
-                .map_err(|e| AppError::invalid(format!("failed to encrypt X25519 key: {e}")))?;
+            util::crypto_encrypt_storage(&x_sk_bytes, &storage_key, util::AAD_KEY_STORE)?;
 
         let now = chrono::Utc::now().timestamp();
 
@@ -892,8 +891,7 @@ pub async fn export_identity(
     // Encrypt the secret key with export passphrase
     let export_key = derive_key_blocking(passphrase, pub_bytes.to_vec()).await?;
     let (nonce, encrypted_sk) =
-        util::crypto_encrypt_storage(&sk_bytes, &export_key, crate::commands::util::AAD_EXPORT_V2)
-            .map_err(|e| AppError::invalid(format!("encryption failed: {e}")))?;
+        util::crypto_encrypt_storage(&sk_bytes, &export_key, crate::commands::util::AAD_EXPORT_V2)?;
 
     // Build the export payload
     let payload = serde_json::json!({
@@ -1137,8 +1135,7 @@ fn seal_imported_identity(
     storage_key: &crate::secure_key::StorageKey,
 ) -> Result<(), AppError> {
     let (new_nonce, new_enc_sk) =
-        util::crypto_encrypt_storage(sk_bytes, storage_key, util::AAD_KEY_STORE)
-            .map_err(|e| AppError::invalid(format!("encryption failed: {e}")))?;
+        util::crypto_encrypt_storage(sk_bytes, storage_key, util::AAD_KEY_STORE)?;
 
     let now = chrono::Utc::now().timestamp();
     key_store
