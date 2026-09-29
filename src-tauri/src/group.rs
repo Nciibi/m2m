@@ -10,7 +10,7 @@
 //! On member removal, all remaining members rotate their Sender Keys
 //! to prevent the removed member from decrypting future messages.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::crypto::{
     self, derive_receiver_chain, generate_sender_key_pair, generate_sender_signing_keypair,
