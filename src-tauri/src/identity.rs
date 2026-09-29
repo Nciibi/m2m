@@ -30,7 +30,6 @@ pub enum IdentityError {
     InviteSignatureInvalid,
     #[error("invite format invalid: {0}")]
     InviteFormatInvalid(String),
-    #[expect(dead_code, reason = "Reserved error variant for one-time invites")]
     #[error("invite already consumed")]
     InviteAlreadyConsumed,
     #[error("address hint too long")]

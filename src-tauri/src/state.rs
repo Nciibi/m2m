@@ -33,7 +33,6 @@ pub struct PeerConnection {
     pub write_half: OwnedWriteHalf,
     pub session: Session,
     /// Remote address (stored for diagnostics).
-    #[expect(dead_code, reason = "Reserved for diagnostic display")]
     pub remote_addr: SocketAddr,
     /// The Happy Eyeballs connection strategy that won this connection
     /// (e.g. "host", "ipv6", "port-mapped", "srflx", "prflx", "relay").

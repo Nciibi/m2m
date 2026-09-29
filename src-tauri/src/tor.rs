@@ -25,7 +25,6 @@ static TOR_ENABLED: AtomicBool = AtomicBool::new(false);
 pub enum TorError {
     #[error("Tor SOCKS5 connection failed: {0}")]
     ConnectionFailed(String),
-    #[expect(dead_code, reason = "Reserved error variant")]
     #[error("Tor proxy not reachable at {0}")]
     ProxyUnreachable(String),
     #[error("io error: {0}")]

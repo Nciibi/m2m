@@ -128,7 +128,6 @@ pub struct StunResult {
     /// The server that reported this address.
     pub server: String,
     /// Round-trip time for the query.
-    #[expect(dead_code, reason = "Reserved for RTT-based NAT classification")]
     pub rtt: Duration,
 }
 

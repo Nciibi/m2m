@@ -33,9 +33,6 @@ use thiserror::Error;
 /// Maximum size of data that can be encrypted in a single operation (16 MiB).
 const MAX_ENCRYPT_SIZE: usize = 16 * 1024 * 1024;
 
-/// Context string for HKDF session key derivation (reserved).
-#[expect(dead_code, reason = "Reserved for HKDF session key derivation")]
-
 /// Maximum number of out-of-order message keys to cache per DH ratchet phase.
 /// Follows the Signal Protocol's design: when messages arrive out of order,
 /// intermediate message keys are derived and cached instead of discarded.
