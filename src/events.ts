@@ -592,6 +592,40 @@ export function asSecurityError(v: unknown): { source: string; message: string }
   return { source: p.source, message: p.message };
 }
 
+/**
+ * `m2m://storage-evicted` — the storage cap permanently destroyed old history.
+ *
+ * The user must be told. Silent history loss is the failure mode this app keeps
+ * shipping, and a user who finds messages gone with no explanation has no way
+ * to tell a cap from a bug — or to raise the cap before it happens again.
+ */
+export interface StorageEvictedEventPayload {
+  messages_evicted: number;
+  group_messages_evicted: number;
+  bytes_freed: number;
+  /** Conversations whose retention policy the cap overrode. */
+  overrode_retention: string[];
+}
+
+export function asStorageEvicted(v: unknown): StorageEvictedEventPayload | null {
+  if (typeof v !== "object" || v === null) return null;
+  const p = v as Record<string, unknown>;
+  if (!isU32(p.messages_evicted)) return null;
+  if (!isU32(p.group_messages_evicted)) return null;
+  // Bytes freed can exceed u32 for a large eviction, so it is bounded wider.
+  if (!isU64(p.bytes_freed)) return null;
+  const list = asArray<unknown>(p.overrode_retention);
+  if (!list) return null;
+  // Conversation ids are peer key hex; anything else is a malformed payload.
+  if (!list.every((x) => isPeerKeyHex(x))) return null;
+  return {
+    messages_evicted: p.messages_evicted,
+    group_messages_evicted: p.group_messages_evicted,
+    bytes_freed: p.bytes_freed,
+    overrode_retention: list as string[],
+  };
+}
+
 /** `m2m://conversation-meta` — a peer-supplied suggested display name. */
 export interface ConversationMetaPayload {
   peer_key_hex: string;
