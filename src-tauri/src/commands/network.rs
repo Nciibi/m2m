@@ -2607,9 +2607,29 @@ async fn handle_group_frame(
                             let gid = create.group_id.clone();
                             // Roster = creator + initial members (H2: we generate
                             // our own keys; never trust key material shipped to us).
+                            //
+                            // Capped before the loop, and the dedup uses a set:
+                            // `Vec::contains` inside a `for` over a peer-controlled
+                            // list is O(n²), and the list comes from a 512 KiB
+                            // frame, so ~260k single-character entries meant ~3×10¹⁰
+                            // string comparisons — minutes of CPU, on a runtime
+                            // thread, with the peer's connection mutex still held
+                            // (`drop(conn)` comes after).
+                            let initial = &create.initial_members;
+                            if initial.len() > MAX_GROUP_MEMBERS - 1 {
+                                tracing::warn!(
+                                    peers = %peer_key_hex,
+                                    members = initial.len(),
+                                    "group create rejected: initial_members exceeds the group cap"
+                                );
+                                return;
+                            }
+                            let mut seen: std::collections::HashSet<&str> =
+                                std::collections::HashSet::with_capacity(initial.len() + 1);
                             let mut roster = vec![create.creator_peer_key_hex.clone()];
-                            for m in &create.initial_members {
-                                if !roster.contains(m) {
+                            seen.insert(roster[0].as_str());
+                            for m in initial {
+                                if seen.insert(m.as_str()) {
                                     roster.push(m.clone());
                                 }
                             }

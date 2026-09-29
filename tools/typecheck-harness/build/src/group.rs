@@ -12,6 +12,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+/// Maximum members in a group, including us.
+///
+/// Enforced on the *deserialized* roster rather than the signed `member_count`
+/// field, and before any allocation — see the note in `join_group`.
+const MAX_GROUP_MEMBERS: usize = 32;
+
 use crate::crypto::{
     self, derive_receiver_chain, generate_sender_key_pair, generate_sender_signing_keypair,
     sign_group_message, verify_group_message_signature, SenderKeyChain,
@@ -483,8 +489,37 @@ impl GroupManager {
         is_admin: bool,
         roster: &[String],
     ) -> Result<GroupSenderKeyData, String> {
+        // ── Roster cap, before ANY branch and before any allocation ──
+        //
+        // This check used to sit *below* the `if let Some(existing)` early
+        // return, so it only guarded group creation. A `GroupInvite` for a group
+        // we were already in took the top branch, which loops over the roster
+        // with no cap and no length check at all.
+        //
+        // The roster arrives in a frame whose per-type cap is 512 KiB, and
+        // MessagePack encodes a 1-character string in ~2 bytes, so one frame
+        // carries on the order of 260k entries. Each one became a `GroupMember`
+        // in memory (~64 B), a `store.add_group_member` SQLite insert, and an
+        // iteration of `fan_out_own_bundle`. That is hundreds of megabytes of
+        // RAM and hundreds of thousands of durable rows from a single frame,
+        // repeatable at the receive-loop frame rate — and the signature over
+        // the invite is the *attacker's own* key, so it verifies.
+        //
+        // The check is before the mutable borrow so it also covers the create
+        // path, and it counts `roster.len()` rather than trusting the signed
+        // `member_count` field.
+        if roster.len() > MAX_GROUP_MEMBERS - 1 {
+            return Err(format!(
+                "group roster of {} exceeds the maximum of {} members",
+                roster.len(),
+                MAX_GROUP_MEMBERS
+            ));
+        }
+
         if let Some(existing) = self.groups.get_mut(&group_id) {
             // Already joined — just make sure the roster includes everyone.
+            // `is_member` is a linear scan, so this is O(n·m); the cap above
+            // keeps both terms under 32.
             for peer in roster {
                 if !existing.is_member(peer) && peer != &our_peer_key_hex {
                     existing.members.push(GroupMember {
