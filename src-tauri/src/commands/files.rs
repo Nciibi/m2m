@@ -903,9 +903,9 @@ fn compute_file_hashes(
     let mut buf = vec![0u8; chunk_size];
 
     loop {
-        let n = file
-            .read(&mut buf)
-            .map_err(|e| AppError::invalid(format!("read error during hash computation: {e}")))?;
+        let n = file.read(&mut buf).map_err(|e| {
+            AppError::new("io", format!("read error during hash computation: {e}"))
+        })?;
         if n == 0 {
             break;
         }
