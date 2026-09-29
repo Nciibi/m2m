@@ -1,34 +1,119 @@
 # SESSION HANDOFF — M2M architecture remediation
 
-**Date:** 2026-09-28
-**Repo:** `/mnt/hdd/projects/M2M` (branch `main`, HEAD `70cf7ed`)
-**Baseline score given at session start:** 6.5 / 10
-**Goal:** fix the defects found in a deep architecture scan, highest severity first.
+**Date:** 2026-09-29
+**Repo:** `/mnt/hdd/projects/M2M` (branch `main`)
+**Previous handoff:** 2026-09-28 (`SESSION_HANDOFF.md` at HEAD `70cf7ed`)
+**Goal this session:** finish the `AppError` error taxonomy that the previous
+session left mid-flight.
 
 ---
 
-## 1. Read this first — the critical constraint
+## 1. Status: the error taxonomy is DONE
 
-### 1.1 The app's Rust tests have never been run in this environment
+The previous session's §4 ("in progress") is closed. All of it is implemented,
+typechecked and tested.
 
-`cargo check` / `cargo test` / `cargo clippy` **cannot build the Tauri app here.**
-The `glib-sys` / `gio-sys` / `gdk-sys` build scripts need GTK dev packages
-(`.pc` files) that are absent. Only the GTK *runtime* is in the nix store, not
-the dev output.
+| Check | Result |
+|---|---|
+| `tools/typecheck-harness/check.sh --run` (all 50 modules) | **0 errors, 0 warnings** |
+| `cargo test` (relay-server) | **15 passed** |
+| `tsc --noEmit` | **clean** |
+| `pnpm test` / vitest | **328 passed** (was 313; +15 new) |
+| `pnpm lint` / eslint | **0 errors, 10 warnings** (at the pinned budget) |
 
-This is why a verification harness was built (see §3). **The app's own 378 tests
-still need a run in a GTK-capable environment.** Anything claimed "verified"
-below means "verified through the harness", not "verified by the app's test suite."
+### 1.1 What was left broken, and is now fixed
 
-### 1.2 The toolchain locations
+The 4 compile errors the previous session documented, plus the whole frontend
+half it never started:
 
-- `node` is not on `PATH`. It lives at
-  `/nix/store/lfaydgacdyngci7p60s8wwvgdm74fjkx-nodejs-24.19.0/bin`.
-  Export it before running `tsc` / `vitest` / `eslint`.
-- `rustfmt` and `clippy` are **not installed**. Neither is `cargo fmt`.
-- GTK dev libs are not obtainable (no network for nix, not in the store).
+- **`files.rs`** — `compute_file_hashes` still returned `Result<_, String>` after
+  its body had been converted to `AppError`; its callers then could not `?` it.
+- **`util.rs`** — `crypto_encrypt_storage` / `crypto_decrypt_storage` had
+  `map_err(|_| "…".to_string())` tails that flattened an already-typed error.
+  One of them only typechecked *because* of the `From<String>` placeholder, so
+  it was a latent duplicate of the reported bug.
+- **`files.rs:556`** — an `AppError` was being passed to `update_state`, which
+  wants `Option<&str>`.
+- **`"CANNOT_REACH"`** — the last string sentinel is gone. It is now the
+  `family.unreachable` code, and the frontend branches on the code instead of
+  substring-matching `String(e)`.
+- **The frontend** — 45 sites did `"…" + e` or `String(e)` on an `invoke`
+  rejection. Every command failure would have rendered as `[object Object]`.
+  All 45 now go through `errorMessage()`.
 
-### 1.3 An external process auto-commits the working tree
+### 1.2 The frontend work, in detail
+
+This was the half the previous session flagged as "most likely to break the UI,
+and untested until it is done". It is now tested.
+
+- **`src/events.ts`** — new `asAppError()` guard, plus an `AppErrorCode` type.
+  The code is deliberately *not* a closed union: the backend defines ~91 codes
+  and adds more without a version bump, so a closed union would reject new
+  codes at runtime. Known codes are named for autocomplete and the
+  `(string & {})` arm keeps everything else assignable.
+- **`src/utils.ts`** — `errorMessage()` already had a `"message" in e` branch,
+  so it needed no behaviour change; its doc comment was rewritten to describe
+  the new rejection shape.
+- **`asTransferErrorEvent`** — `error` is *kept as a string*. Emitting the
+  serialised `AppError` would fail `isDisplayText`, the guard would return
+  `null`, and the whole event would be dropped: the user would watch a transfer
+  fail with no toast at all. The code rides alongside as `error_code`.
+- **`FamilyTab.tsx`** — the `CANNOT_REACH` check had a second bug: it
+  *swallowed every other failure silently*. Connecting to an offline family
+  member showed the user nothing. There is now an `else` branch with a toast.
+
+### 1.3 Tests added (15, and one of them is mutation-verified)
+
+- `asAppError` — 6 cases: accepts unknown codes, rejects strings, bounds and
+  control-character-checks both fields.
+- `errorMessage` — 5 cases, including an explicit
+  `expect(errorMessage(e)).not.toBe("[object Object]")`.
+- `asTransferErrorEvent` — 3 cases, including one that pins the
+  "rejected payload drops the toast" regression.
+- `GroupChatView` — rejects `create_group` with a real `{code, message}` and
+  asserts the toast shows the message.
+
+**Mutation-verified:** reverting `GroupChatView` to `"…" + e` makes that last
+test fail. Without that check it is easy to write a test that passes for the
+wrong reason.
+
+---
+
+## 2. Read this first
+
+### 2.1 The harness is now IN THE REPO
+
+The previous harness lived at `/tmp/opencode/tch` and was **wiped**, which cost
+a large part of this session rebuilding it. It now lives in the repo:
+
+```bash
+cd /mnt/hdd/projects/M2M
+./tools/typecheck-harness/check.sh --run
+```
+
+`build/Cargo.toml` is *generated* from `src-tauri/Cargo.toml` on every run
+(minus the four GTK-coupled crates), so there is no second dependency list to
+drift. `build/` is gitignored; `tauri_stub/` and `check.sh` are the only source
+of truth. **`tools/typecheck-harness/README.md` documents its three known
+limits — read it before trusting a green result.**
+
+### 2.2 The app's Rust tests still have never run
+
+`cargo check` / `cargo test` / `cargo clippy` cannot build the Tauri app here —
+the GTK *development* packages are absent. The 378 backend tests still need a
+GTK-capable machine. Anything claimed "verified" below means "verified through
+the harness", not "verified by the app's own test suite."
+
+`rustfmt` and `clippy` are **not installed**, so formatting is unverified. Run
+`cargo fmt` before committing anywhere real.
+
+### 2.3 The tree auto-commits
+
+An external process commits every few seconds (`git status` and `git diff` are
+useless for seeing your own work). Use `git log -p` or take a backup copy
+before a bulk edit.
+
+### 2.4 An external process auto-commits the working tree
 
 Commits appear every few seconds (`v3.6.1138` and counting). Consequences:
 
@@ -40,9 +125,9 @@ Commits appear every few seconds (`v3.6.1138` and counting). Consequences:
 
 ---
 
-## 2. Work completed and verified
+## 3. Work completed and verified
 
-### 2.1 Crypto — real defects
+### 3.1 Crypto — real defects
 
 | Fix | File(s) | Why it mattered |
 |---|---|---|
@@ -59,27 +144,35 @@ Commits appear every few seconds (`v3.6.1138` and counting). Consequences:
 New regression tests: `test_in_flight_message_survives_dh_ratchet`,
 `test_skipped_cache_stays_bounded_across_ratchets`.
 
-### 2.2 Dead subsystems that were advertised as working
+### 3.2 Dead subsystems that were advertised as working
 
-- **Relay keepalive** — client never sent `0x03`, server never refreshed on it, so registrations died at 5 min while `connected: true`. Fixed both sides; `test_keepalive_refreshes_idle_timer` added (relay 15/15).
-- **Hole punching** — responder bound the already-occupied listener port → `EADDRINUSE`, `Role::Responder` unreachable. Removed as connect-only with an explanation; a coordinated simultaneous-open is a protocol change, not a patch.
-- **DHT** — announced to an empty bootstrap list forever. Now seeds from LAN peers, drops `#![allow(dead_code)]`, and warns loudly when it has nothing to gossip to.
-- **Relay rejected `X3DHHandshakeInit`** outright, so X3DH peers couldn't use the path that most needs it.
+- **Relay keepalive** — client never sent `0x03`, server never refreshed on it, so
+  registrations died at 5 min while `connected: true`. Fixed both sides;
+  `test_keepalive_refreshes_idle_timer` added (relay 15/15).
+- **Hole punching** — responder bound the already-occupied listener port →
+  `EADDRINUSE`, `Role::Responder` unreachable. Removed as connect-only with an
+  explanation; a coordinated simultaneous-open is a protocol change, not a patch.
+- **DHT** — announced to an empty bootstrap list forever. Now seeds from LAN
+  peers, drops `#![allow(dead_code)]`, and warns loudly when it has nothing to
+  gossip to.
+- **Relay rejected `X3DHHandshakeInit`** outright, so X3DH peers couldn't use the
+  path that most needs it.
 
-### 2.3 Concurrency
+### 3.3 Concurrency
 
-- **60 sites** held the global `connections` read guard across `.await`.
-  Added `AppState::peer_connection()` and converted all of them. One of these
+- **60 sites** held the global `connections` read guard across `.await`. Added
+  `AppState::peer_connection()` and converted all of them. One of these
   (sync-resend) could pin the lock ~5.5 hours from a single 20-byte frame.
 - **Two deadlock cycles** removed structurally:
   `identity`⇄`group_manager` (via `our_peer_key_hex()` / `our_identity_kp()`) and
   `storage_key`⇄`message_store` (order rule documented in `commands/util.rs`).
 - **Remote vault-lock DoS** — `identity.read()` was held across an
   unauthenticated handshake; a trickling peer could stop the user locking their vault.
-- `ensure_message_store` / `ensure_transfer_store` no longer take the global mutex on the fast path.
+- `ensure_message_store` / `ensure_transfer_store` no longer take the global mutex
+  on the fast path.
 - `group_manager` write lock no longer held across a SQLite open.
 
-### 2.4 Privacy / SSRF
+### 3.4 Privacy / SSRF
 
 - **UDP chokepoint** — `dial::bind_udp_for_external_query()`. STUN / PCP /
   NAT-PMP / SSDP had no guard, so Tor leaked the real IP from 5 production paths.
@@ -87,14 +180,14 @@ New regression tests: `test_in_flight_message_survives_dh_ratchet`,
   unvalidated; the cloud-metadata deny-list was bypassable.
 - **STUN server list** — `contains(':')` accepted `"a:b"`; now capped, parsed, bounded.
 
-### 2.5 Structural
+### 3.5 Structural
 
 `relay.rs`'s 145-line fork of `handle_incoming_connection` is gone. Both
 transports now call the single `commands::network::complete_inbound_connection`.
 That fork had already drifted (live STUN on an unauthenticated socket, identity
 held across the handshake, no X3DH dispatch).
 
-### 2.6 File transfer (second batch)
+### 3.6 File transfer (second batch)
 
 - **Delivery-confirmation forgery.** `chunks_acked += ack.chunk_index -
   last_acked_index + 1` assumed no gaps, so one `ChunkAck` for the final index
@@ -107,7 +200,7 @@ held across the handshake, no X3DH dispatch).
   every transfer and dropped; the only check being applied compared each chunk
   against a hash the same peer supplied.
 
-### 2.7 Frontend
+### 3.7 Frontend (beyond the error work in §1.2)
 
 - `onDeleteConversation` was still discarding the id (documented as fixed, was
   not). Handler now takes the id and owns the delete. **The signature change
@@ -129,7 +222,7 @@ held across the handshake, no X3DH dispatch).
 - Duplicate `TransferProgressEventPayload` → alias; removed 2 double-casts.
 - `z-index: 9998` → `--z-banner` token.
 
-### 2.8 Styling
+### 3.8 Styling
 
 Six tokens used in CSS were never overridden for light theme and are
 white-on-white in it: `--color-bg-tertiary`, `--color-bg-chip` (mute/read chips
@@ -138,7 +231,7 @@ edge), plus `--shadow-inner` and `--color-bg-modal-backdrop`.
 `--color-danger` and `--color-warning` were **both `#d97706`** — an error toast
 and a warning toast were the same colour.
 
-### 2.9 Cleanup
+### 3.9 Cleanup
 
 - Deleted 0-byte `src-tauri/src/files.rs` (orphan, not in `lib.rs`).
 - Deleted `hub.css` (109 lines) and `chat.css` (69 lines) — 100% dead, and
@@ -156,141 +249,100 @@ and a warning toast were the same colour.
   set on delete paths (so routine churn left free-page remnants), and
   `foreign_keys` was never enabled (making every FK clause decorative).
 
-### 2.10 Verification results
+### 3.10 NEW this session — error codes beyond the mechanical conversion
 
-| Check | Result |
-|---|---|
-| `cargo check` (harness, all 50 modules) | see §4 — **4 errors outstanding** |
-| `cargo test` (relay-server) | **15 passed** |
-| `tsc --noEmit` | **clean** |
-| `pnpm test` / vitest | **313 passed** |
-| `pnpm lint` / eslint | **0 errors, 10 warnings** (at the pinned budget) |
+The mechanical pass left every code as `invalid_input`, because the regex-based
+rewrite could not know what any given site meant. The highest-frequency sites
+are now coded:
+
+| Change | Sites | Why |
+|---|---|---|
+| `message store init: {e}` → `storage` | 11 | SQLite open failed. **The single most common error string in the command layer** and it claimed the caller sent bad input |
+| `serialization failed/error: {e}`, `serialize reaction/sender key` → `serialization` | 16 | Almost always a bug, not a bad request — these types are `Serialize` by construction |
+| `db error`, `key store error`, `data dir error`, `transfer store *`, `list family`, `failed to store/mark/reconstruct identity`, `delete failed`, `failed to encrypt identity` → `storage` | 24 | All persistence-layer failures |
+| `vault must be unlocked …` → `vault_locked` | 2 | Actionable: the UI can offer to unlock, which is the whole reason that constructor exists |
+| air-gap / admin-only / Tor-blocks-STUN → `blocked` | 3 | Policy refusal, not bad input — the remedy is "change a setting" |
+| `not listening`, reconnection exhausted → `not_connected` | 2 | Not a failure to retry, and not a bad request |
+
+**The `map_err` calls that were destroying typed errors.** This was the most
+interesting find. The mechanical pass wrapped *everything*, including calls whose
+inner function already returned a properly-coded `AppError` or a typed enum:
+
+- `util::crypto_encrypt_storage(...)` returns `AppError` with
+  `storage.encryption_failed`. The wrapper overwrote the code with
+  `invalid_input` *and* produced the user-facing message
+  `"encryption failed: encryption failed"`. Four sites. Now just `?`.
+- `handshake_as_initiator_x3dh` / `handshake_as_initiator` return `SessionError`,
+  whose `From` maps every variant to a precise code (`session.replay_detected`,
+  `session.protocol`, …). The wrapper flattened all of that. Four sites. Now `?`.
+- `IdentityKeypair::generate()` returns `CryptoError`. Two sites. Now `?`.
+- `group::encrypt_message` genuinely returns `String`, so it keeps a `map_err` —
+  now with `crypto.encryption_failed`.
+
+Rule worth remembering: **only `map_err` when the inner error is actually
+untyped.** Wrapping a typed error discards the variant.
+
+### 3.11 NEW this session — dead code the compiler found
+
+With `generate_handler!` faithfully referencing every command (see §4.2), the
+harness reports exactly 3 warnings, and the app compiles with **zero** warnings:
+
+- `relay.rs` — 7 dead imports, left behind when the 145-line fork was deleted.
+- `port_mapping.rs`, `stun.rs` — `use tokio::net::UdpSocket`, dead since all 8
+  call sites moved to `dial::bind_udp_for_external_query()`.
+- 5 stale `#[expect(dead_code, …)]` whose items are now genuinely live — the
+  `#[expect]` form of the stale `#[allow]`s the previous session already removed
+  once. `crypto.rs:35` was worse than stale: it was an **orphaned doc comment**
+  for a const that no longer exists.
+- `files.rs` — one redundant `mut`.
+- `hole_punch.rs` — `Role::Responder` and `StrategyResult::role` are unconstructible
+  / write-only, a real consequence of the connect-only change. Annotated with
+  accurate `#[expect]` reasons rather than deleted, because removing a variant
+  from a protocol-shaped enum is a design call, not a cleanup.
 
 ---
 
-## 3. The verification harness (important)
+## 4. The verification harness
 
-Location: `/tmp/opencode/tch`
+Location: **`tools/typecheck-harness/`** (in the repo, see §2.1). Full
+documentation of its limits is in `tools/typecheck-harness/README.md`; the two
+that matter most:
 
-A cargo crate that compiles **all 50 source modules**, including the Tauri
-command layer, with consistent dependency versions.
-
-- `src/tauri_stub/` — a stub crate named `tauri` providing `AppHandle`, `State`,
-  `Emitter`, `Manager`, `WindowEvent`, `async_runtime::spawn_blocking`,
-  `menu::*`, `tray::*`, `image::Image`. It is a harness artifact and never ships.
-- `check.sh` — copies the live `src-tauri/src` into the harness, strips
-  `#[tauri::command]` / `#[tauri::main]` (attribute macros need a proc-macro
-  crate) and rewrites `tauri::` to the stub. Then run `cargo check --offline --lib`.
-- `Cargo.lock` is **copied from the workspace** so cargo resolves the same
-  versions that are already in the local registry cache. Without it, offline
-  resolution fails on uncached crates.
-
-### 3.1 ⚠️ DANGER: the earlier harness destroyed 20 source files
+### 4.1 ⚠️ Never symlink the live sources into a harness
 
 A previous harness (`/tmp/opencode/tc`, rlib-based) created **symlinks** from
 `src/*.rs` to the live files. A `sed ... >` redirect then wrote *through* the
 symlinks and truncated every `src-tauri/src/*.rs` to 0 bytes. All 20 were
 restored from git (newest non-empty blob per file), and all changes verified
-intact, but this is a real hazard.
+intact, but this is a real hazard. `check.sh` copies real files and refuses to
+run if it finds a symlink under `src-tauri/src`.
 
-`check.sh` now has an explicit symlink guard and refuses to run if any target is
-a symlink. **Do not reintroduce symlinks into any harness.**
+### 4.2 The stub had to be made faithful — twice
 
-### 3.2 What the harness earned its keep on
+Both times, a wrong stub produced a *wrong answer*, which is worse than no
+harness:
 
-Building it found **6 real bugs in my own refactors** that would otherwise have
-shipped broken:
+1. **Dead-code analysis.** `generate_handler!` originally expanded to `()`. That
+   made every `#[tauri::command]` nothing calls from Rust look dead — and
+   `sync.rs`'s five functions were about to be deleted on that basis, when they
+   are registered and reachable. The stub now expands to `let _ = <path>;` per
+   command, which reproduces the use the real macro creates.
+2. **`Manager` vs inherent methods.** The stub originally gave `AppHandle`
+   inherent `state` / `try_state` / `get_webview_window`. That made
+   `use tauri::Manager` look unnecessary in `window_security.rs` and `lib.rs`
+   — code that would not compile against the real crate. Verified against
+   tauri **2.11.4** source: `state`/`try_state`/`get_webview_window` are
+   `Manager` methods (`src/lib.rs:729, 744, 576`); `exit` is **inherent**
+   (`src/app.rs:574`). The stub now matches.
 
-1. `protocol::RawFrame` — the type is in `network`, not `protocol`.
-2. `IdentityKeypair` undeclared in `commands/network.rs`.
-3. `state.lan_state.clone()` — `RwLock` is not `Clone`.
-4. `file_path.to_path_buf()` where `file_path: &str`.
-5. `?` used in `complete_inbound_connection`, which returns `()`.
-6. `StrategyResult` destructure missing the `role` field.
+**When upgrading `tauri`, re-verify these against the real source rather than
+trusting the stub.**
 
----
+### 4.3 What the harness earned its keep on
 
-## 4. IN PROGRESS — the error taxonomy (unfinished)
-
-### 4.1 What was built
-
-**`src-tauri/src/error.rs`** (373 lines, new, registered in `lib.rs` as
-`pub mod error;`)
-
-`AppError { code: &'static str, message: String }`, serialising to
-`{ "code": "crypto.replay_detected", "message": "..." }`.
-
-- Constructors: `new`, `invalid`, `blocked`, `not_connected`, `storage`,
-  `vault_locked`, `weak_passphrase`.
-- `From` impls for 12 enums (`CryptoError`, `SessionError`, `NetworkError`,
-  `ProtocolError`, `StorageError`, `StunError`, `PortMapError`,
-  `ConnectionError`, `DhtError`, `RelayError`, `TorError`, `IdentityError`),
-  generated from the real variant lists — **91 variants mapped**, each an
-  exhaustive `match &e`, so adding a variant anywhere is a compile error here.
-- `From<String>` and `From<&str>` default to `code: "invalid_input"`.
-  **This is a placeholder, not a decision** — see §4.4.
-- The 14 original `thiserror` enums are untouched and keep their own variants;
-  `message` carries the full rendered chain, so nothing is lost.
-
-### 4.2 Conversion progress
-
-- 108 command signatures converted `Result<T, String>` → `Result<T, AppError>`.
-- 31 `Err("literal".to_string())` → `Err(AppError::invalid("literal"))`.
-- 22 `Err(format!(…))` → `Err(AppError::invalid(format!(…)))`.
-- 144 `.map_err(|e| format!(…))` → `.map_err(|e| AppError::invalid(format!(…)))`.
-- `use crate::error::AppError;` added to all 12 command modules, placed **after**
-  the `//!` module doc block (an earlier attempt put it on line 1 and produced 87
-  `E0753: expected outer doc comment` errors).
-- A separate regex pass also converted helper functions (`decode_peer_key`,
-  `finish_and_chain`, `crypto_decrypt_storage`, …).
-
-### 4.3 ⚠️ A transformer bug to be aware of
-
-The bulk `.map_err` rewrite initially emitted
-`.map_err(||e| AppError::invalid(|e| format!(…))` — a duplicated closure
-parameter and one missing `)`, from an off-by-one slice in the rewriter. 142
-sites were repaired. **Grep for `map_err(||e|` to confirm none remain** — it
-should return 0.
-
-### 4.4 The 4 remaining compile errors
-
-```
-E0308  src/commands/files.rs:562:26
-E0277  src/commands/files.rs:899:107   `?` couldn't convert the error to String
-E0277  src/commands/files.rs:908:96    `?` couldn't convert the error to String
-E0308  src/commands/util.rs:524:5
-```
-
-Likely all one root cause: a helper that still returns `Result<_, String>` (its
-signature contains `[u8; 32]`, which defeated the conversion regex that excluded
-`;`). `files.rs:899/908` are inside `compute_file_hashes`; `util.rs:524` is
-`crypto_decrypt_storage`'s AEAD decrypt tail. **Fix by hand — the mechanical
-passes are done.**
-
-After those, the remaining work is:
-1. Replace the `"CANNOT_REACH"` string sentinel in `connect_family_member`
-   (`commands/vault.rs`) with a real `AppError` code.
-2. Give the most common error sites meaningful codes instead of the
-   `invalid_input` default — the `From<String>` fallback means codes are
-   currently untyped prose for most of the 109 commands.
-3. Update the frontend (see §4.5) — **not started.**
-
-### 4.5 Frontend work not yet started
-
-`AppError` serialises to an object, so the frontend currently receives
-`{code, message}` where it expected a string. Required:
-
-- `src/utils.ts` `errorMessage()` — handle the object shape. It already has a
-  `{"message" in e}` branch, so extend it to prefer `e.message` and expose `e.code`.
-- Add an `asAppError()` guard in `src/events.ts`, following the existing
-  pattern, and re-export the code union so callers can switch on it.
-- Find and fix every site doing `"..." + e` or `String(e)` on an invoke
-  rejection — these now produce `[object Object]`. `errorMessage(e)` is the
-  replacement. `grep -rn '" + e\|String(e)' src/` to enumerate.
-
-**This is the half of the change most likely to break the UI, and it is
-untested until it is done.** `tsc` will pass with an object because `invoke<T>`
-is unchecked; the visible failure is a toast reading `[object Object]`.
+Building it (and tightening it) found **6 real bugs in the previous session's own
+refactors** plus the 4 outstanding compile errors — all of which would
+otherwise have shipped broken.
 
 ---
 
@@ -303,6 +355,7 @@ is unchecked; the visible failure is a toast reading `[object Object]`.
 | **Zero traits in the crate** | Real architectural gap (nothing mockable). Needs a `trait Transport` seam in `dial.rs` and a `trait` over the three stores. Large, and no longer blocked by the verification problem. |
 | **No task cancellation / shutdown path** | 38 `tokio::spawn`, 0 retained `JoinHandle`, 0 `CancellationToken`, tray-only process with no `RunEvent::ExitRequested` handler. |
 | **ICE priority computed then discarded** | Faithful RFC 8445 §5.1.2.1 priority that never reaches the wire and never orders the dial; 3 of 5 strategies are the same function; 5 divergent `IpAddr` classifiers. |
+| **132 `AppError::invalid` sites left** | These are genuine input validation (bad key length, empty nickname, oversized reaction), where `invalid_input` is the correct code. The high-frequency *mis*codings are fixed; the remainder are low-value churn. |
 | **`AppError` wire-contract change** | `used_opk` and `one_time` in the signed transcript and the new error shape should ship with a `PROTOCOL_VERSION` bump. `protocol.rs` currently reads `0x03`. |
 
 ---
@@ -312,8 +365,8 @@ is unchecked; the visible failure is a toast reading `[object Object]`.
 ```bash
 export PATH="/nix/store/lfaydgacdyngci7p60s8wwvgdm74fjkx-nodejs-24.19.0/bin:$PATH"
 
-# Rust: harness (all 50 modules) — expect the 4 errors from §4.4
-cd /tmp/opencode/tch && ./check.sh && cargo check --offline --lib
+# Rust: harness (all 50 modules) — expect 0 errors, 0 warnings
+cd /mnt/hdd/projects/M2M && ./tools/typecheck-harness/check.sh --run
 
 # Rust: relay (works standalone)
 cd /mnt/hdd/projects/M2M/relay-server && cargo test
@@ -323,9 +376,11 @@ cd /mnt/hdd/projects/M2M && ./node_modules/.bin/tsc --noEmit
 ./node_modules/.bin/vitest run
 ./node_modules/.bin/eslint src --max-warnings 10
 
-# Confirm no transformer residue
-cd /mnt/hdd/projects/M2M && grep -rn 'map_err(||e|' src-tauri/src/ ; echo "expect 0"
-cd /mnt/hdd/projects/M2M && grep -rc "Result<.*, String>" src-tauri/src/commands/*.rs
+# Confirm no regression in the error taxonomy
+cd /mnt/hdd/projects/M2M
+grep -rn 'String(e)\|" *+ *e\b' src/ --include=*.tsx --include=*.ts | grep -v __tests__
+grep -rc "Result<.*, String>" src-tauri/src/commands/*.rs | grep -v ':0'   # expect none
+grep -rn 'CANNOT_REACH' src/ src-tauri/src/                                # expect none
 ```
 
 ### Sanity greps for the completed work
@@ -335,8 +390,9 @@ cd /mnt/hdd/projects/M2M
 for m in append_used_opk_to_sign_data ratchet_reset peer_connection \
          our_peer_key_hex our_identity_kp advance_ack_watermark \
          bind_udp_for_external_query TorUdpUnsupported punch_connect_only \
-         lan_dht_seeds apply_connection_pragmas validate_passphrase; do
-  printf "%-32s %s file(s)\n" "$m" "$(grep -rl "$m" src-tauri/src/ | wc -l)"
+         lan_dht_seeds apply_connection_pragmas validate_passphrase \
+         asAppError errorMessage family.unreachable; do
+  printf "%-32s %s file(s)\n" "$m" "$(grep -rl "$m" src-tauri/src/ src/ 2>/dev/null | wc -l)"
 done
 ```
 
@@ -344,14 +400,19 @@ done
 
 ## 7. Live failure modes to remember
 
-1. **`cargo check` on the app fails** on GTK — not a code problem.
-2. **The tree auto-commits** — `git diff` shows nothing.
+1. **`cargo check` on the app fails** on GTK — not a code problem. Use
+   `./tools/typecheck-harness/check.sh --run`.
+2. **The tree auto-commits** — `git diff` shows nothing. Take a backup copy
+   before any bulk edit.
 3. **Never symlink into the live source from a harness** — 20 files were lost
-   this way.
+   this way. `check.sh` guards against it; keep it that way.
 4. **`rustfmt` and `clippy` do not exist here** — so formatting is unverified.
    Run `cargo fmt` before committing anywhere real.
 5. **Rewriting Rust with regex is a trap.** Two separate passes produced
    paren-corrupted output that only the harness caught. Prefer the compiler:
    change signatures, then let `cargo check` find the bodies.
-6. `#[tauri::command]` cannot be preserved in the harness — it is an attribute
+6. **Do not `map_err` over a typed error.** It discards the variant and, where
+   the inner type was already an `AppError`, overwrites a correct code with
+   `invalid_input`. See §3.10.
+7. `#[tauri::command]` cannot be preserved in the harness — it is an attribute
    macro. `check.sh` strips those lines.
