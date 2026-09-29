@@ -1396,9 +1396,19 @@ mod group_tests {
         let bob_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let bob_hex = hex::encode(bob_id.public_key_bytes());
 
+        // Bob is created as an initial member, so Alice's roster knows about
+        // him. `handle_sender_key` requires membership — a bundle from someone
+        // who is not on the roster is refused, because otherwise a removed
+        // member could re-announce and be re-admitted.
         let mut gm_alice = make_group_manager();
         gm_alice
-            .create_group("g".to_string(), "G".to_string(), 1, alice_hex.clone(), &[])
+            .create_group(
+                "g".to_string(),
+                "G".to_string(),
+                1,
+                alice_hex.clone(),
+                std::slice::from_ref(&bob_hex),
+            )
             .unwrap();
 
         // Bob joins with his own keys and announces a signed bundle.
@@ -1519,9 +1529,17 @@ mod group_tests {
     /// A group with Alice as creator and Bob as a member, plus a correctly
     /// signed sender-key bundle from Bob, and Bob's manager so the test can
     /// actually encrypt a message with that chain.
-    fn alice_bob_g() -> (GroupManager, GroupManager, crate::protocol::GroupSenderKeyData, crate::crypto::IdentityKeypair) {
+    #[allow(clippy::type_complexity)]
+    fn alice_bob_g() -> (
+        GroupManager,
+        GroupManager,
+        crate::protocol::GroupSenderKeyData,
+        crate::crypto::IdentityKeypair,
+        String,
+    ) {
         let alice_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let alice_hex = hex::encode(alice_id.public_key_bytes());
+        // Alice is the creator, hence the admin — `remove_member` is admin-only.
         let bob_id = crate::crypto::IdentityKeypair::generate().unwrap();
         let bob_hex = hex::encode(bob_id.public_key_bytes());
 
@@ -1539,7 +1557,7 @@ mod group_tests {
         bundle.sender_peer_key_hex = bob_hex.clone();
         bundle.signature = bob_id.sign(&sender_key_bundle_sign_bytes(&bundle));
 
-        (gm_alice, gm_bob, bundle, bob_id)
+        (gm_alice, gm_bob, bundle, bob_id, alice_hex)
     }
 
     /// A sender-key bundle is a *repeatable* statement: it carries a chain key
@@ -1551,7 +1569,7 @@ mod group_tests {
     /// one-time key, recovering the message key and allowing forgery.
     #[test]
     fn test_sender_key_bundle_cannot_rewind_an_in_use_chain() {
-        let (mut gm_alice, mut gm_bob, bundle, bob_id) = alice_bob_g();
+        let (mut gm_alice, mut gm_bob, bundle, bob_id, alice_hex) = alice_bob_g();
 
         gm_alice
             .handle_sender_key(&bundle, "", &bob_id.public_key_bytes())
@@ -1595,8 +1613,10 @@ mod group_tests {
     /// and the caller replied with our *current* group chain key.
     #[test]
     fn test_sender_key_bundle_rejected_from_non_member() {
-        let (mut gm_alice, _gm_bob, bundle, bob_id) = alice_bob_g();
-        gm_alice.remove_member("g", &bundle.sender_peer_key_hex).unwrap();
+        let (mut gm_alice, _gm_bob, bundle, bob_id, alice_hex) = alice_bob_g();
+        gm_alice
+            .remove_member("g", &bundle.sender_peer_key_hex, &alice_hex)
+            .unwrap();
 
         let res = gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes());
         assert!(
@@ -1610,9 +1630,11 @@ mod group_tests {
     /// permanently.
     #[test]
     fn test_sender_key_bundle_accepted_again_after_rejoin() {
-        let (mut gm_alice, _gm_bob, bundle, bob_id) = alice_bob_g();
+        let (mut gm_alice, _gm_bob, bundle, bob_id, alice_hex) = alice_bob_g();
         gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes()).unwrap();
-        gm_alice.remove_member("g", &bundle.sender_peer_key_hex).unwrap();
+        gm_alice
+            .remove_member("g", &bundle.sender_peer_key_hex, &alice_hex)
+            .unwrap();
 
         // Re-add as a plain member, then re-announce.
         let hex = bundle.sender_peer_key_hex.clone();

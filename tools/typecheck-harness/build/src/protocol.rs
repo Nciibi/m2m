@@ -1497,6 +1497,7 @@ mod protocol_tests {
             identity_pub: [0xBB; 32],
             x25519_identity_pub: [0xBB; 32],
             used_opk: None,
+            one_time: false,
             timestamp: 1719446400,
             signature: vec![0xCC; 64],
             candidates: vec![
@@ -1529,6 +1530,7 @@ mod protocol_tests {
             identity_pub: [0xBB; 32],
             x25519_identity_pub: [0xBB; 32],
             used_opk: None,
+            one_time: false,
             timestamp: 1719446400,
             signature: vec![0xCC; 64],
             candidates: vec![],
