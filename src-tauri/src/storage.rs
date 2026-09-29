@@ -1528,7 +1528,7 @@ impl MessageStore {
             // other.
             let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
-                // MUTATED: shred skipped
+                self.shred_message_keys(&ids)?;
                 self.wal_checkpoint_truncate()?;
                 for id in &ids {
                     self.conn
@@ -1657,7 +1657,7 @@ impl MessageStore {
     fn shred_message_keys(&self, ids: &[String]) -> Result<(), StorageError> {
         for id in ids {
             self.conn.execute(
-                "UPDATE messages SET content_key_wrapped = ?2 WHERE id = ?1",
+                "UPDATE messages SET content_nonce = ?2 WHERE id = ?1",
                 params![id, vec![0u8; WRAPPED_CEK_LEN]],
             )?;
         }
