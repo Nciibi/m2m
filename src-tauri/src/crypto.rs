@@ -45,6 +45,20 @@ const MAX_SKIP: usize = 2000;
 /// of one incoming message (each derivation is an HKDF evaluation).
 const MAX_GAP_DERIVATION: usize = 1000;
 
+/// How many message keys to capture from a chain at the moment it is
+/// superseded by a DH ratchet.
+///
+/// The sender stops using a chain once it ratchets, but messages already
+/// encrypted on that chain may still be in flight. Deriving their keys at the
+/// ratchet point is what keeps them decryptable, because the counter resets
+/// and the new chain would otherwise derive different keys for the same
+/// numbers.
+///
+/// 64 covers a realistic reordering window at a cost of 64 HKDF evaluations
+/// per ratchet — and a ratchet happens every `ratchet_interval` (100)
+/// messages, so this is under one derivation per message amortised.
+const RATCHET_INFLIGHT_WINDOW: usize = 64;
+
 #[derive(Debug, Error)]
 pub enum CryptoError {
     #[error("initialization failed")]
@@ -799,6 +813,7 @@ impl DoubleRatchet {
                 our_ratchet_keypair: dh_ratchet_keypair,
                 their_ratchet_pub: dh_remote_public,
                 skipped_keys: HashMap::with_capacity(64),
+                ratchet_epoch: 0,
             }
         } else {
             Self {
@@ -810,6 +825,7 @@ impl DoubleRatchet {
                 our_ratchet_keypair: dh_ratchet_keypair,
                 their_ratchet_pub: dh_remote_public,
                 skipped_keys: HashMap::with_capacity(64),
+                ratchet_epoch: 0,
             }
         }
     }
