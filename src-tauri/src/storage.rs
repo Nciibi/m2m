@@ -1158,8 +1158,6 @@ impl MessageStore {
             CREATE INDEX IF NOT EXISTS idx_messages_oldest
                 ON messages(timestamp);",
         )?;
-        // Backfill the counter for a store that predates it. Cheap once, at open.
-        self.recompute_stored_bytes()?;
         Ok(())
     }
 
