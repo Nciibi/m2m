@@ -273,10 +273,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const handleSetRetention = useCallback(async (policy: string, durationSecs: number | null) => {
     if (!activeConversationId) return;
+    const conversationId = activeConversationId;
+    const previousPolicy = retentionPolicy;
+    const previousDuration = retentionDurationSecs;
     try {
-      await invoke("set_conversation_retention", { conversationId: activeConversationId, policy, durationSecs });
-    } catch { /* noop */ }
-  }, [activeConversationId]);
+      await invoke("set_conversation_retention", { conversationId, policy, durationSecs });
+    } catch (e) {
+      // Retention is a data-lifecycle control, and this was a silent no-op on
+      // failure. The <select> in ChatView has already moved to the new value
+      // by the time this runs, so a user who selects "Auto-Delete After 24
+      // Hours" on a failed write is shown a policy that will not delete
+      // anything — and the messages stay on disk, indefinitely, while the UI
+      // says otherwise. Roll the control back and say what happened.
+      setRetentionPolicy(previousPolicy);
+      setRetentionDurationSecs(previousDuration);
+      addToast("Retention policy not saved: " + errorMessage(e), "error");
+    }
+  }, [activeConversationId, retentionPolicy, retentionDurationSecs, addToast]);
 
   const handleGenerateInvite = useCallback(async () => {
     try {
