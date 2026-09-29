@@ -3,7 +3,7 @@ import { I18nProvider } from "./i18n/I18nContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { errorMessage } from "./utils";
-import { asCaptureWarning, asSecurityError } from "./events";
+import { asCaptureWarning, asSecurityError, asStorageEvicted } from "./events";
 import "./styles/tokens.css";
 import "./styles/theme.css";
 import "./styles/animations.css";
@@ -60,6 +60,9 @@ function AppInner() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [captureWarning, setCaptureWarning] = useState<string[]>([]);
   const [securityError, setSecurityError] = useState<string | null>(null);
+  // Set when the storage cap permanently destroys history, so the user is told
+  // rather than finding messages gone with no explanation.
+  const [evictionNotice, setEvictionNotice] = useState<string | null>(null);
   const { securityConfig } = useSettings();
 
   // Focus-loss blur (off unless enabled in security settings).
@@ -100,9 +103,33 @@ function AppInner() {
       setSecurityError(`${payload.source}: ${payload.message}`);
     }).catch(() => () => {});
 
+    // `m2m://storage-evicted` — the backend hit the storage cap and
+    // permanently deleted the oldest messages. Surfaced as a standing notice
+    // rather than a toast: a toast disappears, and this needs the user to
+    // understand that history is now gone and that raising the cap is how to
+    // stop it recurring.
+    const unlistenEvict = listen("m2m://storage-evicted", (event) => {
+      const payload = asStorageEvicted(event.payload);
+      if (!payload) return;  // malformed → drop, never render
+      const total = payload.messages_evicted + payload.group_messages_evicted;
+      if (total === 0) return;
+      const mb = payload.bytes_freed / (1024 * 1024);
+      const freed = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+      const override = payload.overrode_retention.length
+        ? ` This overrode the retention policy on ${payload.overrode_retention.length} conversation(s).`
+        : "";
+      setEvictionNotice(
+        `Storage limit reached — ${total} old message(s) were permanently deleted ` +
+          `and ${freed} freed. Deleted messages cannot be recovered, including ` +
+          `from backups taken beforehand.${override} Raise the cap in Settings to ` +
+          `keep more history.`,
+      );
+    }).catch(() => () => {});
+
     return () => {
       unlisten.then((fn) => fn()).catch(() => {});
       unlistenSec.then((fn) => fn()).catch(() => {});
+      unlistenEvict.then((fn) => fn()).catch(() => {});
     };
   }, []);
 
