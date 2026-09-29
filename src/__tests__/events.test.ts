@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  asAppError,
   asCaptureWarning,
   asChatMessage,
   asConnectionEvent,
@@ -406,5 +407,58 @@ describe("asChatMessage — 1:1 messages", () => {
 
   it("rejects a sender key with trailing whitespace", () => {
     expect(asChatMessage(direct({ sender_peer_key_hex: `${"a".repeat(64)} ` }))).toBeNull();
+  });
+});
+
+/**
+ * `asAppError` — the command-failure boundary.
+ *
+ * Every `#[tauri::command]` now returns `Result<T, AppError>`, so every
+ * `invoke()` rejection is `{ code, message }` rather than a bare string. The
+ * `code` is what callers switch on, which makes it as sensitive as a payload
+ * field that drives navigation: if arbitrary text can land there, a `switch` on
+ * it is not a real decision.
+ */
+describe("asAppError", () => {
+  it("accepts the shape the Rust side serialises", () => {
+    const e = asAppError({ code: "family.unreachable", message: "address is stale" });
+    expect(e).toEqual({ code: "family.unreachable", message: "address is stale" });
+  });
+
+  it("accepts an unknown code without rejecting it", () => {
+    // The backend adds codes freely; a guard that rejected unknown ones would
+    // turn every newly-added code into a silent "Unknown error" for the user.
+    expect(asAppError({ code: "brand.new_code", message: "hi" })?.code).toBe("brand.new_code");
+  });
+
+  it("rejects non-objects and strings", () => {
+    // A bare string is what commands rejected with *before* the taxonomy
+    // landed. It must not be silently upgraded into a code.
+    for (const bad of [null, undefined, 42, "boom", true, []]) {
+      expect(asAppError(bad)).toBeNull();
+    }
+  });
+
+  it("rejects a missing or non-string code", () => {
+    expect(asAppError({ message: "no code" })).toBeNull();
+    expect(asAppError({ code: 7, message: "x" })).toBeNull();
+    expect(asAppError({ code: null, message: "x" })).toBeNull();
+    expect(asAppError({ code: "", message: "x" })).toBeNull();
+  });
+
+  it("rejects a code carrying control characters or unbounded length", () => {
+    // A code containing a newline is a smuggling attempt against anything that
+    // later logs or renders it.
+    expect(asAppError({ code: `bad${String.fromCharCode(10)}code`, message: "x" })).toBeNull();
+    expect(asAppError({ code: "c".repeat(129), message: "x" })).toBeNull();
+  });
+
+  it("rejects a missing, over-long or control-character message", () => {
+    expect(asAppError({ code: "invalid_input" })).toBeNull();
+    expect(asAppError({ code: "invalid_input", message: "x".repeat(513) })).toBeNull();
+    expect(
+      asAppError({ code: "invalid_input", message: `a${String.fromCharCode(7)}b` }),
+    ).toBeNull();
+    expect(asAppError({ code: "invalid_input", message: 42 })).toBeNull();
   });
 });
