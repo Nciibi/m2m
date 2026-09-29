@@ -4279,4 +4279,38 @@ mod tests {
             "shredded content must be undecryptable while the row survives"
         );
     }
+
+    #[test]
+    fn test_evict_shreds_every_evicted_message() {
+        // Proves the *wiring*, not just the shred helper. Eviction shreds and
+        // then deletes, so the rows — and the evidence that they were shredded
+        // — are gone once the pass completes. A test that only called
+        // `shred_message_keys` directly would pass unchanged if `evict_to_cap`
+        // had stopped calling it, which is precisely the regression worth
+        // catching: a hard delete without a shred leaves recoverable key
+        // material behind on freed pages.
+        //
+        // Mutation-verified: commenting out the `shred_message_keys` call in
+        // `evict_to_cap` fails this test.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 10, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 10;
+        assert_eq!(store.shredded_key_count(), 0, "nothing shredded yet");
+
+        let report = store.evict_to_cap(one_msg * 4).unwrap();
+
+        assert!(
+            report.messages_evicted > 0,
+            "the test needs an eviction to have happened"
+        );
+        assert_eq!(
+            store.shredded_key_count(),
+            report.messages_evicted as u64,
+            "every evicted message must have had its content key destroyed \
+             — reported {} evicted, {} shredded",
+            report.messages_evicted,
+            store.shredded_key_count()
+        );
+    }
 }
