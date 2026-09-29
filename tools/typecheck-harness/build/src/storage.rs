@@ -1516,8 +1516,8 @@ impl MessageStore {
             }
             let freed = self.shred_and_delete_batch(&ids, &mut report)?;
 
-            used = used.saturating_sub(freed);
-            report.bytes_freed += freed as u64;
+            used = used.saturating_sub(freed.max(0) as u64);
+            report.bytes_freed += freed.max(0) as u64;
             self.add_stored_bytes(-freed);
         }
 
