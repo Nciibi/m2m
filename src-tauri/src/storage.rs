@@ -1591,7 +1591,7 @@ impl MessageStore {
                                  + LENGTH(m.content_nonce)
                                  + ?2, 0)
                    FROM messages m
-                  ORDER BY m.timestamp DESC
+                  ORDER BY m.timestamp ASC
                   LIMIT ?1",
             )?;
             let mapped = stmt.query_map(params![limit as i64, Self::MSG_ROW_OVERHEAD], |row| {
