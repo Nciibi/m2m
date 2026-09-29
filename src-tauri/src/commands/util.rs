@@ -503,7 +503,7 @@ pub fn crypto_encrypt_storage(
                 aad,
             },
         )
-        .map_err(|_| "encryption failed".to_string())?;
+        .map_err(|_| AppError::new("storage.encryption_failed", "encryption failed"))?;
     Ok((nonce_bytes, ciphertext))
 }
 
@@ -529,7 +529,12 @@ pub fn crypto_decrypt_storage(
                 aad,
             },
         )
-        .map_err(|_| "decryption failed".to_string())
+        .map_err(|_| {
+            AppError::new(
+                "storage.decryption_failed",
+                "decryption failed — wrong key, or the data has been modified",
+            )
+        })
 }
 
 /// Create a temporary file for an incoming transfer.
