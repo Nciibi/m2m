@@ -4515,7 +4515,6 @@ mod tests {
         let store = mem_messagestore();
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let past = chrono::Utc::now().timestamp() - 3600;
-        let future = chrono::Utc::now().timestamp() + 3600;
         store
             .store_message_secure("m-expired", "c1", "sent", b"gone", past, Some(past), true, &test_key())
             .unwrap();
@@ -4632,7 +4631,7 @@ mod tests {
             .query_row(
                 "SELECT COALESCE(SUM(LENGTH(content_encrypted) + LENGTH(content_nonce) + ?1), 0)
                    FROM messages",
-                params![Self::MSG_ROW_OVERHEAD],
+                params![MessageStore::MSG_ROW_OVERHEAD],
                 |r| r.get::<_, i64>(0),
             )
             .unwrap();
