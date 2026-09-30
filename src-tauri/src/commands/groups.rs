@@ -289,9 +289,11 @@ pub async fn send_group_message(
                 }
             }
         }
+        // The store guard is released before the event emit below: the handler
+        // re-enters the frontend, which can call back into the store.
+        drop(ms);
+        drop(sk);
     }
-    drop(ms);
-    drop(sk);
 
     let message = ChatMessage::new(msg_id, content, "sent".to_string(), now);
 
