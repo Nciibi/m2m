@@ -102,7 +102,14 @@ pub fn emit_storage_evicted(app_handle: &AppHandle, report: &EvictionReport) {
 /// the first tick reads the cap, and reading a default cap that the persisted
 /// config is about to override would be a first tick enforcing the wrong number.
 pub fn spawn(app_handle: AppHandle, state: Arc<AppState>) {
-    tokio::spawn(async move {
+    // `tauri::async_runtime::spawn`, not `tokio::spawn`. Both work from a
+    // command handler, which is an async fn with a runtime already entered —
+    // but this is called from `Builder::setup`, which is synchronous, and a bare
+    // `tokio::spawn` there panics if no runtime is ambient. Tauri's spawner
+    // targets its own global runtime and does not care. The rest of the crate
+    // uses `tokio::spawn`; this is the one site where that would be a
+    // difference in kind rather than style.
+    tauri::async_runtime::spawn(async move {
         let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
         // A laptop suspended for a day must not come back and run the sweep
         // once per missed 15-minute period.
