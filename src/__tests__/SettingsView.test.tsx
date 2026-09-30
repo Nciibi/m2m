@@ -339,7 +339,7 @@ describe("SettingsView", () => {
 
   it("reports live usage against the cap", () => {
     render(<SettingsView />);
-    expect(screen.getByText("3 GB of 10 GB used")).toBeInTheDocument();
+    expect(screen.getByText("3.0 GB of 10 GB used")).toBeInTheDocument();
   });
 
   it("fetches usage on mount", () => {
