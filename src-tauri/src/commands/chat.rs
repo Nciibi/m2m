@@ -20,6 +20,7 @@ use crate::protocol::MessageReactionData;
 /// and sent automatically when the peer reconnects.
 #[tauri::command]
 pub async fn send_message(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     content: String,
@@ -81,9 +82,8 @@ pub async fn send_message(
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
             // A user can fill their own disk by sending, so this write path is
-            // bounded exactly like the inbound one. See
-            // `MessageStore::enforce_storage_cap` for why it is one function.
-            enforce_cap_from_ui(store, storage_cap, &peer_key_hex);
+            // bounded exactly like the inbound one.
+            crate::maintenance::enforce_cap(&app_handle, store, storage_cap);
             if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
                 let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                 if let Err(e) = store.store_message_secure(
@@ -534,6 +534,7 @@ pub async fn mark_messages_read(
 /// If the peer is offline, the message is queued locally with `delivered=0`.
 #[tauri::command]
 pub async fn send_message_with_timer(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     content: String,
@@ -586,7 +587,13 @@ pub async fn send_message_with_timer(
 
     // Persist to local storage
     let history = *state.history_enabled.read().await;
-    let persist = history && !state.security_config.read().await.ephemeral_mode;
+    // Both values are snapshotted from `security_config` here, before the store
+    // lock is taken: reading them inside the `message_store` scope would nest
+    // `security_config` under `message_store`, a pair with no documented
+    // acquisition order.
+    let ephemeral_mode = state.security_config.read().await.ephemeral_mode;
+    let storage_cap = state.security_config.read().await.effective_storage_cap();
+    let persist = history && !ephemeral_mode;
     if persist {
         state
             .ensure_message_store(&state.data_dir)
@@ -596,6 +603,7 @@ pub async fn send_message_with_timer(
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            crate::maintenance::enforce_cap(&app_handle, store, storage_cap);
             if let Some(peer_bytes) = util::decode_peer_key_logged(&peer_key_hex) {
                 let _ = store.ensure_conversation(&peer_key_hex, &peer_bytes);
                 if let Err(e) = store.store_message_secure(
