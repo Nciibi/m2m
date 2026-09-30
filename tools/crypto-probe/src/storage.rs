@@ -756,8 +756,6 @@ impl KeyStore {
     }
 }
 
-/// The message store: holds chat history (optional).
-/// Message contents are encrypted at the application level before storage.
 /// Outcome of a storage-cap eviction pass, for reporting to the user.
 ///
 /// Modelled at module scope rather than inside `impl MessageStore` because Rust
@@ -779,6 +777,26 @@ pub struct EvictionReport {
     pub bytes_freed: u64,
 }
 
+/// Outcome of one [`MessageStore::sweep`] pass.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SweepOutcome {
+    /// Self-destruct messages destroyed because their timer had elapsed.
+    pub expired_messages: u32,
+    /// Messages destroyed by the storage cap, empty when under it.
+    pub evicted: EvictionReport,
+}
+
+impl SweepOutcome {
+    /// Whether this pass destroyed anything at all.
+    pub fn destroyed_anything(&self) -> bool {
+        self.expired_messages > 0
+            || self.evicted.messages_evicted > 0
+            || self.evicted.group_messages_evicted > 0
+    }
+}
+
+/// The message store: holds chat history (optional).
+/// Message contents are encrypted at the application level before storage.
 pub struct MessageStore {
     conn: Connection,
     /// Number of content keys destroyed by shredding, for audit and for tests.
@@ -1045,6 +1063,28 @@ impl MessageStore {
         // first launch — otherwise the cap would appear to be 0 bytes and
         // nothing would ever be evicted.
         store.recompute_stored_bytes()?;
+        // Destroy anything whose self-destruct timer elapsed while the app was
+        // not running.
+        //
+        // Expiry used to be driven only by a `setInterval` in `ChatView`, so it
+        // ran *only while a chat screen was mounted*. For a tray app that is
+        // most of its life, which means "auto-delete after 24h" did nothing at
+        // all for a user who never left a conversation open — and a
+        // self-destructed message stayed on disk, shredded-in-name-only, until
+        // the app happened to be sitting on that screen. A promise about
+        // destroying data cannot depend on which view is focused.
+        //
+        // The background sweep in `maintenance.rs` covers the running case;
+        // this covers the closed one, and runs before the first query can read
+        // the row back, so an expired message is never even returned by
+        // `load_messages` after a restart.
+        match store.delete_expired_messages() {
+            Ok(n) if n > 0 => {
+                tracing::info!(expired = n, "expired messages destroyed on open");
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = %e, "could not clear expired messages on open"),
+        }
         Ok(store)
     }
 
@@ -1455,6 +1495,73 @@ impl MessageStore {
     /// Size in bytes of a single message body as stored.
     fn msg_row_bytes(content_encrypted_len: usize, content_nonce_len: usize) -> i64 {
         content_encrypted_len as i64 + content_nonce_len as i64 + Self::MSG_ROW_OVERHEAD
+    }
+
+    /// Enforce the storage cap, and report what was destroyed.
+    ///
+    /// This is **the** definition of "the cap is enforced", and every write path
+    /// that puts a message on disk calls it — inbound (`handle_incoming_text`),
+    /// outbound (`send_message`, `send_message_with_timer`) and group
+    /// (`send_group_message`, inbound group frames) alike. It exists as one
+    /// function because those paths had already begun to diverge: the receive
+    /// loop enforced the cap and the three others did not, so a user filling
+    /// the disk by sending, or an attacker filling it with group traffic, was
+    /// bounded only by whatever the periodic sweep happened to catch. A cap that
+    /// most write paths bypass is not a cap.
+    ///
+    /// Called *before* the write, so a store that is already over the ceiling
+    /// cannot be pushed further past it by the message being written.
+    ///
+    /// The fast path is one O(1) counter read; the expensive re-derivation
+    /// inside `evict_to_cap` only runs once the ceiling is genuinely crossed.
+    ///
+    /// `cap_bytes` is passed in rather than read from the config so the caller
+    /// reads `security_config` *before* taking the store lock. The reverse
+    /// nesting is a deadlock cycle, which is the shape both of this codebase's
+    /// historical deadlocks took.
+    ///
+    /// Returns `None` when nothing was destroyed, including the case where the
+    /// store is over the cap but holds no evictable rows — a cap smaller than a
+    /// single message. The caller uses this to decide whether to bother the
+    /// user with a `m2m://storage-evicted` event.
+    pub fn enforce_storage_cap(
+        &self,
+        cap_bytes: u64,
+    ) -> Result<Option<EvictionReport>, StorageError> {
+        if self.stored_bytes()? <= cap_bytes {
+            return Ok(None);
+        }
+        let report = self.evict_to_cap(cap_bytes)?;
+        if report.messages_evicted == 0 && report.group_messages_evicted == 0 {
+            return Ok(None);
+        }
+        Ok(Some(report))
+    }
+
+    /// One pass of the two policies that destroy stored history on a timer:
+    /// self-destruct expiry and the storage cap.
+    ///
+    /// Split out of the background task so the policy is testable without a
+    /// tokio runtime or an `AppHandle`, and so the task has no logic of its own
+    /// to get wrong — it decides *when*, this decides *what*.
+    ///
+    /// Expiry runs first and unconditionally, including in ephemeral mode:
+    /// deleting is always the safe direction, and a store that accumulated
+    /// messages before the user turned ephemeral mode on still owes them the
+    /// timers they were given.
+    pub fn sweep(&self, cap_bytes: u64) -> Result<SweepOutcome, StorageError> {
+        let expired_messages = self.delete_expired_messages()?;
+        if expired_messages > 0 {
+            tracing::info!(
+                expired = expired_messages,
+                "self-destruct timer elapsed — messages permanently destroyed"
+            );
+        }
+        let evicted = self.enforce_storage_cap(cap_bytes)?;
+        Ok(SweepOutcome {
+            expired_messages,
+            evicted: evicted.unwrap_or_default(),
+        })
     }
 
     /// Permanently evict the oldest stored messages until usage is at or below
@@ -4321,5 +4428,192 @@ mod tests {
             report.messages_evicted,
             store.shredded_key_count()
         );
+    }
+
+    // ─── Sweep: expiry + cap, and the two paths that call them ──────────────
+    //
+    // `sweep` is what the background task in `maintenance.rs` runs, and
+    // `enforce_storage_cap` is what every write path runs. The gap these cover
+    // is the one the cap could not have: it was enforced at one write site of
+    // four, and self-destruct expiry ran only while a chat screen was mounted.
+
+    #[test]
+    fn test_enforce_storage_cap_is_a_noop_under_the_cap() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 4, 500);
+        let used = store.stored_bytes().unwrap();
+        let shredded_before = store.shredded_key_count();
+
+        assert!(
+            store.enforce_storage_cap(used * 2).unwrap().is_none(),
+            "under the cap nothing may be evicted and nothing may be reported"
+        );
+        assert_eq!(store.load_messages("c1", 100).unwrap().len(), 4);
+        assert_eq!(store.shredded_key_count(), shredded_before);
+    }
+
+    #[test]
+    fn test_enforce_storage_cap_evicts_and_reports_over_the_cap() {
+        // Mutation-verified: making `enforce_storage_cap` return `Ok(None)`
+        // unconditionally fails this test — which is exactly the shape of the
+        // original bug, where a write path that "checked" the cap reported
+        // success having done nothing.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 10, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 10;
+
+        let report = store
+            .enforce_storage_cap(one_msg * 4)
+            .unwrap()
+            .expect("over the cap, so the caller must be told what it lost");
+
+        assert!(report.messages_evicted > 0, "something must be evicted");
+        assert!(report.bytes_freed > 0, "the report must quantify the loss");
+        assert!(
+            store.stored_bytes().unwrap() <= one_msg * 4,
+            "the store must end up back under the cap"
+        );
+        assert_eq!(
+            store.shredded_key_count(),
+            report.messages_evicted as u64,
+            "the write-path entry point must shred, not merely delete"
+        );
+    }
+
+    #[test]
+    fn test_enforce_storage_cap_reports_nothing_when_nothing_is_evictable() {
+        // A counter that drifted *high* must not manufacture an eviction. The
+        // enforcement path re-derives from SQL, so an inflated cache resolves to
+        // "under the cap" and the user is not shown a report for messages that
+        // were never destroyed — a notice about a loss that did not happen is
+        // the mirror of the silent loss this feature exists to prevent.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 2, 200);
+        store
+            .conn
+            .execute(
+                "UPDATE storage_stats SET total_bytes = 1000000 WHERE id = 1",
+                [],
+            )
+            .unwrap();
+
+        assert!(
+            store.enforce_storage_cap(1_000).unwrap().is_none(),
+            "a cache that over-reports must not cause a phantom eviction"
+        );
+        assert_eq!(store.load_messages("c1", 100).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_sweep_expires_and_enforces_in_one_pass() {
+        // The two halves of the background task, and the order matters: expiry
+        // runs first so an elapsed self-destruct timer frees bytes that the cap
+        // would otherwise have to evict something else to reclaim.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        let past = chrono::Utc::now().timestamp() - 3600;
+        let future = chrono::Utc::now().timestamp() + 3600;
+        store
+            .store_message_secure("m-expired", "c1", "sent", b"gone", past, Some(past), true, &test_key())
+            .unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let after_expiry_bytes = {
+            let outcome = store.sweep(u64::MAX / 4).unwrap();
+            assert_eq!(outcome.expired_messages, 1, "the elapsed timer must fire");
+            assert!(
+                outcome.evicted.messages_evicted == 0,
+                "an effectively unlimited cap must evict nothing"
+            );
+            store.stored_bytes().unwrap()
+        };
+        assert!(
+            store.load_messages("c1", 100).unwrap().iter().all(|m| m.id != "m-expired"),
+            "the expired message must be gone from the store"
+        );
+
+        // Now the same call with a cap the store no longer fits under.
+        let one_msg = after_expiry_bytes / 6;
+        let outcome = store.sweep(one_msg * 3).unwrap();
+        assert_eq!(outcome.expired_messages, 0, "nothing left to expire");
+        assert!(outcome.evicted.messages_evicted > 0);
+        assert!(
+            outcome.destroyed_anything(),
+            "a pass that evicted must report that it destroyed something"
+        );
+    }
+
+    #[test]
+    fn test_sweep_is_a_noop_when_there_is_nothing_to_do() {
+        // The common case, and the one that runs every 15 minutes for the life
+        // of the process. It must destroy nothing and say so.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 500);
+        let before = store.stored_bytes().unwrap();
+
+        let outcome = store.sweep(before * 2).unwrap();
+        assert_eq!(outcome.expired_messages, 0);
+        assert_eq!(outcome.evicted, EvictionReport::default());
+        assert!(
+            !outcome.destroyed_anything(),
+            "nothing happened, so nothing may be reported as having happened"
+        );
+        assert_eq!(store.stored_bytes().unwrap(), before);
+    }
+
+    #[test]
+    fn test_open_destroys_messages_that_expired_while_the_app_was_closed() {
+        // The bug this whole path exists for. Expiry was driven by a
+        // `setInterval` in `ChatView`, so a self-destruct timer elapsed while
+        // the app was shut — or while the user was on another screen, which for
+        // a tray app is most of its life — left the message on disk, content
+        // key and all, until the app happened to be sitting on that screen.
+        //
+        // So: write a message, let it expire, close the store, reopen. The row
+        // must be gone before the first query can read it.
+        let dir = std::env::temp_dir().join(format!("m2m_exp_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("messages.db");
+
+        let past = chrono::Utc::now().timestamp() - 60;
+        let future = chrono::Utc::now().timestamp() + 3600;
+        {
+            let store = MessageStore::open(&db_path).unwrap();
+            store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+            store
+                .store_message_secure("m-expired", "c1", "sent", b"boom", past, Some(past), true, &test_key())
+                .unwrap();
+            store
+                .store_message_secure("m-live", "c1", "sent", b"keep", past, Some(future), true, &test_key())
+                .unwrap();
+        }
+        // "Closed" — the process is gone, nothing has run since.
+
+        let store = MessageStore::open(&db_path).unwrap();
+        let msgs = store.load_messages("c1", 10).unwrap();
+        let ids: Vec<&str> = msgs.iter().map(|m| m.id.as_str()).collect();
+        assert!(
+            !ids.contains(&"m-expired"),
+            "an expired message must not survive the restart, got {ids:?}"
+        );
+        assert!(ids.contains(&"m-live"), "a live timer must be untouched");
+
+        // And the byte counter must agree with the tables, or the cap starts
+        // from a number that includes bytes nobody can reach any more.
+        let rows: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        let one_msg = store.stored_bytes().unwrap() as i64 / rows.max(1);
+        assert_eq!(
+            store.stored_bytes().unwrap() as i64,
+            one_msg * rows,
+            "the counter must be re-derived at open, after the expiry pass"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
