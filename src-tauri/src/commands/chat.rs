@@ -69,8 +69,10 @@ pub async fn send_message(
     // lock is taken: reading them inside the `message_store` scope would nest
     // `security_config` under `message_store`, a pair with no documented
     // acquisition order.
-    let ephemeral_mode = state.security_config.read().await.ephemeral_mode;
-    let storage_cap = state.security_config.read().await.effective_storage_cap();
+    let (ephemeral_mode, storage_cap) = {
+        let cfg = state.security_config.read().await;
+        (cfg.ephemeral_mode, cfg.effective_storage_cap())
+    };
     let persist = history && !ephemeral_mode;
     if persist {
         state
@@ -591,8 +593,10 @@ pub async fn send_message_with_timer(
     // lock is taken: reading them inside the `message_store` scope would nest
     // `security_config` under `message_store`, a pair with no documented
     // acquisition order.
-    let ephemeral_mode = state.security_config.read().await.ephemeral_mode;
-    let storage_cap = state.security_config.read().await.effective_storage_cap();
+    let (ephemeral_mode, storage_cap) = {
+        let cfg = state.security_config.read().await;
+        (cfg.ephemeral_mode, cfg.effective_storage_cap())
+    };
     let persist = history && !ephemeral_mode;
     if persist {
         state
