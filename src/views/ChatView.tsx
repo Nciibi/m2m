@@ -67,8 +67,6 @@ export default function ChatView() {
   // opened seconds after a timer elapses shows the truth immediately.
   useEffect(() => {
     invoke("cleanup_expired_messages").catch(() => {});
-    const t = setInterval(() => { invoke("cleanup_expired_messages").catch(() => {}); }, 10000);
-    return () => clearInterval(t);
   }, []);
 
   // Mark messages as read when viewing the chat
