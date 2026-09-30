@@ -451,6 +451,21 @@ pub mod tray {
 // ── async_runtime ─────────────────────────────────────────────────────────────
 
 pub mod async_runtime {
+    /// `tauri::async_runtime::spawn`
+    ///
+    /// Verified against tauri 2.11.4 `src/async_runtime.rs`: `spawn` takes a
+    /// `Future<Output = T> + Send + 'static` and returns a `JoinHandle<T>`. It is
+    /// a *function* over Tauri's own global runtime handle, not a
+    /// `Runtime`-parameterised trait method, so `maintenance.rs` calls it
+    /// without importing anything.
+    pub fn spawn<F, R>(future: F) -> tokio::task::JoinHandle<R>
+    where
+        F: std::future::Future<Output = R> + Send + 'static,
+        R: Send + 'static,
+    {
+        tokio::spawn(future)
+    }
+
     /// `tauri::async_runtime::spawn_blocking`
     pub fn spawn_blocking<F, R>(f: F) -> tokio::task::JoinHandle<R>
     where
