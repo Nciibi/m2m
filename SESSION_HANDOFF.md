@@ -186,7 +186,7 @@ shaped. `emit_storage_evicted()` fires the event.
 
 ---
 
-## 3. Tests — 163 passing, all mutations verified
+## 3. Tests — 169 passing, all mutations verified
 
 10 new tests in `storage.rs`, **executed** via `./tools/crypto-probe/sync.sh`
 (see §6 for how that harness was extended this session):
@@ -243,7 +243,7 @@ the loop to drain 1:1 first, then group, with a break when both are empty.
 
 ---
 
-## 5. What remains
+## 5. What session 3 left, and what happened to it
 
 ### 5.1 Verify the frontend — ✅ DONE, and it passed clean
 
@@ -256,7 +256,7 @@ passed. The one genuine surprise arrived in session 4's own work — see §4.1.
 
 ---
 
-## 5.2 The background task — ✅ DONE
+### 5.2 The background task — ✅ DONE
 
 `maintenance.rs` (new), spawned from `lib.rs` `setup`.
 
@@ -301,7 +301,7 @@ timer and the event emission.
 
 ---
 
-## 5.3 Frontend tests for the new surface — ✅ DONE, +29
+### 5.3 Frontend tests for the new surface — ✅ DONE, +29
 
 - `events.test.ts` — 8 tests on `asStorageEvicted`. The important one: a
   non-array `overrode_retention` must be **rejected**, because `asArray` coerces
@@ -335,7 +335,7 @@ not worth it. The *text* it renders is now covered.
 
 ---
 
-## 4. New tests — 6 in `storage.rs`, all mutation-verified
+## 6. New tests this session — 6 in `storage.rs`, all mutation-verified
 
 | Test | Catches |
 |---|---|
@@ -346,7 +346,7 @@ not worth it. The *text* it renders is now covered.
 | `test_sweep_is_a_noop_when_there_is_nothing_to_do` | the 15-minute tick destroying data it should not |
 | `test_open_destroys_messages_that_expired_while_the_app_was_closed` | removing the open-time expiry pass — **verified** |
 
-### 4.1 The first version of the open-time test proved nothing
+### 6.1 The first version of the open-time test proved nothing
 
 Worth recording in full, because it is the same mistake the session-3 notes
 warn about and I made it anyway.
@@ -367,7 +367,7 @@ path.**
 
 ---
 
-## 4.2 The ChatView mock had to change shape, and that was correct
+### 6.2 The ChatView mock had to change shape, and that was correct
 
 Moving `cleanup_expired_messages` from a `setInterval` to a mount effect made 19
 of 20 tests in `ChatView.test.tsx` fail with
@@ -382,7 +382,7 @@ how a test mock starts shaping the product.
 
 ---
 
-## 4.3 Not done, deliberately
+### 6.3 Not done, deliberately
 
 - **A shutdown path for the task.** It has no `CancellationToken` and no
   `JoinHandle` — consistent with the other 39 `tokio::spawn`s, but the same gap
@@ -402,7 +402,7 @@ how a test mock starts shaping the product.
 - **`load_group_messages` is not filtered by the cap or by expiry**, so a group
   view shows rows the sweep has removed. Same class as the line above.
 
-## 6. Tooling added this session
+## 7. Tooling (sessions 3 and 4)
 
 **`tools/crypto-probe/`** now also runs `storage.rs`, so the storage-cap tests
 actually execute. It previously covered only crypto/group/protocol/secure_key
@@ -425,7 +425,7 @@ Also new deps in `tools/crypto-probe/Cargo.toml`: `rusqlite`, `chrono`, `uuid`.
 
 ---
 
-## 7. Everything from session 2 is still true
+## 8. Everything from session 2 is still true
 
 The four IP-leakage fixes, the ratchet in-flight fix, the group (key,nonce)
 reuse fix, the roster cap, the false-safety UI class, and the four lock fixes
