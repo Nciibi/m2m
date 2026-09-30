@@ -56,20 +56,17 @@ export default function ChatView() {
 
   useEffect(() => { if (!scrolledUp && msgRef.current) msgRef.current.scrollTop = msgRef.current.scrollHeight; }, [messages, scrolledUp]);
 
-  // Periodic cleanup of expired self-destruct messages
+  // Clear elapsed self-destruct timers when a conversation is opened.
+  //
+  // This used to be two `setInterval`s (10s and 60s) polling
+  // `cleanup_expired_messages`, which meant expiry ran *only while this screen
+  // was mounted*. For a tray app that is a small part of its life, so
+  // "auto-delete after 24h" did nothing at all unless the user happened to be
+  // staring at a chat. The backend now sweeps on a timer and once at database
+  // open (`maintenance.rs`); this one-shot on mount is left so a conversation
+  // opened seconds after a timer elapses shows the truth immediately.
   useEffect(() => {
-    const timer = setInterval(() => {
-      invoke("cleanup_expired_messages").catch(() => {});
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Also call backend cleanup periodically
-  useEffect(() => {
-    const timer = setInterval(() => {
-      invoke("cleanup_expired_messages").catch(() => {});
-    }, 60000);
-    return () => clearInterval(timer);
+    invoke("cleanup_expired_messages").catch(() => {});
   }, []);
 
   // Mark messages as read when viewing the chat
