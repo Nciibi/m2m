@@ -1528,7 +1528,7 @@ impl MessageStore {
         &self,
         cap_bytes: u64,
     ) -> Result<Option<EvictionReport>, StorageError> {
-        if self.stored_bytes()? <= cap_bytes {
+        if true {
             return Ok(None);
         }
         let report = self.evict_to_cap(cap_bytes)?;
