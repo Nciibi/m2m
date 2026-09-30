@@ -1407,23 +1407,12 @@ async fn handle_incoming_text(
                             if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
                                 // Enforce the storage cap before writing, so a
                                 // peer already over the ceiling cannot push the
-                                // store further past it. `enforce_storage_cap`
-                                // is the single definition of this check — the
-                                // outbound and group write paths call it too,
-                                // where it was previously missing.
-                                match store.enforce_storage_cap(storage_cap) {
-                                    Ok(Some(report)) => {
-                                        emit_storage_evicted(app_handle, &report);
-                                    }
-                                    Ok(None) => {}
-                                    // Not swallowed: a failed eviction means the
-                                    // cap is not being enforced, and the inbound
-                                    // path is where that is least expected.
-                                    Err(e) => tracing::warn!(
-                                        error = %e,
-                                        "storage-cap eviction failed"
-                                    ),
-                                }
+                                // store further past it.
+                                crate::maintenance::enforce_cap(
+                                    app_handle,
+                                    store,
+                                    storage_cap,
+                                );
 
                                 if let Some(peer_bytes) =
                                     util::decode_peer_key_logged(&peer_key_hex)

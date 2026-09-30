@@ -3,32 +3,31 @@
 //! # Why this exists
 //!
 //! Both policies were originally driven from the UI. `ChatView` ran a
-//! `setInterval` that invoked `cleanup_expired_messages` every 10s and again
-//! every 60s, so expiry happened *only while a chat screen was mounted* — and
-//! this app hides to the tray and keeps running, so for most of its life
-//! "auto-delete after 24h" was a promise the app was not keeping. A self-destruct
-//! timer that is enforced only while a particular window is focused is not a
-//! self-destruct timer.
+//! `setInterval` invoking `cleanup_expired_messages` every 10s and again every
+//! 60s, so expiry happened *only while a chat screen was mounted* — and this
+//! app hides to the tray and keeps running, so for most of its life "auto-delete
+//! after 24h" was a promise the app was not keeping. A self-destruct timer
+//! enforced only while a particular window is focused is not a self-destruct
+//! timer.
 //!
-//! The storage cap is worse for the same reason, and additionally because the
-//! cap was enforced at exactly one write site (the inbound text handler). Outbound
-//! sends and group messages wrote to the store with no ceiling at all, so a
-//! caller who could get the store near the cap could push it over at leisure.
-//! Both gaps are now closed by [`crate::storage::MessageStore::enforce_storage_cap`],
-//! which every write path calls; this task is the backstop, not the primary
-//! mechanism.
+//! The storage cap was worse for the same reason, and additionally because it
+//! was enforced at exactly one write site (the inbound text handler). Outbound
+//! sends and group messages wrote to the store with no ceiling at all, so
+//! a store already near the cap could be pushed over it at leisure. Both gaps
+//! are now closed by [`enforce_cap`], which every write path calls; the task
+//! below is the backstop, not the primary mechanism.
 //!
 //! # What the task does
 //!
 //! Runs [`MessageStore::sweep`] on a fixed interval. `sweep` holds no policy of
-//! its own — it is the same code the tests exercise — so the only thing here
-//! that can be wrong is the scheduling.
+//! its own — it is the code the tests exercise — so the only thing here that can
+//! be wrong is the scheduling.
 //!
-//! The first tick fires immediately (`tokio::time::interval` semantics), which
-//! clears anything that expired while the app was closed. The store itself is
-//! opened lazily by `ensure_message_store`, so a tick that finds no store is the
-//! normal pre-first-message state, not an error: the expiry half of the
-//! guarantee is already covered at `MessageStore::open`.
+//! The first tick fires immediately (`tokio::time::interval` semantics). The
+//! store is opened lazily by `ensure_message_store`, so a tick that finds no
+//! store is the normal pre-first-message state rather than an error; the expiry
+//! half of the guarantee is already covered at `MessageStore::open`, which is
+//! what covers the app-closed case.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,87 +35,53 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 use crate::state::AppState;
-use crate::storage::SweepOutcome;
+use crate::storage::{EvictionReport, MessageStore, SweepOutcome};
 
-/// How often the sweep runs when nothing else prompts it.
+/// How often the sweep runs.
 ///
 /// Long enough not to matter on battery, short enough that a self-destruct
-/// timer set to hours does not overshoot by much if the store is opened after
-/// this module's start-up tick found no store. The per-tick work is indexed
-/// (`idx_messages_expires_at`, `idx_messages_oldest`) and skips entirely when
-/// the store has nothing expired and is under the cap.
+/// timer set in hours does not overshoot by much. The per-tick work is indexed
+/// (`idx_messages_expires_at`, `idx_messages_oldest`) and does no destructive
+/// work at all when nothing has expired and the store is under the cap.
 pub const SWEEP_INTERVAL: Duration = Duration::from_secs(15 * 60);
 
-/// Start the maintenance task. Returns immediately; the task lives for the
-/// process.
+/// Enforce the storage cap on a write path, and tell the user if it destroyed
+/// anything.
 ///
-/// Called from `lib.rs` `setup`, after the security config has been restored —
-/// the first tick reads the cap, and reading a default cap that the user's
-/// config is about to override would be a first tick that enforces the wrong
-/// number.
-pub fn spawn(app_handle: AppHandle, state: Arc<AppState>) {
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
-        // A laptop that suspends for a day must not come back and run the sweep
-        // once per missed 15-minute period.
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        loop {
-            ticker.tick().await;
-            sweep_once(&app_handle, &state).await;
-        }
-    });
-}
-
-/// Run one sweep pass and report whatever it destroyed.
-pub async fn sweep_once(app_handle: &AppHandle, state: &Arc<AppState>) {
-    // The cap is read *before* the store lock, and the read guard is released
-    // by the statement. Reading it inside the `message_store` scope would nest
-    // `security_config` under `message_store` — a pair with no documented
-    // acquisition order, which is the shape of both deadlocks this codebase
-    // has already had.
-    let cap = state.security_config.read().await.effective_storage_cap();
-
-    // The store is opened lazily by `ensure_message_store` (called from ~9
-    // command sites, never at startup), so "no store yet" is the normal state
-    // of a freshly launched app and is not an error. Anything that expired
-    // while the app was closed was already destroyed at `MessageStore::open`.
-    let outcome = {
-        let ms = state.message_store.lock().await;
-        let Some(store) = ms.as_ref() else {
-            return;
-        };
-        match store.sweep(cap) {
-            Ok(outcome) => outcome,
-            Err(e) => {
-                // Swallowed, not silent: a sweep that can never succeed means
-                // neither self-destruct nor the cap is being enforced, and the
-                // user has no other way to find that out.
-                tracing::error!(error = %e, "storage maintenance sweep failed");
-                return;
-            }
-        }
-    };
-
-    // The event is emitted outside the store lock — the UI may re-enter and
-    // call `get_storage_usage`, which takes the very lock just released.
-    report(&outcome, app_handle);
-}
-
-/// Tell the user about a sweep that destroyed history.
+/// **The single entry point for "the cap is enforced".** Every path that puts a
+/// message on disk calls this — inbound text, inbound group frames, outbound
+/// sends, outbound group sends. It was one path of four before, and the other
+/// three were the gap: a cap that most write paths bypass is not a cap.
 ///
-/// Only eviction is reported. Elapsed self-destruct timers are not an event:
-/// the user set that timer, and re-notifying them every sweep would train them
-/// to ignore the channel that carries the message that matters — that the cap
-/// took messages a retention policy was protecting.
-fn report(outcome: &SweepOutcome, app_handle: &AppHandle) {
-    let report = &outcome.evicted;
-    if report.messages_evicted == 0 && report.group_messages_evicted == 0 {
-        return;
+/// Takes the cap as a value so the caller reads `security_config` *before*
+/// taking the store lock. The reverse nesting is a deadlock cycle, which is the
+/// shape both of this codebase's historical deadlocks took.
+///
+/// `cap_bytes` comes from [`crate::state::SecurityConfig::effective_storage_cap`],
+/// never from `storage_cap_bytes` directly — the raw field is 0 on a
+/// default-constructed config, which is what a fresh install has, and reading
+/// it raw would mean the cap is off exactly where it matters most.
+pub fn enforce_cap(app_handle: &AppHandle, store: &MessageStore, cap_bytes: u64) {
+    match store.enforce_storage_cap(cap_bytes) {
+        Ok(Some(report)) => emit_storage_evicted(app_handle, &report),
+        // Under the cap, or over it with nothing evictable (a cap smaller than
+        // one message). No report, no event, nothing for the user to read.
+        Ok(None) => {}
+        // Not swallowed. A failed eviction means the ceiling is not being
+        // enforced on this path, and the user has no other way to find out.
+        Err(e) => tracing::error!(
+            error = %e,
+            "storage-cap enforcement failed — the cap is not being applied"
+        ),
     }
-    // Emitted for a *background* pass too, not just a write-path eviction: the
-    // point of the cap is that the user is told history is gone, and a user who
-    // never sends a message would otherwise only discover it by noticing
-    // missing messages.
+}
+
+/// Tell the user that stored history was permanently destroyed.
+///
+/// Emitted for a background pass as well as a write-path eviction. The point of
+/// the cap is that the user learns history is gone; a user who never sends a
+/// message would otherwise discover it by noticing missing messages.
+pub fn emit_storage_evicted(app_handle: &AppHandle, report: &EvictionReport) {
     if let Err(e) = app_handle.emit(
         "m2m://storage-evicted",
         serde_json::json!({
@@ -128,4 +93,69 @@ fn report(outcome: &SweepOutcome, app_handle: &AppHandle) {
     ) {
         tracing::warn!(error = %e, "could not emit storage-evicted");
     }
+}
+
+/// Start the maintenance task. Returns immediately; the task lives for the
+/// process.
+///
+/// Called from `lib.rs` `setup`, after the security config has been restored —
+/// the first tick reads the cap, and reading a default cap that the persisted
+/// config is about to override would be a first tick enforcing the wrong number.
+pub fn spawn(app_handle: AppHandle, state: Arc<AppState>) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
+        // A laptop suspended for a day must not come back and run the sweep
+        // once per missed 15-minute period.
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            sweep_once(&app_handle, &state).await;
+        }
+    });
+}
+
+/// Run one sweep pass: elapsed self-destruct timers first, then the cap.
+pub async fn sweep_once(app_handle: &AppHandle, state: &Arc<AppState>) {
+    // Read before the store lock; the guard is released at the end of the
+    // statement. Reading the cap inside the `message_store` scope would nest
+    // `security_config` under `message_store`.
+    let cap = state.security_config.read().await.effective_storage_cap();
+
+    // The store is opened lazily by `ensure_message_store` (called from ~9
+    // command sites, never at startup), so "no store yet" is the normal state
+    // of a freshly launched app.
+    let outcome = {
+        let ms = state.message_store.lock().await;
+        let Some(store) = ms.as_ref() else {
+            return;
+        };
+        match store.sweep(cap) {
+            Ok(outcome) => outcome,
+            // Logged, not swallowed: a sweep that can never succeed means
+            // neither self-destruct nor the cap is being enforced.
+            Err(e) => {
+                tracing::error!(error = %e, "storage maintenance sweep failed");
+                return;
+            }
+        }
+    };
+
+    // Reported outside the store lock — the event handler re-enters the
+    // frontend, which may call `get_storage_usage` and take the lock just
+    // released.
+    report_sweep(&outcome, app_handle);
+}
+
+/// Announce a sweep, but only the eviction half.
+///
+/// Elapsed self-destruct timers are deliberately not an event. The user set
+/// that timer, and re-notifying them on every sweep would train them to ignore
+/// the one channel that carries the message that matters — that the cap took
+/// messages a retention policy was protecting.
+fn report_sweep(outcome: &SweepOutcome, app_handle: &AppHandle) {
+    let report = &outcome.evicted;
+    if report.messages_evicted == 0 && report.group_messages_evicted == 0 {
+        return;
+    }
+    emit_storage_evicted(app_handle, report);
 }
