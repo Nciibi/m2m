@@ -1407,31 +1407,22 @@ async fn handle_incoming_text(
                             if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
                                 // Enforce the storage cap before writing, so a
                                 // peer already over the ceiling cannot push the
-                                // store further past it.
-                                //
-                                // `stored_bytes()` is an O(1) counter read; the
-                                // expensive part of `evict_to_cap` only runs once
-                                // the ceiling is genuinely crossed.
-                                let over_cap = store
-                                    .stored_bytes()
-                                    .map(|used| used > storage_cap)
-                                    .unwrap_or(false);
-                                if over_cap {
-                                    match store.evict_to_cap(storage_cap) {
-                                        Ok(report) => {
-                                            if report.messages_evicted > 0
-                                                || report.group_messages_evicted > 0
-                                            {
-                                                emit_storage_evicted(
-                                                    app_handle, &report,
-                                                );
-                                            }
-                                        }
-                                        Err(e) => tracing::warn!(
-                                            error = %e,
-                                            "storage-cap eviction failed"
-                                        ),
+                                // store further past it. `enforce_storage_cap`
+                                // is the single definition of this check — the
+                                // outbound and group write paths call it too,
+                                // where it was previously missing.
+                                match store.enforce_storage_cap(storage_cap) {
+                                    Ok(Some(report)) => {
+                                        emit_storage_evicted(app_handle, &report);
                                     }
+                                    Ok(None) => {}
+                                    // Not swallowed: a failed eviction means the
+                                    // cap is not being enforced, and the inbound
+                                    // path is where that is least expected.
+                                    Err(e) => tracing::warn!(
+                                        error = %e,
+                                        "storage-cap eviction failed"
+                                    ),
                                 }
 
                                 if let Some(peer_bytes) =

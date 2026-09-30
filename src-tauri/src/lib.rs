@@ -32,6 +32,7 @@ mod hole_punch;
 mod identity;
 mod lan_discovery;
 mod local_addr;
+mod maintenance;
 pub mod network;
 mod port_mapping;
 pub mod protocol;
@@ -272,6 +273,18 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // ── Background storage maintenance ──
+            // Enforces self-destruct expiry and the storage cap on a timer,
+            // rather than only while a chat screen happens to be mounted — this
+            // app hides to the tray, so the UI-driven version left both
+            // promises unkept for most of the app's life. Spawned here, after
+            // the config restore above, so the first tick reads the real cap
+            // rather than the default.
+            maintenance::spawn(
+                app.handle().clone(),
+                app.state::<Arc<AppState>>().inner().clone(),
+            );
 
             Ok(())
         })
