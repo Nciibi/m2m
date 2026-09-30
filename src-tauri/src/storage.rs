@@ -4515,7 +4515,6 @@ mod tests {
         let store = mem_messagestore();
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let past = chrono::Utc::now().timestamp() - 3600;
-        let future = chrono::Utc::now().timestamp() + 3600;
         store
             .store_message_secure("m-expired", "c1", "sent", b"gone", past, Some(past), true, &test_key())
             .unwrap();
@@ -4595,22 +4594,50 @@ mod tests {
         let store = MessageStore::open(&db_path).unwrap();
         let msgs = store.load_messages("c1", 10).unwrap();
         let ids: Vec<&str> = msgs.iter().map(|m| m.id.as_str()).collect();
+        assert!(ids.contains(&"m-live"), "a live timer must be untouched");
         assert!(
             !ids.contains(&"m-expired"),
             "an expired message must not survive the restart, got {ids:?}"
         );
-        assert!(ids.contains(&"m-live"), "a live timer must be untouched");
+
+        // The read path already filters expired rows (`load_messages` carries
+        // `expires_at > now`), so asserting on `load_messages` alone proves
+        // nothing about the disk — the row and its wrapped content key would
+        // still be sitting in the file, readable by anyone who seizes it and
+        // has the storage key. That is the actual risk, so that is what is
+        // asserted: the row is *gone from the table*.
+        //
+        // Mutation-verified: deleting the `delete_expired_messages` call from
+        // `MessageStore::open` fails this assertion while leaving every
+        // `load_messages` assertion above passing.
+        let on_disk: Vec<String> = store
+            .conn
+            .prepare("SELECT id FROM messages ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert_eq!(
+            on_disk,
+            vec!["m-live".to_string()],
+            "the expired row must be physically removed at open, not merely hidden"
+        );
 
         // And the byte counter must agree with the tables, or the cap starts
         // from a number that includes bytes nobody can reach any more.
-        let rows: i64 = store
+        let one_msg = store
             .conn
-            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(content_encrypted) + LENGTH(content_nonce) + ?1), 0)
+                   FROM messages",
+                params![MessageStore::MSG_ROW_OVERHEAD],
+                |r| r.get::<_, i64>(0),
+            )
             .unwrap();
-        let one_msg = store.stored_bytes().unwrap() as i64 / rows.max(1);
         assert_eq!(
             store.stored_bytes().unwrap() as i64,
-            one_msg * rows,
+            one_msg,
             "the counter must be re-derived at open, after the expiry pass"
         );
 
