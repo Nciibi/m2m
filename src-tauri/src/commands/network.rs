@@ -1309,16 +1309,7 @@ fn emit_storage_evicted(
     app_handle: &AppHandle,
     report: &crate::storage::EvictionReport,
 ) {
-    let _ = tauri::Emitter::emit(
-        app_handle,
-        "m2m://storage-evicted",
-        serde_json::json!({
-            "messages_evicted": report.messages_evicted,
-            "group_messages_evicted": report.group_messages_evicted,
-            "bytes_freed": report.bytes_freed,
-            "overrode_retention": report.overrode_retention,
-        }),
-    );
+    crate::maintenance::emit_storage_evicted(app_handle, report);
 }
 
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
