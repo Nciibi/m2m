@@ -245,65 +245,162 @@ the loop to drain 1:1 first, then group, with a break when both are empty.
 
 ## 5. What remains
 
-### 5.1 Verify the frontend — do this first
+### 5.1 Verify the frontend — ✅ DONE, and it passed clean
 
-```bash
-export PATH="/nix/store/lfaydgacdyngci7p60s8wwvgdm74fjkx-nodejs-24.19.0/bin:$PATH"
-cd /mnt/hdd/projects/M2M
-./node_modules/.bin/tsc --noEmit
-./node_modules/.bin/vitest run
-./node_modules/.bin/eslint src --max-warnings 10
-```
+All three ran green on the first attempt: `tsc` clean, **329 passed** (nothing
+broke, so §5.1's three "known-risky" places were not), lint unchanged at 10.
 
-Three known-risky places, all guessable without running anything:
-
-1. **`SettingsView.test.tsx`** — the `useSettings` mock was extended with
-   `handleStorageCapChange`, `refreshStorageUsage` and `storageUsage`. All 22
-   tests in that file were failing with `refreshStorageUsage is not a function`
-   before the mock was fixed. If the mock is incomplete the *whole view* dies,
-   because the call is in a mount effect.
-2. **`App.tsx`** — `refreshStorageUsage` is invoked from a `useEffect` in
-   `SettingsView`; any other test that mounts it needs the same mock field.
-   `SecurityBanner` also gained an optional `onDismiss`, so any test asserting
-   its exact markup may need updating.
-3. **eslint budget** — `SettingsView` gained a `useEffect` that calls
-   `void refreshStorageUsage()`. That is an async load, not derivable state, so
-   it *should* land in the existing 10 `set-state-in-effect` budget — but if it
-   pushes the count to 11, restructure (move the reset into the handler) rather
-   than raising the pinned number. See `CLAUDE.md`.
-
-### 5.2 Step 3 — the background task (NOT STARTED)
-
-This is the substantive remaining work. Two triggers in one task:
-
-- **Periodic**, which also relocates `delete_expired_messages` off the
-  `ChatView` `setInterval`. **Right now expiry only runs while the chat screen
-  is mounted**, so "auto-delete after 24h" silently does nothing if the app is
-  closed. That is a broken promise independent of any attacker and is the single
-  highest-value thing left in this feature.
-- **Immediate on crossing the cap**, so a wait for the timer cannot be used to
-  fill the disk.
-
-Implementation notes:
-- Spawn from `lib.rs` `setup`, which already does `blocking_write` on the config.
-- **Must tolerate the store not being open.** `ensure_message_store` is lazy —
-  called from ~5 command sites, never at startup. So the task has to handle
-  `None` gracefully on every tick.
-- Read the cap from `security_config` **outside** any store lock, per §2.4.
-- Do not hold the store lock across the whole sweep; `evict_to_cap` is already
-  batched and checkpointed, so a tick should call it once and let it finish.
-
-### 5.3 Frontend test for the new surface
-
-None written yet. Minimum valuable set:
-- `asStorageEvicted` guard: accepts the real shape; rejects a non-array
-  `overrode_retention` (note `asArray` coerces to `[]`, which is why the guard
-  uses `Array.isArray` directly — a regression here would silently drop the
-  conversation list rather than rejecting).
-- The banner renders the eviction message and the dismiss button clears it.
-- The cap `<select>` persists through `set_security_config`.
+**Worth recording that the prediction was wrong.** The handoff guessed the
+`SettingsView` mock was the risk; the mock was already complete and all 22 tests
+passed. The one genuine surprise arrived in session 4's own work — see §4.1.
 
 ---
+
+## 5.2 The background task — ✅ DONE
+
+`maintenance.rs` (new), spawned from `lib.rs` `setup`.
+
+**The "immediate on crossing the cap" trigger was implemented as synchronous
+enforcement at every write path, not as a signal to the task.** That is a
+deliberate deviation from how the item was written up, and the reasoning:
+
+- A `Notify` woken by a write path would mean the same thing one line of
+  synchronous code says, only later and with a failure mode. `enforce_cap` is
+  called *before* the write, so a store already over the ceiling cannot be pushed
+  further past it at all — a signal can only ever be delivered *after* the write
+  that overshot.
+- A `Notify` is new shared state on `AppState`, and this codebase has two
+  historical deadlocks. Not worth it for a strictly weaker guarantee.
+- The task still exists, as the backstop: it covers retention expiry (which no
+  write path can trigger), a store opened after the last tick, and any write path
+  added in future that forgets. A cap enforced at four of five sites is still
+  better enforced at four than at one.
+
+`SWEEP_INTERVAL` is 15 minutes. The per-tick work is indexed
+(`idx_messages_expires_at`, `idx_messages_oldest`) and does no destructive work
+when nothing has expired and the store is under the cap.
+
+**`tauri::async_runtime::spawn`, not `tokio::spawn`.** Every other `tokio::spawn`
+in this crate is inside an async command handler, which has a runtime already
+entered. `setup` is synchronous. `tauri::async_runtime::spawn` targets Tauri's own
+global runtime and does not require an ambient one; a bare `tokio::spawn` there
+would panic at startup if no runtime were entered. This path cannot be executed
+here, so it is worth not gambling on it. The stub grew a matching
+`async_runtime::spawn`, verified against tauri 2.11.4's signature.
+
+### Design decision: the policy is in the store, the schedule is in the task
+
+`MessageStore::sweep` holds the *what*; `maintenance.rs` holds only the *when*.
+The reason is testability: `maintenance.rs` needs an `AppHandle`, so the
+crypto-probe cannot execute it, and the probe is the only way to *run* a Rust
+test in this environment. Putting the policy in `storage.rs` means it is covered
+by the 169.
+
+`maintenance.rs` therefore contains no logic of its own to get wrong beyond the
+timer and the event emission.
+
+---
+
+## 5.3 Frontend tests for the new surface — ✅ DONE, +29
+
+- `events.test.ts` — 8 tests on `asStorageEvicted`. The important one: a
+  non-array `overrode_retention` must be **rejected**, because `asArray` coerces
+  to `[]` and a regression there would turn a malformed payload into a valid one
+  that silently drops the conversation list — the exact information the user
+  needs. Also: `bytes_freed` above u32 is accepted (a 10 GiB cap can free more
+  than 4 GiB in one pass; narrowing to u32 would drop exactly the notice a large
+  eviction produces), and every missing field is rejected rather than defaulted.
+- `utils.test.ts` — 7 tests on `evictionNoticeText`, which is why the text was
+  extracted from `App.tsx`. Three of them assert the notice's *content*: the
+  count, "cannot be recovered, including from backups taken beforehand", and
+  "Raise the cap in Settings". A rewrite that keeps the first and drops either
+  of the others is a test failure, which is the point — the text is a security
+  claim, not copy.
+- `SettingsView.test.tsx` — +7. The `<select>` shows the cap actually in force
+  (not a locally held guess), `storage_cap_bytes: 0` renders as the 10 GB
+  default rather than "Unlimited", and choosing a value calls
+  `handleStorageCapChange` with the raw byte count.
+- `SettingsContext.test.tsx` — +4. The persistence step, and specifically the
+  two failure paths: a rejected `set_security_config` must produce an error toast
+  **and** leave the cap unchanged, and a failed `get_storage_usage` must not
+  block the cap control (a throw there would disable the one control that stops
+  the app destroying the user's history).
+- `ChatView.test.tsx` — +3. Mount-time cleanup happens exactly once, and — with
+  fake timers advanced 10 minutes — **polling does not happen at all**. That test
+  is mutation-verified: re-adding the `setInterval` fails it.
+
+The banner's dismiss button is still untested, because `SecurityBanner` is
+private to `App.tsx` and mounting the whole app for a two-branch component is
+not worth it. The *text* it renders is now covered.
+
+---
+
+## 4. New tests — 6 in `storage.rs`, all mutation-verified
+
+| Test | Catches |
+|---|---|
+| `test_enforce_storage_cap_is_a_noop_under_the_cap` | a check that evicts when it should not |
+| `test_enforce_storage_cap_evicts_and_reports_over_the_cap` | `enforce_storage_cap` returning `Ok(None)` unconditionally — **verified** |
+| `test_enforce_storage_cap_reports_nothing_when_nothing_is_evictable` | a counter that drifted *high* manufacturing a phantom eviction |
+| `test_sweep_expires_and_enforces_in_one_pass` | either half of the sweep dropped — **verified** |
+| `test_sweep_is_a_noop_when_there_is_nothing_to_do` | the 15-minute tick destroying data it should not |
+| `test_open_destroys_messages_that_expired_while_the_app_was_closed` | removing the open-time expiry pass — **verified** |
+
+### 4.1 The first version of the open-time test proved nothing
+
+Worth recording in full, because it is the same mistake the session-3 notes
+warn about and I made it anyway.
+
+The test wrote a message with an elapsed timer, dropped the store, reopened it,
+and asserted the message was gone from `load_messages`. **It passed with the
+open-time expiry pass deleted.** `load_messages` already filters
+`expires_at <= now` at the read path, so the user-facing state was never at risk
+from the missing call — but the **row and its wrapped content key were still on
+disk**, which is the whole seizure scenario the call exists to close.
+
+The fix was to change the observable: assert the row is gone from the `messages`
+*table*, via a direct `SELECT id FROM messages`. Re-run, the mutation is caught.
+This is the same trap as session 3's `test_evict_shreds_every_evicted_message`
+(eviction shreds then deletes, so a read-path assertion is vacuous) and it is now
+written into `CLAUDE.md` as a rule: **the observable is the disk, not the read
+path.**
+
+---
+
+## 4.2 The ChatView mock had to change shape, and that was correct
+
+Moving `cleanup_expired_messages` from a `setInterval` to a mount effect made 19
+of 20 tests in `ChatView.test.tsx` fail with
+`TypeError: Cannot read properties of undefined (reading 'catch')` — the file's
+mock was `invoke: vi.fn()`, which returns `undefined`, and the real Tauri
+`invoke` always returns a promise.
+
+The fix was to give the mock the real shape (`mockResolvedValue(undefined)`),
+**not** to write the component to tolerate an `invoke` that cannot return
+`undefined` in production. Making production code defend against a test mock is
+how a test mock starts shaping the product.
+
+---
+
+## 4.3 Not done, deliberately
+
+- **A shutdown path for the task.** It has no `CancellationToken` and no
+  `JoinHandle` — consistent with the other 39 `tokio::spawn`s, but the same gap
+  the session-2 notes already recorded.
+- **`block_in_place` around `sweep`.** `MessageStore` is `!Send`
+  (`rusqlite::Connection` is `RefCell`-backed), so it cannot go to
+  `spawn_blocking`, and `evict_to_cap` holds the store lock for the duration of
+  its batches. On a 10 GiB store a cold eviction can stall the async runtime for
+  a noticeable time. Same documented perf issue as the receiver-side per-chunk
+  `seek`/`write_all`; both want one fix (`temp_file` → `tokio::fs::File`, which
+  makes the store `Send`).
+- **The UI does not refresh when the background sweep deletes messages.** A
+  self-destructed message disappears from the DB while the open conversation
+  still shows it until the user navigates. Pre-existing, unchanged by this
+  session, and a real UX gap — it needs a "messages changed" event, which is a
+  design call rather than a patch.
+- **`load_group_messages` is not filtered by the cap or by expiry**, so a group
+  view shows rows the sweep has removed. Same class as the line above.
 
 ## 6. Tooling added this session
 
