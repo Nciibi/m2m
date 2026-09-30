@@ -242,34 +242,51 @@ pub async fn send_group_message(
     let delivered = delivered_count > 0;
 
     // Store in DB (encrypting content for storage)
-    state
-        .ensure_message_store(&state.data_dir)
-        .await
-        .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
+    //
+    // Ephemeral mode is honoured here. It was not: `SecurityConfig` documents
+    // itself as "RAM-only ephemeral conversations: NO message/reaction/edit/
+    // delete content is ever written to SQLite. Nothing to seize on disk", and
+    // this function wrote every outbound group message to disk regardless. A
+    // user who turned on ephemeral mode and then discussed something sensitive
+    // in a group — the exact case the mode exists for — left the ciphertext and
+    // the wrapped content keys sitting in `group_messages.db`.
+    let (ephemeral_mode, storage_cap) = {
+        let cfg = state.security_config.read().await;
+        (cfg.ephemeral_mode, cfg.effective_storage_cap())
+    };
+    if ephemeral_mode {
+        tracing::debug!("ephemeral mode — group message not persisted");
+    } else {
+        state
+            .ensure_message_store(&state.data_dir)
+            .await
+            .map_err(|e| AppError::storage(format!("message store init: {e}")))?;
 
-    let sk = state.storage_key.read().await;
-    let ms = state.message_store.lock().await;
-    if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-        match super::util::crypto_encrypt_storage(
-            content.as_bytes(),
-            key,
-            super::util::AAD_MSG_STORE,
-        ) {
-            Ok((nonce, encrypted)) => {
-                let _ = store.store_group_message(
-                    &msg_id,
-                    &group_id,
-                    &our_peer_key_hex,
-                    &encrypted,
-                    &nonce,
-                    now as i64,
-                    delivered,
-                );
-                let preview = super::util::truncate_utf8(&content, 80, "...");
-                let _ = store.update_group_last_message(&group_id, now as i64, &preview);
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "failed to encrypt group message for storage");
+        let sk = state.storage_key.read().await;
+        let ms = state.message_store.lock().await;
+        if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+            crate::maintenance::enforce_cap(&app_handle, store, storage_cap);
+            match super::util::crypto_encrypt_storage(
+                content.as_bytes(),
+                key,
+                super::util::AAD_MSG_STORE,
+            ) {
+                Ok((nonce, encrypted)) => {
+                    let _ = store.store_group_message(
+                        &msg_id,
+                        &group_id,
+                        &our_peer_key_hex,
+                        &encrypted,
+                        &nonce,
+                        now as i64,
+                        delivered,
+                    );
+                    let preview = super::util::truncate_utf8(&content, 80, "...");
+                    let _ = store.update_group_last_message(&group_id, now as i64, &preview);
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to encrypt group message for storage");
+                }
             }
         }
     }
