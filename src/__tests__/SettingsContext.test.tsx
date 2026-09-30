@@ -26,6 +26,7 @@ function TestConsumer() {
     handleTorToggle, setStunServerInput,
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
     handleScreenCaptureToggle, handleLockVault, handleClearClipboard,
+    handleStorageCapChange, storageUsage,
   } = useSettings();
   return (
     <div>
@@ -50,6 +51,10 @@ function TestConsumer() {
       <button onClick={handleScreenCaptureToggle}>Toggle Screen Capture</button>
       <button onClick={handleLockVault}>Lock Vault</button>
       <button onClick={handleClearClipboard}>Clear Clipboard</button>
+      <span data-testid="storage-cap">{String(securityConfig?.storage_cap_bytes ?? "unset")}</span>
+      <span data-testid="storage-usage">{storageUsage ? String(storageUsage.used_bytes) : "null"}</span>
+      <span data-testid="storage-usage-cap">{storageUsage ? String(storageUsage.cap_bytes) : "null"}</span>
+      <button onClick={() => void handleStorageCapChange(5 * 1024 ** 3)}>Set Cap 5GB</button>
     </div>
   );
 }
@@ -67,6 +72,9 @@ const DEFAULT_SECURITY_CONFIG = {
   send_batching_ms: 0,
   cover_typing_traffic: false,
   panic_hotkey_enabled: false,
+  // 0 = "use the backend default", which is the 10 GiB cap. See
+  // `effective_storage_cap`.
+  storage_cap_bytes: 0,
 };
 
 /**
@@ -97,6 +105,8 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_muted_conversations":
     case "refresh_discovery":
       return [];
+    case "get_storage_usage":
+      return { used_bytes: 3_221_225_472, cap_bytes: 10_737_418_240 };
     case "get_network_diagnostics":
       return { nat_type: "Unknown", stun_servers: [], consensus: false };
     case "get_stun_config":
@@ -328,5 +338,107 @@ describe("SettingsContext", () => {
 
     await user.click(screen.getByText("Clear Clipboard"));
     expect(mockInvoke).toHaveBeenCalledWith("clear_clipboard");
+  });
+
+  // ─── Storage cap ─────────────────────────────────────────────────────────
+  //
+  // The cap decides how much of the user's history this app may destroy, so
+  // "the dropdown changed" is not the property that matters — "the backend
+  // holds the new number" is. A handler that updated local state and never
+  // called `set_security_config` would leave the UI asserting a cap that is not
+  // in force, which is the false-safety class this codebase keeps shipping.
+
+  it("handleStorageCapChange persists the new cap in bytes", async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("storage-cap")).toHaveTextContent("0"),
+    );
+
+    await user.click(screen.getByText("Set Cap 5GB"));
+
+    expect(mockInvoke).toHaveBeenCalledWith("set_security_config", {
+      config: { ...DEFAULT_SECURITY_CONFIG, storage_cap_bytes: 5 * 1024 ** 3 },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("storage-cap")).toHaveTextContent(String(5 * 1024 ** 3)),
+    );
+  });
+
+  it("changing the cap re-reads usage so the row reflects the new ceiling", async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+    mockInvoke.mockClear();
+
+    await user.click(screen.getByText("Set Cap 5GB"));
+
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("get_storage_usage"),
+    );
+  });
+
+  it("reports a failed cap change instead of leaving the UI claiming success", async () => {
+    // The optimistic-update-with-`catch {}` shape. A rejected `set_security_config`
+    // must produce an error toast naming the failure; silently swallowing it
+    // leaves the dropdown showing a cap the backend never adopted — so the
+    // next eviction runs against a different number than the user chose.
+    const user = userEvent.setup();
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "set_security_config") return Promise.reject(new Error("disk read-only"));
+      return defaultInvoke(cmd, args);
+    });
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("storage-cap")).toHaveTextContent("0"),
+    );
+
+    await user.click(screen.getByText("Set Cap 5GB"));
+
+    await waitFor(() =>
+      expect(appState.addToast).toHaveBeenCalledWith(
+        "Failed to update storage cap: disk read-only",
+        "error",
+      ),
+    );
+    // And the cap is unchanged, so the UI is not asserting a value the
+    // backend rejected.
+    expect(screen.getByTestId("storage-cap")).toHaveTextContent("0");
+  });
+
+  it("a failed usage read does not block the cap control", async () => {
+    // `get_storage_usage` rejects; the row shows "Loading…" and the user must
+    // still be able to raise the cap. A throw here would disable the one
+    // control that stops the app destroying their history.
+    const user = userEvent.setup();
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "get_storage_usage") return Promise.reject(new Error("store not open"));
+      return defaultInvoke(cmd, args);
+    });
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("storage-usage")).toHaveTextContent("null"),
+    );
+
+    await user.click(screen.getByText("Set Cap 5GB"));
+
+    expect(mockInvoke).toHaveBeenCalledWith("set_security_config", {
+      config: { ...DEFAULT_SECURITY_CONFIG, storage_cap_bytes: 5 * 1024 ** 3 },
+    });
   });
 });
