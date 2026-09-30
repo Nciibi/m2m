@@ -2940,11 +2940,30 @@ async fn handle_group_frame(
                                 let msg_id = uuid::Uuid::new_v4().to_string();
 
                                 // Ephemeral mode: group content stays in RAM.
+                                // Both values are snapshotted from
+                                // `security_config` here, before the store lock
+                                // is taken — reading them inside the
+                                // `message_store` scope would nest
+                                // `security_config` under `message_store`.
                                 if !state.security_config.read().await.ephemeral_mode {
+                                    let storage_cap = state
+                                        .security_config
+                                        .read()
+                                        .await
+                                        .effective_storage_cap();
                                     state.ensure_message_store(&state.data_dir).await.ok();
                                     let sk = state.storage_key.read().await;
                                     let ms = state.message_store.lock().await;
                                     if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
+                                        // `group_messages` counts toward the cap,
+                                        // so an attacker who only ever sends
+                                        // group traffic must not be a way
+                                        // around it.
+                                        crate::maintenance::enforce_cap(
+                                            app_handle,
+                                            store,
+                                            storage_cap,
+                                        );
                                         match super::util::crypto_encrypt_storage(
                                             content_str.as_bytes(),
                                             key,
