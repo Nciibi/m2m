@@ -278,4 +278,74 @@ describe("SettingsView", () => {
     render(<SettingsView />);
     expect(screen.getByLabelText("Copy fingerprint")).toBeInTheDocument();
   });
+
+  // ─── Storage cap ─────────────────────────────────────────────────────────
+  //
+  // The cap is the control that decides how much of the user's history this app
+  // is allowed to destroy. Two things therefore have to hold: the control
+  // reports the cap that is actually in force, and choosing a different one
+  // actually persists it rather than moving a local `<select>` that nothing
+  // reads.
+
+  it("shows the cap in force, not a locally held guess", () => {
+    settingsState.securityConfig = { storage_cap_bytes: 25 * 1024 ** 3 };
+    render(<SettingsView />);
+    const select = screen.getByLabelText("Maximum stored message history");
+    expect((select as HTMLSelectElement).value).toBe(String(25 * 1024 ** 3));
+  });
+
+  it("falls back to the 10 GB default when the backend reports 0", () => {
+    // `storage_cap_bytes: 0` means "use the default" — `AppState::new` builds
+    // `SecurityConfig::default()` on every launch with no config file, and
+    // `Default` derives 0. Reading the raw field and mapping it to "Unlimited"
+    // is how the cap ends up silently off on a fresh install.
+    settingsState.securityConfig = { storage_cap_bytes: 0 };
+    render(<SettingsView />);
+    const select = screen.getByLabelText("Maximum stored message history");
+    expect((select as HTMLSelectElement).value).toBe(String(10 * 1024 ** 3));
+    expect(screen.getByRole("option", { name: "10 GB (default)" })).toBeInTheDocument();
+  });
+
+  it("persists a chosen cap through handleStorageCapChange", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    const select = screen.getByLabelText("Maximum stored message history");
+    await user.selectOptions(select, String(5 * 1024 ** 3));
+    // The raw byte count, not the preset index or the label — the backend
+    // stores bytes and `effective_storage_cap` is what reads them.
+    expect(settingsState.handleStorageCapChange).toHaveBeenCalledWith(5 * 1024 ** 3);
+  });
+
+  it("offers a large finite cap rather than an off switch", () => {
+    // "Unlimited" has to be a big number, not the absence of one. A user
+    // archiving evidence needs a way to stop the cap without also having to
+    // believe the app will keep everything.
+    render(<SettingsView />);
+    const unlimited = screen.getByRole("option", { name: "Unlimited" });
+    expect(Number((unlimited as HTMLOptionElement).value)).toBeGreaterThan(10 * 1024 ** 3);
+  });
+
+  it("states that evicted messages are unrecoverable, including from a backup", () => {
+    // The claim the user acts on. "Permanently deleted" alone invites the
+    // belief that a copy exists, and someone archiving evidence would keep
+    // relying on a backup this app has no way to reach.
+    render(<SettingsView />);
+    const hint = document.getElementById("storage-cap-hint");
+    expect(hint).not.toBeNull();
+    expect(hint).toHaveTextContent(/permanently deleted/i);
+    expect(hint).toHaveTextContent(/cannot be recovered/i);
+    expect(hint).toHaveTextContent(/not from a backup/i);
+  });
+
+  it("reports live usage against the cap", () => {
+    render(<SettingsView />);
+    expect(screen.getByText("3 GB of 10 GB used")).toBeInTheDocument();
+  });
+
+  it("fetches usage on mount", () => {
+    // Without this the usage row reads "Loading…" forever, which is the same
+    // class of defect as a control that toasts success without doing anything.
+    render(<SettingsView />);
+    expect(settingsState.refreshStorageUsage).toHaveBeenCalled();
+  });
 });
