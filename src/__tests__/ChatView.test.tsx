@@ -93,6 +93,11 @@ import type { DeepPartial } from "./tauriMock";
 
 describe("ChatView", () => {
   beforeEach(() => {
+    // The real `invoke` always returns a promise. A bare `vi.fn()` returns
+    // `undefined`, which the component's `.catch(...)` then dereferences — so
+    // the mock is given the real shape rather than the component being written
+    // to tolerate a call that cannot happen in production.
+    (tauriInvoke as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     state.connection = null;
     state.messages = [];
     state.fileRequests = [];
