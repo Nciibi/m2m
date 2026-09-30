@@ -779,6 +779,24 @@ pub struct EvictionReport {
     pub bytes_freed: u64,
 }
 
+/// Outcome of one [`MessageStore::sweep`] pass.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SweepOutcome {
+    /// Self-destruct messages destroyed because their timer had elapsed.
+    pub expired_messages: u32,
+    /// Messages destroyed by the storage cap, empty when under it.
+    pub evicted: EvictionReport,
+}
+
+impl SweepOutcome {
+    /// Whether this pass destroyed anything at all.
+    pub fn destroyed_anything(&self) -> bool {
+        self.expired_messages > 0
+            || self.evicted.messages_evicted > 0
+            || self.evicted.group_messages_evicted > 0
+    }
+}
+
 pub struct MessageStore {
     conn: Connection,
     /// Number of content keys destroyed by shredding, for audit and for tests.
