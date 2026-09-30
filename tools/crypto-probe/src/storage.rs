@@ -1077,7 +1077,8 @@ impl MessageStore {
         // The background sweep in `maintenance.rs` covers the running case;
         // this covers the closed one, and runs before the first query can read
         // the row back, so an expired message is never even returned by
-        // `load_messages` after a restart.        Ok(store)
+        // `load_messages` after a restart.
+        Ok(store)
     }
 
     /// Add new columns to the conversations table if they don't exist yet.
