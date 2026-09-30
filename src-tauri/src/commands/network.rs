@@ -2941,16 +2941,15 @@ async fn handle_group_frame(
 
                                 // Ephemeral mode: group content stays in RAM.
                                 // Both values are snapshotted from
-                                // `security_config` here, before the store lock
-                                // is taken — reading them inside the
+                                // `security_config` in one read here, before the
+                                // store lock is taken — reading them inside the
                                 // `message_store` scope would nest
                                 // `security_config` under `message_store`.
-                                if !state.security_config.read().await.ephemeral_mode {
-                                    let storage_cap = state
-                                        .security_config
-                                        .read()
-                                        .await
-                                        .effective_storage_cap();
+                                let (ephemeral_mode, storage_cap) = {
+                                    let cfg = state.security_config.read().await;
+                                    (cfg.ephemeral_mode, cfg.effective_storage_cap())
+                                };
+                                if !ephemeral_mode {
                                     state.ensure_message_store(&state.data_dir).await.ok();
                                     let sk = state.storage_key.read().await;
                                     let ms = state.message_store.lock().await;
