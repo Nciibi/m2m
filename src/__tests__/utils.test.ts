@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   estimateEntropy,
   errorMessage,
+  evictionNoticeText,
   hashToColor,
   formatTime,
   DEFAULT_STUN_SERVERS,
@@ -154,5 +155,70 @@ describe("errorMessage", () => {
     expect(errorMessage(null)).toBe("Unknown error");
     expect(errorMessage(undefined, "fallback")).toBe("fallback");
     expect(errorMessage(42)).toBe("Unknown error");
+  });
+});
+
+/**
+ * The storage-cap eviction notice.
+ *
+ * This is the only thing the user is told when the cap permanently destroys
+ * history, so its content is a security property, not copy. The three
+ * assertions below are the three claims it must always make — the count, that
+ * the loss is unrecoverable *including from a backup taken beforehand*, and
+ * that raising the cap is the remedy. A rewrite that keeps the first and drops
+ * either of the other two is the failure mode worth catching.
+ */
+describe("evictionNoticeText", () => {
+  const base = {
+    messages_evicted: 120,
+    group_messages_evicted: 30,
+    bytes_freed: 5 * 1024 ** 3,
+    overrode_retention: [] as string[],
+  };
+
+  it("says how many messages were destroyed, across 1:1 and group", () => {
+    const text = evictionNoticeText(base);
+    expect(text).not.toBeNull();
+    expect(text).toContain("150 old message(s)");
+  });
+
+  it("states that the loss is unrecoverable, including from a backup", () => {
+    // The honest caveat. "Permanently deleted" alone invites the belief that a
+    // copy exists somewhere — and the user is the one who knows whether they
+    // took one before the eviction.
+    expect(evictionNoticeText(base)).toContain(
+      "cannot be recovered, including from backups taken beforehand",
+    );
+  });
+
+  it("names the remedy — raising the cap", () => {
+    expect(evictionNoticeText(base)).toContain("Raise the cap in Settings");
+  });
+
+  it("names the conversations whose retention policy was overridden", () => {
+    // Silently discarding a preference the user set is the failure this clause
+    // exists to prevent, so its absence has to be a test failure.
+    const text = evictionNoticeText({
+      ...base,
+      overrode_retention: ["c1", "c2", "c3"],
+    });
+    expect(text).toContain("overrode the retention policy on 3 conversation(s)");
+  });
+
+  it("omits the override sentence when nothing was overridden", () => {
+    expect(evictionNoticeText(base)).not.toContain("overrode the retention policy");
+  });
+
+  it("formats a sub-GB free in MB and a multi-GB free in GB", () => {
+    expect(evictionNoticeText({ ...base, bytes_freed: 512 * 1024 ** 2 })).toContain("512 MB");
+    expect(evictionNoticeText({ ...base, bytes_freed: 2 * 1024 ** 3 })).toContain("2.0 GB");
+  });
+
+  it("returns null when nothing was destroyed", () => {
+    // A notice about a loss that did not happen is the mirror of silent loss:
+    // it teaches the user to ignore the channel that reports real destruction.
+    expect(
+      evictionNoticeText({ ...base, messages_evicted: 0, group_messages_evicted: 0 }),
+    ).toBeNull();
   });
 });
