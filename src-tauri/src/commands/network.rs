@@ -1295,23 +1295,6 @@ pub(crate) async fn send_own_bundle(
 }
 
 
-/// Tell the frontend that the storage cap permanently evicted history.
-///
-/// Silent history loss is the failure mode this codebase keeps shipping —
-/// a control that changes state and reports nothing. The user is told how many
-/// messages went, and which conversations had a retention preference
-/// overridden, so the loss is attributable rather than mysterious.
-///
-/// `AppError` is deliberately NOT used for the per-conversation ids: they are
-/// peer key hexes, and they travel as a plain string array validated by
-/// `asStorageEvicted` on the way in.
-fn emit_storage_evicted(
-    app_handle: &AppHandle,
-    report: &crate::storage::EvictionReport,
-) {
-    crate::maintenance::emit_storage_evicted(app_handle, report);
-}
-
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 #[allow(clippy::single_match)] // uniform handler signature across packet domains
 async fn handle_incoming_text(
