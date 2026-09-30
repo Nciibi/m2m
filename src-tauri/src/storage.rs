@@ -756,8 +756,6 @@ impl KeyStore {
     }
 }
 
-/// The message store: holds chat history (optional).
-/// Message contents are encrypted at the application level before storage.
 /// Outcome of a storage-cap eviction pass, for reporting to the user.
 ///
 /// Modelled at module scope rather than inside `impl MessageStore` because Rust
@@ -797,6 +795,8 @@ impl SweepOutcome {
     }
 }
 
+/// The message store: holds chat history (optional).
+/// Message contents are encrypted at the application level before storage.
 pub struct MessageStore {
     conn: Connection,
     /// Number of content keys destroyed by shredding, for audit and for tests.
