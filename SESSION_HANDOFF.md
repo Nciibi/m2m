@@ -1,34 +1,87 @@
 # SESSION HANDOFF — M2M architecture remediation
 
-**Date:** 2026-09-29 (session 3 — storage cap)
+**Date:** 2026-09-30 (session 4 — maintenance)
 **Repo:** `/mnt/hdd/projects/M2M` (branch `main`)
-**Goal this session:** build the storage cap with permanent oldest-first
-eviction, per the spec agreed in session 2: a **user-visible 10 GiB default
-cap**, **oldest-first permanent eviction** when full, and deletion that is
-**unrecoverable by all means**.
+**Goal this session:** close session 3's §5.1 (verify the frontend), §5.2 (the
+background task) and §5.3 (tests for the new surface). All three are done and
+every suite is green.
+
+**Session 4 in one line:** the storage cap was enforced at one write path of
+four and self-destruct expiry ran only while a chat screen was mounted, so the
+two promises this app makes about *destroying its own data* were both
+substantially unkept. Both now go through one function each, and both were
+verified by mutating the live source and watching the tests fail.
 
 ---
 
-## 0. ⚠️ READ THIS FIRST — the frontend half is UNVERIFIED
+## 0. Verification — all green, all re-run after the last edit
 
-The session ended mid-verification. Here is exactly what is known:
-
-| Check | State |
+| Check | Result |
 |---|---|
-| `./tools/typecheck-harness/check.sh --run` | **0 errors** as of the last full run (after the backend work) |
-| `./tools/crypto-probe/sync.sh` | **163 passed** as of the last full run (after the backend work) |
-| `tsc --noEmit` | **clean**, but checked *before* the last three frontend edits |
-| `pnpm test` (vitest) | **NOT RUN since the frontend changes** — the run was aborted |
-| `pnpm lint` | **NOT RUN since the frontend changes** |
-| relay | not re-run this session |
+| `./tools/typecheck-harness/check.sh --run` (51 modules) | **0 errors, 0 warnings** |
+| `./tools/crypto-probe/sync.sh` | **169 passed** (was 163; +6 new) |
+| `tsc --noEmit` | **clean** |
+| `pnpm test` | **358 passed** (was 329; +29 new) |
+| `pnpm lint` | **0 errors, 10 warnings** — budget unchanged at 10 |
+| `cargo test` (relay) | 15 passed |
+| `cargo clippy` / `cargo fmt` | still not run — neither binary exists here |
 
-**So: the backend is verified. The frontend is written and typechecks, but no
-test has confirmed it.** The very first thing to do next session is run the
-full suite and expect failures — see §5.1, which lists the three places I
-already know are risky.
+The tree auto-commits on its own, so `git diff` shows nothing. Use
+`git log -p` or diff against `89cc2dc` (the last session-3 commit).
 
-Nothing is committed. The tree auto-commits on its own, so check `git log -p`
-rather than `git diff`.
+---
+
+## 0.1 What this session changed
+
+### Backend
+
+1. **`MessageStore::sweep(cap)`** (`storage.rs`) — one pass = elapsed
+   self-destruct timers, then the cap. Deliberately in the *store*, not in the
+   task, so the crypto-probe can execute it: `maintenance.rs` needs an
+   `AppHandle` and is therefore unexecutable, and an unexecutable module is
+   where a policy goes to be untested.
+2. **`MessageStore::enforce_storage_cap(cap)`** (`storage.rs`) — the store-level
+   half; returns `None` when nothing was destroyed, which is what the caller
+   uses to decide whether to bother the user.
+3. **`maintenance::enforce_cap(app, store, cap)`** — the single entry point
+   every write path calls. It takes the cap as a *value* so callers read
+   `security_config` before taking the store lock, per the existing lock-order
+   rule.
+4. **`maintenance::spawn` + `sweep_once`** — spawned from `lib.rs` `setup`,
+   after the config restore, on a 15-minute `tokio::time::interval` with
+   `MissedTickBehavior::Delay`. First tick fires immediately; a tick that finds
+   no store is the normal pre-first-message state, not an error.
+5. **Expiry is also enforced at `MessageStore::open`.** This is the load-bearing
+   part for the app-closed case, and see §4.1 for why the first attempt at
+   testing it proved nothing.
+6. **All four write paths now enforce the cap** — inbound text, inbound group
+   frames, outbound `send_message`, outbound `send_message_with_timer`,
+   `send_group_message`. Only inbound text did before.
+
+### Frontend
+
+7. The two `setInterval`s in `ChatView` (10s and 60s, both calling
+   `cleanup_expired_messages`) are replaced by one mount-time call.
+8. `evictionNoticeText()` extracted to `src/utils.ts` so the notice text is
+   testable without mounting the app.
+
+### A second bug found and fixed while in there
+
+**`send_group_message` never consulted `ephemeral_mode`.** Every outbound group
+message was written to `group_messages` regardless, while `SecurityConfig`
+documents itself as "RAM-only ephemeral conversations: NO message/reaction/
+edit/delete content is ever written to SQLite. Nothing to seize on disk." A
+user who enabled ephemeral mode and then discussed something sensitive *in a
+group* — the exact case the mode exists for — left ciphertext and wrapped
+content keys on disk. `groups.rs` contained zero occurrences of the string
+"ephemeral" before this change. It is in scope here because it is the same
+write path the cap work was touching, and because the cap's own accounting
+would have been reasoning about a store the user believed was empty.
+
+**This is the kind of gap worth hunting for deliberately next session**: any
+security flag read in *some* `commands/*.rs` and not others.
+
+---
 
 ---
 
