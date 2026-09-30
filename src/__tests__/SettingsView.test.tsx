@@ -33,6 +33,10 @@ const settingsState = {
   handleStorageCapChange: vi.fn(),
   refreshStorageUsage: vi.fn(),
   storageUsage: { used_bytes: 3_221_225_472, cap_bytes: 10_737_418_240 } as const,
+  // Left null by default so the <select> falls back to the 10 GB default, which
+  // is what a fresh install shows — `storage_cap_bytes: 0` on the wire means
+  // "use the default", not "unlimited".
+  securityConfig: null as DeepPartial<SecurityConfig> | null,
 };
 
 // State for AppContext mock
@@ -86,6 +90,7 @@ vi.mock("../context/SettingsContext", () => ({
     handleStorageCapChange: settingsState.handleStorageCapChange,
     refreshStorageUsage: settingsState.refreshStorageUsage,
     storageUsage: settingsState.storageUsage,
+    securityConfig: settingsState.securityConfig,
   }),
 }));
 
@@ -107,6 +112,7 @@ import type {
   IdentityInfo,
   NatTypeInfo,
   NetworkSettings,
+  SecurityConfig,
   StunConfig,
 } from "../types";
 import type { ToastData } from "../components/ui/Toast";
@@ -122,6 +128,7 @@ describe("SettingsView", () => {
     settingsState.stunServerInput = "";
     settingsState.privateMode = false;
     settingsState.connectivityResult = null;
+    settingsState.securityConfig = null;
     appState.identity = null;
     appState.toasts = [];
     vi.clearAllMocks();
