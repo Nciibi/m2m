@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { screen } from "@testing-library/react";
 import { render } from "./setup";
 import userEvent from "@testing-library/user-event";
@@ -228,5 +229,50 @@ describe("ChatView", () => {
     render(<ChatView />);
     const sendBtn = screen.getByRole("button", { name: /send/i });
     expect(sendBtn).toBeInTheDocument();
+  });
+
+  // ─── Self-destruct expiry is not this view's job ─────────────────────────
+  //
+  // Expiry used to be two `setInterval`s here (10s and 60s), which meant it ran
+  // *only while this screen was mounted*. For a tray app that is a small part
+  // of its life, so "auto-delete after 24h" silently did nothing unless the
+  // user happened to be sitting in a conversation. The backend now sweeps on a
+  // timer and once at database open. What is left is a single one-shot on
+  // mount, so a conversation opened seconds after a timer elapses shows the
+  // truth — and polling must not come back, because polling from the view is
+  // the bug.
+
+  it("clears elapsed self-destruct timers once on mount", () => {
+    render(<ChatView />);
+    const calls = (tauriInvoke as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => c[0] === "cleanup_expired_messages",
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it("does not poll cleanup_expired_messages while mounted", () => {
+    // Fake timers, then advance well past both of the old intervals. If a
+    // `setInterval` is ever reintroduced here this fails.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<ChatView />);
+      vi.advanceTimersByTime(10 * 60 * 1000);
+      const calls = (tauriInvoke as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c) => c[0] === "cleanup_expired_messages",
+      );
+      expect(calls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a rejected cleanup does not take the view down", async () => {
+    (tauriInvoke as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (cmd: string) => (cmd === "cleanup_expired_messages" ? Promise.reject(new Error("store not open")) : Promise.resolve(undefined)),
+    );
+    render(<ChatView />);
+    // The view is still usable: a store that is not open is the normal state of
+    // a fresh install, not a reason to blank the conversation.
+    expect(screen.getByText("Encrypted Session")).toBeInTheDocument();
   });
 });
