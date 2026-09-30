@@ -1078,13 +1078,6 @@ impl MessageStore {
         // this covers the closed one, and runs before the first query can read
         // the row back, so an expired message is never even returned by
         // `load_messages` after a restart.
-        match store.delete_expired_messages() {
-            Ok(n) if n > 0 => {
-                tracing::info!(expired = n, "expired messages destroyed on open");
-            }
-            Ok(_) => {}
-            Err(e) => tracing::warn!(error = %e, "could not clear expired messages on open"),
-        }
         Ok(store)
     }
 
