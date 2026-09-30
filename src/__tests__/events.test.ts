@@ -12,6 +12,7 @@ import {
   asReactionEvent,
   asReconnectAttempt,
   asSecurityError,
+  asStorageEvicted,
   asTransferErrorEvent,
   asTransferProgressEvent,
   asTypingEvent,
@@ -376,6 +377,88 @@ describe("asSecurityError", () => {
 
   it("rejects an oversized source", () => {
     expect(asSecurityError({ source: "x".repeat(65), message: "m" })).toBeNull();
+  });
+});
+
+/**
+ * `m2m://storage-evicted` announces that the storage cap permanently destroyed
+ * history. It is the only notice the user gets that messages are gone, so the
+ * guard's job is to make sure a malformed payload is *dropped* rather than
+ * rendered — and, more subtly, that a real one is not dropped.
+ */
+describe("asStorageEvicted", () => {
+  const valid = {
+    messages_evicted: 42,
+    group_messages_evicted: 7,
+    bytes_freed: 5_368_709_120,
+    overrode_retention: ["conv-1", "conv-2"],
+  };
+
+  it("accepts the real payload shape", () => {
+    expect(asStorageEvicted(valid)).toEqual(valid);
+  });
+
+  it("accepts an eviction that overrode nothing", () => {
+    // `overrode_retention: []` is the overwhelmingly common case. A guard that
+    // only passed with a non-empty list would mean the user is almost never
+    // told about the eviction.
+    const p = asStorageEvicted({ ...valid, overrode_retention: [] });
+    expect(p).not.toBeNull();
+    expect(p?.overrode_retention).toEqual([]);
+  });
+
+  it("rejects a non-array overrode_retention rather than coercing it", () => {
+    // `asArray` turns a non-array into `[]`, so using it here would turn a
+    // malformed payload into a *valid* one that silently drops the
+    // conversation list — the exact information the user needs in order to
+    // know which retention policy was overridden.
+    for (const bad of ["conv-1", 7, null, { "0": "conv-1", length: 1 }, undefined]) {
+      expect(asStorageEvicted({ ...valid, overrode_retention: bad })).toBeNull();
+    }
+  });
+
+  it("rejects a conversation id with control characters", () => {
+    expect(
+      asStorageEvicted({ ...valid, overrode_retention: ["ok", "bad name"] }),
+    ).toBeNull();
+    expect(asStorageEvicted({ ...valid, overrode_retention: ["bad\nname"] })).toBeNull();
+  });
+
+  it("rejects a non-numeric or negative count", () => {
+    // u32/u64 checks, not mere `typeof === "number"`. A negative byte count or
+    // a fractional message count would be rendered straight into the notice
+    // text, where it becomes "freed -1 bytes".
+    expect(asStorageEvicted({ ...valid, messages_evicted: -1 })).toBeNull();
+    expect(asStorageEvicted({ ...valid, messages_evicted: 1.5 })).toBeNull();
+    expect(asStorageEvicted({ ...valid, messages_evicted: "42" })).toBeNull();
+    expect(asStorageEvicted({ ...valid, group_messages_evicted: -3 })).toBeNull();
+    expect(asStorageEvicted({ ...valid, bytes_freed: -1 })).toBeNull();
+    expect(asStorageEvicted({ ...valid, messages_evicted: 2 ** 32 })).toBeNull();
+  });
+
+  it("accepts bytes_freed above u32", () => {
+    // A 10 GiB cap can free more than 4 GiB in one pass. Narrowing this to u32
+    // would silently drop exactly the notice a large eviction produces.
+    const p = asStorageEvicted({ ...valid, bytes_freed: 2 ** 33 });
+    expect(p).not.toBeNull();
+    expect(p?.bytes_freed).toBe(2 ** 33);
+  });
+
+  it("rejects a missing field rather than defaulting it", () => {
+    // Every field is emitted by the Rust side, so an absent one is a version
+    // skew — and the message would then claim a certainty the payload does not
+    // carry.
+    for (const key of Object.keys(valid) as (keyof typeof valid)[]) {
+      const partial: Record<string, unknown> = { ...valid };
+      delete partial[key];
+      expect(asStorageEvicted(partial)).toBeNull();
+    }
+  });
+
+  it("rejects non-objects", () => {
+    for (const bad of [null, undefined, 42, "m2m://storage-evicted", []]) {
+      expect(asStorageEvicted(bad)).toBeNull();
+    }
   });
 });
 
