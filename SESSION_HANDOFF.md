@@ -158,6 +158,11 @@ finite value from the UI, not an absence.
 
 ### 2.4 Enforcement on the inbound path (`commands/network.rs`)
 
+> ⚠️ **Superseded in session 4.** This was the *only* write site. It is now
+> `maintenance::enforce_cap`, called by all of them — see §0.1 item 6. The note
+> below about reading `security_config` before the store lock is the rule every
+> call site now follows, and the reason `enforce_cap` takes the cap as a value.
+
 In `handle_incoming_text`, before `store_message_secure`. `security_config` is
 read **once, before the store lock is taken** — reading it inside the
 `message_store` scope would nest `security_config` under `message_store`, a
@@ -183,6 +188,8 @@ shaped. `emit_storage_evicted()` fires the event.
 - `App.tsx`: a listener that turns the event into a **dismissible standing
   banner**, not a toast — a toast disappears, and the user needs to understand
   that history is gone and that raising the cap is how to stop it recurring.
+  Its text comes from `evictionNoticeText()` in `utils.ts` (session 4), so the
+  three claims it makes are unit-tested rather than embedded in a listener.
 
 ---
 
