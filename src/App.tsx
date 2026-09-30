@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { I18nProvider } from "./i18n/I18nContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { errorMessage } from "./utils";
+import { errorMessage, evictionNoticeText } from "./utils";
 import { asCaptureWarning, asSecurityError, asStorageEvicted } from "./events";
 import "./styles/tokens.css";
 import "./styles/theme.css";
@@ -127,19 +127,8 @@ function AppInner() {
     const unlistenEvict = listen("m2m://storage-evicted", (event) => {
       const payload = asStorageEvicted(event.payload);
       if (!payload) return;  // malformed → drop, never render
-      const total = payload.messages_evicted + payload.group_messages_evicted;
-      if (total === 0) return;
-      const mb = payload.bytes_freed / (1024 * 1024);
-      const freed = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
-      const override = payload.overrode_retention.length
-        ? ` This overrode the retention policy on ${payload.overrode_retention.length} conversation(s).`
-        : "";
-      setEvictionNotice(
-        `Storage limit reached — ${total} old message(s) were permanently deleted ` +
-          `and ${freed} freed. Deleted messages cannot be recovered, including ` +
-          `from backups taken beforehand.${override} Raise the cap in Settings to ` +
-          `keep more history.`,
-      );
+      const text = evictionNoticeText(payload);
+      if (text) setEvictionNotice(text);
     }).catch(() => () => {});
 
     return () => {

@@ -184,3 +184,37 @@ export function errorMessage(e: unknown, fallback = "Unknown error"): string {
   }
   return fallback;
 }
+
+/**
+ * The standing notice shown when the storage cap permanently destroyed history.
+ *
+ * Extracted from the `m2m://storage-evicted` listener so the text is testable
+ * without mounting the whole app, and so its content cannot drift silently: the
+ * three things this must always say are the count, that it cannot be recovered
+ * (including from a backup taken beforehand), and that raising the cap is how to
+ * stop it recurring. A user who reads "storage limit reached" and nothing else
+ * has learned only that something was removed from their machine.
+ *
+ * Returns `null` when nothing was actually destroyed, so the caller does not
+ * display a notice about a loss that did not happen.
+ */
+export function evictionNoticeText(p: {
+  messages_evicted: number;
+  group_messages_evicted: number;
+  bytes_freed: number;
+  overrode_retention: string[];
+}): string | null {
+  const total = p.messages_evicted + p.group_messages_evicted;
+  if (total === 0) return null;
+  const mb = p.bytes_freed / (1024 * 1024);
+  const freed = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+  const override = p.overrode_retention.length
+    ? ` This overrode the retention policy on ${p.overrode_retention.length} conversation(s).`
+    : "";
+  return (
+    `Storage limit reached — ${total} old message(s) were permanently deleted ` +
+    `and ${freed} freed. Deleted messages cannot be recovered, including ` +
+    `from backups taken beforehand.${override} Raise the cap in Settings to ` +
+    `keep more history.`
+  );
+}
