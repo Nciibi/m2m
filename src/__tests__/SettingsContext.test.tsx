@@ -108,7 +108,7 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_storage_usage":
       return { used_bytes: 3_221_225_472, cap_bytes: 10_737_418_240 };
     case "get_network_diagnostics":
-      return { nat_type: "Unknown", stun_servers: [], consensus: false };
+      return { nat_type: "Unknown", stun_servers: [], candidates: [], connectivity: null };
     case "get_stun_config":
       return { servers: [], private_mode: false };
     case "set_stun_servers":
