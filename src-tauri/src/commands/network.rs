@@ -939,7 +939,7 @@ pub(crate) async fn complete_inbound_connection(
         // single address, so the per-IP rotation defence never sees them. The
         // check is inside the same `write()` guard as the insert, so two peers
         // racing the last slot cannot both win it.
-        if conns.len() >= MAX_ESTABLISHED_CONNECTIONS {
+        if !connection_map_has_room(conns.len()) {
             tracing::warn!(
                 peer = %peer_key_hex,
                 established = conns.len(),

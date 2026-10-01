@@ -4222,12 +4222,22 @@ mod tests {
         );
 
         // Legacy plaintext reaction still readable without a key.
+        //
+        // This is on a *different* message, and that is the point rather than an
+        // accident: `m-1` carries a sealed envelope from this same peer, so
+        // writing to it without a key cannot tell "new reaction" from "duplicate
+        // of the sealed one" and now refuses. A message whose rows are all
+        // plaintext is still fully usable with `key = None` — which is the whole
+        // no-vault / pre-metadata-at-rest profile this branch exists for.
         store
-            .upsert_reaction("m-1", "legacy", &hex::encode(peer), false, "conv-r", None)
+            .store_message("m-2", "conv-r", "sent", &[0u8; 24], b"hello", 1001, true)
             .unwrap();
-        let legacy_map = store.get_reactions(&["m-1".to_string()], None).unwrap();
+        store
+            .upsert_reaction("m-2", "legacy", &hex::encode(peer), false, "conv-r", None)
+            .unwrap();
+        let legacy_map = store.get_reactions(&["m-2".to_string()], None).unwrap();
         assert!(
-            legacy_map["m-1"].iter().any(|(r, _, _)| r == "legacy"),
+            legacy_map["m-2"].iter().any(|(r, _, _)| r == "legacy"),
             "expected the legacy 'legacy' reaction to be present"
         );
     }
