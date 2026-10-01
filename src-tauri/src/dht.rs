@@ -623,11 +623,12 @@ pub async fn announce_loop(
                 dht_state.write().await.warned_no_bootstrap = true;
                 tracing::warn!(
                     "DHT enabled but no bootstrap nodes are configured and no LAN peers \
-                     with a completed handshake have been discovered yet — nothing to announce \
-                     to. M2M ships no public bootstrap set on purpose (joining a public DHT would \
-                     disclose this node's address to an unrelated third party). Peer gossip will \
-                     populate the node list once a peer found on the LAN has completed a handshake, \
-                     or set dht bootstrap_nodes explicitly. Discovery will stay inert until then."
+                     with a completed handshake have been discovered yet — nothing to \
+                     announce to. M2M ships no public bootstrap set on purpose (joining a \
+                     public DHT would disclose this node's address to an unrelated third \
+                     party). Peer gossip will populate the node list once a peer found on \
+                     the LAN has completed a handshake, or set dht bootstrap_nodes \
+                     explicitly. Discovery will stay inert until then."
                 );
             }
             lan
