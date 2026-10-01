@@ -37,9 +37,10 @@ vi.mock("../context/AppContext", () => ({
   useApp: () => appState,
 }));
 
-const REACTION = "\u{1F44D}";
-
 import { ChatProvider, useChat } from "../context/ChatContext";
+
+/** The emoji the reaction tests send, referenced by name to keep it readable. */
+const REACTION = "\u{1F44D}";
 
 function TestConsumer() {
   const {
@@ -244,9 +245,9 @@ describe("ChatContext", () => {
       expect(screen.getByTestId("reactors").textContent).toContain(REACTION),
     );
     const reactors = JSON.parse(screen.getByTestId("reactors").textContent || "{}") as Record<string, string[]>;
-    expect(reactors["👍"]).toEqual(["a".repeat(64)]);
+    expect(reactors[REACTION]).toEqual(["a".repeat(64)]);
     // And explicitly not the sentinel the old code wrote.
-    expect(reactors["👍"]).not.toContain("self");
+    expect(reactors[REACTION]).not.toContain("self");
   });
 
   it("failed reaction insert rolls back the optimistic key", async () => {
