@@ -113,6 +113,19 @@ pub async fn set_stun_servers(
     state: State<'_, Arc<AppState>>,
     servers: Vec<String>,
 ) -> Result<(), AppError> {
+    validate_stun_server_list(&servers)?;
+
+    let mut config = state.stun_config.write().await;
+    config.servers = servers;
+    tracing::info!("STUN configuration updated");
+    Ok(())
+}
+
+/// Validate a user-supplied STUN server list.
+///
+/// Split out of the command so the rules are testable without a Tauri
+/// `State`, and so the command body is just "validate, then store".
+fn validate_stun_server_list(servers: &[String]) -> Result<(), AppError> {
     // ── Quorum floor ──
     //
     // Enforced here as well as in `stun`, because this is the only way a user
@@ -139,15 +152,15 @@ pub async fn set_stun_servers(
     //
     // Duplicates satisfy the quorum with one server: `["evil.example:3478",
     // "evil.example:3478"]` looks like two independent answers and is one, and
-    // the response would pass the transaction ID and FINGERPRINT checks because
-    // it is a real STUN server answering a real query. Compared
+    // the response passes the transaction ID and FINGERPRINT checks because it
+    // really is a STUN server answering a real query. Compared
     // case-insensitively because host names are case-insensitive.
     //
     // This cannot enforce *operator* diversity — `stun.l.google.com` and
-    // `stun1.l.google.com` are one operator, and nothing at this layer knows who
-    // owns a host. Documented rather than pretended.
+    // `stun1.l.google.com` are one operator, and nothing at this layer knows
+    // who owns a host. Documented rather than pretended.
     let mut unique = std::collections::HashSet::with_capacity(servers.len());
-    for s in &servers {
+    for s in servers {
         if !unique.insert(s.trim().to_ascii_lowercase()) {
             return Err(AppError::invalid(format!(
                 "duplicate STUN server — two copies of one server cannot agree \
@@ -161,7 +174,7 @@ pub async fn set_stun_servers(
     // empty host, and a non-numeric port. Whatever passes here is DNS-resolved
     // and sent a UDP datagram from the user's real address, so this list is a
     // probe target: it must be validated, not merely colon-checked.
-    for s in &servers {
+    for s in servers {
         if s.len() > 255 {
             return Err(AppError::invalid(format!("STUN server address too long: {s}")));
         }
@@ -186,10 +199,6 @@ pub async fn set_stun_servers(
             return Err(AppError::invalid(format!("invalid STUN server port (0): {s}")));
         }
     }
-
-    let mut config = state.stun_config.write().await;
-    config.servers = servers;
-    tracing::info!("STUN configuration updated");
     Ok(())
 }
 
@@ -207,7 +216,12 @@ pub async fn set_private_mode(
     Ok(())
 }
 
-/// Run connectivity verification: check if the listening port is reachable.
+/// Run a connectivity check: cross-server STUN agreement and NAT classification.
+///
+/// Note what this does **not** do: it does not verify that the listening port is
+/// reachable from the public internet, and does not claim to. `reachable` is
+/// reported as `None` ("not measured") — see the comment inside for why, and
+/// for what a real measurement would cost.
 #[tauri::command]
 pub async fn check_connectivity(
     state: State<'_, Arc<AppState>>,
