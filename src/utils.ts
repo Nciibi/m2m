@@ -150,6 +150,15 @@ export function formatTime(ts: number): string {
  */
 export const MIN_STUN_SERVERS = 2;
 
+/**
+ * Maximum STUN servers that may be configured.
+ *
+ * Must match `settings::MAX_STUN_SERVERS` on the Rust side. The backend
+ * rejects a longer list, so this is only here to pre-empt the round-trip with
+ * a message that says what happened.
+ */
+export const MAX_STUN_SERVERS = 8;
+
 /// Default STUN servers used when resetting STUN config.
 export const DEFAULT_STUN_SERVERS: readonly string[] = [
   "stun.l.google.com:19302",
