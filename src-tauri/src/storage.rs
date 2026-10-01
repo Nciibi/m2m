@@ -5819,20 +5819,32 @@ mod tests {
     /// absent entirely.
     #[test]
     fn test_cek_length_check_is_exact() {
-        let store = mem_messagestore();
-        // A wrapped key of every plausible wrong length must be rejected.
-        for len in [0usize, 1, 23, 25, WRAPPED_CEK_LEN - 1, WRAPPED_CEK_LEN + 1] {
+        // A wrapped key of every plausible wrong length must be rejected as
+        // unusable storage. The old check was `len() < 24 + 1`, so 25 passed
+        // and was handed to the AEAD as a 24-byte nonce plus one byte of
+        // ciphertext — rejected by Poly1305 for a reason that has nothing to do
+        // with the real cause, and indistinguishable from tampering.
+        for len in [
+            0usize,
+            1,
+            23,
+            25,
+            WRAPPED_CEK_LEN - 1,
+            WRAPPED_CEK_LEN + 1,
+        ] {
             let err = MessageStore::unwrap_cek(&vec![0xAA; len], &test_key()).unwrap_err();
             assert!(
                 matches!(err, StorageError::KeyNotFound),
                 "a {len}-byte wrapped key must be rejected as unusable, got {err:?}"
             );
         }
-        // And the real length gets past the length check — proving the test
-        // above is not passing because *everything* fails.
-        // (It still fails to decrypt: the bytes are not a real wrapped key.)
-        let _ = MessageStore::unwrap_cek(&vec![0xAA; WRAPPED_CEK_LEN], &test_key());
-        let _ = &store;
+        // The correct length gets *past* the length check, so the loop above is
+        // not passing because everything fails. (It still fails to decrypt: these
+        // are not real wrapped keys.)
+        assert!(
+            MessageStore::unwrap_cek(&vec![0xAA; WRAPPED_CEK_LEN], &test_key()).is_err(),
+            "a well-formed-length blob of the wrong bytes must still fail to open"
+        );
     }
 
     /// A shredded key is exactly `WRAPPED_CEK_LEN` zeros and must be treated as
