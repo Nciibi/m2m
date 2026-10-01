@@ -970,11 +970,20 @@ impl MessageStore {
     }
 
     /// Inverse of [`wrap_cek`]. Fails on tampering or wrong vault key.
+    ///
+    /// The length check is exact because the wrapped blob has a fixed size by
+    /// construction. It used to be `len() < 24 + 1`, where the `1` stood for
+    /// "at least a tag": a 25-byte blob passed, was sliced into a 24-byte nonce
+    /// and 1 byte of "ciphertext", and was rejected later by `open_msg` as a
+    /// decryption failure — so a truncated or corrupted key was reported as bad
+    /// crypto rather than bad storage. Any row whose wrapped key is not exactly
+    /// 72 bytes is either shredded-with-the-wrong-length or corrupt, and both
+    /// deserve the same answer: this key is not usable.
     fn unwrap_cek(
         wrapped: &[u8],
         storage_key: &crate::secure_key::StorageKey,
     ) -> Result<[u8; 32], StorageError> {
-        if wrapped.len() < 24 + 1 {
+        if wrapped.len() != WRAPPED_CEK_LEN {
             return Err(StorageError::KeyNotFound);
         }
         let mut cek = [0u8; 32];
