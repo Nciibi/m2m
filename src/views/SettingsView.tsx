@@ -117,7 +117,7 @@ export default function SettingsView() {
   // refuses Tor).
   const torEnabled = networkSettings?.tor_enabled ?? false;
   const [appVersion, setAppVersion] = useState<string>("");
-// The cap the <select> shows. Derived from the persisted config rather than
+  // The cap the <select> shows. Derived from the persisted config rather than
   // held as its own state, so it cannot drift out of step with what the backend
   // actually has - the same mistake the Tor toggle used to make. One call
   // produces both the selected value and the custom flag, so they cannot
