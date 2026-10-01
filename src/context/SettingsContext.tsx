@@ -222,6 +222,24 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const handleAddStunServer = useCallback(async () => {
     if (!stunConfig || !stunServerInput.trim()) return;
     const newServers = [...stunConfig.servers, stunServerInput.trim()];
+    // Pre-empt the backend's bounds rather than letting the round-trip fail.
+    //
+    // Without the floor this is an unrecoverable dead end below two entries:
+    // adding one to an empty list produces a 1-entry list, the backend rejects
+    // it, `setStunConfig` never runs, so the list stays empty and the next add
+    // produces 1 again. Only "Reset to defaults" escaped.
+    if (newServers.length < MIN_STUN_SERVERS) {
+      addToast(
+        `Add ${MIN_STUN_SERVERS - newServers.length} more STUN server(s) before saving — ` +
+        "agreement between independent servers is what makes the published address trustworthy.",
+        "warning",
+      );
+      return;
+    }
+    if (newServers.length > MAX_STUN_SERVERS) {
+      addToast(`At most ${MAX_STUN_SERVERS} STUN servers.`, "warning");
+      return;
+    }
     try {
       await invoke("set_stun_servers", { servers: newServers });
       setStunConfig({ ...stunConfig, servers: newServers });
@@ -233,20 +251,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const handleRemoveStunServer = useCallback(async (idx: number) => {
     if (!stunConfig) return;
-const newServers = stunConfig.servers.filter((_, i) => i !== idx);
-  // Two, not one. `consensus` used to mean "every server that *responded*
-  // agreed", which is vacuously true when exactly one answers — so a single
-  // rogue server, or one DNS-hijacked hostname, defined the address this app
-  // published. The backend now requires a quorum (`MIN_CONSENSUS_SERVERS = 2`),
-  // so refuse here rather than letting the round-trip fail with a raw error.
-  if (newServers.length < MIN_STUN_SERVERS) {
-  addToast(
-  `Cannot go below ${MIN_STUN_SERVERS} STUN servers — agreement between ` +
-  "independent servers is what makes the published address trustworthy.",
-  "warning",
-  );
-  return;
-  }
+    const newServers = stunConfig.servers.filter((_, i) => i !== idx);
+    // Two, not one. `consensus` used to mean "every server that *responded*
+    // agreed", which is vacuously true when exactly one answers — so a single
+    // rogue server, or one DNS-hijacked hostname, defined the address this app
+    // published. The backend now requires a quorum, so refuse here rather than
+    // letting the round-trip fail with a raw backend error.
+    if (newServers.length < MIN_STUN_SERVERS) {
+      addToast(
+        `Cannot go below ${MIN_STUN_SERVERS} STUN servers — agreement between ` +
+        "independent servers is what makes the published address trustworthy.",
+        "warning",
+      );
+      return;
+    }
     try {
       await invoke("set_stun_servers", { servers: newServers });
       setStunConfig({ ...stunConfig, servers: newServers });
