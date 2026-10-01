@@ -981,4 +981,76 @@ mod dht_tests {
         assert_eq!(typ, DHT_ANNOUNCE);
         assert_eq!(parsed, original);
     }
+
+    fn lan_peer_at(addr: &str) -> crate::lan_discovery::LanPeer {
+        crate::lan_discovery::LanPeer {
+            session_token: [0x9D; 32],
+            token_hex: "token".to_string(),
+            connect_addr: addr.parse().unwrap(),
+            last_seen: now_unix_secs(),
+        }
+    }
+
+    /// The core of the announce-disclosure bug: an entry in `lan.peers` exists
+    /// only because an unauthenticated datagram said so. With no handshake
+    /// behind it, it must not become a destination for this node's real listen
+    /// address and ephemeral id.
+    #[test]
+    fn test_lan_seeds_require_a_completed_handshake() {
+        let mut lan = crate::lan_discovery::LanDiscoveryState::new();
+        lan.insert_peer(lan_peer_at("192.168.1.50:5000"));
+
+        let untrusted: HashSet<IpAddr> = HashSet::new();
+        assert!(
+            lan_dht_seeds(&lan, &untrusted).is_empty(),
+            "a spoofed LAN announcement must not become a DHT announce target"
+        );
+
+        let mut trusted: HashSet<IpAddr> = HashSet::new();
+        trusted.insert("192.168.1.50".parse::<IpAddr>().unwrap());
+        let seeds = lan_dht_seeds(&lan, &trusted);
+        assert_eq!(seeds.len(), 1, "a handshaked peer is a usable seed");
+        assert_eq!(seeds[0].address.to_string(), "192.168.1.50:5000");
+    }
+
+    /// A peer at some *other* address on the LAN must not inherit trust from a
+    /// handshake with a different host.
+    #[test]
+    fn test_lan_seeds_do_not_trust_unrelated_addresses() {
+        let mut lan = crate::lan_discovery::LanDiscoveryState::new();
+        lan.insert_peer(lan_peer_at("192.168.1.99:5000"));
+
+        let mut trusted: HashSet<IpAddr> = HashSet::new();
+        trusted.insert("192.168.1.50".parse::<IpAddr>().unwrap());
+
+        assert!(
+            lan_dht_seeds(&lan, &trusted).is_empty(),
+            "trust is per address, not per network"
+        );
+    }
+
+    /// The fan-out bound has to hold even if the peer table is somehow full of
+    /// trusted peers, so a single tick cannot start an unbounded number of
+    /// dials.
+    #[test]
+    fn test_lan_seeds_are_bounded() {
+        let mut lan = crate::lan_discovery::LanDiscoveryState::new();
+        let mut trusted: HashSet<IpAddr> = HashSet::new();
+        for i in 0..(MAX_ANNOUNCE_SEEDS * 10) {
+            let addr = format!("192.168.1.{}:5000", i + 1);
+            lan.insert_peer(lan_peer_at(&addr));
+            trusted.insert(
+                format!("192.168.1.{}", i + 1)
+                    .parse::<IpAddr>()
+                    .unwrap(),
+            );
+        }
+
+        let seeds = lan_dht_seeds(&lan, &trusted);
+        assert_eq!(
+            seeds.len(),
+            MAX_ANNOUNCE_SEEDS,
+            "seed list must be capped so one tick cannot fan out without bound"
+        );
+    }
 }
