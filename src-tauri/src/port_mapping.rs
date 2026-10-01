@@ -1531,13 +1531,29 @@ async fn upnp_map_tcp(
     let resp_str = String::from_utf8_lossy(&response_body);
 
     if status_code == 200 {
-        // Success — get the external IP from the gateway via UPnP
-        // GetExternalIPAddress, or fall back to the local IP.
-        let public_ip = gateway_wan_ip_via_upnp(&service).await.unwrap_or(client_ip);
+        // Success — the router accepted the mapping. We still do not know the
+        // address it forwards from; only `GetExternalIPAddress` can tell us, and
+        // if it cannot be read then we have nothing publishable.
+        //
+        // This used to be `gateway_wan_ip_via_upnp(&service).await.unwrap_or(client_ip)`,
+        // which substituted the *private LAN address* when the WAN-IP query
+        // failed and advertised it to every invite recipient as the public
+        // address. That entry is unreachable from anywhere but our own network
+        // and it hands out our RFC 1918 topology to a third party, so a failed
+        // query now fails the mapping instead.
+        let public_ip = gateway_wan_ip_via_upnp(&service).await.map_err(|e| {
+            PortMapError::Upnp(format!(
+                "UPnP mapping succeeded but the gateway's WAN address is unknown ({e}); \
+                 refusing to advertise the LAN address as the external address"
+            ))
+        })?;
+
+        let external_addr =
+            reject_unusable_external_addr(SocketAddr::new(public_ip, internal_port), "UPnP IGD")?;
 
         tracing::info!(
             internal = internal_port,
-            external = internal_port,
+            external = external_addr.port(),
             public = %public_ip,
             "UPnP port mapping established"
         );
@@ -1545,7 +1561,7 @@ async fn upnp_map_tcp(
         Ok(PortMapping {
             protocol: "upnp-igd",
             internal_port,
-            external_addr: SocketAddr::new(public_ip, internal_port),
+            external_addr,
             lifetime_secs: _lifetime_secs,
         })
     } else if status_code == 500 && resp_str.contains("ConflictInMappingEntry") {
