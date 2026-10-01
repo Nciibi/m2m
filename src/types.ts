@@ -201,7 +201,25 @@ export interface StunServerHealth {
  * user's own addresses, so anything rendering this must treat it as sensitive.
  */
 export interface ConnectivityStatus {
-  reachable: boolean;
+  /**
+   * Whether the listening port is reachable from the public internet.
+   *
+   * `null` means **not measured**, which is the honest answer from every code
+   * path the backend has. This was a plain `boolean` derived from
+   * `NatType::Symmetric` or from whether the STUN servers agreed — neither of
+   * which tests inbound reachability of a *TCP* port; the STUN-mapped UDP port
+   * belongs to a throwaway probe socket and is generally not the listening port
+   * at all. A symmetric-NAT user, the case that most needs TURN, was being told
+   * "reachable: true". Measuring it for real needs a third party to dial our
+   * port, which discloses the address, so it is reported as unmeasured rather
+   * than assumed. Render it as "not measured", never as "no".
+   */
+  reachable: boolean | null;
+  /**
+   * Whether the STUN servers agreed on this node's public address — the one
+   * fact a local connectivity check *can* establish. `null` when not checked.
+   */
+  stun_agreement: boolean | null;
   nat_type: string;
   public_addr: string | null;
   host_addrs: string[];
