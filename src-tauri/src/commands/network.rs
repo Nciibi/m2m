@@ -3852,6 +3852,15 @@ pub fn spawn_receive_loop(
         // and owned by this receive loop, so it resets when the peer
         // reconnects and cannot be shared or manipulated across peers.
         let frame_limiter = network::FrameRateLimiter::new();
+        // A second, separate budget for bulk transfer frames. Both buckets are
+        // token buckets and both are still enforced; only the *frame* ceiling
+        // differs, which is the whole point — see `is_bulk_transfer_frame` for
+        // why charging 256 KiB chunks against a 30-frames/s control budget
+        // dropped every transfer faster than 7.68 MB/s.
+        let bulk_frame_limiter = network::FrameRateLimiter::with_limits(
+            MAX_INBOUND_CHUNK_FRAMES_PER_SEC,
+            MAX_INBOUND_CHUNK_BYTES_PER_SEC,
+        );
         // Consecutive over-budget frames; reset by any accepted frame.
         let mut rate_limit_strikes: u32 = 0;
 
