@@ -1970,7 +1970,7 @@ mod port_mapping_tests {
         assert!(reject_unusable_external_addr("0.0.0.0:41234".parse().unwrap(), "PCP").is_err());
         assert!(reject_unusable_external_addr("[::]:41234".parse().unwrap(), "PCP").is_err());
         // A grant with no reachable port.
-        assert!(reject_unusable_external_addr("203.0.113.5:0".parse().unwrap(), "PCP").is_err());
+        assert!(reject_unusable_external_addr("8.8.8.8:0".parse().unwrap(), "PCP").is_err());
         // The `client_ip` fallback `upnp_map_tcp` used to substitute for the WAN
         // address.
         for lan in ["192.168.1.5:9000", "10.0.0.7:9000", "172.16.4.9:9000"] {
@@ -1980,9 +1980,14 @@ mod port_mapping_tests {
                  external address"
             );
         }
-        // And a real one still passes.
-        assert!(reject_unusable_external_addr("203.0.113.5:41234".parse().unwrap(), "PCP").is_ok());
-        assert!(reject_unusable_external_addr("[2001:db8::1]:41234".parse().unwrap(), "PCP").is_ok());
+        // And a real routable one still passes, or the guard would break every
+        // working router.
+        assert!(reject_unusable_external_addr("8.8.8.8:41234".parse().unwrap(), "PCP").is_ok());
+        assert!(reject_unusable_external_addr("1.1.1.1:41234".parse().unwrap(), "PCP").is_ok());
+        assert!(
+            reject_unusable_external_addr("[2606:4700:4700::1111]:41234".parse().unwrap(), "PCP")
+                .is_ok()
+        );
     }
 
     /// F19 — `controlURL` must come from the `WANIPConnection` service, not from

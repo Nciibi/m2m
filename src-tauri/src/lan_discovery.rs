@@ -137,23 +137,22 @@ impl LanDiscoveryState {
         self.peers.insert(key, peer);
 
         while self.peers.len() > MAX_LAN_PEERS {
-            let oldest = self
+            // Snapshot the key out before the `remove`: taking it from the
+            // iterator directly would keep an immutable borrow of `peers` live
+            // across the mutable one and fail to borrow-check.
+            let oldest: Option<String> = self
                 .peers
                 .iter()
                 .min_by_key(|(k, p)| (p.last_seen, (*k).as_str()))
-                .map(|(k, _)| k.clone());
-            match oldest {
-                Some(k) => {
-                    self.peers.remove(&k);
-                    tracing::debug!(
-                        evicted = %k,
-                        "LAN peer table full — evicted least recently seen"
-                    );
-                }
-                // Unreachable while the map is non-empty; `break` rather than
-                // spin so a future change can never turn this into a hang.
-                None => break,
-            }
+                .map(|(k, _)| (*k).clone());
+            // `None` is unreachable while the map is non-empty; break rather
+            // than spin so a future change can never turn this into a hang.
+            let Some(k) = oldest else { break };
+            self.peers.remove(&k);
+            tracing::debug!(
+                evicted = %k,
+                "LAN peer table full — evicted least recently seen"
+            );
         }
     }
 }
