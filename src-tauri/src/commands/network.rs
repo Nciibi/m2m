@@ -2910,52 +2910,100 @@ async fn handle_sync_frame(
                                 );
                             }
                             let since = (sync.since_timestamp as i64).max(earliest);
-                            let missed: Vec<(String, Option<i64>)> = {
+
+                            // ── Bound the count BEFORE any decryption ──
+                            //
+                            // The cap has to be applied to the *rows*, not to
+                            // the decrypted output. It used to be applied after
+                            // the decrypt loop, so `load_sent_messages_since`
+                            // returned every row in the window and every one of
+                            // them was decrypted — a CEK unwrap plus an AEAD open
+                            // of up to `MAX_TEXT_MESSAGE_SIZE` — with only the
+                            // first 2000 kept. A peer holding enough sent history
+                            // to fill the window therefore bought 2000
+                            // decryptions of work per 20-byte request, and could
+                            // ask again at the frame rate.
+                            //
+                            // `None` means "refused", and it is refused rather
+                            // than truncated because the comment above promises
+                            // exactly that ("refused outright so the attacker
+                            // cannot even get the partial work"). The rows are
+                            // chronological, so a truncated prefix is
+                            // indistinguishable at the receiving end from a
+                            // complete catch-up of the oldest messages, and the
+                            // peer never learns that it must resume from a later
+                            // `since_timestamp`.
+                            //
+                            // Residual (needs `storage.rs`, out of scope here):
+                            // the SQL itself is still unbounded, so the rows of
+                            // an over-cap window are read before they are counted.
+                            // The correct fix is `LIMIT ?3` with
+                            // `MAX_SYNC_RESEND_MESSAGES + 1` bound as `?3` in
+                            // `load_sent_messages_since`; then this branch stays
+                            // exactly as it is and the over-cap case never
+                            // allocates the rows.
+                            let missed: Option<Vec<(String, Option<i64>)>> = {
                                 // Lock order: `storage_key` before `message_store`.
                                 let sk = state.storage_key.read().await;
                                 let ms = state.message_store.lock().await;
-                                if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {
-                                    if let Ok(stored) =
-                                        store.load_sent_messages_since(&peer_key_hex, since)
-                                    {
-                                        stored.iter().filter_map(|msg| {
-                                                    crate::storage::MessageStore::decrypt_stored_content(
-                                                        &msg.content_encrypted, &msg.content_nonce,
-                                                        msg.content_key_wrapped.as_deref(),
-                                                        key,
-                                                    ).ok().and_then(|d| String::from_utf8(d).ok())
-                                                     .map(|text| (text, msg.expires_at))
-                                                }).collect()
-                                    } else {
-                                        Vec::new()
+                                match (ms.as_ref(), sk.as_ref()) {
+                                    (Some(store), Some(key)) => {
+                                        match store
+                                            .load_sent_messages_since(&peer_key_hex, since)
+                                        {
+                                            Ok(stored)
+                                                if stored.len() > MAX_SYNC_RESEND_MESSAGES =>
+                                            {
+                                                tracing::warn!(
+                                                    peer = %peer_key_hex,
+                                                    total = stored.len(),
+                                                    cap = MAX_SYNC_RESEND_MESSAGES,
+                                                    "sync response refused: window exceeds the \
+                                                     per-request cap — peer must resume from \
+                                                     a later since_timestamp"
+                                                );
+                                                None
+                                            }
+                                            Ok(stored) => Some(
+                                                stored
+                                                    .iter()
+                                                    .filter_map(|msg| {
+                                                        crate::storage::MessageStore::decrypt_stored_content(
+                                                            &msg.content_encrypted,
+                                                            &msg.content_nonce,
+                                                            msg.content_key_wrapped.as_deref(),
+                                                            key,
+                                                        )
+                                                        .ok()
+                                                        .and_then(|d| String::from_utf8(d).ok())
+                                                        .map(|text| (text, msg.expires_at))
+                                                    })
+                                                    .collect(),
+                                            ),
+                                            // An unreadable store must not be
+                                            // reported as an empty window: the peer
+                                            // would treat "nothing to send" as
+                                            // authoritative and never ask again.
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    peer = %peer_key_hex,
+                                                    error = %e,
+                                                    "sync: failed to read missed messages — \
+                                                     response refused"
+                                                );
+                                                None
+                                            }
+                                        }
                                     }
-                                } else {
-                                    Vec::new()
+                                    // No store, or a locked vault with no storage key.
+                                    // There is nothing to resend, and this is not an
+                                    // error — but it is also not an authoritative
+                                    // empty answer, so the re-send is skipped.
+                                    _ => None,
                                 }
                             };
-
-                            // Bound the count. The lookback clamp above
-                            // bounds the time range; this bounds the work.
-                            //
-                            // On overflow we keep the OLDEST messages rather
-                            // than the newest. The rows are returned in
-                            // chronological order, so a prefix is a contiguous
-                            // slice ending where the peer asked to resume;
-                            // taking the newest instead would leave a hole in
-                            // the middle of the conversation, which reads as
-                            // data loss to the recipient. A peer that needs
-                            // more can simply re-request from a later
-                            // `since_timestamp` — the protocol supports it.
-                            let missed = if missed.len() > MAX_SYNC_RESEND_MESSAGES {
-                                tracing::warn!(
-                                    peer = %peer_key_hex,
-                                    total = missed.len(),
-                                    cap = MAX_SYNC_RESEND_MESSAGES,
-                                    "sync response truncated to the oldest messages"
-                                );
-                                missed[..MAX_SYNC_RESEND_MESSAGES].to_vec()
-                            } else {
-                                missed
+                            let Some(missed) = missed else {
+                                return;
                             };
 
                             // Re-send each missed message using the destructure pattern
