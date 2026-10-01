@@ -3803,7 +3803,7 @@ const MAX_INBOUND_CHUNK_FRAMES_PER_SEC: u32 = 1000;
 /// 16 MiB/s the bucket drains in well under a second and every later frame is
 /// rejected, which is the same dropped-mid-file failure at twice the threshold.
 /// 64 MiB/s is above every non-local path (1 Gbps peaks at 119 MiB/s) and below
-/// the 250 MB/s that the 1000-frames/s cap alone would permit at 256 KiB
+/// the 250 MiB/s that the 1000-frames/s cap alone would permit at 256 KiB
 /// chunks, so both budgets stay meaningful.
 ///
 /// Cost of the change: a connection now has two byte budgets instead of one,
