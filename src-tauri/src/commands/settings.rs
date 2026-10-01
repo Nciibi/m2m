@@ -96,14 +96,34 @@ pub async fn get_stun_config(state: State<'_, Arc<AppState>>) -> Result<stun::St
 /// Upper bound on configured STUN servers. One task and one socket per entry.
 const MAX_STUN_SERVERS: usize = 8;
 
+/// Lower bound on configured STUN servers.
+///
+/// `stun::MIN_CONSENSUS_SERVERS` independent responders are required before
+/// `discover_public_addrs` will report a consensus address at all, so a shorter
+/// list cannot produce a usable public address. The previous bound was
+/// `1..=8`: with one entry, "all responding servers agree" is vacuously true,
+/// so a single rogue server — or a single DNS-hijacked name already in the
+/// user's list — became the public address advertised in invites and in the
+/// plaintext handshake frame a peer dials first.
+const MIN_STUN_SERVERS: usize = stun::MIN_CONSENSUS_SERVERS;
+
 /// Update the STUN server list and configuration.
 #[tauri::command]
 pub async fn set_stun_servers(
     state: State<'_, Arc<AppState>>,
     servers: Vec<String>,
 ) -> Result<(), AppError> {
-    if servers.is_empty() {
-        return Err(AppError::invalid("STUN server list cannot be empty"));
+    // ── Quorum floor ──
+    //
+    // Enforced here as well as in `stun`, because this is the only way a user
+    // reaches that requirement: the consensus rule is unreadable in the UI if a
+    // one-server list silently disables it.
+    if servers.len() < MIN_STUN_SERVERS {
+        return Err(AppError::invalid(format!(
+            "at least {MIN_STUN_SERVERS} STUN servers are required so a single server \
+             cannot define your advertised public address (got {})",
+            servers.len()
+        )));
     }
     // Cap the list. `discover_public_addrs` spawns one task and one socket per
     // entry, so an unbounded list is a task/socket exhaustion primitive
@@ -114,6 +134,26 @@ pub async fn set_stun_servers(
             servers.len(),
             MAX_STUN_SERVERS
         )));
+    }
+    // ── No duplicates ──
+    //
+    // Duplicates satisfy the quorum with one server: `["evil.example:3478",
+    // "evil.example:3478"]` looks like two independent answers and is one, and
+    // the response would pass the transaction ID and FINGERPRINT checks because
+    // it is a real STUN server answering a real query. Compared
+    // case-insensitively because host names are case-insensitive.
+    //
+    // This cannot enforce *operator* diversity — `stun.l.google.com` and
+    // `stun1.l.google.com` are one operator, and nothing at this layer knows who
+    // owns a host. Documented rather than pretended.
+    let mut unique = std::collections::HashSet::with_capacity(servers.len());
+    for s in &servers {
+        if !unique.insert(s.trim().to_ascii_lowercase()) {
+            return Err(AppError::invalid(format!(
+                "duplicate STUN server — two copies of one server cannot agree \
+                 independently: {s}"
+            )));
+        }
     }
     // Each entry must be a real `host:port` and must parse.
     //
