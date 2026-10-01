@@ -2222,4 +2222,35 @@ mod upnp_security_tests {
     /// gateways) or too large (restoring the amplification it exists to stop).
     const _: () = assert!(MAX_HTTP_BODY > 0);
     const _: () = assert!(MAX_HTTP_BODY <= 1024 * 1024);
+
+    /// F14 — the chunk-size line was the last unbounded declared length in this
+    /// file. The reader appends one byte per iteration and grants every byte a
+    /// *fresh* `UPNP_READ_TIMEOUT`, so a responder trickling one byte per
+    /// deadline could grow `line_buf` without bound and hold the task for as
+    /// long as it liked. A real chunk-size line is a handful of hex digits.
+    #[tokio::test]
+    async fn test_chunk_size_line_is_bounded() {
+        let (mut wr, mut rd) = tokio::io::duplex(4096);
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            let _ = wr
+                .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+                .await;
+            let _ = wr.flush().await;
+            // Let the reader finish its header pass first, then trickle a chunk
+            // header that never terminates.
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let _ = wr.write_all(&b'a'.repeat(MAX_CHUNK_LINE * 4)).await;
+            let _ = wr.flush().await;
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(2), wr.write_all(b"bbbb")).await;
+        });
+        let err = read_http_response_body(&mut rd)
+            .await
+            .expect_err("an unbounded chunk-size line must be refused");
+        assert!(
+            err.to_string().contains("chunk-size line"),
+            "unexpected: {err}"
+        );
+    }
 }

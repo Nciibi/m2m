@@ -114,6 +114,45 @@ impl LanDiscoveryState {
         let cutoff = now.saturating_sub(PEER_EXPIRY_SECS);
         self.peers.retain(|_, peer| peer.last_seen >= cutoff);
     }
+
+    /// Insert or refresh a peer, keeping the table bounded.
+    ///
+    /// This used to be a bare `peers.insert(key, peer)` with no upper bound,
+    /// and the key is a 32-byte token chosen by the *sender* of an entirely
+    /// unauthenticated datagram. A single host on the LAN could therefore send
+    /// N packets with N distinct tokens and grow this map — each entry a
+    /// candidate `connect_addr` the UI offers to dial, and, through
+    /// `dht::lan_dht_seeds`, a DHT node — without limit, all inside the
+    /// 90-second expiry window.
+    ///
+    /// Eviction is least-recently-seen first. `last_seen` is stamped at receive
+    /// time, so a flood of freshly-minted tokens evicts itself rather than the
+    /// real peers; ties are broken on the key so eviction does not depend on
+    /// `HashMap` iteration order.
+    pub fn insert_peer(&mut self, peer: LanPeer) {
+        let key = peer.token_hex.clone();
+        self.peers.insert(key, peer);
+
+        while self.peers.len() > MAX_LAN_PEERS {
+            let oldest = self
+                .peers
+                .iter()
+                .min_by_key(|(k, p)| (p.last_seen, (*k).as_str()))
+                .map(|(k, _)| k.clone());
+            match oldest {
+                Some(k) => {
+                    self.peers.remove(&k);
+                    tracing::debug!(
+                        evicted = %k,
+                        "LAN peer table full — evicted least recently seen"
+                    );
+                }
+                // Unreachable while the map is non-empty; `break` rather than
+                // spin so a future change can never turn this into a hang.
+                None => break,
+            }
+        }
+    }
 }
 
 /// Error type for LAN discovery operations.
@@ -123,6 +162,15 @@ pub enum LanDiscoveryError {
     Io(#[from] std::io::Error),
     #[error("crypto error: {0}")]
     Crypto(#[from] crate::crypto::CryptoError),
+    /// LAN discovery refuses to run while Tor routing is enabled.
+    ///
+    /// LAN multicast never touches the Tor circuit, so enabling Tor provides no
+    /// protection against it at all while the announcer keeps publishing this
+    /// node's listening port to every host on the local network every 30
+    /// seconds. Checked *inside* `start` so the refusal cannot depend on the
+    /// order in which the two toggles were flipped — see [`start`].
+    #[error("LAN discovery is disabled while Tor routing is enabled")]
+    TorEnabled,
 }
 
 /// Build a LAN discovery announcement packet using an ephemeral session token.
