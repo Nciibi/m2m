@@ -28,6 +28,21 @@ const DEFAULT_STUN_SERVERS: &[&str] = &[
 #[expect(dead_code, reason = "Reserved for external API consistency")]
 const STUN_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Number of independent STUN servers that must report the same address before
+/// that address is published as [`StunMultiResult::consensus_addr`].
+///
+/// Cross-server agreement is the *only* defence this module has against a
+/// hostile or DNS-hijacked server. A Binding Response is not authenticated:
+/// the transaction ID only stops off-path guessing, and the optional
+/// FINGERPRINT is a CRC that the server itself computes over a message it
+/// authored, so a rogue server can report any `host:port` it likes and the
+/// response parses cleanly. Agreement between one server and itself is not
+/// agreement.
+///
+/// `commands::settings::set_stun_servers` enforces the same floor on the
+/// configured list, so a one-entry configuration cannot exist at all.
+pub const MIN_CONSENSUS_SERVERS: usize = 2;
+
 /// Magic cookie as defined in RFC 8489 §6.
 const STUN_MAGIC_COOKIE: u32 = 0x2112A442;
 
