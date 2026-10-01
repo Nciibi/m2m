@@ -239,7 +239,7 @@ describe("ChatContext", () => {
     // — `"{}"` is already non-empty, so a weaker assertion would pass before the
     // optimistic update had run at all.
     await waitFor(() =>
-      expect(screen.getByTestId("reactors").textContent).toContain("\u{1F44D}"),
+      expect(screen.getByTestId("reactors").textContent).toContain(REACTION),
     );
     const reactors = JSON.parse(screen.getByTestId("reactors").textContent || "{}") as Record<string, string[]>;
     expect(reactors["👍"]).toEqual(["a".repeat(64)]);
