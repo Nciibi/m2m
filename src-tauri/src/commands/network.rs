@@ -2879,6 +2879,20 @@ const MAX_SYNC_LOOKBACK_SECS: i64 = 30 * 24 * 60 * 60;
 /// control: the code below now refuses, and the doc matches it.
 const MAX_SYNC_RESEND_MESSAGES: usize = 2000;
 
+/// Outcome of gathering what one `SyncRequest` should be answered with.
+enum SyncResend {
+    /// Decrypted bodies, oldest first, ready to write.
+    Ready(Vec<(String, Option<i64>)>),
+    /// Nothing is being sent, and the `&'static str` is the reason reported to
+    /// the peer.
+    ///
+    /// There is deliberately no "empty" variant: an empty response is
+    /// indistinguishable from "you have everything", so it may only be sent
+    /// when the query genuinely succeeded and matched no rows. Every other
+    /// outcome is a refusal that the peer is told about.
+    Refused(&'static str),
+}
+
 async fn handle_sync_frame(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
