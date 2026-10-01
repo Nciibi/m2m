@@ -1087,18 +1087,11 @@ fn validate_upnp_location(raw: &str) -> Result<String, PortMapError> {
             "UPnP LOCATION must not contain userinfo".into(),
         ));
     }
-    // IPv6 literals are bracketed: [::1]:80
-    let (host, _port) = if let Some(after_bracket) = authority.strip_prefix('[') {
-        let end = after_bracket
-            .find(']')
-            .ok_or_else(|| PortMapError::Upnp("malformed IPv6 in UPnP LOCATION".into()))?;
-        (&after_bracket[..end], &after_bracket[end + 1..])
-    } else {
-        match authority.rsplit_once(':') {
-            Some((h, p)) if p.chars().all(|c| c.is_ascii_digit()) => (h, p),
-            _ => (authority, ""),
-        }
-    };
+    // IPv6 literals are bracketed: [::1]:80. The split lives in one place so
+    // this guard and `parse_url_host_port` cannot drift into disagreeing about
+    // which gateway URLs are legal — when they did, UPnP port mapping was
+    // unconditionally broken on IPv6/dual-stack gateways.
+    let (host, _port) = split_authority_host_port(authority);
 
     // Must be a literal IP. A hostname is rejected rather than resolved: a
     // DNS name is attacker-controlled and could point anywhere, including at
@@ -1710,8 +1703,42 @@ async fn gateway_wan_ip_via_upnp(service: &UpnpService) -> Result<IpAddr, PortMa
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+/// Split a URL authority into `(host, port_str)`, honouring RFC 3986 IPv6
+/// literals.
+///
+/// `host` comes back *without* its `[`/`]` delimiters. Splitting on the first
+/// `':'` — as `parse_url_host_port` used to — truncates `[fe80::1]:80` to
+/// `"[fe80"`, which is not an address at all; the two functions disagreed about
+/// what a valid gateway URL looks like, and `validate_upnp_location` explicitly
+/// accepts the bracketed form that `parse_url_host_port` then mangled. One
+/// function, one answer.
+///
+/// A bare (unbracketed) IPv6 literal with a port is not a legal URL — `:` is
+/// ambiguous — so it is split at the *last* `':'`, which keeps the common
+/// `host:port` and no-port cases correct and degrades a malformed authority to
+/// "no port" rather than to a wrong host.
+fn split_authority_host_port(authority: &str) -> (&str, &str) {
+    if let Some(after_bracket) = authority.strip_prefix('[') {
+        let end = after_bracket.find(']').unwrap_or(after_bracket.len());
+        let port = after_bracket[end..].strip_prefix(':').unwrap_or("");
+        return (&after_bracket[..end], port);
+    }
+    match authority.rsplit_once(':') {
+        Some((h, p)) if !p.contains(':') => (h, p),
+        _ => (authority, ""),
+    }
+}
+
 /// Parse a URL like `http://192.168.1.1:5000/ctl/conn` into
 /// `(host, port)`.
+///
+/// The host is returned exactly as it appeared in the URL, brackets included:
+/// every caller feeds it straight to `format!("{host}:{port}").parse::<SocketAddr>()`
+/// or into a `Host:` header, and both need the literal brackets back. That is
+/// what keeps a control URL like `http://[fe80::1]:5000/ctl/IPConn` parseable —
+/// stripping the brackets to `fe80::1` and re-joining with `:` yields
+/// `fe80::1:5000`, which is an invalid `SocketAddr` because the address is
+/// ambiguous.
 fn parse_url_host_port(url: &str) -> Result<(&str, u16), PortMapError> {
     // Strip http:// or https:// prefix.
     let rest = url
@@ -1721,11 +1748,29 @@ fn parse_url_host_port(url: &str) -> Result<(&str, u16), PortMapError> {
 
     // Split on first '/' to get host:port part.
     let host_port = rest.split('/').next().unwrap_or(rest);
-    let host = host_port.split(':').next().unwrap_or(host_port);
-    let port: u16 = host_port
-        .split(':')
-        .nth(1)
-        .and_then(|p| p.parse().ok())
+
+    // Split host from port, keeping IPv6 brackets intact.
+    let (host, port_str) = if host_port.starts_with('[') {
+        let end = host_port.find(']').ok_or_else(|| {
+            PortMapError::Upnp(format!("unterminated IPv6 literal in URL '{url}'"))
+        })?;
+        (
+            &host_port[..=end], // include the ']'
+            &host_port[end + 1..],
+        )
+    } else {
+        host_port.split_once(':').unwrap_or((host_port, ""))
+    };
+
+    let port: u16 = port_str
+        .strip_prefix(':')
+        .unwrap_or(port_str)
+        .parse()
+        .ok()
+        // An IGD control endpoint lives on the device itself, never on port 80.
+        // Defaulting a *malformed or absent* port to 80 — the previous fallback —
+        // put the SOAP POST on the description-document port of a device that
+        // serves it over anything else.
         .unwrap_or(5000);
 
     Ok((host, port))
