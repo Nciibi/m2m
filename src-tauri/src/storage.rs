@@ -4965,7 +4965,11 @@ mod tests {
             .conn
             .execute(
                 "UPDATE storage_stats SET total_bytes = ?1 WHERE id = 1",
-                params![cap - 1024],
+                // `cap - 1`, not something further away: the gate's verify band
+                // is `min(cap/16, 64 MiB)`, so a counter that is only 1024 bytes
+                // under the cap is *outside* it and would legitimately skip
+                // verification. One byte under is unambiguously "near".
+                params![cap - 1],
             )
             .unwrap();
 
