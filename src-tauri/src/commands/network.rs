@@ -683,6 +683,24 @@ pub async fn start_listening(
     Ok(format!("listening on {bound_addr}"))
 }
 
+/// Hard ceiling on the number of entries in `state.connections`.
+///
+/// Every inbound transport runs its connections through
+/// `state.connection_limiter` first, and that limiter is keyed on *attempts*:
+/// its active counter is incremented when a handshake starts and decremented
+/// when the handshake routine returns, not when the socket closes. A peer that
+/// keeps completing handshakes therefore walks the counter back down to zero
+/// while its established sessions stay in the map — and each entry pins a
+/// socket, a `Session` and its ratchet state for as long as the peer keeps the
+/// socket open. Nothing bounded the map itself, which is why the cap has to be
+/// enforced here, on the size of the thing that is actually being bounded.
+///
+/// Mirrors `MAX_TOTAL_CONNECTIONS` in `network.rs`, which is private to that
+/// module. If one is changed the other must be: the accept-path limiter stops
+/// new sessions at 50 attempts, this stops the map at 50 live sessions, and a
+/// lower value here is the stricter of the two.
+const MAX_ESTABLISHED_CONNECTIONS: usize = 50;
+
 /// Complete an inbound connection, given the stream and its already-read
 /// handshake-init frame.
 ///
