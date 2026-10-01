@@ -650,6 +650,11 @@ impl AppState {
     }
 
     /// Refresh STUN discovery and update stored candidates/NAT type.
+    ///
+    /// Nothing derived from a single STUN server's answer reaches the state
+    /// this method owns. `public_ip` and `candidates` both end up in invites
+    /// and in the plaintext handshake frames, so a hostile or hijacked STUN
+    /// server must not be able to write into them.
     pub async fn refresh_stun(&self) -> Result<stun::StunMultiResult, stun::StunError> {
         // The config is snapshotted and released before the discovery runs.
         //
@@ -662,10 +667,28 @@ impl AppState {
         let config = { self.stun_config.read().await.clone() };
         let multi = stun::discover_public_addrs(&config).await?;
 
-        // Update public IP
-        if let Some(addr) = multi.consensus_addr {
-            let mut pip = self.public_ip.write().await;
-            *pip = Some(addr);
+        // Update public IP.
+        //
+        // `consensus_addr` already carries the quorum rule (see
+        // `stun::aggregate_consensus`) and `query_single_server` already refuses
+        // a non-routable XOR-MAPPED-ADDRESS. The address check is repeated here
+        // because this is the last point before a `host:port` becomes
+        // user-visible state: `state.public_ip` is rendered in Settings and read
+        // by callers that build candidate lists, and a STUN server reporting
+        // `192.168.x.x` or `169.254.169.254` must never be stored as "the user's
+        // public address".
+        match multi.consensus_addr {
+            Some(addr) if stun::is_publishable_public_addr(&addr) => {
+                let mut pip = self.public_ip.write().await;
+                *pip = Some(addr);
+            }
+            Some(addr) => {
+                tracing::warn!(
+                    public_ip = %addr,
+                    "STUN consensus address is not globally routable — not stored"
+                );
+            }
+            None => {}
         }
 
         // Update NAT type
@@ -675,7 +698,13 @@ impl AppState {
             *nt = nat;
         }
 
-        // Update candidates from STUN results
+        // Update candidates from STUN results.
+        //
+        // `gather_reflexive_candidates` is the chokepoint that decides what a
+        // STUN answer may become: it publishes only the corroborated
+        // `consensus_addr`, never the individual per-server results. It is
+        // shared with the invite, discovery and reconnect paths, so keeping the
+        // filtering there covers every writer of `state.candidates` at once.
         let reflexive_candidates = crate::candidate::gather_reflexive_candidates(&multi);
         let host_candidates = crate::candidate::gather_host_candidates();
         let ipv6_candidates = crate::candidate::gather_ipv6_candidates();
