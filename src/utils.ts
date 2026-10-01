@@ -139,6 +139,17 @@ export function formatTime(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
+/**
+ * Minimum STUN servers that may be configured.
+ *
+ * Must match `stun::MIN_CONSENSUS_SERVERS` on the Rust side. With one server,
+ * "the servers agreed on my public address" is vacuously true — whoever
+ * answered *defines* the address this app publishes in invites and plaintext
+ * handshakes — so the backend rejects a list shorter than this and so does the
+ * remove handler.
+ */
+export const MIN_STUN_SERVERS = 2;
+
 /// Default STUN servers used when resetting STUN config.
 export const DEFAULT_STUN_SERVERS: readonly string[] = [
   "stun.l.google.com:19302",
