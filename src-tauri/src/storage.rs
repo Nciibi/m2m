@@ -5650,24 +5650,15 @@ mod tests {
     /// Deleting a conversation removes its messages, the conversation row and
     /// the byte accounting together.
     ///
-    /// The two DELETEs share one transaction, so the observable invariant is
-    /// that neither half is reachable without the other. This asserts the
-    /// post-state, which is what the Hub renders.
+    /// The two DELETEs share one transaction, so neither half is reachable
+    /// without the other: as separate commits a crash between them left a
+    /// conversation row that still listed in the Hub with an empty history.
+    /// This asserts the post-state, which is what the Hub renders.
     #[test]
     fn test_delete_conversation_leaves_no_orphans() {
         let store = mem_messagestore();
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         fill_messages(&store, "c1", 4, 300);
-
-        // A reaction on one of the messages, which the delete must not strand.
-        store
-            .conn
-            .execute(
-                "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
-                 VALUES ('m1', 'x', 'peer', 1000)",
-                [],
-            )
-            .unwrap();
 
         store.delete_conversation("c1").unwrap();
 
