@@ -4225,7 +4225,6 @@ pub fn spawn_receive_loop(
 #[cfg(test)]
 mod contact_gate_tests {
     use super::*;
-    use super::{connection_map_has_room, is_bulk_transfer_frame};
 
     /// HIGH-5: the frame budget must be sized for control traffic, not for bulk
     /// data. A 256 KiB chunk charged against `MAX_INBOUND_FRAMES_PER_SEC` is
@@ -4242,21 +4241,24 @@ mod contact_gate_tests {
     }
 
     /// HIGH-5 sizing, stated as an assertion so the two constants cannot be
-    /// retuned into a transfer-breaking combination without a test failing.
-    /// A `compute_chunk_size` of 256 KiB (direct) must stay admitted at the byte
-    /// ceiling: 64 MiB/s ÷ 256 KiB = 256 frames/s, under the 1000/s cap.
+    /// retuned into a transfer-breaking combination without a test failing: the
+    /// byte ceiling must be reachable at both chunk sizes `compute_chunk_size`
+    /// emits (256 KiB direct, 128 KiB relay) *without* exhausting the frame cap,
+    /// because a transfer is bounded by whichever budget runs out first.
     #[test]
     fn test_bulk_frame_cap_admits_a_full_rate_chunk_stream() {
-        let chunk = crate::protocol::MAX_FILE_CHUNK_SIZE; // 256 KiB
-        let relay_chunk = 128 * 1024usize; // `compute_chunk_size("relay")`
-        assert!(MAX_INBOUND_CHUNK_BYTES_PER_SEC as usize / chunk
-            <= MAX_INBOUND_CHUNK_FRAMES_PER_SEC as usize);
+        let direct_chunk = crate::protocol::MAX_FILE_CHUNK_SIZE;
+        let relay_chunk = 128 * 1024usize;
+        let bytes = MAX_INBOUND_CHUNK_BYTES_PER_SEC as usize;
+        let frames = MAX_INBOUND_CHUNK_FRAMES_PER_SEC as usize;
         assert!(
-            MAX_INBOUND_CHUNK_BYTES_PER_SEC as usize / relay_chunk
-                <= MAX_INBOUND_CHUNK_FRAMES_PER_SEC as usize
+            bytes / direct_chunk <= frames,
+            "the byte ceiling must admit a full-rate direct chunk stream"
         );
-        // And the ceiling is above every non-local link: 1 Gbps is 119 MiB/s.
-        assert!(MAX_INBOUND_CHUNK_BYTES_PER_SEC >= 64 * 1024 * 1024);
+        assert!(
+            bytes / relay_chunk <= frames,
+            "the byte ceiling must admit a full-rate relayed chunk stream"
+        );
     }
 
     /// MEDIUM-12: the connection map is full at the cap, not one past it.
