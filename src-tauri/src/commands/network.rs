@@ -2958,25 +2958,23 @@ async fn handle_sync_frame(
                             // decryptions of work per 20-byte request, and could
                             // ask again at the frame rate.
                             //
-                            // `None` means "refused", and it is refused rather
-                            // than truncated because the comment above promises
-                            // exactly that ("refused outright so the attacker
-                            // cannot even get the partial work"). The rows are
-                            // chronological, so a truncated prefix is
-                            // indistinguishable at the receiving end from a
-                            // complete catch-up of the oldest messages, and the
-                            // peer never learns that it must resume from a later
-                            // `since_timestamp`.
+                            // `Refused` is sent rather than a truncated prefix
+                            // because the comment above promises exactly that
+                            // ("refused outright so the attacker cannot even get
+                            // the partial work"). The rows are chronological, so a
+                            // truncated prefix is indistinguishable at the
+                            // receiving end from a complete catch-up of the oldest
+                            // messages.
                             //
                             // Residual (needs `storage.rs`, out of scope here):
-                            // the SQL itself is still unbounded, so the rows of
-                            // an over-cap window are read before they are counted.
+                            // the SQL itself is still unbounded, so the rows of an
+                            // over-cap window are read before they are counted.
                             // The correct fix is `LIMIT ?3` with
                             // `MAX_SYNC_RESEND_MESSAGES + 1` bound as `?3` in
                             // `load_sent_messages_since`; then this branch stays
                             // exactly as it is and the over-cap case never
                             // allocates the rows.
-                            let missed: Option<Vec<(String, Option<i64>)>> = {
+                            let fetched: SyncResend = {
                                 // Lock order: `storage_key` before `message_store`.
                                 let sk = state.storage_key.read().await;
                                 let ms = state.message_store.lock().await;
@@ -2996,9 +2994,11 @@ async fn handle_sync_frame(
                                                      per-request cap — peer must resume from \
                                                      a later since_timestamp"
                                                 );
-                                                None
+                                                SyncResend::Refused(
+                                                    "sync window exceeds the per-request cap",
+                                                )
                                             }
-                                            Ok(stored) => Some(
+                                            Ok(stored) => SyncResend::Ready(
                                                 stored
                                                     .iter()
                                                     .filter_map(|msg| {
@@ -3014,10 +3014,10 @@ async fn handle_sync_frame(
                                                     })
                                                     .collect(),
                                             ),
-                                            // An unreadable store must not be
-                                            // reported as an empty window: the peer
-                                            // would treat "nothing to send" as
-                                            // authoritative and never ask again.
+                                            // An unreadable store must not be reported as
+                                            // an empty window: the peer would take
+                                            // "nothing to send" as authoritative and never
+                                            // ask again.
                                             Err(e) => {
                                                 tracing::warn!(
                                                     peer = %peer_key_hex,
@@ -3025,19 +3025,48 @@ async fn handle_sync_frame(
                                                     "sync: failed to read missed messages — \
                                                      response refused"
                                                 );
-                                                None
+                                                SyncResend::Refused("message store unavailable")
                                             }
                                         }
                                     }
                                     // No store, or a locked vault with no storage key.
-                                    // There is nothing to resend, and this is not an
-                                    // error — but it is also not an authoritative
-                                    // empty answer, so the re-send is skipped.
-                                    _ => None,
+                                    // Nothing can be decrypted, and that is not an
+                                    // authoritative empty answer.
+                                    _ => SyncResend::Refused("message store unavailable"),
                                 }
                             };
-                            let Some(missed) = missed else {
-                                return;
+
+                            let missed = match fetched {
+                                SyncResend::Ready(missed) => missed,
+                                SyncResend::Refused(reason) => {
+                                    // Say so. A refusal that looks exactly like
+                                    // "nothing missed" is the worst of the two
+                                    // options: the requester treats the conversation as
+                                    // caught up, never advances its `since_timestamp`,
+                                    // and asks the same over-cap question on every
+                                    // reconnect — a permanent, invisible hole in the
+                                    // history. The requesting side only logs incoming
+                                    // `Error` frames today, so this cannot repair that
+                                    // yet (it needs `commands/mod.rs` and the frontend),
+                                    // but it puts the refusal in the peer's log instead
+                                    // of in neither. Plaintext, like every other
+                                    // `send_error`: it discloses nothing and does not
+                                    // touch the send ratchet.
+                                    let PeerConnection { write_half, .. } = &mut *conn;
+                                    if let Err(e) = network::send_error(
+                                        write_half,
+                                        protocol::ErrorCode::RateLimitExceeded,
+                                        reason,
+                                    )
+                                    .await
+                                    {
+                                        tracing::warn!(
+                                            error = %e,
+                                            "sync: failed to report refusal to peer"
+                                        );
+                                    }
+                                    return;
+                                }
                             };
 
                             // Re-send each missed message using the destructure pattern
