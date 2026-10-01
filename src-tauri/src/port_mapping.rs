@@ -1825,15 +1825,18 @@ fn parse_url_host_port(url: &str) -> Result<(&str, u16), PortMapError> {
         host_port.split_once(':').unwrap_or((host_port, ""))
     };
 
+    // The port is the text between the host and the path; for a bracketed IPv6
+    // literal that text still carries its leading `':'`, so strip it first.
     let port: u16 = port_str
         .strip_prefix(':')
         .unwrap_or(port_str)
         .parse()
         .ok()
-        // An IGD control endpoint lives on the device itself, never on port 80.
-        // Defaulting a *malformed or absent* port to 80 — the previous fallback —
-        // put the SOAP POST on the description-document port of a device that
-        // serves it over anything else.
+        // A missing *or* malformed port falls back to 5000, an IGD control
+        // endpoint port. Splitting on the first `':'` instead used to let a
+        // trailing partial token through unparsed — `http://192.168.1.1:80abc/`
+        // yielded port 80 — which silently pointed the SOAP POST at the wrong
+        // port on the gateway. Non-numeric is not a port.
         .unwrap_or(5000);
 
     Ok((host, port))
