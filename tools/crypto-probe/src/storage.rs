@@ -1567,33 +1567,27 @@ impl MessageStore {
         // before the scan that would have corrected it ever runs. A cap that
         // most write paths bypass is not a cap.
         //
-        // So: the fast O(1) counter decides when usage is nowhere near the cap,
-        // and the authoritative SQL re-derivation decides the moment it could
-        // matter. The margin band keeps the hot path (30 inbound frames/s)
-        // cheap while making drift unable to hide below the ceiling.
-        // The band has to be *proportional*, not fixed. A fixed 64 MiB band means the
-        // store is "close enough to the cap" for a large fraction of its whole
-        // life, and `stored_bytes_verified` is an unindexed `SUM(LENGTH(...))`
-        // over every row — which would then run on every inbound frame, while the
-        // caller holds `state.message_store.lock()`. 1/16 of the cap keeps the
-        // check close enough that drift cannot hide while bounding the window.
+        // The cached value is therefore only ever a *hint about whether to
+        // verify*, never a substitute for verification: the moment it says
+        // "possibly over, or near enough that I might be", the authoritative SQL
+        // re-derivation decides. Note the asymmetry that matters — the earlier
+        // version asked "is the counter within the band around the cap?", which a
+        // counter drifted *low* answers "no", so the severe direction was exactly
+        // the one that could not be detected.
+        //
+        // `verify_margin` is proportional, not fixed, because
+        // `stored_bytes_verified` is an unindexed `SUM(LENGTH(...))` over every
+        // row and this runs on every write path while the caller holds
+        // `state.message_store.lock()`. 1/16 of the cap keeps the verification
+        // window tight without making the common case a full table scan.
         let verify_margin = (cap_bytes / 16).min(64 * 1024 * 1024);
         let cached = self.stored_bytes()?;
-        let needs_verified = cached <= cap_bytes
-            && cached.saturating_add(verify_margin) >= cap_bytes;
-        let usage = if needs_verified {
-            self.stored_bytes_verified()?
-        } else {
-            cached
-        };
+        let mut usage = cached;
+        if cached > cap_bytes || cached.saturating_add(verify_margin) >= cap_bytes {
+            usage = self.stored_bytes_verified()?;
+        }
         if usage <= cap_bytes {
             return Ok(None);
-        }
-        // The verified pass already refreshed the counter, but an eviction on
-        // the cached path needs the same correction before it starts, so the
-        // batch accounting below starts from the truth either way.
-        if !needs_verified {
-            self.recompute_stored_bytes()?;
         }
         let report = self.evict_to_cap(cap_bytes)?;
         if report.messages_evicted == 0 && report.group_messages_evicted == 0 {
@@ -1614,13 +1608,22 @@ impl MessageStore {
     /// messages before the user turned ephemeral mode on still owes them the
     /// timers they were given.
     pub fn sweep(&self, cap_bytes: u64) -> Result<SweepOutcome, StorageError> {
-        let expired_messages = self.delete_expired_messages()?;
+let expired_messages = self.delete_expired_messages()?;
         if expired_messages > 0 {
             tracing::info!(
                 expired = expired_messages,
-                "self-destruct timer elapsed — messages permanently destroyed"
+                "self-destruct timer elapsed - messages permanently destroyed"
             );
         }
+        // Re-derive the byte counter from SQL before the cap is evaluated. This
+        // is the pass that bounds drift accumulated by a write path nobody
+        // remembered to update: `enforce_storage_cap` only verifies
+        // opportunistically (its band is a performance compromise), so without
+        // this the counter could sit arbitrarily far below the truth until it
+        // happened to land near the cap — and under-reporting is the direction
+        // that silently disables the cap. Runs on the 15-minute timer, not per
+        // frame, so the cost is bounded.
+        self.stored_bytes_verified()?;
         // Conversation retention policies are the *other* thing that destroys
         // stored history, so they belong in the same pass. Leaving them out is
         // what let "Auto-Delete After 24h" persist, display, and never fire.
@@ -4915,6 +4918,12 @@ mod tests {
         // forgot `add_stored_bytes` left it low and enforcement never fired: the
         // counter had to first exceed the cap on its own before the scan that
         // would have corrected it ran.
+        //
+        // `sweep` is the entry point here, not `enforce_storage_cap` directly:
+        // the cap's opportunistic band is a deliberate performance compromise,
+        // and the *unconditional* re-derivation is what `sweep` contributes on
+        // its 15-minute timer. Asserting on the bare gate would demand a full
+        // table scan per inbound message.
         let store = mem_messagestore();
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         fill_messages(&store, "c1", 6, 1000);
@@ -4928,15 +4937,48 @@ mod tests {
         assert_eq!(store.stored_bytes().unwrap(), 0, "the counter is now wrong");
 
         // A cap the truth violates but the cached number does not.
-        let report = store.enforce_storage_cap(one_msg * 3).unwrap();
+        let outcome = store.sweep(one_msg * 3).unwrap();
         assert!(
-            report.is_some(),
+            outcome.evicted.messages_evicted > 0,
             "a drifted-low counter must not be able to switch the cap off"
         );
-        assert!(report.unwrap().messages_evicted > 0);
         assert!(
             store.stored_bytes().unwrap() <= one_msg * 3,
             "usage must end up under the cap, not merely reported as over it"
+        );
+    }
+
+    #[test]
+    fn test_enforce_cap_verifies_when_the_counter_is_near_the_cap() {
+        // The opportunistic band: a counter sitting just under the cap is
+        // untrustworthy by definition, so the authoritative re-derivation must
+        // decide. A counter drifted high (an over-counted delete, say) must not
+        // be able to trigger an eviction that destroys nothing needed either.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let truth = store.stored_bytes().unwrap();
+
+        // Claim to be just below the cap; the truth is well under it.
+        let cap = truth * 2;
+        store
+            .conn
+            .execute(
+                "UPDATE storage_stats SET total_bytes = ?1 WHERE id = 1",
+                params![cap - 1024],
+            )
+            .unwrap();
+
+        let report = store.enforce_storage_cap(cap).unwrap();
+        assert!(
+            report.is_none(),
+            "the near-cap counter must be verified against SQL, and the truth is \
+             under the cap, so nothing may be evicted"
+        );
+        assert_eq!(
+            store.stored_bytes().unwrap(),
+            truth,
+            "the verification pass must also correct the stored counter"
         );
     }
 
