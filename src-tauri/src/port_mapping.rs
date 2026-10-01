@@ -330,6 +330,10 @@ impl PortMapper {
 /// 4. **Fallback** — probe common gateway addresses (last resort).
 ///
 /// Returns the gateway's LAN IP address.
+///
+/// Only an address that has actually been shown to be a router is returned —
+/// see `discover_gateway_fallback` for why the unverified guess it used to hand
+/// back is no longer usable.
 async fn discover_gateway() -> Option<IpAddr> {
     // ── Strategy 1: Linux /proc/net/route ──
     // Format (header + one line per route):
