@@ -289,39 +289,7 @@ pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResul
         return Err(StunError::AllServersFailed);
     }
 
-    // Consensus: do ALL responding servers report the same public IP?
-    let first_ip = results[0].public_addr.ip();
-    let mut consensus = true;
-    for r in &results {
-        if r.public_addr.ip() != first_ip {
-            tracing::warn!(
-                ip1 = %first_ip, ip2 = %r.public_addr.ip(),
-                server = %r.server,
-                "STUN server IP mismatch — possible DNS poisoning or asymmetric routing"
-            );
-            consensus = false;
-        }
-    }
-
-    let consensus_addr = if consensus {
-        Some(results[0].public_addr)
-    } else {
-        // When servers disagree, take the majority vote.
-        let mut ip_counts: std::collections::HashMap<std::net::IpAddr, usize> =
-            std::collections::HashMap::new();
-        for r in &results {
-            *ip_counts.entry(r.public_addr.ip()).or_insert(0) += 1;
-        }
-        let (winning_ip, _count) = ip_counts
-            .into_iter()
-            .max_by_key(|&(_, c)| c)
-            .unwrap_or((std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0));
-        // Return the first result matching the winning IP.
-        results
-            .iter()
-            .find(|r| r.public_addr.ip() == winning_ip)
-            .map(|r| r.public_addr)
-    };
+    let (consensus, consensus_addr) = aggregate_consensus(&results);
 
     Ok(StunMultiResult {
         results,
@@ -330,6 +298,109 @@ pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResul
         total_servers,
         responding_servers,
     })
+}
+
+/// Reduce per-server results to the single address we are willing to trust.
+///
+/// Returns `(consensus, consensus_addr)`:
+///
+/// * `(true, Some(_))` — every responder reported the same IP and there were
+///   at least [`MIN_CONSENSUS_SERVERS`] of them.
+/// * `(false, Some(_))` — responders disagreed, but one IP holds a *strict
+///   majority*, so the winner is identifiable.
+/// * `(false, None)` — below quorum, a tie, or nothing usable.
+///
+/// Split out of [`discover_public_addrs`] so the quorum rule is exercised by
+/// tests without opening a socket.
+fn aggregate_consensus(results: &[StunResult]) -> (bool, Option<SocketAddr>) {
+    let responding = results.len();
+    let first_ip = results[0].public_addr.ip();
+    let mut all_agree = true;
+    for r in results {
+        if r.public_addr.ip() != first_ip {
+            tracing::warn!(
+                ip1 = %first_ip, ip2 = %r.public_addr.ip(),
+                server = %r.server,
+                "STUN server IP mismatch — possible DNS poisoning or asymmetric routing"
+            );
+            all_agree = false;
+        }
+    }
+
+    if all_agree {
+        // ── Agreement — but from how many servers? ──
+        //
+        // `consensus` used to mean "every server that *answered* agreed", which
+        // is vacuously true when exactly one server answers. `set_stun_servers`
+        // accepted a one-entry list, so a single rogue server — or a single
+        // DNS-hijacked name already in the user's list — *became* the user's
+        // advertised public address. That address reaches `state.candidates`,
+        // invite candidate lists (including one-time, shareable links) and the
+        // **plaintext** `HandshakeInit` frame, which is the frame a peer dials
+        // first and which nothing authenticates yet.
+        //
+        // Agreement is therefore only believed from a quorum.
+        if responding < MIN_CONSENSUS_SERVERS {
+            tracing::warn!(
+                responding = responding,
+                required = MIN_CONSENSUS_SERVERS,
+                "STUN agreement below quorum — address discarded rather than \
+                 treating a single responder as consensus"
+            );
+            return (false, None);
+        }
+        return (true, Some(results[0].public_addr));
+    }
+
+    // ── Disagreement: only a strict majority identifies a winner ──
+    //
+    // The previous code returned `max_by_key` over the IP histogram, which
+    // yields an arbitrary element on a tie — and `HashMap` iteration order is
+    // not deterministic. So one injected answer against one real answer (a
+    // two-server list, or a 2–2 split of four) handed the attacker a coin flip
+    // to own the published address, decided per call. A tie means one of the
+    // two answers is wrong and nothing here can say which, so a tie publishes
+    // nothing at all.
+    let mut ip_counts: std::collections::HashMap<std::net::IpAddr, usize> =
+        std::collections::HashMap::new();
+    for r in results {
+        *ip_counts.entry(r.public_addr.ip()).or_insert(0) += 1;
+    }
+
+    let majority_ip = match ip_counts.into_iter().max_by_key(|&(_, count)| count) {
+        Some((ip, count)) if count >= MIN_CONSENSUS_SERVERS && count * 2 > responding => Some(ip),
+        Some((ip, count)) => {
+            tracing::warn!(
+                %ip, count, responding = responding,
+                "STUN results disagree with no strict majority — no address published"
+            );
+            None
+        }
+        None => None,
+    };
+
+    let addr = majority_ip.and_then(|ip| {
+        let found = results
+            .iter()
+            .find(|r| r.public_addr.ip() == ip)
+            .map(|r| r.public_addr)?;
+        // Defence in depth. `query_single_server` already refuses a
+        // non-routable XOR-MAPPED-ADDRESS, so this cannot fire from the network
+        // path; it is here so a hand-built `StunMultiResult` cannot smuggle
+        // `127.0.0.1`, a LAN address or the cloud metadata endpoint
+        // (`169.254.169.254`) into a published candidate.
+        if is_publishable_public_addr(&found) {
+            Some(found)
+        } else {
+            tracing::warn!(
+                addr = %found,
+                "majority STUN address is not globally routable — discarded"
+            );
+            None
+        }
+    });
+
+    (false, addr)
 }
 
 /// Query a single STUN server and return the discovered public address.
