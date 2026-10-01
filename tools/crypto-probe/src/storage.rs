@@ -1211,6 +1211,26 @@ impl MessageStore {
             ),
         }
 
+        // Reclaim rows left behind by a shred that committed but whose delete
+        // did not. This must run **before** `recompute_stored_bytes`, for the
+        // same reason the expiry sweep above does: those rows are already dead
+        // weight, and counting them would leave the cap permanently inflated by
+        // however long the app stayed closed after the crash.
+        //
+        // Also before the first read, so an undecryptable leftover is never
+        // handed to the UI as though it were a message.
+        match store.recover_interrupted_shreds() {
+            Ok(0) => {}
+            Ok(n) => tracing::warn!(
+                rows = n,
+                "cleaned up rows orphaned by a crash during message deletion"
+            ),
+            Err(e) => tracing::error!(
+                error = %e,
+                "could not clean up rows orphaned by an interrupted shred"
+            ),
+        }
+
         // Seed the storage-cap counter from the tables. Done once, at open, so
         // a database that already holds messages is accounted for from its
         // first launch — otherwise the cap would appear to be 0 bytes and
@@ -2024,6 +2044,73 @@ let expired_messages = self.delete_expired_messages()?;
     /// How many content keys this store has destroyed by shredding.
     pub fn shredded_key_count(&self) -> u64 {
         self.shredded_keys.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Finish any shred whose delete did not survive a crash.
+    ///
+    /// Every hard-delete path in this file runs in two steps: zero the wrapped
+    /// content key, commit and checkpoint, *then* open a second transaction to
+    /// remove the row. The two steps are deliberately not one transaction, and
+    /// that is not an oversight:
+    ///
+    /// A single transaction would be **less** safe. The reason for zeroing before
+    /// deleting is that SQLite does not scrub the bytes of a deleted row — the
+    /// page goes on the free list still holding the old key. Zeroing in the same
+    /// transaction that deletes the row would mean the zeroed value never reaches
+    /// disk on its own; the freed page would still carry the key it overwrote. The
+    /// committed zero plus checkpoint is what actually overwrites the bytes, and
+    /// the delete afterwards is only tidiness.
+    ///
+    /// The cost of that ordering is an intermediate on-disk state, and a crash or
+    /// power loss can leave it behind: the key is destroyed, the row is not yet
+    /// gone. That state is *safe* — the ciphertext is undecryptable either way —
+    /// but it is untidy, and worse, it is invisible: nothing re-runs the second
+    /// step, so the row sits in the table indefinitely, still counted by
+    /// `recompute_stored_bytes` and still returned by the read path as an
+    /// undecryptable placeholder.
+    ///
+    /// So the pipeline is made restartable rather than atomic. A row whose key is
+    /// all zeros and which is not a soft-delete tombstone is by definition a shred
+    /// that completed and whose delete did not, and it is removed here.
+    ///
+    /// `deleted = 1` is excluded, and that exclusion is the whole subtlety: a
+    /// user-initiated "delete for everyone" *also* leaves a row with a zeroed
+    /// key, on purpose, as a tombstone. Deleting those would silently discard the
+    /// tombstones that stop deleted messages from reappearing on a later sync, and
+    /// it would also inflate `shredded_key_count`, since those rows were shredded
+    /// by a path that already counted them.
+    fn recover_interrupted_shreds(&self) -> Result<u64, StorageError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let n = tx.execute(
+            "DELETE FROM messages
+              WHERE deleted = 0
+                AND content_key_wrapped IS NOT NULL
+                AND content_key_wrapped = ?1",
+            params![vec![0u8; WRAPPED_CEK_LEN]],
+        )?;
+        // Reactions are keyed by `message_id` with no foreign key, so a row
+        // removed here can leave orphans behind. Cleaned in the same
+        // transaction for the same reason as everywhere else: a reaction left
+        // pointing at a message that no longer exists is a row that can never
+        // be rendered and never gets collected.
+        tx.execute(
+            "DELETE FROM reactions
+              WHERE message_id NOT IN (SELECT id FROM messages)",
+            [],
+        )?;
+        tx.commit()?;
+
+        if n > 0 {
+            // These keys were counted as shredded when the interrupted shred
+            // committed, and this process did not do that, so nothing is added
+            // to the counter here. Only the leftover rows are reclaimed.
+            tracing::warn!(
+                rows = n,
+                "recovered rows left by a shred that committed but whose delete did not \
+                 (crash during eviction) — their content keys were already destroyed"
+            );
+        }
+        Ok(n as u64)
     }
 
 
@@ -5353,6 +5440,132 @@ mod tests {
             store.stored_bytes().unwrap() as i64,
             one_msg,
             "the counter must be re-derived at open, after the expiry pass"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A crash between the committed shred and its delete must not leave the
+    /// row in the table forever.
+    ///
+    /// The shred/delete pair is deliberately two committed steps (see
+    /// `recover_interrupted_shreds` for why merging them weakens the shred), so
+    /// a crash can land between them. That intermediate state is *safe* — the
+    /// content key is already destroyed, so the ciphertext is undecryptable
+    /// either way — but nothing re-ran the delete, so the row would sit there
+    /// indefinitely: still returned by the read path as an undecryptable
+    /// placeholder and still counted against the storage cap.
+    ///
+    /// The interrupted state is simulated directly rather than by killing a
+    /// process, because the whole point is the state *on disk* between two
+    /// commits, which is exactly what the SQL below reproduces: key zeroed, row
+    /// still present.
+    ///
+    /// Mutation-verified: removing the `recover_interrupted_shreds` call from
+    /// `MessageStore::open` leaves every other assertion in this test passing
+    /// and fails the on-disk one.
+    #[test]
+    fn interrupted_shred_is_recovered_at_open() {
+        let dir = std::env::temp_dir().join(format!("m2m_shred_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("messages.db");
+
+        {
+            let store = MessageStore::open(&db_path).unwrap();
+            store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+            for id in ["m-gone", "m-shredded", "m-keep", "m-tombstone"] {
+                store
+                    .store_message_secure(id, "c1", "sent", b"content", 1000, None, true, &test_key())
+                    .unwrap();
+            }
+            // A user-initiated "delete for everyone": also a zeroed key, but
+            // `deleted = 1`, and it must survive as a tombstone.
+            assert!(
+                store
+                    .delete_message("m-tombstone", "c1", "sent")
+                    .unwrap(),
+                "the user-delete under test must actually have applied"
+            );
+
+            // Reproduce the crash window: the shred has committed, the delete
+            // has not. `shred_message_keys` is exactly the committed half, and
+            // it is unwrapped because a shred that did not land would make this
+            // test pass for the wrong reason.
+            store
+                .shred_message_keys(&["m-gone".to_string(), "m-shredded".to_string()])
+                .unwrap();
+
+            // Precondition: the row is still on disk, with a destroyed key. If
+            // this ever stops holding, the test is no longer testing the window.
+            let (present, zeroed): (i64, i64) = store
+                .conn
+                .query_row(
+                    "SELECT COUNT(*),
+                            COALESCE(SUM(CASE WHEN content_key_wrapped = ?2 THEN 1 ELSE 0 END), 0)
+                       FROM messages WHERE id = 'm-shredded'",
+                    params![vec![0u8; WRAPPED_CEK_LEN]],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(present, 1, "the row must still exist in the window");
+            assert_eq!(zeroed, 1, "its content key must already be destroyed");
+        }
+        // "Crash" — the process is gone with the shred committed and the delete
+        // not.
+
+        let store = MessageStore::open(&db_path).unwrap();
+
+        let on_disk: Vec<String> = store
+            .conn
+            .prepare("SELECT id FROM messages ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert_eq!(
+            on_disk,
+            vec![
+                "m-keep".to_string(),
+                "m-tombstone".to_string(),
+            ],
+            "the interrupted shred's row must be reclaimed at open, while the \
+             user-deleted tombstone and untouched rows survive"
+        );
+
+        // The tombstone is the subtle one, and the reason this function is not a
+        // one-liner: it also carries a zeroed key. Reclaiming it would discard
+        // the marker that stops a deleted message reappearing on a later sync.
+        let tombstone_deleted: i64 = store
+            .conn
+            .query_row(
+                "SELECT deleted FROM messages WHERE id = 'm-tombstone'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            tombstone_deleted, 1,
+            "a user 'delete for everyone' row must remain a tombstone, not be swept \
+             as an orphaned shred"
+        );
+
+        // And the byte counter must not be carrying the reclaimed row, or the
+        // cap is permanently inflated by a crash that happened once.
+        let one_live = store
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(content_encrypted) + LENGTH(content_nonce) + ?1), 0)
+                   FROM messages",
+                params![MessageStore::MSG_ROW_OVERHEAD],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(
+            store.stored_bytes().unwrap() as i64,
+            one_live,
+            "reclaimed rows must not be counted against the cap"
         );
 
         std::fs::remove_dir_all(&dir).ok();
