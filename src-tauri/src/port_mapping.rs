@@ -1891,6 +1891,162 @@ mod port_mapping_tests {
         assert_eq!(port, 49152);
     }
 
+    /// F18 — a bracketed IPv6 control URL. The old `split(':').next()`
+    /// truncated `[fe80::1]` to the literal string `"[fe80"`, which is not an
+    /// address, so the port fell through to 5000 and every IPv6 / dual-stack
+    /// gateway failed with "invalid socket address". These are exactly the URLs
+    /// `validate_upnp_location` is required to accept.
+    #[test]
+    fn test_parse_url_host_port_ipv6_literal() {
+        // The URL the SSRF guard's own test asserts is a valid gateway.
+        let (host, port) = parse_url_host_port("http://[fe80::1]:80/desc.xml").unwrap();
+        assert_eq!(host, "[fe80::1]");
+        assert_eq!(port, 80);
+
+        // A control URL, which is what `upnp_map_tcp` actually parses.
+        let (host, port) = parse_url_host_port("http://[fd00::1]:5000/ctl/IPConn").unwrap();
+        assert_eq!(host, "[fd00::1]");
+        assert_eq!(port, 5000);
+
+        // Bracketed, no port.
+        let (host, port) = parse_url_host_port("http://[::1]/ctl/IPConn").unwrap();
+        assert_eq!(host, "[::1]");
+        assert_eq!(port, 5000);
+
+        // The host must survive the re-join every caller does.
+        let (host, port) = parse_url_host_port("http://[fe80::1]:5000/ctl/IPConn").unwrap();
+        let addr: SocketAddr = format!("{host}:{port}").parse().unwrap();
+        assert_eq!(addr.to_string(), "[fe80::1]:5000");
+    }
+
+    /// A port that is present but not a number is not a port. The old
+    /// `nth(1).parse()` let `http://192.168.1.1:80abc/` through as port 80 and
+    /// silently pointed the SOAP POST at the wrong port on the gateway.
+    #[test]
+    fn test_parse_url_host_port_rejects_partial_port() {
+        let (host, port) = parse_url_host_port("http://192.168.1.1:80abc/ctl").unwrap();
+        assert_eq!(host, "192.168.1.1");
+        assert_eq!(port, 5000);
+    }
+
+    /// An unterminated bracket is a hard error rather than a silently mangled
+    /// host, so a hostile control URL cannot steer the parse somewhere else.
+    #[test]
+    fn test_parse_url_host_port_rejects_unterminated_ipv6() {
+        assert!(parse_url_host_port("http://[fe80::1/ctl").is_err());
+    }
+
+    /// `parse_url_host_port` and `validate_upnp_location` must agree on which
+    /// gateway URLs are legal — they now share `split_authority_host_port` /
+    /// bracket handling, so this asserts the property rather than each copy.
+    #[test]
+    fn test_authority_split_agrees_with_url_parser() {
+        for url in [
+            "http://192.168.1.1:5000/rootDesc.xml",
+            "http://[fe80::1]:80/desc.xml",
+            "http://[fd00::1]/desc.xml",
+            "http://127.0.0.1:49000/rootDesc.xml",
+        ] {
+            let accepted = validate_upnp_location(url);
+            assert!(accepted.is_ok(), "{url} must be accepted as a gateway");
+            let (host, port) = parse_url_host_port(url).unwrap();
+            let sock: SocketAddr = format!("{host}:{port}").parse().unwrap_or_else(|e| {
+                panic!("{url} was accepted by validate_upnp_location but parse_url_host_port \
+                        produced an unusable address {host}:{port} ({e})")
+            });
+            assert!(sock.port() != 0);
+        }
+    }
+
+    /// F5 — `external_addr` is published verbatim as a `candidate_type: 4`
+    /// invite entry, and the invite also appears in a *plaintext* handshake, so
+    /// an unusable value here is both a dead connection and a small information
+    /// leak to the peer / Tor exit / every AS on the path. All-zero (what PCP
+    /// echoes when the client asked for "any"), port 0, and our own RFC 1918
+    /// LAN address must all be refused.
+    #[test]
+    fn test_external_addr_rejects_unusable_values() {
+        // PCP echoes the all-zero requested external IP back unchanged.
+        assert!(reject_unusable_external_addr("0.0.0.0:41234".parse().unwrap(), "PCP").is_err());
+        assert!(reject_unusable_external_addr("[::]:41234".parse().unwrap(), "PCP").is_err());
+        // A grant with no reachable port.
+        assert!(reject_unusable_external_addr("203.0.113.5:0".parse().unwrap(), "PCP").is_err());
+        // The `client_ip` fallback `upnp_map_tcp` used to substitute for the WAN
+        // address.
+        for lan in ["192.168.1.5:9000", "10.0.0.7:9000", "172.16.4.9:9000"] {
+            assert!(
+                reject_unusable_external_addr(lan.parse().unwrap(), "UPnP IGD").is_err(),
+                "{lan} is a private LAN address and must never be advertised as the \
+                 external address"
+            );
+        }
+        // And a real one still passes.
+        assert!(reject_unusable_external_addr("203.0.113.5:41234".parse().unwrap(), "PCP").is_ok());
+        assert!(reject_unusable_external_addr("[2001:db8::1]:41234".parse().unwrap(), "PCP").is_ok());
+    }
+
+    /// F19 — `controlURL` must come from the `WANIPConnection` service, not from
+    /// whichever `<service>` happens to be first. A real IGD lists
+    /// `WANCommonInterfaceConfig` first, and its control URL answers
+    /// `AddPortMapping` with a SOAP fault.
+    #[test]
+    fn test_control_url_comes_from_the_wanipconnection_service() {
+        // The service order a real IGD uses: LAN service first, WANIP second.
+        let doc = r#"<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+  <serviceList>
+    <service>
+      <serviceType>urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1</serviceType>
+      <serviceId>urn:upnp-org:serviceId:WANCommonIFC1</serviceId>
+      <controlURL>/ctl/CmnIfCfg</controlURL>
+      <SCPDURL>/WANCommonCmnIfCfg.xml</SCPDURL>
+    </service>
+    <service>
+      <serviceType>urn:schemas-upnp-org:service:WANIPConnection:1</serviceType>
+      <serviceId>urn:upnp-org:serviceId:WANIPConn1</serviceId>
+      <controlURL>/ctl/IPConn</controlURL>
+      <SCPDURL>/WANIPCn.xml</SCPDURL>
+    </service>
+  </serviceList>
+</root>"#;
+
+        let block = extract_wanip_service_block(doc).expect("WANIPConnection service must be found");
+        assert_eq!(
+            extract_xml_tag(block, "controlURL").as_deref(),
+            Some("/ctl/IPConn"),
+            "controlURL must be read from the WANIPConnection block, not the first <service>"
+        );
+    }
+
+    /// A document whose only `WANIPConnection` service is also its first must
+    /// keep working, and a document with no such service must fail rather than
+    /// fall back to some other service's control URL.
+    #[test]
+    fn test_wanip_service_block_single_service_and_no_match() {
+        let single = r#"<root><serviceList><service>
+            <serviceType>urn:schemas-upnp-org:service:WANIPConnection:1</serviceType>
+            <controlURL>/ctl/IPConn</controlURL>
+          </service></serviceList></root>"#;
+        let block = extract_wanip_service_block(single).unwrap();
+        assert_eq!(
+            extract_xml_tag(block, "controlURL").as_deref(),
+            Some("/ctl/IPConn")
+        );
+
+        let no_wanip = r#"<root><serviceList><service>
+            <serviceType>urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1</serviceType>
+            <controlURL>/ctl/CmnIfCfg</controlURL>
+          </service></serviceList></root>"#;
+        assert!(
+            extract_wanip_service_block(no_wanip).is_none(),
+            "a document with no WANIPConnection service must yield nothing, so the \
+             caller errors instead of POSTing to an unrelated service"
+        );
+
+        // `<serviceList>` must not be mistaken for a `<service>` block.
+        assert!(extract_wanip_service_block("<root><serviceList/></root>").is_none());
+    }
+
     #[test]
     fn test_extract_host() {
         assert_eq!(
