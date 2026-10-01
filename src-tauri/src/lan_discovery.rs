@@ -185,6 +185,130 @@ pub enum LanDiscoveryError {
     TorEnabled,
 }
 
+/// Bind a UDP socket for multicast reception on `port`, with address reuse set so
+/// several instances on one host can all listen.
+///
+/// Setting `SO_REUSEADDR`/`SO_REUSEPORT` requires the option to be set
+/// **before** `bind`, which is why this cannot be done with `UdpSocket::bind`
+/// alone — `std` exposes no socket-option API. The FFI declarations mirror the
+/// existing pattern in `secure_key.rs`; `socket2` is not a dependency and adding
+/// one for two `setsockopt` calls is not worth it.
+fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
+    // SAFETY: `socket(2)` with constant, valid arguments. The descriptor is
+    // validated and every later path either closes it or hands it to a
+    // `UdpSocket`, so it cannot leak.
+    let raw = unsafe { socket(AF_INET, SOCK_DGRAM, 0) };
+    if raw < 0 {
+        return Err(LanDiscoveryError::Io(std::io::Error::last_os_error()));
+    }
+    let Some(raw) = std::num::NonZeroI32::new(raw) else {
+        return Err(LanDiscoveryError::Io(std::io::Error::from_raw_os_error(0)));
+    };
+
+    let one = 1i32;
+    let ptr = &one as *const i32 as *const std::ffi::c_void;
+    let len = std::mem::size_of::<i32>() as u32;
+    // SAFETY: `raw` is a live socket; `one` outlives both calls.
+    unsafe {
+        setsockopt(raw.get(), SOL_SOCKET, SO_REUSEADDR, ptr, len);
+        setsockopt(raw.get(), SOL_SOCKET, SO_REUSEPORT, ptr, len);
+    }
+
+    // `sockaddr_in`: family in host order, port and address in network order.
+    let addr = SockAddrIn {
+        sin_family: AF_INET as u16,
+        sin_port: port.to_be(),
+        sin_addr: u32::from_ne_bytes([0, 0, 0, 0]), // INADDR_ANY
+        // Padding that MSAN on Windows reads, so zero it rather than leaving it
+        // uninitialised.
+        sin_zero: [0u8; 8],
+    };
+    // SAFETY: `addr` is a correctly laid-out `sockaddr_in` and the length
+    // matches it.
+    let rc = unsafe {
+        bind(
+            raw.get(),
+            &addr as *const SockAddrIn as *const SockAddr,
+            std::mem::size_of::<SockAddrIn>() as u32,
+        )
+    };
+    if rc < 0 {
+        let err = std::io::Error::last_os_error();
+        // SAFETY: `raw` is a live socket that has not been handed over.
+        unsafe { close(raw.get()) };
+        return Err(LanDiscoveryError::Io(err));
+    }
+
+    // SAFETY: `raw` is a bound UDP socket; the `UdpSocket` takes ownership and
+    // closes it on drop.
+    UdpSocket::from_raw_socket(raw.get()).map_err(LanDiscoveryError::Io)
+}
+
+#[repr(C)]
+struct SockAddrIn {
+    sin_family: u16,
+    sin_port: u16,
+    sin_addr: u32,
+    sin_zero: [u8; 8],
+}
+
+#[repr(C)]
+struct SockAddr {
+    sa_family: u16,
+    sa_data: [u8; 14],
+}
+
+#[cfg(unix)]
+extern "C" {
+    fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
+    fn setsockopt(
+        sockfd: i32,
+        level: i32,
+        optname: i32,
+        optval: *const std::ffi::c_void,
+        optlen: u32,
+    ) -> i32;
+    fn bind(sockfd: i32, addr: *const SockAddr, addrlen: u32) -> i32;
+    fn close(fd: i32) -> i32;
+}
+
+#[cfg(windows)]
+extern "system" {
+    fn socket(domain: i32, ty: i32, protocol: i32) -> i32;
+    fn setsockopt(
+        sockfd: i32,
+        level: i32,
+        optname: i32,
+        optval: *const std::ffi::c_void,
+        optlen: u32,
+    ) -> i32;
+    fn bind(sockfd: i32, addr: *const SockAddr, addrlen: u32) -> i32;
+    fn close(fd: i32) -> i32;
+}
+
+#[cfg(unix)]
+const AF_INET: i32 = 2;
+#[cfg(windows)]
+const AF_INET: i32 = 2;
+
+const SOCK_DGRAM: i32 = 2;
+
+#[cfg(unix)]
+const SOL_SOCKET: i32 = 1;
+#[cfg(windows)]
+const SOL_SOCKET: i32 = 0xffff;
+
+/// 1 on both platforms.
+const SO_REUSEADDR: i32 = 1;
+
+/// Platform-specific and *not* interchangeable: 15 on Linux, 30 on Windows. A
+/// wrong value means the option is silently ignored and a second instance gets
+/// `EADDRINUSE` — the exact failure this function exists to prevent.
+#[cfg(unix)]
+const SO_REUSEPORT: i32 = 15;
+#[cfg(windows)]
+const SO_REUSEPORT: i32 = 30;
+
 /// Build a LAN discovery announcement packet using an ephemeral session token.
 ///
 /// Packet format:
