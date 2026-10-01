@@ -1251,7 +1251,16 @@ pub async fn panic_wipe(
 /// Lock the vault — zeroizes keys in memory and marks vault as locked.
 ///
 /// After calling this, the user must unlock the vault again to perform
-/// sensitive operations. Active connections remain open.
+/// sensitive operations.
+///
+/// **All live connections are torn down.** This used to be documented as
+/// "active connections remain open", and that turned out to be unsatisfiable
+/// alongside scrubbing the session keys: a Double Ratchet whose root key has
+/// been discarded cannot be resumed, so the connection would die on its first
+/// heartbeat anyway — silently, a few seconds after the lock, with the UI still
+/// showing `established`. Locking the vault therefore ends calls, and each peer
+/// gets an explicit `m2m://connection` `disconnected` event so the UI reflects
+/// it immediately.
 #[tauri::command]
 pub async fn lock_vault(
     app_handle: AppHandle,
