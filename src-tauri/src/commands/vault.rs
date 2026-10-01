@@ -1322,10 +1322,13 @@ pub async fn lock_vault(
     // `disconnected` event per peer so the Hub matches reality instead of showing
     // "established" for sessions that no longer exist.
     //
-    // `draining()` returns the `Vec` so the peers are known after the guard is
-    // released — emitting events while holding the global `connections` write
-    // lock would re-enter the frontend under a global lock.
-    let dropped_peers: Vec<String> = state.connections.write().await.draining().map(|(k, _)| k).collect();
+// The peers are collected inside a block so the write guard is released
+    // before the emits below: emitting while holding the global `connections`
+    // lock re-enters the frontend under a global lock.
+    let dropped_peers: Vec<String> = {
+        let mut conns = state.connections.write().await;
+        conns.drain(..).map(|(peer, _)| peer).collect()
+    };
     for peer in &dropped_peers {
         let _ = tauri::Emitter::emit(
             &app_handle,
