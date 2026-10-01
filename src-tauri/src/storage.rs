@@ -1011,6 +1011,17 @@ impl MessageStore {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         apply_connection_pragmas(&conn)?;
 
+        // Every column the migrations below add is declared here.
+        //
+        // The `messages` table used to be created without `expires_at`,
+        // `read_at`, `edited_at` or `deleted`, so a fresh install wrote the
+        // table, read `PRAGMA table_info`, and then issued four `ALTER TABLE`s —
+        // each its own implicit transaction. A crash between two of them left
+        // a partially-migrated schema on a database that could not be fixed by
+        // restarting, because the next run would read `table_info`, see the
+        // column present, and skip it. Declaring the columns up front makes the
+        // new-database path a single atomic `execute_batch`, and
+        // `migrate_messages_table` remains for databases that predate this.
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS conversations (
                 id TEXT PRIMARY KEY,
@@ -1020,7 +1031,9 @@ impl MessageStore {
                 display_name TEXT,
                 peer_display_name TEXT,
                 auto_delete_at INTEGER,
-                retention_policy TEXT NOT NULL DEFAULT 'none'
+                retention_policy TEXT NOT NULL DEFAULT 'none',
+                is_favorite INTEGER DEFAULT 0,
+                archived INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
@@ -1031,12 +1044,21 @@ impl MessageStore {
                 timestamp INTEGER NOT NULL,
                 delivered INTEGER NOT NULL DEFAULT 0,
                 content_key_wrapped BLOB,
+                expires_at INTEGER,
+                read_at INTEGER,
+                edited_at INTEGER,
+                deleted INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id)
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conversation
                 ON messages(conversation_id, timestamp);
-            -- idx_messages_expires_at and idx_messages_read_status are created
-            -- in migrate_messages_table() after the expires_at column is guaranteed to exist.
+            -- These two depend on `expires_at`, which is declared above now, so
+            -- they are created here rather than deferred to the migration. The
+            -- migration still creates them (IF NOT EXISTS) for older databases.
+            CREATE INDEX IF NOT EXISTS idx_messages_expires_at
+                ON messages(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_messages_read_status
+                ON messages(conversation_id, direction, read_at);
             CREATE TABLE IF NOT EXISTS reactions (
                 message_id TEXT NOT NULL,
                 reaction TEXT NOT NULL,
@@ -1049,6 +1071,14 @@ impl MessageStore {
         // Run migrations for existing databases that lack the new columns
         Self::migrate_conversations_table(&conn)?;
         Self::migrate_messages_table(&conn)?;
+
+        // Record that the schema is known-complete, *after* the migrations, so
+        // a crash mid-migration leaves the old version and the next open retries
+        // rather than assuming success. Nothing reads this yet — it exists so
+        // "is this database migrated" is an explicit fact rather than inferred
+        // from `PRAGMA table_info`, which cannot distinguish "migrated" from
+        // "half-migrated".
+        conn.pragma_update(None, "user_version", MESSAGE_DB_SCHEMA_VERSION)?;
 
         let store = Self {
             conn,
