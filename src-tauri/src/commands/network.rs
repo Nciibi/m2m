@@ -3904,9 +3904,16 @@ pub fn spawn_receive_loop(
             // ── Inbound rate limit ──
             // Charged on the frame's declared wire size, before any
             // deserialization, database write, or event emission. The
-            // limiter is a token bucket, so brief bursts (a file transfer
-            // legitimately sends large frames back to back) pass while a
+            // limiter is a token bucket, so brief bursts pass while a
             // sustained flood does not.
+            //
+            // Bulk transfer frames are charged against `bulk_frame_limiter`
+            // instead of `frame_limiter`. Both are token buckets over both a
+            // frame count and a byte count, so a peer still cannot flood:
+            // it simply cannot flood with 256 KiB chunks, because the frame
+            // count it is allowed is derived from the transfer, not from the
+            // typing-indicator budget. This is what fixes the dropped-mid-file
+            // false positive documented on `MAX_INBOUND_CHUNK_FRAMES_PER_SEC`.
             //
             // A breach is treated as fatal for the connection: once a peer is
             // demonstrably over budget, continuing to serve it would just
@@ -3918,7 +3925,13 @@ pub fn spawn_receive_loop(
             // established session on the first one makes a false positive
             // expensive. The frame is dropped either way; only a *sustained*
             // breach (MAX_INBOUND_RATE_LIMIT_STRIKES) ends the connection.
-            match frame_limiter.check(frame.body.len()) {
+            let bulk = is_bulk_transfer_frame(frame.packet_type);
+            let limiter = if bulk {
+                &bulk_frame_limiter
+            } else {
+                &frame_limiter
+            };
+            match limiter.check(frame.body.len()) {
                 network::RateLimitVerdict::Allowed => {
                     // A single accepted frame clears the strike counter, so
                     // the peer must be continuously over budget to be dropped.
@@ -3931,6 +3944,7 @@ pub fn spawn_receive_loop(
                         peer = %peer_key_hex,
                         bytes = frame.body.len(),
                         ?verdict,
+                        bulk,
                         strike = rate_limit_strikes,
                         of = network::MAX_INBOUND_RATE_LIMIT_STRIKES,
                         "inbound rate limit exceeded — frame dropped"
