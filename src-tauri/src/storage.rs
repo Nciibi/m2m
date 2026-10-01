@@ -844,6 +844,21 @@ const AAD_TRANSFER: &[u8] = b"m2m-transfer-v1";
 /// Length of a wrapped CEK blob: 24-byte XChaCha nonce || 32-byte CEK || 16-byte Poly1305 tag.
 pub const WRAPPED_CEK_LEN: usize = 24 + 32 + 16;
 
+/// `PRAGMA user_version` recorded in `messages.db` once the schema is known
+/// complete.
+///
+/// Version 1 = every column the migrations add (`expires_at`, `read_at`,
+/// `edited_at`, `deleted`, `is_favorite`, `archived`, `content_key_wrapped`) is
+/// declared in the `CREATE TABLE` itself, so a fresh install never takes the
+/// `ALTER TABLE` path at all.
+///
+/// Written *after* the migrations run, so a crash part way through leaves the
+/// previous value and the next open retries rather than reporting a database
+/// it never finished converting. `table_info` cannot make that distinction: it
+/// sees the column that did get added and skips it on the next pass, which is
+/// how a half-migrated schema becomes indistinguishable from a good one.
+const MESSAGE_DB_SCHEMA_VERSION: i64 = 1;
+
 /// Encrypt plaintext under `key`; returns (nonce, ciphertext).
 fn seal_msg(
     key: &[u8; 32],
@@ -1192,6 +1207,11 @@ impl MessageStore {
     }
 
     /// Migrate the messages table — add `read_at`, `edited_at`, `deleted`, `expires_at` columns.
+    ///
+    /// Every column is already declared in the `CREATE TABLE` in `open`, so on a
+    /// fresh install all four `PRAGMA table_info` checks hit and no `ALTER` runs.
+    /// This remains the path for databases created by an earlier version, and it
+    /// is idempotent, so it is safe to re-run on every open.
     fn migrate_messages_table(conn: &Connection) -> Result<(), StorageError> {
         let mut stmt = conn.prepare("PRAGMA table_info(messages)")?;
         let existing_columns: Vec<String> = stmt
