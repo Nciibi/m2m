@@ -649,17 +649,35 @@ impl KeyStore {
              FROM family WHERE public_key = ?1",
         )?;
         let result = stmt.query_row(params![new_public_key.as_slice()], |row| {
-            let pk_bytes: Vec<u8> = row.get(0)?;
-            Ok(FamilyMember {
-                public_key_hex: hex::encode(&pk_bytes),
-                nickname: row.get(1)?,
-                added_at: row.get(2)?,
-                expires_at: row.get(3)?,
-                last_address: row.get(4)?,
-            })
+            Ok((
+                row.get::<_, Vec<u8>>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
         });
         match result {
-            Ok(mut m) => {
+            Ok((pk_bytes, nickname, added_at, expires_at, last_address)) => {
+                // This path takes `new_public_key: &[u8; 32]`, so the value just
+                // written cannot be short — but the row is read back rather than
+                // echoed, and this is the function that tells the UI the update
+                // worked. A corrupt row must not be reported as a member with a
+                // hex string the caller cannot use.
+                if pk_bytes.len() != 32 {
+                    return Err(StorageError::PathError(format!(
+                        "family row has a {}-byte public key, expected 32 — refusing to \
+                         report the update as successful",
+                        pk_bytes.len()
+                    )));
+                }
+                let mut m = FamilyMember {
+                    public_key_hex: hex::encode(&pk_bytes),
+                    nickname,
+                    added_at,
+                    expires_at,
+                    last_address,
+                };
                 m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)
                     .unwrap_or_else(|_| "[encrypted]".to_string());
                 if let Some(addr) = &m.last_address {
