@@ -3704,21 +3704,24 @@ pub fn spawn_receive_loop(
         loop {
             interval.tick().await;
 
-// Resolve *this* session, never whatever currently holds the map
-            // slot. A re-dial for the same peer replaces the entry, and looking
-            // the peer up by key here would probe the replacement's socket while
-            // this worker still believed it owned the old one — and, worse, clear
-            // the replacement's liveness bookkeeping. `hb_conn` is the identity
-            // that matches `remove_own_connection` below.
-            //
-            // A `None` here means our session is gone — `lock_vault` now tears
-            // connections down rather than scrubbing them (a discarded Double
-            // Ratchet root key cannot be resumed) — so this worker stops, which
-            // is the correct outcome.
+// Lock *this* session, never whatever currently holds the map
+            // slot. A re-dial for the same peer replaces the entry, and resolving
+            // by peer key here would probe the replacement's socket while this
+            // worker still believed it owned the old one — and, worse, clear the
+            // replacement's liveness bookkeeping. `hb_conn` is the same identity
+            // `remove_own_connection` below compares against.
             let mut dead_reason: Option<String> = None;
             {
-                let conn_arc = hb_conn.clone();
-                let mut conn = conn_arc.lock().await;
+                // Still the live session? `lock_vault` drains the map, and a
+                // re-dial replaces the entry, so both retire this worker.
+                let still_current = {
+                    let map = hb_state.connections.read().await;
+                    map.get(&hb_peer).is_some_and(|c| Arc::ptr_eq(c, &hb_conn))
+                };
+                if !still_current {
+                    break;
+                }
+                let mut conn = hb_conn.lock().await;
 
                 // Liveness check: was the most recent probe answered in time?
                 if let Some(sent_at) = conn.last_hb_sent {
