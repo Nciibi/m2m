@@ -1341,13 +1341,11 @@ pub async fn lock_vault(
             }),
         );
     }
-    if !dropped_peers.is_empty() {
+if !dropped_peers.is_empty() {
         tracing::info!(
             peers = dropped_peers.len(),
             "vault locked - sessions torn down, peers must reconnect after unlock"
         );
-    }
-        }
     }
 
     // Mark vault as locked
