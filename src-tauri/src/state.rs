@@ -401,8 +401,14 @@ pub struct AppState {
     pub candidates: RwLock<Vec<crate::candidate::NetworkCandidate>>,
     /// Cached NAT type classification.
     pub nat_type: RwLock<stun::NatType>,
-    /// Whether connectivity check has passed (port is reachable).
-    pub connectivity_verified: RwLock<bool>,
+    /// Result of an inbound-reachability measurement of the listening port.
+    ///
+    /// `None` means *not measured*. Nothing in the app measures it — STUN
+    /// observes the UDP mapping of an ephemeral probe socket, not the TCP
+    /// listening port — so the value stays `None` and the diagnostics view
+    /// reports "not verified" rather than a `false` that reads as "checked and
+    /// unreachable", or worse a `true` derived from the NAT type.
+    pub connectivity_verified: RwLock<Option<bool>>,
     /// Whether we're in private mode (don't expose IP in invites).
     pub private_mode: RwLock<bool>,
     /// Connection rate limiter for DoS protection.
@@ -481,7 +487,7 @@ impl AppState {
             stun_config: RwLock::new(stun::StunConfig::default()),
             candidates: RwLock::new(Vec::new()),
             nat_type: RwLock::new(stun::NatType::Unknown),
-            connectivity_verified: RwLock::new(false),
+            connectivity_verified: RwLock::new(None),
             private_mode: RwLock::new(false),
             connection_limiter: network::ConnectionLimiter::new(),
             manual_forwards: RwLock::new(Vec::new()),
