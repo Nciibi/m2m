@@ -223,11 +223,43 @@ describe("SettingsView", () => {
     expect(settingsState.handleConnectivityCheck).toHaveBeenCalledTimes(1);
   });
 
-  it("shows connectivity result when available", () => {
-    settingsState.connectivityResult = { reachable: true, nat_type: "Full Cone" };
-    render(<SettingsView />);
-    expect(screen.getByText(/reachable/)).toBeInTheDocument();
-  });
+it("shows connectivity result when available", () => {
+  settingsState.connectivityResult = {
+    reachable: true,
+    stun_agreement: true,
+    nat_type: "Full Cone",
+  };
+  render(<SettingsView />);
+  expect(screen.getByText(/reachable/)).toBeInTheDocument();
+});
+
+it("says inbound reachability is unmeasured rather than printing null", () => {
+  // `reachable` is `boolean | null` and the backend never has a measurement:
+  // it cannot test inbound reachability of a TCP port from a local STUN probe.
+  // `String(null)` used to render the literal word "null" as though it were a
+  // reading, which is precisely the "claim the code cannot back" failure.
+  settingsState.connectivityResult = {
+    reachable: null,
+    stun_agreement: true,
+    nat_type: "Symmetric",
+  };
+  render(<SettingsView />);
+  expect(screen.getByText(/inbound reachable: not measured/i)).toBeInTheDocument();
+  expect(screen.queryByText(/inbound reachable: null/i)).not.toBeInTheDocument();
+});
+
+it("reports STUN agreement separately from reachability", () => {
+  // A symmetric-NAT user — the case that most needs TURN — was shown
+  // "reachable: true" because the backend derived it from the NAT type.
+  settingsState.connectivityResult = {
+    reachable: null,
+    stun_agreement: false,
+    nat_type: "Symmetric",
+  };
+  render(<SettingsView />);
+  expect(screen.getByText(/stun agreement: false/i)).toBeInTheDocument();
+  expect(screen.getByText(/inbound reachable: not measured/i)).toBeInTheDocument();
+});
 
   it("renders STUN servers section", () => {
     settingsState.stunConfig = { servers: ["stun.l.google.com:19302", "stun1.l.google.com:19302"], private_mode: false };
