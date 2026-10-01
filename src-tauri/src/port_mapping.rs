@@ -851,23 +851,31 @@ async fn pcp_map_tcp(
         buf[PCP_OFF_LIFETIME + 3],
     ]);
     let external_port = u16::from_be_bytes([buf[PCP_OFF_EXT_PORT], buf[PCP_OFF_EXT_PORT + 1]]);
+    // The request we sent asks for "any" external IP (all-zero, see
+    // `build_pcp_map_request`), and RFC 6887 has the server echo that choice
+    // back verbatim rather than substituting the address it actually used.
+    // A successful reply therefore routinely carries `0.0.0.0`, which used to
+    // be returned as `external_addr` and advertised to every invite recipient
+    // as a `candidate_type: 4` candidate — in a plaintext handshake, in which
+    // the Tor exit can read it too. A grant we cannot name is not usable.
     let ext_ip = IpAddr::V4(Ipv4Addr::new(
         buf[PCP_OFF_EXT_IP],
         buf[PCP_OFF_EXT_IP + 1],
         buf[PCP_OFF_EXT_IP + 2],
         buf[PCP_OFF_EXT_IP + 3],
     ));
+    let external_addr = reject_unusable_external_addr(SocketAddr::new(ext_ip, external_port), "PCP")?;
 
     tracing::debug!(
         lifetime = mapped_lifetime,
-        external = %SocketAddr::new(ext_ip, external_port),
+        external = %external_addr,
         "PCP mapping granted"
     );
 
     Ok(PortMapping {
         protocol: "pcp",
         internal_port,
-        external_addr: SocketAddr::new(ext_ip, external_port),
+        external_addr,
         lifetime_secs: mapped_lifetime,
     })
 }
