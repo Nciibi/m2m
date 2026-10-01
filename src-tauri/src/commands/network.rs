@@ -693,12 +693,14 @@ pub async fn start_listening(
 /// while its established sessions stay in the map — and each entry pins a
 /// socket, a `Session` and its ratchet state for as long as the peer keeps the
 /// socket open. Nothing bounded the map itself, which is why the cap has to be
-/// enforced here, on the size of the thing that is actually being bounded.
+/// enforced here, on the size of the thing that is actually being bounded — and
+/// being here it also covers the outbound paths, which insert into the same map
+/// and were never counted by the limiter at all.
 ///
 /// Mirrors `MAX_TOTAL_CONNECTIONS` in `network.rs`, which is private to that
-/// module. If one is changed the other must be: the accept-path limiter stops
-/// new sessions at 50 attempts, this stops the map at 50 live sessions, and a
-/// lower value here is the stricter of the two.
+/// module. If one is changed the other must be: the accept-path limiter refuses
+/// once 50 handshakes are in flight, this refuses once 50 sessions are
+/// established, and a lower value here is the stricter of the two.
 const MAX_ESTABLISHED_CONNECTIONS: usize = 50;
 
 /// Is there room in `state.connections` for one more established session?
