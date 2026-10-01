@@ -1876,15 +1876,35 @@ let expired_messages = self.delete_expired_messages()?;
     /// Step 1 of the shred sequence: destroy the content encryption keys for
     /// these rows. Once this commits the ciphertext is undecryptable, whatever
     /// later happens to the row or the file.
+    ///
+    /// Idempotent and atomic, because the caller may retry it. The `!=` guard
+    /// skips rows that already hold the zero blob: without it a retry after a
+    /// crash between the shred and the delete rewrites zeros over zeros and
+    /// `shredded_keys` counts the same key twice, so the audit figure would
+    /// claim more keys destroyed than exist. The `IS NULL` arm is still
+    /// shredded — a legacy row with no wrapped key is encrypted directly under
+    /// the vault key, so it is exactly the case shredding exists for.
+    ///
+    /// One transaction rather than a commit per row: a crash half way through
+    /// 200 rows used to leave the batch partly shredded and partly intact while
+    /// the caller had already been told the whole batch was.
     fn shred_message_keys(&self, ids: &[String]) -> Result<(), StorageError> {
-        for id in ids {
-            let n = self.conn.execute(
-                "UPDATE messages SET content_key_wrapped = ?2 WHERE id = ?1",
-                params![id, vec![0u8; WRAPPED_CEK_LEN]],
-            )?;
-            self.shredded_keys
-                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        let mut shredded = 0u64;
+        {
+            let tx = self.conn.unchecked_transaction()?;
+            for id in ids {
+                let n = tx.execute(
+                    "UPDATE messages SET content_key_wrapped = ?2
+                      WHERE id = ?1
+                        AND (content_key_wrapped IS NULL OR content_key_wrapped != ?2)",
+                    params![id, vec![0u8; WRAPPED_CEK_LEN]],
+                )?;
+                shredded += n as u64;
+            }
+            tx.commit()?;
         }
+        self.shredded_keys
+            .fetch_add(shredded, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 
