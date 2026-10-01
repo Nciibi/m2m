@@ -618,7 +618,7 @@ pub async fn announce_loop(
 
         let nodes = if nodes.is_empty() {
             let trusted_ips = handshaked_peer_ips(&app).await;
-            let lan = lan_dht_seeds(&lan_state.read().await, &trusted_ips);
+            let lan = lan_dht_seeds(&*lan_state.read().await, &trusted_ips);
             if lan.is_empty() && !warned {
                 dht_state.write().await.warned_no_bootstrap = true;
                 tracing::warn!(
