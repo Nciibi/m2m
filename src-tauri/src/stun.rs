@@ -246,6 +246,13 @@ pub enum StunError {
 /// - Cross-server consistency check detects DNS poisoning attacks:
 ///   if one STUN server resolves to a different IP than the others,
 ///   `consensus` will be `false` and the operator can be alerted.
+/// - Agreement needs a quorum: fewer than [`MIN_CONSENSUS_SERVERS`] responders
+///   yields `consensus_addr = None`, because one server cannot corroborate
+///   itself. A tie between disagreeing IPs also yields `None`.
+/// - Every reported address is validated with
+///   [`is_publishable_public_addr`] before it becomes a result, so a server
+///   cannot hand the host a loopback, LAN, CGNAT or cloud-metadata address and
+///   have it advertised to peers.
 /// - Transaction ID validation prevents off-path injection.
 /// - Each server is bound to an independent ephemeral socket.
 pub async fn discover_public_addrs(config: &StunConfig) -> Result<StunMultiResult, StunError> {
