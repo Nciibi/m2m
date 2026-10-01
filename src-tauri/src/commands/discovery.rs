@@ -256,6 +256,62 @@ pub async fn set_discovery_config(
     Ok(config)
 }
 
+/// Wait for the LAN discovery tasks to observe cancellation and exit.
+///
+/// `lan_discovery::start` publishes `LanDiscoveryState::enabled == false` once
+/// its last task has returned, which is the only completion signal available
+/// here — the stop path holds the cancel flag, not the tasks' `JoinHandle`s.
+/// The `Arc` is snapshotted before the inner lock is taken so no guard is held
+/// across the await.
+async fn await_lan_stop(state: &Arc<AppState>) {
+    let deadline = tokio::time::Instant::now() + STOP_WAIT_TIMEOUT;
+    loop {
+        let lan = state.lan_state.read().await.clone();
+        let still_running = match lan {
+            Some(lan) => lan.read().await.enabled,
+            None => false,
+        };
+        if !still_running {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            tracing::warn!(
+                timeout_secs = STOP_WAIT_TIMEOUT.as_secs(),
+                "LAN discovery task did not exit after being cancelled — clearing state anyway"
+            );
+            return;
+        }
+        tokio::time::sleep(STOP_POLL_INTERVAL).await;
+    }
+}
+
+/// Wait for the DHT announce loop to observe cancellation and exit.
+///
+/// `DhtState::running` is the mirror of `LanDiscoveryState::enabled`, for the
+/// same reason: `dht::announce_loop` runs forever and its `JoinHandle` is
+/// discarded at spawn, so completion has to be observable in the state object.
+async fn await_dht_stop(state: &Arc<AppState>) {
+    let deadline = tokio::time::Instant::now() + STOP_WAIT_TIMEOUT;
+    loop {
+        let dht = state.dht_state.read().await.clone();
+        let still_running = match dht {
+            Some(dht) => dht.read().await.running,
+            None => false,
+        };
+        if !still_running {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            tracing::warn!(
+                timeout_secs = STOP_WAIT_TIMEOUT.as_secs(),
+                "DHT announce loop did not exit after being cancelled — clearing state anyway"
+            );
+            return;
+        }
+        tokio::time::sleep(STOP_POLL_INTERVAL).await;
+    }
+}
+
 /// Get the list of currently-discovered peers (LAN + DHT).
 #[tauri::command]
 pub async fn get_discovered_peers(
