@@ -5399,10 +5399,10 @@ mod tests {
             result.is_err(),
             "a remove that could not decrypt its target row must not report success"
         );
+        let err = result.unwrap_err();
         assert!(
-            matches!(result, Err(StorageError::KeyNotFound)),
-            "expected KeyNotFound (vault locked), got {:?}",
-            result.as_ref().err()
+            matches!(err, StorageError::KeyNotFound),
+            "expected KeyNotFound (vault locked), got {err:?}"
         );
 
         // The row must still be there. A delete that "succeeded" while leaving
