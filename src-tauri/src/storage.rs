@@ -2627,9 +2627,19 @@ let expired_messages = self.delete_expired_messages()?;
 
     // ─── Self-Destruct (Expired Messages) ─────────────
 
-    /// Permanently delete expired messages from the database, with
+/// Permanently delete expired messages from the database, with
     /// crypto-shredding (H7): shred wrapped keys first, truncate the WAL,
-    /// then delete the rows.
+    /// then delete the rows in one transaction.
+    ///
+    /// The delete and the orphan-reaction sweep are in the same transaction
+    /// because they are one promise: no reaction may outlive the message it
+    /// annotates. As separate commits, a crash between them left reactions
+    /// naming message ids that no longer existed — and the `reactions` table is
+    /// not counted by the storage cap, so those rows accumulated invisibly.
+    ///
+    /// This is the path `MessageStore::open` runs for timers that elapsed while
+    /// the app was closed, so it must be crash-safe rather than merely
+    /// crash-tolerant.
     pub fn delete_expired_messages(&self) -> Result<u32, StorageError> {
         let now = chrono::Utc::now().timestamp();
         self.conn.pragma_update(None, "secure_delete", "ON")?;
@@ -2648,21 +2658,35 @@ let expired_messages = self.delete_expired_messages()?;
             .unwrap_or(0);
         self.conn.execute(
             "UPDATE messages SET content_key_wrapped = ?2
-             WHERE expires_at IS NOT NULL AND expires_at <= ?1 AND content_key_wrapped IS NOT NULL",
+              WHERE expires_at IS NOT NULL AND expires_at <= ?1
+                AND content_key_wrapped IS NOT NULL
+                AND content_key_wrapped != ?2",
             rusqlite::params![now, vec![0u8; WRAPPED_CEK_LEN]],
         )?;
         self.wal_checkpoint_truncate()?;
-        let count = self.conn.execute(
-            "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
-            rusqlite::params![now],
-        )?;
-        // Reactions carry no foreign key to `messages`, so every self-destruct
-        // left them behind: orphaned rows naming messages that no longer
-        // exist. They were also invisible to the storage cap, which counts only
-        // message rows — so the one table that could grow without bound was the
-        // one the ceiling could not see.
-        self.conn
-            .execute("DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
+        let count = {
+            let tx = self.conn.unchecked_transaction()?;
+            let count = tx.execute(
+                "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
+                rusqlite::params![now],
+            )?;
+            // Reactions carry no foreign key to `messages`, so every
+            // self-destruct left them behind: orphaned rows naming messages
+            // that no longer exist. They were also invisible to the storage
+            // cap, which counts only message rows — so the one table that
+            // could grow without bound was the one the ceiling could not see.
+            //
+            // This must be inside the same transaction as the delete above: it
+            // queries `messages` to find what is orphaned, so running it
+            // separately could only ever be correct if the delete had
+            // already committed.
+            tx.execute(
+                "DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)",
+                [],
+            )?;
+            tx.commit()?;
+            count
+        };
         self.add_stored_bytes(-freed);
         self.wal_checkpoint_truncate()?;
         Ok(count as u32)
