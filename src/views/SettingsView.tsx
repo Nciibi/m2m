@@ -318,10 +318,22 @@ export default function SettingsView() {
                     disclosed is deliberate. */}
                 <span className="settings-mono">
                   {connectivityResult.nat_type.replace(/_/g, " ")}
-                  {connectivityResult.behind_symmetric_nat ? " (symmetric)" : ""}
-                  {" · reachable: "}
-                  {String(connectivityResult.reachable)}
-                </span>
+{connectivityResult.behind_symmetric_nat ? " (symmetric)" : ""}
+        {/* `reachable` is `null` when it was never measured, and this check
+            cannot measure inbound TCP reachability at all — the STUN-mapped UDP
+            port is a throwaway probe socket's, not the listening port. So print
+            the one thing the check *did* establish, and say plainly that
+            reachability is unknown. `String(null)` here used to render the
+            literal word "null" as though it were a measurement. */}
+        {" · stun agreement: "}
+        {connectivityResult.stun_agreement === null
+          ? "not checked"
+          : String(connectivityResult.stun_agreement)}
+        {" · inbound reachable: "}
+        {connectivityResult.reachable === null
+          ? "not measured"
+          : String(connectivityResult.reachable)}
+      </span>
               </div>
             )}
           </div>
