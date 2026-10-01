@@ -235,7 +235,12 @@ describe("ChatContext", () => {
     mockInvoke.mockResolvedValue(undefined);
     await user.click(screen.getByText("Send Reaction"));
 
-    await waitFor(() => expect(screen.getByTestId("reactors").textContent).not.toBe(""));
+    // Assert the key is *present*, not merely that the probe string is non-empty
+    // — `"{}"` is already non-empty, so a weaker assertion would pass before the
+    // optimistic update had run at all.
+    await waitFor(() =>
+      expect(screen.getByTestId("reactors").textContent).toContain("\u{1F44D}"),
+    );
     const reactors = JSON.parse(screen.getByTestId("reactors").textContent || "{}") as Record<string, string[]>;
     expect(reactors["👍"]).toEqual(["a".repeat(64)]);
     // And explicitly not the sentinel the old code wrote.
