@@ -2854,9 +2854,14 @@ const MAX_SYNC_LOOKBACK_SECS: i64 = 30 * 24 * 60 * 60;
 /// Maximum number of messages re-sent in response to one `SyncRequest` (2000).
 ///
 /// The lookback clamp bounds the *time* range; this bounds the *count*, which
-/// is what actually bounds the work (a decrypt plus a frame write each). A
-/// peer that asks for more gets the oldest-N within the window rather than
-/// nothing, and the truncation is logged.
+/// is what actually bounds the work (a decrypt plus a frame write each).
+///
+/// A peer that asks for more is **refused**, not truncated. The previous
+/// documentation here claimed "the oldest-N within the window rather than
+/// nothing, and the truncation is logged", and the handler did exactly that —
+/// after decrypting every row in the window, so the cap bounded only what was
+/// kept. A control that is documented and not enforced is worse than no
+/// control: the code below now refuses, and the doc matches it.
 const MAX_SYNC_RESEND_MESSAGES: usize = 2000;
 
 async fn handle_sync_frame(
