@@ -1294,37 +1294,47 @@ pub async fn lock_vault(
     *ts = None;
     drop(ts);
 
-    // Scrub the live session keys.
+// Tear down every live connection.
     //
-    // "Active connections remain open" is a reasonable product choice — a call
-    // should survive a lock. But a `Session` owns the Double Ratchet root key,
-    // both chain keys and the skipped-key cache, and *nothing* on this path
-    // dropped a connection, so those secrets survived the lock while the
-    // function's own contract said keys were zeroized. `Session::lock` takes and
-    // drops both key holders, whose `Drop` impls already zeroize.
+    // The doc comment above this function used to say "Active connections
+    // remain open", and a `Session::lock` scrubber was added on the strength of
+    // it — keeping the socket while taking the Double Ratchet root key, both
+    // chain keys and the skipped-key cache. That is not a survivable state: a
+    // scrubbed ratchet **cannot be resumed**, because resuming is exactly what
+    // the root key is for, and nothing in this crate re-establishes one. Every
+    // send on it fails, so the heartbeat worker tears the connection down within
+    // one poll interval and the UI reports the peer gone — a lock that silently
+    // drops every call, discovered a few seconds late, which is worse than the
+    // honest version.
     //
-    // Deliberately not `connections.clear()`: the sockets stay up so the call
-    // can resume after unlock. Every send on a scrubbed session now fails loudly
-    // rather than encrypting under a key the user believes is gone.
-    {
-        // Clone the `Arc`s out, then release the map guard. Holding the global
-        // `connections` lock across a per-peer `lock().await` is the exact
-        // anti-pattern this codebase warns about — it would block every
-        // `disconnect_peer`, every heartbeat teardown and every new-connection
-        // insert — so the map guard is dropped first and only the per-peer locks
-        // are taken while held.
-        let conns: Vec<_> = {
-            let map = state.connections.read().await;
-            map.values().cloned().collect()
-        };
-        for conn_arc in conns {
-            match conn_arc.try_lock() {
-                Ok(mut conn) => conn.session.lock(),
-                Err(_) => tracing::error!(
-                    "lock_vault: a connection's mutex was busy - its session keys \
-                     may not have been scrubbed"
-                ),
-            }
+    // So a lock ends calls. That is the truthful semantic, it removes the
+    // residual-key problem outright (`Arc::drop` runs `Session::drop`, which
+    // zeroizes both key holders), and the user gets a `m2m://connection`
+    // `disconnected` event per peer so the Hub matches reality instead of showing
+    // "established" for sessions that no longer exist.
+    //
+    // `draining()` returns the `Vec` so the peers are known after the guard is
+    // released — emitting events while holding the global `connections` write
+    // lock would re-enter the frontend under a global lock.
+    let dropped_peers: Vec<String> = state.connections.write().await.draining().map(|(k, _)| k).collect();
+    for peer in &dropped_peers {
+        let _ = tauri::Emitter::emit(
+            &app_handle,
+            "m2m://connection",
+            serde_json::json!({
+                "peer_key_hex": peer,
+                "state": "disconnected",
+                "peer_fingerprint": serde_json::Value::Null,
+                "peer_verified": false,
+            }),
+        );
+    }
+    if !dropped_peers.is_empty() {
+        tracing::info!(
+            peers = dropped_peers.len(),
+            "vault locked - sessions torn down, peers must reconnect after unlock"
+        );
+    }
         }
     }
 
