@@ -2135,7 +2135,10 @@ let expired_messages = self.delete_expired_messages()?;
     ///
     /// Shredding order matches [`Self::delete_expired_messages`]: zero the
     /// wrapped content keys first (so the bytes are unrecoverable even if the
-    /// delete itself is interrupted), truncate the WAL, then delete.
+    /// delete itself is interrupted), truncate the WAL, then delete. The
+    /// delete and the orphan-reaction sweep share one transaction for the same
+    /// reason as there: as separate commits, a crash between them left
+    /// reactions naming messages that no longer existed.
     ///
     /// Returns the number of messages destroyed.
     pub fn delete_messages_by_retention_policy(&self) -> Result<u32, StorageError> {
@@ -2164,6 +2167,7 @@ let expired_messages = self.delete_expired_messages()?;
         self.conn.execute(
             "UPDATE messages SET content_key_wrapped = ?2
               WHERE content_key_wrapped IS NOT NULL
+                AND content_key_wrapped != ?2
                 AND conversation_id IN (
                     SELECT id FROM conversations
                      WHERE retention_policy = 'delete'
@@ -2173,23 +2177,33 @@ let expired_messages = self.delete_expired_messages()?;
         )?;
         self.wal_checkpoint_truncate()?;
 
-        let count = self.conn.execute(
-            "DELETE FROM messages
-              WHERE conversation_id IN (
-                    SELECT id FROM conversations
-                     WHERE retention_policy = 'delete'
-                       AND auto_delete_at IS NOT NULL
-                       AND auto_delete_at <= ?1)",
-            rusqlite::params![now],
-        )?;
-        // Reactions are keyed by message id with no foreign key, so they would
-        // otherwise outlive the message they annotate — and count as nothing
-        // toward the cap, which is how the table became invisible to it.
-        self.conn.execute(
-            "DELETE FROM reactions
-              WHERE message_id NOT IN (SELECT id FROM messages)",
-            [],
-        )?;
+        let count = {
+            let tx = self.conn.unchecked_transaction()?;
+            let count = tx.execute(
+                "DELETE FROM messages
+                  WHERE conversation_id IN (
+                        SELECT id FROM conversations
+                         WHERE retention_policy = 'delete'
+                           AND auto_delete_at IS NOT NULL
+                           AND auto_delete_at <= ?1)",
+                rusqlite::params![now],
+            )?;
+            // Reactions are keyed by message id with no foreign key, so they
+            // would otherwise outlive the message they annotate — and count as
+            // nothing toward the cap, which is how the table became invisible
+            // to it.
+            //
+            // In the same transaction as the delete: it decides what is
+            // orphaned by reading `messages`, so a separate commit could
+            // only ever be right if the delete had already landed.
+            tx.execute(
+                "DELETE FROM reactions
+                  WHERE message_id NOT IN (SELECT id FROM messages)",
+                [],
+            )?;
+            tx.commit()?;
+            count
+        };
         self.add_stored_bytes(-freed);
         self.wal_checkpoint_truncate()?;
         Ok(count as u32)
