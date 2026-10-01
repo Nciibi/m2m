@@ -199,19 +199,22 @@ pub enum LanDiscoveryError {
 /// other. It was already in the dependency tree, so this pins it rather than
 /// adding anything.
 fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
-    let domain = socket2::Domain::IPV4;
-    let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))
-        .map_err(LanDiscoveryError::Io)?;
+    let socket = socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )
+    .map_err(LanDiscoveryError::Io)?;
 
-    // Both before `bind`. `SO_REUSEADDR` is what lets a second instance bind the
-    // same fixed port; without it the second process gets `EADDRINUSE` and
-    // discovery silently stops working for that user. A failure here is fatal
-    // for the same reason — carrying on would bind a socket that cannot receive
-    // anything and report discovery as running.
+    // Both options must be set **before** `bind`. `SO_REUSEADDR` is what lets a
+    // second instance bind the same fixed port; without it the second process
+    // gets `EADDRINUSE` and discovery silently stops working for that user. A
+    // failure here is fatal for the same reason — carrying on would bind a
+    // socket that cannot receive anything and report discovery as running.
     socket.set_reuse_address(true).map_err(LanDiscoveryError::Io)?;
     // Not fatal on its own: this option is absent on some platforms, and its
     // absence degrades to `SO_REUSEADDR` semantics rather than breaking a single
-    // instance. Log it, because it is the difference between two instances
+    // instance. Logged because it is the difference between two instances
     // coexisting and the second one failing to start.
     if let Err(e) = socket.set_reuse_port(true) {
         tracing::warn!(
@@ -221,13 +224,18 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
         );
     }
 
-    socket
-        .bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port).into())
-        .map_err(LanDiscoveryError::Io)?;
+    // `SockAddr::from(&SocketAddr)` is `socket2`'s own conversion; written as
+    // an explicit `from` rather than `.into()` so the target type is stated
+    // rather than inferred from `bind`'s signature.
+    let addr = socket2::SockAddr::from(&SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        port,
+    ));
+    socket.bind(&addr).map_err(LanDiscoveryError::Io)?;
 
-    // `into()` hands the `socket2::Socket` to a `std` socket, which then owns
-    // and closes the descriptor.
-    Ok(socket.into())
+    // `From<Socket> for UdpSocket` transfers ownership, so the resulting
+    // `std` socket closes the descriptor on drop.
+    Ok(UdpSocket::from(socket))
 }
 
 /// Build a LAN discovery announcement packet using an ephemeral session token.
