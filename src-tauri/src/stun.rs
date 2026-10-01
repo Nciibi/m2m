@@ -152,9 +152,10 @@ pub struct StunMultiResult {
     pub results: Vec<StunResult>,
     /// The consensus public IP.
     ///
-    /// `None` when no address survives [`aggregate_consensus`]: too few
-    /// responders, or no strict majority among disagreeing ones. This is the
-    /// **only** field that may be turned into a published candidate — see
+    /// `None` when no address survives the quorum rule in
+    /// [`discover_public_addrs`]: too few responders, or no strict majority
+    /// among disagreeing ones. This is the **only** field that may be turned
+    /// into a published candidate — see
     /// [`crate::candidate::gather_reflexive_candidates`].
     pub consensus_addr: Option<SocketAddr>,
     /// True only if every responding server reported the same public IP **and**
