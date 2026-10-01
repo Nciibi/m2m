@@ -125,10 +125,13 @@ impl LanDiscoveryState {
     /// `dht::lan_dht_seeds`, a DHT node — without limit, all inside the
     /// 90-second expiry window.
     ///
-    /// Eviction is least-recently-seen first. `last_seen` is stamped at receive
-    /// time, so a flood of freshly-minted tokens evicts itself rather than the
-    /// real peers; ties are broken on the key so eviction does not depend on
-    /// `HashMap` iteration order.
+    /// Eviction is least-recently-seen first, which is the useful direction
+    /// here: an attacker's freshly-minted tokens are the *most* recent
+    /// entries, so they displace peers that have gone quiet — entries that are
+    /// within seconds of the expiry sweep anyway — instead of growing the
+    /// table without limit. A genuine peer that announces again immediately
+    /// takes its place back at the top. Ties are broken on the key so eviction
+    /// never depends on `HashMap` iteration order.
     pub fn insert_peer(&mut self, peer: LanPeer) {
         let key = peer.token_hex.clone();
         self.peers.insert(key, peer);
