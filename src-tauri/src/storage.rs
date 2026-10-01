@@ -5401,8 +5401,8 @@ mod tests {
         );
         assert!(
             matches!(result, Err(StorageError::KeyNotFound)),
-            "expected KeyNotFound, got {:?}",
-            result.err()
+            "expected KeyNotFound (vault locked), got {:?}",
+            result.as_ref().err()
         );
 
         // The row must still be there. A delete that "succeeded" while leaving
