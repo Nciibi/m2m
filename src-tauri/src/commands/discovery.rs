@@ -266,9 +266,9 @@ pub async fn set_discovery_config(
 async fn await_lan_stop(state: &Arc<AppState>) {
     let deadline = tokio::time::Instant::now() + STOP_WAIT_TIMEOUT;
     loop {
-        let lan = state.lan_state.read().await.clone();
-        let still_running = match lan {
-            Some(lan) => lan.read().await.enabled,
+        let lan_arc = state.lan_state.read().await.clone();
+        let still_running = match lan_arc {
+            Some(arc) => arc.read().await.enabled,
             None => false,
         };
         if !still_running {
@@ -293,9 +293,9 @@ async fn await_lan_stop(state: &Arc<AppState>) {
 async fn await_dht_stop(state: &Arc<AppState>) {
     let deadline = tokio::time::Instant::now() + STOP_WAIT_TIMEOUT;
     loop {
-        let dht = state.dht_state.read().await.clone();
-        let still_running = match dht {
-            Some(dht) => dht.read().await.running,
+        let dht_arc = state.dht_state.read().await.clone();
+        let still_running = match dht_arc {
+            Some(arc) => arc.read().await.running,
             None => false,
         };
         if !still_running {
