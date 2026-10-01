@@ -490,9 +490,41 @@ async fn query_single_server(
         .map_err(StunError::Io)?;
 
     // ── Parse and validate response ──
-    parse_binding_response(&buf[..len], &transaction_id).map_err(|_| StunError::InvalidResponse {
-        server: server.to_string(),
-    })
+    let addr = parse_binding_response(&buf[..len], &transaction_id).map_err(|_| {
+        StunError::InvalidResponse {
+            server: server.to_string(),
+        }
+    })?;
+
+    // ── Validate the *reported address*, not just the message ──
+    //
+    // The parser only checks framing, magic cookie, transaction ID and (when
+    // present) the FINGERPRINT. Every one of those is satisfiable by a server
+    // that is itself hostile: the FINGERPRINT is a CRC the server computes over
+    // a message it wrote, so a rogue STUN server — or an on-path attacker who
+    // is also the server's operator — can return a perfectly well-formed
+    // response carrying any address it chooses.
+    //
+    // That value is what the app advertises to peers, so it is checked before
+    // it can become a result. The specific attacks this rejects:
+    // `127.0.0.1` / `::1` (peer redirected to the wrong host, or a loop in the
+    // hole-punch), the LAN address `192.168.x.x` (publishing the user's
+    // internal topology into a shareable invite link), CGNAT `100.64.0.0/10`
+    // (a range that identifies the ISP and is not dialable from the internet),
+    // link-local `169.254.169.254` (cloud instance metadata — a classic SSRF
+    // target) and multicast/unspecified. A rejected server counts as *not*
+    // responding, so it also cannot contribute to a quorum.
+    if !is_publishable_public_addr(&addr) {
+        tracing::warn!(
+            server = %server, reported = %addr,
+            "STUN server reported a non-routable address — result discarded"
+        );
+        return Err(StunError::InvalidResponse {
+            server: server.to_string(),
+        });
+    }
+
+    Ok(addr)
 }
 
 /// Build a minimal STUN Binding Request (RFC 8489 §7.1).
