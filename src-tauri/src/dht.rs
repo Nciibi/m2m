@@ -737,15 +737,41 @@ async fn handshaked_peer_ips(app: &crate::state::AppState) -> HashSet<IpAddr> {
 /// A DHT needs somewhere to bootstrap *from*, and M2M ships no public node set:
 /// joining a public BitTorrent DHT would disclose this node's address to an
 /// unrelated third party on every start, which is the opposite of what the
-/// privacy model is for. The peers we have already found ourselves, on our own
-/// LAN, are the only seeds we can trust to already know us.
+/// privacy model is for. Peers we have already found ourselves, on our own LAN,
+/// are the only candidates — but **only once we have completed a handshake with
+/// them**.
 ///
-/// Returns an empty vector when LAN discovery is off or has found nothing —
-/// callers must treat that as "not yet bootstrapped", not as "no peers".
-fn lan_dht_seeds(lan: &crate::lan_discovery::LanDiscoveryState) -> Vec<BootstrapNode> {
+/// `trusted_ips` is the set of IPs this node holds an established session with
+/// (see [`handshaked_peer_ips`]). The LAN announcement carries an ephemeral
+/// token and nothing verifiable, so the token cannot be matched against a
+/// permanent identity key; membership is therefore decided on the address,
+/// which is the one field that ties the claim to a peer that proved possession
+/// of a private key we talked to. Matching on IP rather than IP+port is
+/// deliberate: an inbound session records the peer's *source* port, so an
+/// IP+port test would silently drop every peer that dialled us rather than us.
+///
+/// The consequence of the gate: a peer that has only ever been seen on the LAN
+/// is *not* a seed. That is the point. This function used to return every entry
+/// in `lan.peers`, and the caller then sent `build_announce_body(current_id,
+/// listen_addr)` — this node's real bind address and its current ephemeral id —
+/// to all of them. One host that spoofed a single 43-byte multicast packet got
+/// a copy of both, and could repeat that every 10 minutes for as long as the
+/// spoofed token stayed inside the 90-second expiry window.
+///
+/// Returns an empty vector when LAN discovery is off, has found nothing, or has
+/// found only unauthenticated peers — callers must treat that as "not yet
+/// bootstrapped", not as "no peers".
+fn lan_dht_seeds(
+    lan: &crate::lan_discovery::LanDiscoveryState,
+    trusted_ips: &HashSet<IpAddr>,
+) -> Vec<BootstrapNode> {
     let mut seeds: Vec<BootstrapNode> = lan
         .peers
         .values()
+        // No completed handshake, no announce. Without this filter a spoofed
+        // source address becomes a destination for this node's real listen
+        // address.
+        .filter(|p| trusted_ips.contains(&p.connect_addr.ip()))
         .map(|p| BootstrapNode {
             address: p.connect_addr,
         })
@@ -753,6 +779,10 @@ fn lan_dht_seeds(lan: &crate::lan_discovery::LanDiscoveryState) -> Vec<Bootstrap
     // Stable order so successive ticks do not reshuffle the announce order.
     seeds.sort_by_key(|n| (n.address.ip(), n.address.port()));
     seeds.dedup_by_key(|n| n.address);
+    // Bound the fan-out as well as filtering it: the peer table is capped at
+    // `MAX_LAN_PEERS`, so this is a second, independent limit on how many
+    // dials a single tick can start.
+    seeds.truncate(MAX_ANNOUNCE_SEEDS);
     seeds
 }
 
