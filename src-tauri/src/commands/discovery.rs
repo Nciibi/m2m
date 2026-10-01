@@ -100,7 +100,7 @@ pub async fn set_discovery_config(
 
     // ── LAN Discovery ──
     if config.lan_enabled && !state.lan_cancel.read().await.is_some() {
-        // Start LAN discovery
+        // Start LAN discovery.
         let lan_state = Arc::new(RwLock::new(lan_discovery::LanDiscoveryState::new()));
         let lan_cancel = Arc::new(AtomicBool::new(false));
 
@@ -108,17 +108,33 @@ pub async fn set_discovery_config(
             let val = state.listen_addr.read().await;
             Arc::new(RwLock::new(*val))
         };
-        let lan_state_clone = lan_state.clone();
         let eid = Arc::new(RwLock::new(ephemeral_id::EphemeralPeerId::generate()));
-        let cancel_clone = lan_cancel.clone();
 
-        tokio::spawn(async move {
-            if let Err(e) =
-                lan_discovery::start(listen_addr, lan_state_clone, eid, cancel_clone).await
-            {
-                tracing::warn!(error = %e, "LAN discovery failed to start");
-            }
-        });
+        // Awaited inline rather than wrapped in `tokio::spawn`. `start` does
+        // nothing but bind the socket, set four options, join the multicast
+        // group and spawn two tasks, so there is nothing to keep off this
+        // thread — and awaiting it is what makes a failure *visible*. It used
+        // to be spawned into the void, where a `LanDiscoveryError` became one
+        // `tracing::warn!` line: the state handles were installed regardless, so
+        // `lan_cancel` was `Some`, the UI showed LAN discovery as enabled, and
+        // the toggle could never be re-enabled because the guard on this branch
+        // is "not already running". A failed start looked exactly like a
+        // working one.
+        if let Err(e) = lan_discovery::start(listen_addr, lan_state.clone(), eid, lan_cancel.clone())
+            .await
+        {
+            return Err(match e {
+                lan_discovery::LanDiscoveryError::TorEnabled => AppError::blocked(
+                    "LAN discovery is disabled while Tor routing is enabled — it broadcasts \
+                     your listening port and a rotating token to every host on this network, \
+                     which Tor cannot protect against",
+                ),
+                other => AppError::new(
+                    "discovery.unavailable",
+                    format!("LAN discovery could not start: {other}"),
+                ),
+            });
+        }
 
         {
             let mut ls = state.lan_state.write().await;
@@ -135,6 +151,16 @@ pub async fn set_discovery_config(
         if let Some(ref cancel) = *state.lan_cancel.read().await {
             cancel.store(true, Ordering::SeqCst);
         }
+
+        // Wait for the announcer and the listener to actually exit before
+        // clearing anything. Previously the flag was set, `lan_state` was
+        // immediately set to `None` and "DISABLED" was logged — while the
+        // announcer was still asleep and would wake up and multicast this
+        // node's real listening port one more time, after the UI had already
+        // reported discovery as off. `get_discovered_peers` reported an empty
+        // list for a service that was still running.
+        await_lan_stop(state.inner()).await;
+
         {
             let mut ls = state.lan_state.write().await;
             *ls = None;
@@ -171,6 +197,21 @@ pub async fn set_discovery_config(
         let network_monitor = Arc::new(RwLock::new(ephemeral_id::NetworkMonitor::new()));
         let cancel_clone = dht_cancel.clone();
 
+        // Publish the handles *before* spawning. `announce_loop` reads its
+        // cancel flag before its first sleep and returns immediately if it is
+        // already set, so installing first closes the window in which a user
+        // toggled DHT discovery on and off again quickly: the old order (spawn,
+        // then install) meant the task could be running — with the real listen
+        // address in hand — before the flag that would stop it existed.
+        {
+            let mut ds = state.dht_state.write().await;
+            *ds = Some(dht_state);
+        }
+        {
+            let mut dc = state.dht_cancel.write().await;
+            *dc = Some(dht_cancel);
+        }
+
         tokio::spawn(async move {
             dht::announce_loop(
                 dht_state_clone,
@@ -183,21 +224,18 @@ pub async fn set_discovery_config(
             .await;
         });
 
-        {
-            let mut ds = state.dht_state.write().await;
-            *ds = Some(dht_state);
-        }
-        {
-            let mut dc = state.dht_cancel.write().await;
-            *dc = Some(dht_cancel);
-        }
-
         tracing::info!("DHT discovery ENABLED");
     } else if !config.dht_enabled {
         // Stop DHT discovery
         if let Some(ref cancel) = *state.dht_cancel.read().await {
             cancel.store(true, Ordering::SeqCst);
         }
+
+        // Same reason as the LAN case: an announce tick already past its sleep
+        // had this node's real listen address and ephemeral id queued for
+        // every seed. `DhtState::running` is the completion signal.
+        await_dht_stop(state.inner()).await;
+
         {
             let mut ds = state.dht_state.write().await;
             *ds = None;
