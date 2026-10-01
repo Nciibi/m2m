@@ -86,6 +86,9 @@ function TestConsumer() {
   );
 }
 
+/** The emoji the reaction tests send, referenced by name to avoid mojibake. */
+const REACTION = "\u{1F44D}";
+
 /** Surfaces `messages[0].reactions` so a test can assert the optimistic shape. */
 function ReactionProbe() {
   const { messages } = useChat();
