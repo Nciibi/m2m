@@ -233,11 +233,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const handleRemoveStunServer = useCallback(async (idx: number) => {
     if (!stunConfig) return;
-    const newServers = stunConfig.servers.filter((_, i) => i !== idx);
-    if (newServers.length === 0) {
-      addToast("Cannot remove all STUN servers — at least one required.", "warning");
-      return;
-    }
+const newServers = stunConfig.servers.filter((_, i) => i !== idx);
+  // Two, not one. `consensus` used to mean "every server that *responded*
+  // agreed", which is vacuously true when exactly one answers — so a single
+  // rogue server, or one DNS-hijacked hostname, defined the address this app
+  // published. The backend now requires a quorum (`MIN_CONSENSUS_SERVERS = 2`),
+  // so refuse here rather than letting the round-trip fail with a raw error.
+  if (newServers.length < MIN_STUN_SERVERS) {
+  addToast(
+  `Cannot go below ${MIN_STUN_SERVERS} STUN servers — agreement between ` +
+  "independent servers is what makes the published address trustworthy.",
+  "warning",
+  );
+  return;
+  }
     try {
       await invoke("set_stun_servers", { servers: newServers });
       setStunConfig({ ...stunConfig, servers: newServers });
