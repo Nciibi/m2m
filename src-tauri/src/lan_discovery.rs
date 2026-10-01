@@ -751,30 +751,31 @@ mod lan_discovery_tests {
         );
     }
 
-    /// Eviction must be least-recently-seen first, so a flood of fresh
-    /// attacker-chosen tokens evicts itself instead of the genuine peers.
+    /// A peer that is actively announcing must never be the one evicted,
+    /// however many quiet entries the attacker has seeded behind it.
     #[test]
     fn test_insert_peer_evicts_least_recently_seen() {
         let mut state = LanDiscoveryState::new();
         let now = now_unix_secs();
 
-        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now));
-
-        // Fill the table with strictly newer entries; `genuine` is now the
-        // oldest and must be the one evicted.
+        // Fill the table with entries that have already gone quiet.
         for i in 0..MAX_LAN_PEERS {
             state.insert_peer(peer_named(
                 &format!("flood{i}"),
                 &format!("192.168.1.{}:4000", (i % 250) + 20),
-                now + 1 + i as u64,
+                now - 10,
             ));
         }
 
+        // The genuine peer announces now, overflowing the bound by one.
+        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now));
+
+        assert_eq!(state.peers.len(), MAX_LAN_PEERS);
         assert!(
             state.peers.contains_key("genuine"),
-            "the least recently seen peer should have been the one evicted"
+            "the most recently seen peer must not be the one evicted"
         );
-        assert!(state.peers.len() <= MAX_LAN_PEERS);
+        assert!(!state.peers.contains_key("flood0"));
     }
 
     /// Refreshing an existing peer must not be treated as a new insert: it
