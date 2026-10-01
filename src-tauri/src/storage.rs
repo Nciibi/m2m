@@ -1725,10 +1725,27 @@ let expired_messages = self.delete_expired_messages()?;
             let (ids, freed) = self.oldest_message_batch(want.min(BATCH), &mut report)?;
             if !ids.is_empty() {
                 self.shred_message_keys(&ids)?;
+                // One checkpoint between the shred and the delete, one after.
+                // They cannot be merged into a single transaction because
+                // `wal_checkpoint(TRUNCATE)` is refused while a write
+                // transaction is open, and it must run *after* the shred is
+                // durable for the shred to have any point.
+                //
+                // What the delete loop itself must not be is a sequence of
+                // independent autocommit statements. A crash or `SQLITE_BUSY`
+                // between two of them used to leave a partially-deleted batch
+                // whose shredded rows were still listed by `load_messages` —
+                // which filters on `expires_at` alone, not on key state — so
+                // they rendered as "[encrypted]" permanently, and
+                // `report.messages_evicted` claimed rows that were still on
+                // disk. One transaction makes the batch all-or-nothing.
                 self.wal_checkpoint_truncate()?;
-                for id in &ids {
-                    self.conn
-                        .execute("DELETE FROM messages WHERE id = ?1", params![id])?;
+                {
+                    let tx = self.conn.unchecked_transaction()?;
+                    for id in &ids {
+                        tx.execute("DELETE FROM messages WHERE id = ?1", params![id])?;
+                    }
+                    tx.commit()?;
                 }
                 self.wal_checkpoint_truncate()?;
                 report.messages_evicted += ids.len() as u32;
@@ -1745,9 +1762,18 @@ let expired_messages = self.delete_expired_messages()?;
                 // satisfy rather than spinning.
                 break;
             }
-            for id in &gids {
-                self.conn
-                    .execute("DELETE FROM group_messages WHERE id = ?1", params![id])?;
+            // Same all-or-nothing requirement as the 1:1 branch: a torn group
+            // eviction reports rows as freed that are still on disk, and the
+            // byte counter is decremented by the full batch.
+            {
+                let tx = self.conn.unchecked_transaction()?;
+                for id in &gids {
+                    tx.execute(
+                        "DELETE FROM group_messages WHERE id = ?1",
+                        params![id],
+                    )?;
+                }
+                tx.commit()?;
             }
             self.wal_checkpoint_truncate()?;
             report.group_messages_evicted += gids.len() as u32;
