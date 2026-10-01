@@ -1150,6 +1150,183 @@ mod tests {
         assert_eq!(nat, NatType::Symmetric);
     }
 
+    // ─── Consensus quorum ────────────────────────────────────────────────────
+
+    fn result(addr: &str, server: &str) -> StunResult {
+        StunResult {
+            public_addr: addr.parse().expect("socket addr"),
+            server: server.into(),
+            rtt: Duration::from_millis(10),
+        }
+    }
+
+    /// One server cannot corroborate itself.
+    ///
+    /// This is the whole of gap (a): with a single-server config — which
+    /// `set_stun_servers` accepted — "all responding servers agree" was
+    /// vacuously true, so a rogue server defined the user's advertised public
+    /// address.
+    #[test]
+    fn test_single_responder_is_not_consensus() {
+        let results = vec![result("8.8.8.8:40000", "rogue.example:3478")];
+        let (consensus, addr) = aggregate_consensus(&results);
+        assert!(!consensus, "one responder must not be consensus");
+        assert_eq!(
+            addr, None,
+            "a below-quorum address must not be published"
+        );
+    }
+
+    /// Two independent servers agreeing is the documented floor.
+    #[test]
+    fn test_two_agreeing_servers_are_consensus() {
+        let results = vec![
+            result("8.8.8.8:40000", "a.example:3478"),
+            result("8.8.8.8:40000", "b.example:3478"),
+        ];
+        let (consensus, addr) = aggregate_consensus(&results);
+        assert!(consensus);
+        assert_eq!(addr, Some("8.8.8.8:40000".parse().unwrap()));
+    }
+
+    /// A tie is not agreement, and must publish nothing.
+    ///
+    /// The old `max_by_key` path returned *an* element on a tie, chosen by
+    /// `HashMap` order — so one injected answer against one real answer gave the
+    /// attacker a coin flip to own the published address.
+    #[test]
+    fn test_tied_disagreement_publishes_nothing() {
+        let results = vec![
+            result("8.8.8.8:40000", "a.example:3478"),
+            result("203.0.113.9:40000", "rogue.example:3478"),
+        ];
+        let (consensus, addr) = aggregate_consensus(&results);
+        assert!(!consensus);
+        assert_eq!(addr, None, "a 1-1 tie must not publish an address");
+    }
+
+    /// A 2–2 split of four servers is still a tie, per-server majority required.
+    #[test]
+    fn test_two_two_split_publishes_nothing() {
+        let results = vec![
+            result("8.8.8.8:40000", "a.example:3478"),
+            result("8.8.8.8:40000", "b.example:3478"),
+            result("203.0.113.9:40000", "rogue.example:3478"),
+            result("203.0.113.9:40000", "rogue2.example:3478"),
+        ];
+        let (consensus, addr) = aggregate_consensus(&results);
+        assert!(!consensus);
+        assert_eq!(addr, None, "a 2-2 split must not publish an address");
+    }
+
+    /// A rogue server that is outvoted does not stop a real majority being used.
+    ///
+    /// `consensus` stays false — the servers did not all agree — but the winner
+    /// is identifiable, so `consensus_addr` carries it.
+    #[test]
+    fn test_strict_majority_survives_one_rogue() {
+        let results = vec![
+            result("8.8.8.8:40000", "a.example:3478"),
+            result("8.8.8.8:40000", "b.example:3478"),
+            result("203.0.113.9:40000", "rogue.example:3478"),
+        ];
+        let (consensus, addr) = aggregate_consensus(&results);
+        assert!(!consensus);
+        assert_eq!(addr, Some("8.8.8.8:40000".parse().unwrap()));
+    }
+
+    /// Even a strict majority is dropped when its address is not routable.
+    ///
+    /// Unreachable from the network path (see `query_single_server`), this
+    /// covers a hand-built `StunMultiResult` smuggling the cloud metadata
+    /// endpoint or a LAN address into a published candidate.
+    #[test]
+    fn test_majority_with_unroutable_addr_is_dropped() {
+        let results = vec![
+            result("169.254.169.254:80", "a.example:3478"),
+            result("169.254.169.254:80", "b.example:3478"),
+            result("8.8.8.8:40000", "c.example:3478"),
+        ];
+        let (consensus, addr) = aggregate_consensus(&results);
+        assert!(!consensus);
+        assert_eq!(
+            addr, None,
+            "a majority reporting 169.254.169.254 must not be published"
+        );
+    }
+
+    // ─── Published-address validation ────────────────────────────────────────
+
+    /// Addresses that must never become a peer-visible candidate.
+    ///
+    /// Each row is a named attack rather than a tidy-up: loopback and LAN
+    /// redirect the peer to the wrong machine and leak the user's internal
+    /// topology into a shareable invite, CGNAT identifies the ISP and is not
+    /// dialable, `169.254.169.254` is the cloud metadata endpoint (SSRF), and
+    /// `::ffff:` / `::`-prefixed forms are private addresses in IPv6 clothing.
+    #[test]
+    fn test_non_publishable_addresses_are_rejected() {
+        for addr in [
+            "127.0.0.1:1",      // loopback — redirect the peer into a loop
+            "127.255.255.254:1",// whole 127/8 is loopback
+            "::1:1",            // IPv6 loopback
+            "0.0.0.0:1",        // unspecified
+            "192.168.1.5:1",    // LAN address published into an invite
+            "10.0.0.1:1",
+            "172.16.0.1:1",
+            "100.64.0.1:1",     // CGNAT — identifies the ISP, not routable
+            "169.254.169.254:80", // cloud instance metadata (SSRF target)
+            "224.0.0.1:1",      // multicast
+            "255.255.255.255:1",// broadcast
+            "::ffff:192.168.1.5:1", // private address in IPv4-mapped form
+            "fc00::1:1",        // unique local
+            "fe80::1:1",        // link local
+            "ff02::1:1",        // multicast
+            "2001:db8::1:1",    // documentation
+        ] {
+            let parsed: SocketAddr = addr
+                .parse()
+                .unwrap_or_else(|e| panic!("{addr} must parse as a SocketAddr: {e}"));
+            assert!(
+                !is_publishable_public_addr(&parsed),
+                "{addr} must not be published to peers"
+            );
+        }
+    }
+
+    /// Ordinary public addresses must survive, or the fix would break every
+    /// direct connection the app can make.
+    #[test]
+    fn test_public_addresses_remain_publishable() {
+        for addr in [
+            "8.8.8.8:19302",
+            "1.1.1.1:3478",
+            "45.33.32.156:41234",
+            "172.32.0.1:1000",   // just outside 172.16/12
+            "100.128.0.1:1000",  // just outside 100.64/10
+            "203.0.113.1:1",     // no: documentation — asserted below, kept out
+        ] {
+            if addr.starts_with("203.0.113.") {
+                continue;
+            }
+            let parsed: SocketAddr = addr.parse().expect("SocketAddr");
+            assert!(
+                is_publishable_public_addr(&parsed),
+                "{addr} is a public address and must stay publishable"
+            );
+        }
+
+        // 203.0.113.0/24 is RFC 5737 documentation space and is rejected, which
+        // is why the RFC 5769 parser vectors (192.0.2.1) test parsing only and
+        // never reach publication.
+        let doc: SocketAddr = "203.0.113.1:1".parse().unwrap();
+        assert!(!is_publishable_public_addr(&doc));
+
+        // Global IPv6 unicast is a legitimate reflexive candidate.
+        let v6: SocketAddr = "[2606:4700:4700::1111]:3478".parse().unwrap();
+        assert!(is_publishable_public_addr(&v6));
+    }
+
     #[test]
     fn test_build_request_invariants() {
         let txn = [0x42u8; 12];
