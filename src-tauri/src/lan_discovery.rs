@@ -191,6 +191,51 @@ pub enum LanDiscoveryError {
     TorEnabled,
 }
 
+/// Bind a UDP socket for multicast reception on `port`, with address reuse set so
+/// several instances on one host can all listen.
+///
+/// `SO_REUSEADDR`/`SO_REUSEPORT` must be set **before** `bind`, which
+/// `std::net::UdpSocket::bind` cannot express — `std` exposes no socket-option
+/// API at all. `socket2` is used rather than hand-rolled `extern "C"`
+/// declarations because this is exactly the portability trap it exists to
+/// abstract: a raw `socket()` returns `i32` on Unix but a `usize`-wide `SOCKET`
+/// on Windows whose failure value is `INVALID_SOCKET` rather than `-1`, and
+/// closing one needs `closesocket`, not the CRT `close`. Getting any of that
+/// wrong compiles on one platform and corrupts the descriptor table on the
+/// other. It was already in the dependency tree, so this pins it rather than
+/// adding anything.
+fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
+    let domain = socket2::Domain::IPV4;
+    let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))
+        .map_err(LanDiscoveryError::Io)?;
+
+    // Both before `bind`. `SO_REUSEADDR` is what lets a second instance bind the
+    // same fixed port; without it the second process gets `EADDRINUSE` and
+    // discovery silently stops working for that user. A failure here is fatal
+    // for the same reason — carrying on would bind a socket that cannot receive
+    // anything and report discovery as running.
+    socket.set_reuse_address(true).map_err(LanDiscoveryError::Io)?;
+    // Not fatal on its own: this option is absent on some platforms, and its
+    // absence degrades to `SO_REUSEADDR` semantics rather than breaking a single
+    // instance. Log it, because it is the difference between two instances
+    // coexisting and the second one failing to start.
+    if let Err(e) = socket.set_reuse_port(true) {
+        tracing::warn!(
+            error = %e,
+            "SO_REUSEPORT unavailable - a second M2M instance on this host may not be \
+             able to discover peers"
+        );
+    }
+
+    socket
+        .bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port).into())
+        .map_err(LanDiscoveryError::Io)?;
+
+    // `into()` hands the `socket2::Socket` to a `std` socket, which then owns
+    // and closes the descriptor.
+    Ok(socket.into())
+}
+
 /// Build a LAN discovery announcement packet using an ephemeral session token.
 ///
 /// Packet format:
