@@ -35,8 +35,8 @@
 //!
 //! Peers behind symmetric NATs act as "client-only" nodes (query and
 //! announce only, don't serve routing table entries).
-use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -44,6 +44,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
+use tokio::task::JoinSet;
 use tokio::time;
 
 use thiserror::Error;
