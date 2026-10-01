@@ -326,11 +326,17 @@ export default function SettingsView() {
             reachability is unknown. `String(null)` here used to render the
             literal word "null" as though it were a measurement. */}
         {" · stun agreement: "}
-        {connectivityResult.stun_agreement === null
+        {/* `== null` rather than `=== null`: the backend always sends the field
+            (serde has no `skip_serializing_if`), but a test fixture typed
+            `DeepPartial<ConnectivityStatus>` can omit it, and `=== null` would
+            then render the literal word "undefined" as though it were a reading.
+            `invoke<ConnectivityStatus>` is an unchecked cast, so nothing else
+            would catch that. */}
+        {connectivityResult.stun_agreement == null
           ? "not checked"
           : String(connectivityResult.stun_agreement)}
         {" · inbound reachable: "}
-        {connectivityResult.reachable === null
+        {connectivityResult.reachable == null
           ? "not measured"
           : String(connectivityResult.reachable)}
       </span>
