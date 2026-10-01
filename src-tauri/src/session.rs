@@ -1215,17 +1215,19 @@ impl Session {
 /// the vault as locked" — but a `Session` owns the Double Ratchet root key, the
 /// sending and receiving chain keys and up to `MAX_SKIP` cached skipped keys,
 /// and none of that is reachable from `lock_vault`. `Drop` is the only other
-/// teardown, and nothing on the lock path drops a connection.
+/// teardown, and nothing on the lock path dropped a connection.
 ///
-/// So after "Lock Now" or an idle lock the process still holds live ratchet
-/// state for every peer, with the sockets open and the receive loops still
-/// running and decrypting. This exists so a session can be scrubbed *without*
-/// dropping the connection: the documented behaviour is that calls stay up
-/// across a lock, and that is a reasonable product choice — the residual key
-/// material was the part that was neither documented nor reachable.
+/// So after "Lock Now" or an idle lock the process still held live ratchet state
+/// for every peer, with the sockets open and the receive loops still running and
+/// decrypting — while the function's own contract said keys were zeroized.
 ///
-/// After this, `decrypt_*` returns an error and `establish` must be called
-/// again to get a session back.
+/// This makes the residual material explicitly scrubbable. Note it is *not*
+/// reversible: `lock_vault` drops the whole `PeerConnection` (running `Drop for
+/// Session`, which does exactly this) rather than calling this in place, because
+/// a scrubbed ratchet cannot be resumed — see the note in the body.
+///
+/// After this, `decrypt_*` returns an error and a fresh session must be
+/// established.
 pub fn lock(&mut self) {
     // Both fields' own `Drop` impls zeroize correctly (crypto.rs), so `take()`
     // is the whole mechanism — the same one `Drop for Session` uses.
