@@ -1322,7 +1322,7 @@ pub async fn lock_vault(
     // `disconnected` event per peer so the Hub matches reality instead of showing
     // "established" for sessions that no longer exist.
     //
-// The peers are collected inside a block so the write guard is released
+    // The peers are collected inside a block so the write guard is released
     // before the emits below: emitting while holding the global `connections`
     // lock re-enters the frontend under a global lock.
     let dropped_peers: Vec<String> = {
@@ -1341,7 +1341,7 @@ pub async fn lock_vault(
             }),
         );
     }
-if !dropped_peers.is_empty() {
+    if !dropped_peers.is_empty() {
         tracing::info!(
             peers = dropped_peers.len(),
             "vault locked - sessions torn down, peers must reconnect after unlock"
