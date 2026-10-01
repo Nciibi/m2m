@@ -250,7 +250,10 @@ export interface NatTypeInfo {
     error: string | null;
   }>;
   connectivity: {
-    reachable: boolean;
+    /** See `ConnectivityStatus.reachable` — `null` means not measured. */
+    reachable: boolean | null;
+    /** See `ConnectivityStatus.stun_agreement` — `null` means not checked. */
+    stun_agreement: boolean | null;
     nat_type: string;
     public_addr: string | null;
     host_addrs: string[];
