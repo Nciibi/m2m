@@ -1658,6 +1658,14 @@ async fn handle_file_transfer_packet(
                                         .unwrap_or_else(|| format!("file_{}", transfer_id));
 
                                     let (accepted, inserted);
+                                    // Collected here so the deletes can happen
+                                    // *after* the map guard is released, on the
+                                    // blocking pool. `remove_file` is a blocking
+                                    // syscall: doing it inside `retain` would hold
+                                    // the global `incoming_transfers` write lock
+                                    // across every delete, and doing it inline on
+                                    // the runtime would stall a tokio worker.
+                                    let mut orphaned: Vec<std::path::PathBuf> = Vec::new();
                                     {
                                         const MAX_PENDING_INCOMING_TRANSFERS: usize = 20;
                                         const STALE_TRANSFER_SECS: u64 = 60 * 60;
@@ -1670,13 +1678,6 @@ async fn handle_file_transfer_packet(
                                             .unwrap_or_default()
                                             .as_secs();
                                         if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
-                                            // Drop the stale entries, and *collect*
-                                            // their temp paths rather
-                                            // than deleting inline: `remove_file` is a blocking syscall, and
-                                            // doing it inside `retain` holds the global
-                                            // `incoming_transfers` write lock across every delete.
-                                            let mut orphaned: Vec<std::path::PathBuf> =
-                                                Vec::new();
                                             transfers.retain(|_, t| {
                                                 let fresh = now.saturating_sub(t.created_at)
                                                     < STALE_TRANSFER_SECS;
@@ -1687,21 +1688,6 @@ async fn handle_file_transfer_packet(
                                                 }
                                                 fresh
                                             });
-                                            // The guard is released here.
-                                            drop(transfers);
-                                            if !orphaned.is_empty() {
-                                                // Off the runtime: a blocking delete
-                                                // on a tokio worker stalls every
-                                                // other socket and timer on it.
-                                                let _ = tokio::task::spawn_blocking(
-                                                    move || {
-                                                        for path in &orphaned {
-                                                            let _ = std::fs::remove_file(path);
-                                                        }
-                                                    },
-                                                )
-                                                .await;
-                                            }
                                         }
                                         // `inserted` is whether *this* request created the entry.
                                         //
@@ -1790,6 +1776,21 @@ async fn handle_file_transfer_packet(
                                                 "too many concurrent incoming transfers — rejecting"
                                             );
                                         }
+                                    }
+                                    // The map guard is released here; delete the
+                                    // orphaned temp files off-lock and off the
+                                    // runtime. Without this the prune was the only
+                                    // teardown path that left its `m2m_<uuid>` file
+                                    // on disk, and the orphan count grows without
+                                    // bound (send N requests, wait an hour, send one
+                                    // more, repeat).
+                                    if !orphaned.is_empty() {
+                                        let _ = tokio::task::spawn_blocking(move || {
+                                            for path in &orphaned {
+                                                let _ = std::fs::remove_file(path);
+                                            }
+                                        })
+                                        .await;
                                     }
                                     if accepted && inserted {
                                         // Only prompt for a transfer we actually
