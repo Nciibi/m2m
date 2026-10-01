@@ -43,6 +43,12 @@
 /// the address involved.
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+// Needed by `bind_multicast_listener`, which has to set `SO_REUSEADDR` before
+// `bind` and so has to reach the raw descriptor itself.
+#[cfg(unix)]
+use std::os::fd::FromRawFd;
+#[cfg(windows)]
+use std::os::windows::io::FromRawSocket;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
