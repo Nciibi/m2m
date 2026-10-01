@@ -154,29 +154,77 @@ pub fn gather_ipv6_candidates() -> Vec<NetworkCandidate> {
 }
 
 /// Gather server-reflexive candidates from STUN results.
-/// Maps each STUN result to a candidate with type=ServerReflexive.
+///
+/// Publishes **at most one** candidate, and only when
+/// [`stun::StunMultiResult::consensus_addr`] is populated — i.e. when
+/// [`stun::MIN_CONSENSUS_SERVERS`] independent servers agreed
+/// (`consensus`) or one IP held a strict majority of them, and only when that
+/// address passes [`stun::is_publishable_public_addr`].
+///
+/// # What this replaces
+///
+/// This used to iterate `multi_result.results` — *every* server's answer — and
+/// emit a candidate for each. That published attacker-chosen addresses: one
+/// rogue STUN server, or one DNS-hijacked hostname already sitting in the
+/// user's list, contributed an arbitrary `host:port` to the candidate set. That
+/// set flows into `state.candidates`, into invite candidate lists (including
+/// one-time, shareable invite links) and into the **plaintext**
+/// `HandshakeInit` / `HandshakeResponse` frames. A peer that picks the injected
+/// candidate connects to the attacker, who is then first in the path for a
+/// handshake whose opening frames are unauthenticated by construction — so the
+/// attacker sees the X3DH bundle and the identity key, and can sit in the
+/// middle of a session the user believes is direct.
+///
+/// # Cost
+///
+/// When the servers disagree without a strict majority, or only one answers,
+/// this returns an empty list: no server-reflexive candidate is published at
+/// all. Peers then connect via the host/IPv6/relay candidates or by dialling
+/// the listening port directly. That is the intended direction — withholding an
+/// address beats publishing a wrong one.
 pub fn gather_reflexive_candidates(multi_result: &stun::StunMultiResult) -> Vec<NetworkCandidate> {
-    let base = local_addr::gather_host_candidates()
-        .first()
-        .map(|a| a.to_string());
+    // The consensus address is the only value that survived the quorum and
+    // address-validation checks in `stun`. Everything in `results` is
+    // uncorroborated per-server output and must not reach the wire.
+    let consensus = match multi_result.consensus_addr {
+        Some(addr) => addr,
+        None => {
+            tracing::warn!(
+                responding = multi_result.responding_servers,
+                total = multi_result.total_servers,
+                "no STUN consensus address — publishing no server-reflexive candidate"
+            );
+            return Vec::new();
+        }
+    };
 
-    multi_result
-        .results
-        .iter()
-        .filter_map(|result| {
-            let addr_str = result.public_addr.to_string();
-            // Deduplicate: skip if same address from different servers
-            // (consensus means they're all the same anyway)
-            base.as_ref().map(|host| {
-                let local_pref = if multi_result.consensus { 100 } else { 80 };
-                NetworkCandidate {
-                    address: addr_str.clone(),
-                    candidate_type: CandidateType::ServerReflexive,
-                    priority: compute_priority(CandidateType::ServerReflexive, local_pref),
-                    foundation: format!("srflx-{}", addr_str),
-                    base_address: Some(host.clone()),
-                }
-            })
-        })
-        .collect()
+    // Re-validated here rather than trusted from the aggregator: this is the
+    // last point before the address is written into an invite, and the caller
+    // cannot see whether the `StunMultiResult` it holds came from the network
+    // or was constructed by hand.
+    if !stun::is_publishable_public_addr(&consensus) {
+        tracing::warn!(
+            addr = %consensus,
+            "STUN consensus address is not globally routable — publishing no \
+             server-reflexive candidate"
+        );
+        return Vec::new();
+    }
+
+    let base = match local_addr::gather_host_candidates().first() {
+        Some(a) => a.to_string(),
+        None => return Vec::new(),
+    };
+
+    let addr_str = consensus.to_string();
+    vec![NetworkCandidate {
+        address: addr_str.clone(),
+        candidate_type: CandidateType::ServerReflexive,
+        // Corroborated address, so full local preference. There is only one
+        // such address, so the old "demote when there is no consensus" branch
+        // has nothing left to demote.
+        priority: compute_priority(CandidateType::ServerReflexive, 100),
+        foundation: format!("srflx-{}", addr_str),
+        base_address: Some(base),
+    }]
 }
