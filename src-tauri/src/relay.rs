@@ -499,9 +499,49 @@ pub async fn wait_for_bridge(
                             return;
                         }
 
+                        // ── Rate-limit the relay path like the direct path ──
+                        //
+                        // `start_listening` wraps every direct accept in
+                        // `connection_limiter.check/increment/decrement`; this
+                        // bridge had none of it, so the relay — a full MITM by
+                        // design, and therefore fully under the control of
+                        // whoever runs it — could bridge unlimited peers into a
+                        // spawned handshake task each and then a permanent
+                        // `state.connections` entry holding a socket, a `Session`
+                        // and ratchet state. It also sidestepped the per-IP
+                        // defence entirely: every relayed peer arrives from the
+                        // relay's single address, so keying on the source IP sees
+                        // one peer, not the many behind it.
+                        //
+                        // Mirrors `start_listening` exactly, including the reap
+                        // (without it `check()` inserts a per-IP entry for every
+                        // address it is about to reject, and the map grows without
+                        // bound) and the `RateLimitExceeded` error frame, so the
+                        // peer is told why instead of watching a silent close.
+                        let ip = relay_peer.ip();
+                        let reaped = state.connection_limiter.reap();
+                        if reaped > 0 {
+                            tracing::debug!(reaped, "reaped expired per-IP rate limit entries");
+                        }
+                        if !state.connection_limiter.check(ip) {
+                            tracing::warn!(
+                                relay = %relay_peer,
+                                "relayed connection rejected by rate limiter"
+                            );
+                            let _ = network::send_error(
+                                &mut relay_stream,
+                                protocol::ErrorCode::RateLimitExceeded,
+                                "rate limited — too many connections",
+                            )
+                            .await;
+                            return;
+                        }
+
                         // Note: we can't directly call handle_incoming_connection
                         // because we already read the HandshakeInit frame.
                         // We pass the pre-read frame instead.
+                        let limiter_state = state.clone();
+                        state.connection_limiter.increment();
                         handle_relay_incoming_with_frame(
                             relay_stream,
                             relay_peer,
@@ -510,6 +550,11 @@ pub async fn wait_for_bridge(
                             app_handle,
                         )
                         .await;
+                        // Same accounting as the direct path: the count tracks
+                        // handshakes in flight, not live sessions, which is why
+                        // `complete_inbound_connection` also caps the size of the
+                        // connection map itself.
+                        limiter_state.connection_limiter.decrement();
                     }
                     Err(e) => {
                         tracing::warn!(relay = %relay_peer, error = %e, "relay: failed to read initial M2M frame");
