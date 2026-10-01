@@ -1567,33 +1567,27 @@ impl MessageStore {
         // before the scan that would have corrected it ever runs. A cap that
         // most write paths bypass is not a cap.
         //
-        // So: the fast O(1) counter decides when usage is nowhere near the cap,
-        // and the authoritative SQL re-derivation decides the moment it could
-        // matter. The margin band keeps the hot path (30 inbound frames/s)
-        // cheap while making drift unable to hide below the ceiling.
-        // The band has to be *proportional*, not fixed. A fixed 64 MiB band means the
-        // store is "close enough to the cap" for a large fraction of its whole
-        // life, and `stored_bytes_verified` is an unindexed `SUM(LENGTH(...))`
-        // over every row — which would then run on every inbound frame, while the
-        // caller holds `state.message_store.lock()`. 1/16 of the cap keeps the
-        // check close enough that drift cannot hide while bounding the window.
+        // The cached value is therefore only ever a *hint about whether to
+        // verify*, never a substitute for verification: the moment it says
+        // "possibly over, or near enough that I might be", the authoritative SQL
+        // re-derivation decides. Note the asymmetry that matters — the earlier
+        // version asked "is the counter within the band around the cap?", which a
+        // counter drifted *low* answers "no", so the severe direction was exactly
+        // the one that could not be detected.
+        //
+        // `verify_margin` is proportional, not fixed, because
+        // `stored_bytes_verified` is an unindexed `SUM(LENGTH(...))` over every
+        // row and this runs on every write path while the caller holds
+        // `state.message_store.lock()`. 1/16 of the cap keeps the verification
+        // window tight without making the common case a full table scan.
         let verify_margin = (cap_bytes / 16).min(64 * 1024 * 1024);
         let cached = self.stored_bytes()?;
-        let needs_verified = cached <= cap_bytes
-            && cached.saturating_add(verify_margin) >= cap_bytes;
-        let usage = if needs_verified {
-            self.stored_bytes_verified()?
-        } else {
-            cached
-        };
+        let mut usage = cached;
+        if cached > cap_bytes || cached.saturating_add(verify_margin) >= cap_bytes {
+            usage = self.stored_bytes_verified()?;
+        }
         if usage <= cap_bytes {
             return Ok(None);
-        }
-        // The verified pass already refreshed the counter, but an eviction on
-        // the cached path needs the same correction before it starts, so the
-        // batch accounting below starts from the truth either way.
-        if !needs_verified {
-            self.recompute_stored_bytes()?;
         }
         let report = self.evict_to_cap(cap_bytes)?;
         if report.messages_evicted == 0 && report.group_messages_evicted == 0 {
