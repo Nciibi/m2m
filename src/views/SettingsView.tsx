@@ -49,7 +49,12 @@ function formatBytes(bytes: number): string {
  * value must be offered explicitly.
  */
 function capSelection(bytes: number): { value: number; isCustom: boolean } {
-  const presets = [
+  // Annotated `number[]` on purpose: the members of `STORAGE_CAP_CHOICES` are
+  // *arithmetic* (`1 * 1024 ** 3`), and TypeScript does not constant-fold
+  // arithmetic into literal types, so an inferred array would be a mix of
+  // `number` and literal types. Spelling it out keeps `includes(bytes)` a plain
+  // `number` comparison either way.
+  const presets: number[] = [
     STORAGE_CAP_CHOICES.gb1,
     STORAGE_CAP_CHOICES.gb5,
     STORAGE_CAP_CHOICES.gb10,
