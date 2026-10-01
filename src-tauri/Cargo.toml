@@ -63,6 +63,11 @@ base64 = "0.22"
 # Rate limiting
 governor = "0.6"
 
+# Socket options (SO_REUSEADDR/SO_REUSEPORT) for the LAN multicast listener.
+# Already in the dependency tree via tokio/tauri, so this pins the existing
+# version rather than adding anything new.
+socket2 = "0.6"
+
 # Local storage (app-level encryption via RustCrypto AEAD, no OpenSSL needed)
 rusqlite = { version = "0.33", features = ["bundled"] }
 
