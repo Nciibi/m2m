@@ -447,12 +447,26 @@ fn parse_hex_ipv4(hex: &str) -> Result<Ipv4Addr, ()> {
 /// Fallback gateway discovery: probe common addresses (last resort).
 ///
 /// 1. Determine the local interface IP by binding a UDP socket.
-/// 2. Try `.1` and `.254` on the same /24 subnet.
+/// 2. Try `.1` and `.254` on the same /24 subnet — **only when that address is
+///    private**, because a publicly-addressed host would otherwise have us probe
+///    `.1` of its own public /24.
 /// 3. Append a list of well-known gateway addresses.
 /// 4. Send a NAT-PMP public-address request to each — the first to
 ///    respond is confirmed as the real gateway.
-/// 5. If no response, return the first unverified candidate anyway.
-async fn discover_gateway_fallback() -> Option<IpAddr> {
+/// 5. If nothing responded, return the first candidate *marked unverified*.
+///
+/// **F4 — why the responder's address, not its reply, is returned.** Step 4's
+/// probe carries the router's *external* address in the reply body
+/// (`nat_pmp_public_address`). The old code returned that value as "the
+/// gateway", so the caller sent PCP and NAT-PMP — LAN protocols, port 5351 — to
+/// a public internet address. What has been proved to be a router is the
+/// address we *probed*, so that is what comes back.
+///
+/// **F4 — why step 5 is unusable.** The candidate in step 5 is `.1` of whatever
+/// subnet we guessed, with zero evidence behind it. It is returned wrapped in
+/// `Unverified` so `discover_gateway` can refuse it instead of turning it into a
+/// mapping attempt against an address that was never shown to be a router.
+async fn discover_gateway_fallback() -> Option<GatewayCandidate> {
     // Learn our local interface IP.
     let local_ip = {
         let sock = crate::dial::bind_udp_for_external_query().await.ok()?;
@@ -473,10 +487,21 @@ async fn discover_gateway_fallback() -> Option<IpAddr> {
 
     let candidates: Vec<Ipv4Addr> = if let IpAddr::V4(v4) = local_ip {
         let octets = v4.octets();
-        let mut list = vec![
-            Ipv4Addr::new(octets[0], octets[1], octets[2], 1),
-            Ipv4Addr::new(octets[0], octets[1], octets[2], 254),
-        ];
+        let mut list: Vec<Ipv4Addr> = Vec::new();
+        // `sock.connect("8.8.8.8:53")` is a connect-only trick to pick a source
+        // address, and on a host with a public interface it yields the *public*
+        // IP. Sibling-derived candidates are therefore only meaningful when the
+        // host is private; otherwise `.1` of that /24 is an arbitrary internet
+        // address and probing it sends a LAN-protocol datagram off-LAN.
+        if v4.is_private() {
+            list.push(Ipv4Addr::new(octets[0], octets[1], octets[2], 1));
+            list.push(Ipv4Addr::new(octets[0], octets[1], octets[2], 254));
+        } else {
+            tracing::debug!(
+                local_ip = %v4,
+                "not deriving sibling gateway candidates: source address is not private"
+            );
+        }
         for gw in common {
             let a = Ipv4Addr::new(gw[0], gw[1], gw[2], gw[3]);
             if !list.contains(&a) {
@@ -495,15 +520,17 @@ async fn discover_gateway_fallback() -> Option<IpAddr> {
         let addr = SocketAddr::new(IpAddr::V4(*gw), 5351);
         if let Ok(probe) = nat_pmp_public_address(&addr).await {
             tracing::info!(gateway = %gw, public_ip = %probe, "gateway discovered via NAT-PMP probe");
-            return Some(probe);
+            // The *probed* address is the router. `probe` is the external address
+            // the router reported and is not a valid LAN mapping target.
+            return Some(GatewayCandidate::Verified(IpAddr::V4(*gw)));
         }
     }
 
-    // Last resort: return first candidate even without verification.
-    candidates.first().map(|&gw| {
-        tracing::warn!(gateway = %gw, "using unverified gateway");
-        IpAddr::V4(gw)
-    })
+    // Nothing responded: hand back the first guess, explicitly marked unverified
+    // so the caller refuses to send it a mapping request.
+    let guess = candidates.first().copied().map(IpAddr::V4);
+    tracing::warn!("no gateway answered a NAT-PMP probe");
+    guess.map(GatewayCandidate::Unverified)
 }
 
 // ─── NAT-PMP (RFC 6886) ─────────────────────────────────────────────────────
