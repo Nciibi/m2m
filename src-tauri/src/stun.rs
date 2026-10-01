@@ -180,8 +180,31 @@ pub struct StunServerHealth {
 /// Result of an end-to-end connectivity verification.
 #[derive(Debug, Clone, Serialize)]
 pub struct ConnectivityStatus {
-    /// Whether the listening port is reachable from the public internet.
-    pub reachable: bool,
+    /// Whether the **TCP listening port** was verified reachable from the
+    /// public internet.
+    ///
+    /// `None` means *not measured*, which is different from `false`, and it is
+    /// currently always `None`. STUN reports the UDP mapping of an ephemeral
+    /// socket this module creates for the probe; that port is not the TCP
+    /// listening port, and nothing here sends a packet to the listening port
+    /// from outside. The field used to be a `bool` derived from the NAT type
+    /// (`Symmetric => true`) or from cross-server agreement, and the Settings
+    /// view renders it verbatim next to the word "reachable" — a check that
+    /// reported a claim it could not back.
+    ///
+    /// Measuring it for real needs an external echo service that dials our
+    /// TCP port, which would hand the user's address to a fourth third party
+    /// on every "Check". That trade is not taken silently: it is a product
+    /// decision, not an implementation detail.
+    pub reachable: Option<bool>,
+    /// Whether at least [`MIN_CONSENSUS_SERVERS`] configured STUN servers
+    /// independently reported the same global-unicast address.
+    ///
+    /// This is the fact the check actually establishes, so it is the one that
+    /// carries a value. `None` means no agreement check was run for this
+    /// snapshot (e.g. the diagnostics path, which only probes per-server
+    /// liveness) — not that servers disagreed.
+    pub stun_agreement: Option<bool>,
     /// Classified NAT type.
     pub nat_type: NatType,
     /// Public address if discovered.
