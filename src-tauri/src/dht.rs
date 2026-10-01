@@ -670,9 +670,7 @@ pub async fn announce_loop(
             let ephemeral = current_id;
             let announced_addr = addr;
             set.spawn(async move {
-                if let Err(e) =
-                    announce_to_node(node_addr, &ephemeral, announced_addr).await
-                {
+                if let Err(e) = announce_to_node(node_addr, &ephemeral, announced_addr).await {
                     tracing::debug!(node = %node_addr, error = %e, "DHT announce failed");
                 }
             });
@@ -1042,11 +1040,7 @@ mod dht_tests {
         for i in 0..(MAX_ANNOUNCE_SEEDS * 10) {
             let addr = format!("192.168.1.{}:5000", i + 1);
             lan.insert_peer(lan_peer_at(&addr, &format!("tok{i}")));
-            trusted.insert(
-                format!("192.168.1.{}", i + 1)
-                    .parse::<IpAddr>()
-                    .unwrap(),
-            );
+            trusted.insert(format!("192.168.1.{}", i + 1).parse::<IpAddr>().unwrap());
         }
 
         assert_eq!(

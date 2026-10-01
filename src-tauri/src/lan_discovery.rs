@@ -162,10 +162,7 @@ impl LanDiscoveryState {
             // than spin so a future change can never turn this into a hang.
             let Some(k) = oldest else { break };
             self.peers.remove(&k);
-            tracing::debug!(
-                evicted = %k,
-                "LAN peer table full — evicted least recently seen"
-            );
+            tracing::debug!(evicted = %k, "LAN peer table full — evicted oldest");
         }
     }
 }
@@ -514,10 +511,7 @@ pub async fn start(
             }
 
             match socket_announcer
-                .send_to(
-                    &packet,
-                    SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT),
-                )
+                .send_to(&packet, SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT))
                 .await
             {
                 Ok(n) => {
@@ -543,10 +537,7 @@ pub async fn start(
 /// while the announcer was still live, so `get_discovered_peers` reported an
 /// empty list for a service that was still running and about to publish this
 /// node's listening port one more time.
-async fn task_finished(
-    lan_state: &Arc<RwLock<LanDiscoveryState>>,
-    live_tasks: &Arc<AtomicUsize>,
-) {
+async fn task_finished(lan_state: &Arc<RwLock<LanDiscoveryState>>, live_tasks: &Arc<AtomicUsize>) {
     // `fetch_sub` returns the *previous* count, so only the task that takes it
     // from 1 to 0 is the last one out.
     if live_tasks.fetch_sub(1, Ordering::SeqCst) == 1 {
