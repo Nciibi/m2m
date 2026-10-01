@@ -64,6 +64,17 @@ const MAX_HTTP_BODY: usize = 256 * 1024;
 /// indefinitely part-way through a body.
 const UPNP_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Maximum length of a chunked-transfer chunk-size line (32 bytes).
+///
+/// The loop that reads such a line appends one byte per iteration and grants
+/// every byte a *fresh* `UPNP_READ_TIMEOUT`, so a responder trickling a byte
+/// just before each deadline grew the allocation without bound — the only
+/// unbounded length left in this file now that `MAX_HTTP_BODY` covers
+/// `Content-Length`, the header block and each chunk size. A legal chunk-size
+/// line is a hex number plus an optional `;` extension, so 32 bytes is
+/// generous; anything longer is a hostile or broken responder.
+const MAX_CHUNK_LINE: usize = 32;
+
 /// A successful NAT port mapping from one of the three protocols.
 #[derive(Debug, Clone)]
 pub struct PortMapping {
