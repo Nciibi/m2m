@@ -3668,6 +3668,62 @@ async fn handle_group_frame(
     }
 }
 
+/// Maximum inbound file-transfer chunk frames per second, per connection.
+///
+/// `network::MAX_INBOUND_FRAMES_PER_SEC` (30/s) is sized for *control* traffic:
+/// typing indicators, reactions, heartbeats — things a human produces. Charging
+/// bulk data frames against it capped every legitimate transfer at 30 × 256 KiB
+/// = 7.68 MB/s, and 30 × 128 KiB = 3.84 MB/s over a relay, because
+/// `compute_chunk_size` returns `MAX_FILE_CHUNK_SIZE` (256 KiB) for every
+/// non-relay strategy and `send_file_chunks_inner` paces nothing at all — it
+/// reads, hashes and writes the next chunk as fast as the link allows. A 1 GiB
+/// transfer therefore cleared the one-second burst allowance and then had
+/// *every* frame rejected, so `rate_limit_strikes` never reset and the session
+/// was dropped mid-file with a `disconnected` event. That is a false positive on
+/// an abuse heuristic, triggered by the product's main feature working.
+///
+/// 1000/s is not a throttle on any transfer this build can produce: the byte
+/// ceiling below binds first, at 64 MiB/s, which is 256 chunk-frames/s at
+/// 256 KiB and 512/s at 128 KiB. The cap binds only for a peer sending chunks
+/// *smaller* than 64 KiB, and its purpose is to bound per-frame dispatch cost
+/// (read syscall, MessagePack parse, AEAD open, SHA-256) when a peer declares
+/// tiny chunks — the case in which a byte-only budget would otherwise become a
+/// 65536-frames-per-second CPU allowance. A peer cannot widen that allowance by
+/// choosing a chunk size; it can only choose to accept a 1000/s ceiling.
+const MAX_INBOUND_CHUNK_FRAMES_PER_SEC: u32 = 1000;
+
+/// Maximum inbound bulk-transfer bytes per second, per connection.
+///
+/// This is the budget that actually bounds a file transfer, so it has to sit
+/// above what a real link delivers — otherwise the limiter simply becomes the
+/// reason transfers fail. The control-frame byte budget (16 MiB/s) is not safe
+/// to reuse here: a 1 GiB transfer over a 1 Gbps LAN sustains ~119 MiB/s, so at
+/// 16 MiB/s the bucket drains in well under a second and every later frame is
+/// rejected, which is the same dropped-mid-file failure at twice the threshold.
+/// 64 MiB/s is above every non-local path (1 Gbps peaks at 119 MiB/s) and below
+/// the 250 MB/s that the 1000-frames/s cap alone would permit at 256 KiB
+/// chunks, so both budgets stay meaningful.
+///
+/// Cost of the change: a connection now has two byte budgets instead of one,
+/// so the per-connection ceiling is 16 MiB/s of control frames plus 64 MiB/s of
+/// transfer data. Both are hard token buckets; neither is unbounded.
+const MAX_INBOUND_CHUNK_BYTES_PER_SEC: u32 = 64 * 1024 * 1024;
+
+/// Is this frame part of the bulk file-transfer data path?
+///
+/// Both directions of the per-chunk protocol qualify: the chunk itself, and the
+/// `FileTransferChunkAck` the receiver returns for each one. The ACK rate is
+/// dictated by the data rate — at 64 MiB/s of 256 KiB chunks the *sender*
+/// receives 256 ACKs/s — so leaving ACKs on the 30/s control budget would drop
+/// the sender's own session mid-transfer for a transfer the byte budget had
+/// already allowed.
+fn is_bulk_transfer_frame(packet_type: PacketType) -> bool {
+    matches!(
+        packet_type,
+        PacketType::FileTransferChunk | PacketType::FileTransferChunkAck
+    )
+}
+
 /// Spawn the receive loop and its heartbeat worker for one established session.
 ///
 /// `conn_arc` is the *identity* of this session. Both workers must be able to
