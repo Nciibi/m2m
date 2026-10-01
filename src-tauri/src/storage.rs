@@ -1608,13 +1608,22 @@ impl MessageStore {
     /// messages before the user turned ephemeral mode on still owes them the
     /// timers they were given.
     pub fn sweep(&self, cap_bytes: u64) -> Result<SweepOutcome, StorageError> {
-        let expired_messages = self.delete_expired_messages()?;
+let expired_messages = self.delete_expired_messages()?;
         if expired_messages > 0 {
             tracing::info!(
                 expired = expired_messages,
-                "self-destruct timer elapsed — messages permanently destroyed"
+                "self-destruct timer elapsed - messages permanently destroyed"
             );
         }
+        // Re-derive the byte counter from SQL before the cap is evaluated. This
+        // is the pass that bounds drift accumulated by a write path nobody
+        // remembered to update: `enforce_storage_cap` only verifies
+        // opportunistically (its band is a performance compromise), so without
+        // this the counter could sit arbitrarily far below the truth until it
+        // happened to land near the cap — and under-reporting is the direction
+        // that silently disables the cap. Runs on the 15-minute timer, not per
+        // frame, so the cost is bounded.
+        self.stored_bytes_verified()?;
         // Conversation retention policies are the *other* thing that destroys
         // stored history, so they belong in the same pass. Leaving them out is
         // what let "Auto-Delete After 24h" persist, display, and never fire.
