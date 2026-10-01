@@ -914,8 +914,36 @@ fn is_global_unicast(ip: std::net::IpAddr) -> bool {
                 && !v6.is_multicast()
                 && !v6.is_unique_local()
                 && !v6.is_unicast_link_local()
+                // Documentation prefix 2001:db8::/32 (RFC 3849). Spelled out
+                // rather than calling `is_documentation()` so this predicate
+                // does not depend on that method's availability in std.
+                && !(v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8)
         }
     }
+}
+
+/// Whether `addr` may be turned into a candidate that peers are told to dial.
+///
+/// This is the single predicate for "is this a public address we are willing to
+/// publish", and it is the intersection of two independent checks:
+///
+/// * [`is_global_unicast`] — the address is not private, loopback, link-local,
+///   CGNAT, multicast, documentation or benchmarking space.
+/// * [`crate::dial::is_non_tor_routable`] — the same conservative
+///   classification the outbound dial chokepoint uses, which additionally
+///   unwraps IPv4-mapped (`::ffff:a.b.c.d`) and IPv4-compatible IPv6 forms so a
+///   private address cannot smuggle itself through in IPv6 clothing.
+///
+/// Both are required rather than one: `is_global_unicast` alone lets
+/// `::ffff:192.168.1.5` through, and `is_non_tor_routable` alone is a
+/// *Tor-mode* dial filter whose semantics are about reachability, not about
+/// what is safe to hand to a third party in an invite.
+///
+/// This is used on the wire-derived address only. A local LAN address is a
+/// legitimate candidate from `gather_host_candidates`; it is just not something
+/// a remote STUN server gets to decide.
+pub fn is_publishable_public_addr(addr: &SocketAddr) -> bool {
+    is_global_unicast(addr.ip()) && !crate::dial::is_non_tor_routable(addr.ip())
 }
 
 /// Check if an IPv4 address is in a private range (RFC 1918).
