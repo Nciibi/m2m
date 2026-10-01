@@ -249,6 +249,28 @@ fn parse_announcement(packet: &[u8], sender: SocketAddr) -> Option<LanPeer> {
         return None;
     }
 
+    // The datagram is not authenticated in any way: the 32 bytes are an
+    // ephemeral token the sender invented for this packet and nothing about
+    // them can be verified. The source address is therefore the *only* field
+    // that can be checked, and accepting an unchecked one is how an off-LAN
+    // sender turns a spoofed multicast packet into both a diallable peer (the
+    // UI offers `connect_addr` verbatim) and a DHT announce target, which
+    // receives this node's real listen address and current ephemeral id.
+    if !is_acceptable_lan_source(sender.ip()) {
+        tracing::debug!(
+            ip = %sender.ip(),
+            "ignoring LAN announcement from a non-LAN source address"
+        );
+        return None;
+    }
+
+    // Port 0 is never connectable, and announcing it is pure table pollution:
+    // it would occupy a bounded slot for a peer that can never be dialled.
+    if listen_port == 0 {
+        tracing::debug!("ignoring LAN announcement claiming listen port 0");
+        return None;
+    }
+
     let connect_addr = SocketAddr::new(sender.ip(), listen_port);
     let token_hex = hex::encode(session_token);
 
@@ -258,6 +280,30 @@ fn parse_announcement(packet: &[u8], sender: SocketAddr) -> Option<LanPeer> {
         connect_addr,
         last_seen: now,
     })
+}
+
+/// Whether `ip` is a source address LAN discovery may accept a peer from.
+///
+/// A peer discovered over LAN multicast is by definition on a local network,
+/// so its address has to fall in RFC 1918 private space, RFC 3927 link-local
+/// space, or loopback (two instances on one machine). Anything else — a routed
+/// segment, a spoofed source, a crafted packet from anywhere — is rejected
+/// before it can become a connectable peer or a DHT bootstrap seed.
+///
+/// Deliberately *not* accepted: CGNAT `100.64/10` and the RFC 5737 / RFC 2544
+/// documentation and benchmarking ranges. None of them is a range a home or
+/// office LAN is addressed from, and widening the accept set widens the set of
+/// spoofable source addresses for no gain. The cost of a false negative is one
+/// missed peer; the cost of a false positive is a deanonymisation primitive.
+fn is_acceptable_lan_source(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_private() || v4.is_link_local() || v4.is_loopback(),
+        // The group is IPv4-only and the socket is bound to 0.0.0.0, so an
+        // IPv6 source is never a legitimate announcement. Rejecting the whole
+        // family also stops an IPv4-mapped source (`::ffff:192.168.1.5`) from
+        // reaching the v4 classification as anything other than itself.
+        IpAddr::V6(_) => false,
+    }
 }
 
 /// Start the LAN discovery service.
