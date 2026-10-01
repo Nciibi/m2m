@@ -317,28 +317,81 @@ fn is_acceptable_lan_source(ip: IpAddr) -> bool {
 /// only a random token that changes frequently.
 ///
 /// LAN discovery is **OFF by default**. Enable it in Settings.
+///
+/// Returns `Err` — and starts nothing — if Tor is enabled, or if the socket
+/// cannot be bound or cannot join the multicast group. It never reports
+/// success for a listener that would not have worked.
 pub async fn start(
     listen_addr: Arc<RwLock<Option<std::net::SocketAddr>>>,
     lan_state: Arc<RwLock<LanDiscoveryState>>,
     ephemeral_id: Arc<RwLock<crate::ephemeral_id::EphemeralPeerId>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<(), LanDiscoveryError> {
+    // Defence in depth against the Tor refusal in
+    // `commands::discovery::set_discovery_config`: that check is ordered
+    // *before* the state handles are installed, and the Tor flag is global
+    // and can be flipped at any time from Settings. Checking here as well
+    // means a LAN announcer cannot exist at all while Tor is on, regardless
+    // of toggle ordering or of a future caller that forgets the check — the
+    // shape that let enabling Tor fail to stop the 30-second multicast that
+    // publishes this node's listening port to every host on the network.
+    if crate::tor::is_enabled() {
+        return Err(LanDiscoveryError::TorEnabled);
+    }
+
     // Bind to a random UDP port for multicast
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))
         .map_err(LanDiscoveryError::Io)?;
 
+    // Do not loop our own announcements back to us. With loopback on, every
+    // send is delivered to this host too, so `parse_announcement` accepted it
+    // and the node listed *itself* as a discovered LAN peer — an entry the UI
+    // then offered to connect to, and (via `dht::lan_dht_seeds`) a DHT node to
+    // announce our own address to.
     socket
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_multicast_loop_v4(false)
         .map_err(LanDiscoveryError::Io)?;
 
-    // Join the multicast group
-    let _ = socket
-        .join_multicast_v4(&MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED)
-        .map_err(LanDiscoveryError::Io);
+    // TTL 1 keeps the datagram on the local link, which is the entire intent
+    // of LAN discovery. The platform default happens to be 1 on the common
+    // stacks, but "happens to be" is not a property this disclosure should
+    // depend on: a datagram that escaped onto a routed segment would be
+    // readable by every AS between here and wherever it landed.
+    socket.set_multicast_ttl_v4(1).map_err(LanDiscoveryError::Io)?;
 
-    let socket = Arc::new(socket);
+    // Join the multicast group. This used to be `let _ = ...`, i.e. the error
+    // was constructed and thrown away: a failed join (no route to the group,
+    // the interface already having joined it, a firewall) left the socket bound
+    // but subscribed to nothing, `start` still logged "LAN discovery started",
+    // and the Settings toggle reported discovery as ON while no announcement
+    // was ever sent or received. No join, no discovery — say so.
+    socket
+        .join_multicast_v4(&MULTICAST_ADDR, &Ipv4Addr::UNSPECIFIED)
+        .map_err(LanDiscoveryError::Io)?;
+
+    // Hand the socket to the reactor. The listener used to call a *blocking*
+    // `std::net::UdpSocket::recv_from` from inside `tokio::spawn`, with a 5s
+    // read timeout, in a loop with no other await point. That occupies one
+    // tokio worker thread essentially 100% of the time for as long as
+    // discovery is enabled — half the runtime on a 2-core VM, starving every
+    // receive loop, heartbeat and self-destruct timer in the messaging path —
+    // and it also meant `cancel` was only observed after each 5s block.
+    // `from_std` requires non-blocking mode to already be set.
+    socket.set_nonblocking(true).map_err(LanDiscoveryError::Io)?;
+    let socket = Arc::new(
+        tokio::net::UdpSocket::from_std(socket).map_err(LanDiscoveryError::Io)?,
+    );
     let socket_listener = socket.clone();
     let socket_announcer = socket.clone();
+
+    // Number of tasks this call owns. The caller (`commands::discovery`) only
+    // holds the cancel flag, not our `JoinHandle`s, so completion is published
+    // through the state object it already keeps a handle to: `enabled` is true
+    // only while at least one task is still running. Without that signal the
+    // stop path logged "LAN discovery DISABLED" and dropped the state handles
+    // while the announcer was still mid-sleep, about to send one more
+    // multicast of this node's real listening port.
+    let live_tasks = Arc::new(AtomicUsize::new(2));
 
     {
         let mut state = lan_state.write().await;
@@ -348,24 +401,37 @@ pub async fn start(
     tracing::info!(port = MULTICAST_PORT, "LAN discovery started");
 
     // ── Listener task ──
-    let lan_state_clone = lan_state.clone();
+    let lan_state_listener = lan_state.clone();
+    let live_tasks_listener = live_tasks.clone();
     let cancel_listener = cancel.clone();
     tokio::spawn(async move {
         let mut buf = [0u8; 512];
         loop {
             if cancel_listener.load(Ordering::SeqCst) {
-                tracing::info!("LAN discovery listener cancelled");
-                return;
+                break;
             }
-            match socket_listener.recv_from(&mut buf) {
+            // The receive is awaited, and the cancel flag is re-read on a
+            // short interval alongside it. Waiting only for a datagram would
+            // keep the socket subscribed to the group after the user turned
+            // discovery off, so this host would still ingest announcements —
+            // and the loop would still be holding the multicast subscription —
+            // until somebody happened to speak on the LAN.
+            let received = tokio::select! {
+                res = socket_listener.recv_from(&mut buf) => Some(res),
+                _ = tokio::time::sleep(CANCEL_POLL_INTERVAL) => None,
+            };
+            let Some(res) = received else {
+                continue;
+            };
+            match res {
                 Ok((n, sender)) => {
                     let packet = &buf[..n];
                     if let Some(peer) = parse_announcement(packet, sender) {
-                        let mut state = lan_state_clone.write().await;
-                        let peer_key_hex = peer.token_hex.clone();
+                        let mut state = lan_state_listener.write().await;
 
-                        // Update or insert the peer
-                        state.peers.insert(peer_key_hex, peer);
+                        // Bounded insert: an unauthenticated sender controls
+                        // the key, so the table cannot be left unbounded.
+                        state.insert_peer(peer);
                         state.expire_stale_peers();
 
                         tracing::debug!(
@@ -375,26 +441,33 @@ pub async fn start(
                     }
                 }
                 Err(e) => {
-                    // Timeout is expected (set_read_timeout = 5s)
-                    if e.kind() != std::io::ErrorKind::WouldBlock
-                        && e.kind() != std::io::ErrorKind::TimedOut
-                    {
-                        tracing::warn!(error = %e, "LAN discovery recv error");
-                    }
+                    tracing::warn!(error = %e, "LAN discovery recv error");
                 }
             }
         }
+        tracing::info!("LAN discovery listener cancelled");
+        task_finished(&lan_state_listener, &live_tasks_listener).await;
     });
 
     // ── Announcer task ──
+    let lan_state_announcer = lan_state.clone();
+    let live_tasks_announcer = live_tasks.clone();
     let cancel_announcer = cancel.clone();
     tokio::spawn(async move {
         loop {
             if cancel_announcer.load(Ordering::SeqCst) {
-                tracing::info!("LAN discovery announcer cancelled");
-                return;
+                break;
             }
             tokio::time::sleep(ANNOUNCE_INTERVAL).await;
+
+            // Re-read the flag *after* the sleep. Checking only at the top of
+            // the loop meant a sleep that began while discovery was still
+            // enabled ran to completion after the user disabled it and then
+            // multicasted this node's real listening port anyway — a presence
+            // disclosure published after the UI said discovery was off.
+            if cancel_announcer.load(Ordering::SeqCst) {
+                break;
+            }
 
             // Check if network changed — rotate ephemeral ID
             {
@@ -422,10 +495,20 @@ pub async fn start(
 
             let packet = build_announcement(listen_port, &session_token);
 
-            match socket_announcer.send_to(
-                &packet,
-                SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT),
-            ) {
+            // Everything above this line awaits, so the flag has to be read
+            // once more immediately before the send: this is the last point at
+            // which cancellation can still prevent a disclosure.
+            if cancel_announcer.load(Ordering::SeqCst) {
+                break;
+            }
+
+            match socket_announcer
+                .send_to(
+                    &packet,
+                    SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT),
+                )
+                .await
+            {
                 Ok(n) => {
                     tracing::trace!(bytes = n, "LAN announcement sent");
                 }
@@ -434,9 +517,31 @@ pub async fn start(
                 }
             }
         }
+        tracing::info!("LAN discovery announcer cancelled");
+        task_finished(&lan_state_announcer, &live_tasks_announcer).await;
     });
 
     Ok(())
+}
+
+/// Publish "LAN discovery is no longer running" once the last task has exited.
+///
+/// The stop path in `commands::discovery` cannot await our `JoinHandle`s — it
+/// only holds the cancel flag — so it polls `LanDiscoveryState::enabled`
+/// instead. Without this, it cleared the state handles and logged "DISABLED"
+/// while the announcer was still live, so `get_discovered_peers` reported an
+/// empty list for a service that was still running and about to publish this
+/// node's listening port one more time.
+async fn task_finished(
+    lan_state: &Arc<RwLock<LanDiscoveryState>>,
+    live_tasks: &Arc<AtomicUsize>,
+) {
+    // `fetch_sub` returns the *previous* count, so only the task that takes it
+    // from 1 to 0 is the last one out.
+    if live_tasks.fetch_sub(1, Ordering::SeqCst) == 1 {
+        let mut state = lan_state.write().await;
+        state.enabled = false;
+    }
 }
 
 fn now_unix_secs() -> u64 {
