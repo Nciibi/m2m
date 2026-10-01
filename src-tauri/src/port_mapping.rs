@@ -875,7 +875,8 @@ async fn pcp_map_tcp(
         buf[PCP_OFF_EXT_IP + 2],
         buf[PCP_OFF_EXT_IP + 3],
     ));
-    let external_addr = reject_unusable_external_addr(SocketAddr::new(ext_ip, external_port), "PCP")?;
+    let external_addr =
+        reject_unusable_external_addr(SocketAddr::new(ext_ip, external_port), "PCP")?;
 
     tracing::debug!(
         lifetime = mapped_lifetime,
