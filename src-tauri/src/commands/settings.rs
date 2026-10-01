@@ -443,6 +443,49 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    /// A one-server list makes "all responding servers agree" vacuously true,
+    /// which is how a single rogue server used to define the user's advertised
+    /// public address. `stun::aggregate_consensus` refuses to publish below the
+    /// quorum, so the list must not be configurable that way in the first place.
+    #[test]
+    fn stun_list_requires_a_quorum() {
+        assert!(validate_stun_server_list(&[]).is_err());
+        assert!(validate_stun_server_list(&["stun.example:3478".to_string()]).is_err());
+        assert!(
+            validate_stun_server_list(&[
+                "stun.a.example:3478".to_string(),
+                "stun.b.example:3478".to_string(),
+            ])
+            .is_ok()
+        );
+    }
+
+    /// Two copies of one server look like a quorum and are not one. Compared
+    /// case-insensitively because host names are case-insensitive, so
+    /// `Stun.A.example` and `stun.a.example` are the same entry.
+    #[test]
+    fn stun_list_rejects_duplicates() {
+        let err = validate_stun_server_list(&[
+            "stun.evil.example:3478".to_string(),
+            "STUN.Evil.Example:3478".to_string(),
+        ])
+        .expect_err("a duplicated server must be rejected");
+        assert!(err.message.contains("duplicate"), "got: {err:?}");
+    }
+
+    /// The pre-existing per-entry validation must still apply now that the list
+    /// is checked by a helper — a malformed entry must not slip through the
+    /// quorum branch.
+    #[test]
+    fn stun_list_still_validates_each_entry() {
+        assert!(validate_stun_server_list(&["a:b".to_string(), "stun.b:3478".to_string()]).is_err());
+        assert!(validate_stun_server_list(&[":3478".to_string(), "stun.b:3478".to_string()]).is_err());
+        assert!(validate_stun_server_list(&["stun.a:0".to_string(), "stun.b:3478".to_string()]).is_err());
+        assert!(
+            validate_stun_server_list(&["stun.a:99999".to_string(), "stun.b:3478".to_string()]).is_err()
+        );
+    }
+
     #[tokio::test]
     async fn diagnostics_reject_air_gap_before_accessing_stun_config() {
         let state = AppState::new(String::new());
