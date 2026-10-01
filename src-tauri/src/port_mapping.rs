@@ -102,6 +102,48 @@ pub enum PortMapError {
     TorUnsupported,
 }
 
+/// Reject an address that must not be published to peers as `external_addr`.
+///
+/// `PortMapping::external_addr` is not a diagnostic value. `commands::network`
+/// turns it into a `candidate_type: 4` invite entry, and the invite is a
+/// shareable link — it also ends up in the *plaintext* `HandshakeInit` frame,
+/// so the peer, the Tor exit and every AS on the path can read it. Three ways a
+/// response body could put an address here that no peer can ever connect to:
+///
+/// * **All-zero.** PCP (RFC 6887 §14.1) echoes an all-zero requested external
+///   IP unchanged when the client asked for "any", so a success response
+///   routinely carries `0.0.0.0`. NAT-PMP (RFC 6886 §4.2) does the same. That
+///   used to be published as the literal string `"0.0.0.0:0"`.
+/// * **Port 0.** The mapping grants no reachable port; `external_port` comes
+///   straight off the wire.
+/// * **Our own LAN address.** `client_ip` is a private RFC 1918 address that
+///   resolves nowhere off-LAN. Advertising it as the "public" address is the
+///   worst case of the three: it is guaranteed dead *and* it is our real LAN
+///   topology handed to every recipient.
+///
+/// `is_global_unicast` is the same idea `validate_upnp_location` uses on the
+/// other side of the flow: an address we hand to someone else has to be a real,
+/// globally routable address — anything in a reserved range is either a
+/// placeholder or something that can only exist inside the sender's network.
+fn reject_unusable_external_addr(
+    addr: SocketAddr,
+    protocol: &'static str,
+) -> Result<SocketAddr, PortMapError> {
+    let unusable = |why: &str| {
+        let msg = format!("{protocol} returned an unusable external address {addr}: {why}");
+        // Loud on purpose: this is a "we are about to publish a lie" condition.
+        tracing::warn!(%addr, protocol, why, "refusing to advertise a bogus external address");
+        PortMapError::Upnp(msg)
+    };
+    if addr.port() == 0 {
+        return Err(unusable("external port is 0, so nothing is reachable"));
+    }
+    if !addr.ip().is_global_unicast() {
+        return Err(unusable("address is not globally routable"));
+    }
+    Ok(addr)
+}
+
 /// Map a LAN-only dial failure onto a port-mapping error.
 ///
 /// Port mapping talks to the user's own router, so under Tor it is refused
