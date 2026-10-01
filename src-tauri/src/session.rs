@@ -1228,6 +1228,11 @@ impl Session {
 ///
 /// After this, `decrypt_*` returns an error and a fresh session must be
 /// established.
+///
+/// Retained as the reference implementation of that scrub even though
+/// `lock_vault` now drops the whole connection instead — `Drop for Session`
+/// below performs exactly these steps, and this documents what "scrubbed" means.
+#[allow(dead_code, reason = "reference scrubber; lock_vault drains connections so Drop handles this")]
 pub fn lock(&mut self) {
     // Both fields' own `Drop` impls zeroize correctly (crypto.rs), so `take()`
     // is the whole mechanism — the same one `Drop for Session` uses.
