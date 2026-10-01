@@ -1257,6 +1257,18 @@ async fn read_http_response_body<R: tokio::io::AsyncRead + Unpin>(
                         break;
                     }
                     if byte[0] != b'\r' {
+                        // A chunk-size line is a few hex digits. Without this cap
+                        // a responder that trickles one byte per read timeout
+                        // grows `line_buf` forever, and the per-read timeout is
+                        // *restarted* for every byte — so the trickle can hold
+                        // the task for as long as it likes and allocate as much
+                        // as it likes. Every other declared length in this file
+                        // is bounded; this one was not.
+                        if line_buf.len() >= MAX_CHUNK_LINE {
+                            return Err(PortMapError::Upnp(format!(
+                                "chunk-size line exceeds the {MAX_CHUNK_LINE} byte limit"
+                            )));
+                        }
                         line_buf.push(byte[0]);
                     }
                 }
