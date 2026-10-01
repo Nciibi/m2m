@@ -37,6 +37,8 @@ vi.mock("../context/AppContext", () => ({
   useApp: () => appState,
 }));
 
+const REACTION = "\u{1F44D}";
+
 import { ChatProvider, useChat } from "../context/ChatContext";
 
 function TestConsumer() {
@@ -79,15 +81,12 @@ function TestConsumer() {
       <button onClick={() => handleDeleteConversation("conv-1")}>Delete Conv</button>
       <button onClick={() => handleOpenChat({ id: "c1", peer_key_hex: "abc", display_name: null, peer_display_name: null, last_message_at: null, last_message_preview: null, message_count: 0, is_online: false, auto_delete_at: null, retention_policy: "none", created_at: 0 })}>Open Chat</button>
       <button onClick={() => handleOpenChat({ id: "cb", peer_key_hex: "b".repeat(64), display_name: null, peer_display_name: null, last_message_at: null, last_message_preview: null, message_count: 0, is_online: true, auto_delete_at: null, retention_policy: "none", created_at: 0 })}>Open Peer B</button>
-      <button onClick={() => handleSendReaction("msg-1", "👍")}>Send Reaction</button>
-      <button onClick={() => handleRemoveReaction("msg-1", "👍")}>Remove Reaction</button>
+      <button onClick={() => handleSendReaction("msg-1", REACTION)}>Send Reaction</button>
+      <button onClick={() => handleRemoveReaction("msg-1", REACTION)}>Remove Reaction</button>
       <button onClick={handleMarkConversationRead}>Mark Read</button>
     </div>
   );
 }
-
-/** The emoji the reaction tests send, referenced by name to avoid mojibake. */
-const REACTION = "\u{1F44D}";
 
 /** Surfaces `messages[0].reactions` so a test can assert the optimistic shape. */
 function ReactionProbe() {
@@ -184,7 +183,7 @@ describe("ChatContext", () => {
     expect(mockInvoke).toHaveBeenCalledWith("send_reaction", {
       peerKeyHex: "abc",
       messageId: "msg-1",
-      reaction: "👍",
+      reaction: REACTION,
     });
   });
 
@@ -206,7 +205,7 @@ describe("ChatContext", () => {
     expect(mockInvoke).toHaveBeenCalledWith("remove_reaction", {
       peerKeyHex: "abc",
       messageId: "msg-1",
-      reaction: "👍",
+      reaction: REACTION,
     });
   });
 
