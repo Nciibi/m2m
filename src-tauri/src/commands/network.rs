@@ -4224,7 +4224,49 @@ pub fn spawn_receive_loop(
 
 #[cfg(test)]
 mod contact_gate_tests {
-    use super::contact_gate_allows;
+    use super::*;
+    use super::{connection_map_has_room, is_bulk_transfer_frame};
+
+    /// HIGH-5: the frame budget must be sized for control traffic, not for bulk
+    /// data. A 256 KiB chunk charged against `MAX_INBOUND_FRAMES_PER_SEC` is
+    /// what capped every transfer at 7.68 MB/s and dropped it mid-file.
+    #[test]
+    fn test_bulk_transfer_frames_are_not_control_frames() {
+        assert!(is_bulk_transfer_frame(PacketType::FileTransferChunk));
+        // ACKs are driven by the data rate, so they belong to the same budget.
+        assert!(is_bulk_transfer_frame(PacketType::FileTransferChunkAck));
+        assert!(!is_bulk_transfer_frame(PacketType::EncryptedMessage));
+        assert!(!is_bulk_transfer_frame(PacketType::FileTransferRequest));
+        assert!(!is_bulk_transfer_frame(PacketType::Heartbeat));
+        assert!(!is_bulk_transfer_frame(PacketType::SyncRequest));
+    }
+
+    /// HIGH-5 sizing, stated as an assertion so the two constants cannot be
+    /// retuned into a transfer-breaking combination without a test failing.
+    /// A `compute_chunk_size` of 256 KiB (direct) must stay admitted at the byte
+    /// ceiling: 64 MiB/s ÷ 256 KiB = 256 frames/s, under the 1000/s cap.
+    #[test]
+    fn test_bulk_frame_cap_admits_a_full_rate_chunk_stream() {
+        let chunk = crate::protocol::MAX_FILE_CHUNK_SIZE; // 256 KiB
+        let relay_chunk = 128 * 1024usize; // `compute_chunk_size("relay")`
+        assert!(MAX_INBOUND_CHUNK_BYTES_PER_SEC as usize / chunk
+            <= MAX_INBOUND_CHUNK_FRAMES_PER_SEC as usize);
+        assert!(
+            MAX_INBOUND_CHUNK_BYTES_PER_SEC as usize / relay_chunk
+                <= MAX_INBOUND_CHUNK_FRAMES_PER_SEC as usize
+        );
+        // And the ceiling is above every non-local link: 1 Gbps is 119 MiB/s.
+        assert!(MAX_INBOUND_CHUNK_BYTES_PER_SEC >= 64 * 1024 * 1024);
+    }
+
+    /// MEDIUM-12: the connection map is full at the cap, not one past it.
+    #[test]
+    fn test_connection_map_cap_boundary() {
+        assert!(connection_map_has_room(0));
+        assert!(connection_map_has_room(MAX_ESTABLISHED_CONNECTIONS - 1));
+        assert!(!connection_map_has_room(MAX_ESTABLISHED_CONNECTIONS));
+        assert!(!connection_map_has_room(MAX_ESTABLISHED_CONNECTIONS + 1));
+    }
 
     /// H5: gate disabled (default) — everyone passes, first-time invite
     /// connections keep working.
