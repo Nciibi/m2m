@@ -363,9 +363,7 @@ pub async fn start(
     // and the node listed *itself* as a discovered LAN peer — an entry the UI
     // then offered to connect to, and (via `dht::lan_dht_seeds`) a DHT node to
     // announce our own address to.
-    socket
-        .set_multicast_loop_v4(false)
-        .map_err(LanDiscoveryError::Io)?;
+    socket.set_multicast_loop_v4(false).map_err(LanDiscoveryError::Io)?;
 
     // TTL 1 keeps the datagram on the local link, which is the entire intent
     // of LAN discovery. The platform default happens to be 1 on the common
