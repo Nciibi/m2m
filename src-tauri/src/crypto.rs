@@ -1175,7 +1175,12 @@ impl DoubleRatchet {
             Some(c) => c,
             None => scrub_and!(CryptoError::DoubleRatchetError("no recv chain key".into(),)),
         };
-        tent_chain_opt = None;
+        // `zeroize()`, not `= None`. `Option<[u8; 32]>` is `Copy` and has no drop
+        // glue, so assigning `None` rewrites the discriminant and leaves all 32
+        // bytes sitting in the slot — which is the exact hazard the comment above
+        // this binding describes. The value is now held by `tent_chain`, which is
+        // scrubbed on every exit.
+        tent_chain_opt.zeroize();
 
         // ── Cap gap size: reject absurd message numbers before burning CPU ──
         // `checked_sub` is belt-and-braces: the guards above already make an
