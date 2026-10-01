@@ -5480,7 +5480,12 @@ mod tests {
             }
             // A user-initiated "delete for everyone": also a zeroed key, but
             // `deleted = 1`, and it must survive as a tombstone.
-            store.soft_delete_message("m-tombstone", None).ok();
+            assert!(
+                store
+                    .delete_message("m-tombstone", "c1", "sent")
+                    .unwrap(),
+                "the user-delete under test must actually have applied"
+            );
 
             // Reproduce the crash window: the shred has committed, the delete
             // has not. `shred_message_keys` is exactly the committed half, and
