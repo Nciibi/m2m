@@ -701,6 +701,15 @@ pub async fn start_listening(
 /// lower value here is the stricter of the two.
 const MAX_ESTABLISHED_CONNECTIONS: usize = 50;
 
+/// Is there room in `state.connections` for one more established session?
+///
+/// Pure predicate so the cap is unit-testable at its boundary — the rule is
+/// "`MAX_ESTABLISHED_CONNECTIONS` entries is full", and off-by-one there is the
+/// difference between a bound and no bound at all.
+fn connection_map_has_room(current_len: usize) -> bool {
+    current_len < MAX_ESTABLISHED_CONNECTIONS
+}
+
 /// Complete an inbound connection, given the stream and its already-read
 /// handshake-init frame.
 ///
