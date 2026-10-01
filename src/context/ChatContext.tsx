@@ -831,11 +831,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: conn.peer_key_hex })));
         } catch { /* noop */ }
       } else if (stateStr === "disconnected") {
-        // Only meaningful for the conversation actually on screen.
-        if (!adoptingPeer) return;
-        // For verified peers, stay on ChatView so user can attempt reconnect.
-        // For unverified peers, go back to hub (no reconnect possible).
-        if (!conn.peer_verified) {
+        // Only meaningful for the conversation actually on screen — but a peer
+        // going offline is always worth refreshing the list for, so this must not
+        // `return` past the refresh below. (It used to, which left a peer shown
+        // as online in the Hub until some unrelated event refreshed it.)
+        if (adoptingPeer && !conn.peer_verified) {
+          // For verified peers, stay on ChatView so the user can attempt a
+          // reconnect. For unverified peers, go back to the hub — there is no
+          // reconnect to offer.
           setView("hub");
           setConnection(null);
           setMessages([]);
