@@ -3704,7 +3704,7 @@ pub fn spawn_receive_loop(
         loop {
             interval.tick().await;
 
-// Lock *this* session, never whatever currently holds the map
+            // Lock *this* session, never whatever currently holds the map
             // slot. A re-dial for the same peer replaces the entry, and resolving
             // by peer key here would probe the replacement's socket while this
             // worker still believed it owned the old one — and, worse, clear the
