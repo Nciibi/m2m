@@ -2295,8 +2295,18 @@ let expired_messages = self.delete_expired_messages()?;
     /// slack) are undecryptable even with full knowledge of the vault key.
     /// Step 2 truncates the WAL so shredded key cells cannot survive in
     /// `messages.db-wal`. Step 3 deletes the rows (`secure_delete` ON makes
-    /// SQLite zero freed in-page content). A final checkpoint flushes the
-    /// second round of changes.
+    /// SQLite zero freed in-page content) in ONE transaction, together with the
+    /// conversation row. A final checkpoint flushes the second round of
+    /// changes.
+    ///
+    /// Why step 3 must be a transaction: the two DELETEs were separate
+    /// autocommit statements, so a crash or `SQLITE_BUSY` between them could
+    /// remove the messages while leaving the conversation row behind — a
+    /// "deleted" conversation still listed in the Hub with an empty history,
+    /// and reactions orphaned against ids that no longer exist. The checkpoint
+    /// sits before and after the transaction rather than inside it, because
+    /// SQLite refuses `wal_checkpoint(TRUNCATE)` while a write transaction is
+    /// open.
     pub fn delete_conversation(&self, conversation_id: &str) -> Result<(), StorageError> {
         self.conn.pragma_update(None, "secure_delete", "ON")?;
         // Measure the rows about to be freed so the storage-cap counter can be
@@ -2314,18 +2324,25 @@ let expired_messages = self.delete_expired_messages()?;
             )
             .unwrap_or(0);
         self.conn.execute(
-            "UPDATE messages SET content_key_wrapped = ?2 WHERE conversation_id = ?1 AND content_key_wrapped IS NOT NULL",
+            "UPDATE messages SET content_key_wrapped = ?2
+              WHERE conversation_id = ?1
+                AND content_key_wrapped IS NOT NULL
+                AND content_key_wrapped != ?2",
             params![conversation_id, vec![0u8; WRAPPED_CEK_LEN]],
         )?;
         self.wal_checkpoint_truncate()?;
-        self.conn.execute(
-            "DELETE FROM messages WHERE conversation_id = ?1",
-            params![conversation_id],
-        )?;
-        self.conn.execute(
-            "DELETE FROM conversations WHERE id = ?1",
-            params![conversation_id],
-        )?;
+        {
+            let tx = self.conn.unchecked_transaction()?;
+            tx.execute(
+                "DELETE FROM messages WHERE conversation_id = ?1",
+                params![conversation_id],
+            )?;
+            tx.execute(
+                "DELETE FROM conversations WHERE id = ?1",
+                params![conversation_id],
+            )?;
+            tx.commit()?;
+        }
         self.add_stored_bytes(-freed);
         self.wal_checkpoint_truncate()?;
         Ok(())
