@@ -65,6 +65,26 @@ const PEER_EXPIRY_SECS: u64 = 1800;
 
 const MAX_LOOKUP_PARALLEL: usize = 3;
 
+/// Maximum number of seeds contacted in a single announce tick.
+///
+/// `nodes` is derived from peers discovered by LAN multicast, whose
+/// announcements are not authenticated at all, so the list is
+/// attacker-inflatable. Unbounded, a single host on the LAN could both grow the
+/// list and turn one tick into an arbitrarily long serial sequence of dials.
+/// `MAX_LOOKUP_PARALLEL` is deliberately not reused: a lookup is on the
+/// critical path of a user action, whereas an announce is best-effort and can
+/// afford a slightly wider fan-out against a slightly larger bound.
+const MAX_ANNOUNCE_SEEDS: usize = 4;
+
+/// Wall-clock budget for one whole announce fan-out.
+///
+/// `announce_to_node` can cost up to `DHT_CONNECT_TIMEOUT` for the dial plus
+/// another for the read, so a seed that black-holes the connection used to add
+/// ~10s to a *serial* loop. The whole fan-out now runs concurrently under this
+/// single deadline, so a dead seed costs the tick one timeout and not one
+/// timeout per seed.
+const ANNOUNCE_FANOUT_DEADLINE: Duration = Duration::from_secs(10);
+
 // ─── DHT Message Types ─────────────────────────────────────────────────────────
 
 const DHT_PING: u8 = 0x01;

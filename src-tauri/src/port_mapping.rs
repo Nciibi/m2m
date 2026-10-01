@@ -2245,10 +2245,11 @@ mod upnp_security_tests {
             // Let the reader finish its header pass first, then trickle a chunk
             // header that never terminates.
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            let _ = wr.write_all(&b'a'.repeat(MAX_CHUNK_LINE * 4)).await;
+            let trickle = b'a'.repeat(MAX_CHUNK_LINE * 4);
+            let _ = wr.write_all(&trickle).await;
             let _ = wr.flush().await;
-            let _ =
-                tokio::time::timeout(std::time::Duration::from_secs(2), wr.write_all(b"bbbb")).await;
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), wr.write_all(b"bbbb"))
+                .await;
         });
         let err = read_http_response_body(&mut rd)
             .await
