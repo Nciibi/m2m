@@ -4918,6 +4918,12 @@ mod tests {
         // forgot `add_stored_bytes` left it low and enforcement never fired: the
         // counter had to first exceed the cap on its own before the scan that
         // would have corrected it ran.
+        //
+        // `sweep` is the entry point here, not `enforce_storage_cap` directly:
+        // the cap's opportunistic band is a deliberate performance compromise,
+        // and the *unconditional* re-derivation is what `sweep` contributes on
+        // its 15-minute timer. Asserting on the bare gate would demand a full
+        // table scan per inbound message.
         let store = mem_messagestore();
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         fill_messages(&store, "c1", 6, 1000);
@@ -4931,15 +4937,48 @@ mod tests {
         assert_eq!(store.stored_bytes().unwrap(), 0, "the counter is now wrong");
 
         // A cap the truth violates but the cached number does not.
-        let report = store.enforce_storage_cap(one_msg * 3).unwrap();
+        let outcome = store.sweep(one_msg * 3).unwrap();
         assert!(
-            report.is_some(),
+            outcome.evicted.messages_evicted > 0,
             "a drifted-low counter must not be able to switch the cap off"
         );
-        assert!(report.unwrap().messages_evicted > 0);
         assert!(
             store.stored_bytes().unwrap() <= one_msg * 3,
             "usage must end up under the cap, not merely reported as over it"
+        );
+    }
+
+    #[test]
+    fn test_enforce_cap_verifies_when_the_counter_is_near_the_cap() {
+        // The opportunistic band: a counter sitting just under the cap is
+        // untrustworthy by definition, so the authoritative re-derivation must
+        // decide. A counter drifted high (an over-counted delete, say) must not
+        // be able to trigger an eviction that destroys nothing needed either.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let truth = store.stored_bytes().unwrap();
+
+        // Claim to be just below the cap; the truth is well under it.
+        let cap = truth * 2;
+        store
+            .conn
+            .execute(
+                "UPDATE storage_stats SET total_bytes = ?1 WHERE id = 1",
+                params![cap - 1024],
+            )
+            .unwrap();
+
+        let report = store.enforce_storage_cap(cap).unwrap();
+        assert!(
+            report.is_none(),
+            "the near-cap counter must be verified against SQL, and the truth is \
+             under the cap, so nothing may be evicted"
+        );
+        assert_eq!(
+            store.stored_bytes().unwrap(),
+            truth,
+            "the verification pass must also correct the stored counter"
         );
     }
 
