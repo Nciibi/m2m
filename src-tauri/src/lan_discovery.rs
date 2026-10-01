@@ -655,4 +655,145 @@ mod lan_discovery_tests {
             "different tokens should produce different packets"
         );
     }
+
+    fn v4(s: &str) -> IpAddr {
+        IpAddr::V4(s.parse::<Ipv4Addr>().unwrap())
+    }
+
+    /// A spoofed or off-LAN source must not become a peer. `parse_announcement`
+    /// authenticates nothing, so the address check is the only thing standing
+    /// between a crafted datagram and a diallable `connect_addr` that the UI
+    /// offers the user (and that `dht::lan_dht_seeds` hands to
+    /// `announce_to_node`).
+    #[test]
+    fn test_parse_rejects_non_lan_source_addresses() {
+        let packet = build_announcement(4444, &[0x5Au8; 32]);
+
+        for ip in ["8.8.8.8", "1.1.1.1", "203.0.113.7", "100.64.0.1"] {
+            let sender = SocketAddr::new(v4(ip), 9999);
+            assert!(
+                parse_announcement(&packet, sender).is_none(),
+                "{ip} is not a LAN source address and must be rejected"
+            );
+        }
+
+        // IPv6 cannot arrive on this IPv4-only socket, and must not be
+        // smuggled through as an IPv4-mapped or IPv4-compatible address.
+        for ip in ["2001:db8::1", "::ffff:192.168.1.5", "::1"] {
+            let sender = SocketAddr::new(ip.parse::<std::net::IpAddr>().unwrap(), 9999);
+            assert!(
+                parse_announcement(&packet, sender).is_none(),
+                "{ip} must be rejected on an IPv4-only group"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_accepts_lan_source_addresses() {
+        let packet = build_announcement(4444, &[0x5Au8; 32]);
+
+        for ip in [
+            "192.168.1.42",
+            "10.0.0.1",
+            "172.16.5.5",
+            "169.254.10.10",
+            "127.0.0.1",
+        ] {
+            let sender = SocketAddr::new(v4(ip), 9999);
+            assert!(
+                parse_announcement(&packet, sender).is_some(),
+                "{ip} is a legitimate LAN source and must be accepted"
+            );
+        }
+    }
+
+    /// Port 0 is not connectable, so accepting it only burns a bounded table
+    /// slot on an entry nothing can ever dial.
+    #[test]
+    fn test_parse_rejects_zero_listen_port() {
+        let packet = build_announcement(0, &[0x6Bu8; 32]);
+        let sender = SocketAddr::new(v4("192.168.1.42"), 9999);
+        assert!(parse_announcement(&packet, sender).is_none());
+    }
+
+    fn peer_named(name: &str, addr: &str, last_seen: u64) -> LanPeer {
+        LanPeer {
+            session_token: [0x7C; 32],
+            token_hex: name.to_string(),
+            connect_addr: addr.parse().unwrap(),
+            last_seen,
+        }
+    }
+
+    /// The table used to be an unbounded `HashMap` keyed on a 32-byte token the
+    /// *sender* chose, so one LAN host could mint unlimited entries — each a
+    /// diallable address the UI offers — inside the expiry window.
+    #[test]
+    fn test_insert_peer_is_bounded() {
+        let mut state = LanDiscoveryState::new();
+        let now = now_unix_secs();
+
+        for i in 0..(MAX_LAN_PEERS * 4) {
+            state.insert_peer(peer_named(
+                &format!("tok{i}"),
+                &format!("192.168.1.{}:4000", (i % 250) + 1),
+                now,
+            ));
+        }
+
+        assert!(
+            state.peers.len() <= MAX_LAN_PEERS,
+            "peer table must stay bounded, got {}",
+            state.peers.len()
+        );
+    }
+
+    /// Eviction must be least-recently-seen first, so a flood of fresh
+    /// attacker-chosen tokens evicts itself instead of the genuine peers.
+    #[test]
+    fn test_insert_peer_evicts_least_recently_seen() {
+        let mut state = LanDiscoveryState::new();
+        let now = now_unix_secs();
+
+        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now));
+
+        // Fill the table with strictly newer entries; `genuine` is now the
+        // oldest and must be the one evicted.
+        for i in 0..MAX_LAN_PEERS {
+            state.insert_peer(peer_named(
+                &format!("flood{i}"),
+                &format!("192.168.1.{}:4000", (i % 250) + 20),
+                now + 1 + i as u64,
+            ));
+        }
+
+        assert!(
+            state.peers.contains_key("genuine"),
+            "the least recently seen peer should have been the one evicted"
+        );
+        assert!(state.peers.len() <= MAX_LAN_PEERS);
+    }
+
+    /// Refreshing an existing peer must not be treated as a new insert: it
+    /// would otherwise push a stable peer table over the bound and evict a
+    /// peer for simply talking to us again.
+    #[test]
+    fn test_insert_peer_refresh_keeps_table_size() {
+        let mut state = LanDiscoveryState::new();
+        let now = now_unix_secs();
+
+        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now));
+        for i in 0..MAX_LAN_PEERS {
+            state.insert_peer(peer_named(
+                &format!("peer{i}"),
+                &format!("192.168.1.{}:4000", (i % 250) + 20),
+                now,
+            ));
+        }
+        let len_after_fill = state.peers.len();
+
+        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now + 5));
+        assert_eq!(state.peers.len(), len_after_fill);
+        assert!(state.peers.contains_key("genuine"));
+    }
 }
