@@ -5357,4 +5357,577 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    // ─── A control must not report success for something that did not happen ──
+    //
+    // The recurring failure in this codebase is a function returning `Ok(true)`
+    // — or a toast reading "done" — while the thing it describes failed
+    // silently. Every test below asserts the *error*, not the success, because
+    // the bug is precisely that a success was returned.
+
+    /// Reaction remove must fail loudly when the sealed row cannot be opened.
+    ///
+    /// This is the exact bug: the dedup/remove comparison was
+    /// `.unwrap_or(false)`, so with the vault locked every sealed row failed to
+    /// decrypt, every comparison returned "no match", the DELETE loop had an
+    /// empty `matched` list, and `upsert_reaction` returned `Ok(true)`. The
+    /// caller surfaced that as "reaction removed" while the row was still on
+    /// disk and still rendered in the UI.
+    ///
+    /// Asserted on the table, not on `get_reactions`: the read path skips
+    /// undecryptable rows, so it would look identical before and after a
+    /// successful delete.
+    #[test]
+    fn test_reaction_remove_errors_when_it_cannot_decrypt() {
+        let store = mem_messagestore();
+        let key = test_key();
+        let peer = hex::encode([0x44u8; 32]);
+        store.ensure_conversation("conv-x", &[0x44; 32]).unwrap();
+        store
+            .store_message("m-1", "conv-x", "sent", &[0u8; 24], b"hello", 1000, true)
+            .unwrap();
+
+        // Sealed row, written with a key.
+        store
+            .upsert_reaction("m-1", "👍", &peer, false, "conv-x", Some(&key))
+            .unwrap();
+
+        // Now remove it with NO key — the vault-locked case.
+        let result = store.upsert_reaction("m-1", "👍", &peer, true, "conv-x", None);
+
+        assert!(
+            result.is_err(),
+            "a remove that could not decrypt its target row must not report success"
+        );
+        assert!(
+            matches!(result, Err(StorageError::KeyNotFound)),
+            "expected KeyNotFound, got {:?}",
+            result.err()
+        );
+
+        // The row must still be there. A delete that "succeeded" while leaving
+        // the row is the precise failure mode being pinned.
+        let count: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "the reaction row must survive a remove that could not read it"
+        );
+    }
+
+    /// Reaction insert must also refuse when it cannot read the existing rows.
+    ///
+    /// Symmetric to the remove case and worse if unfixed: the dedup scan found
+    /// no match, so the INSERT went ahead *alongside* the row it could not
+    /// read. SQL cannot see the duplicate (the envelope has a fresh nonce, so
+    /// `reaction` differs byte-wise even for the same emoji), and no subsequent
+    /// remove can target it — the reaction is stuck on the message forever, and
+    /// a remove of the identical emoji now matches two rows.
+    #[test]
+    fn test_reaction_insert_errors_when_it_cannot_decrypt() {
+        let store = mem_messagestore();
+        let key = test_key();
+        let peer = hex::encode([0x55u8; 32]);
+        store.ensure_conversation("conv-y", &[0x55; 32]).unwrap();
+        store
+            .store_message("m-1", "conv-y", "sent", &[0u8; 24], b"hello", 1000, true)
+            .unwrap();
+
+        store
+            .upsert_reaction("m-1", "👍", &peer, false, "conv-y", Some(&key))
+            .unwrap();
+
+        // Same reaction again, but with no key: cannot tell duplicate from new.
+        let result = store.upsert_reaction("m-1", "👍", &peer, false, "conv-y", None);
+
+        assert!(
+            result.is_err(),
+            "an insert that could not check for duplicates must not claim it stored one"
+        );
+        let count: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "no duplicate may be inserted next to a row the caller could not read"
+        );
+
+        // And with the right key the dedup still works, so the guard has not
+        // simply broken the feature.
+        store
+            .upsert_reaction("m-1", "👍", &peer, false, "conv-y", Some(&key))
+            .unwrap();
+        let count_keyed: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM reactions WHERE message_id = 'm-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count_keyed, 1, "keyed dedup must still collapse to one row");
+    }
+
+    /// A row that is genuinely *not* a match must still remove/insert normally.
+    ///
+    /// The guard added above must not degrade into "refuse whenever there is
+    /// any sealed row" — that would break the ordinary case where a user reacts
+    /// with a different emoji to a message they have already reacted to.
+    #[test]
+    fn test_reaction_dedup_still_works_when_rows_decrypt() {
+        let store = mem_messagestore();
+        let key = test_key();
+        let peer = hex::encode([0x66u8; 32]);
+        store.ensure_conversation("conv-z", &[0x66; 32]).unwrap();
+        store
+            .store_message("m-1", "conv-z", "sent", &[0u8; 24], b"hello", 1000, true)
+            .unwrap();
+
+        store
+            .upsert_reaction("m-1", "👍", &peer, false, "conv-z", Some(&key))
+            .unwrap();
+        // Different emoji: a real insert, not a dedup, and not an error.
+        store
+            .upsert_reaction("m-1", "🎉", &peer, false, "conv-z", Some(&key))
+            .unwrap();
+
+        let map = store
+            .get_reactions(&["m-1".to_string()], Some(&key))
+            .unwrap();
+        assert_eq!(map["m-1"].len(), 2, "two distinct reactions must coexist");
+
+        // Removing one must leave the other.
+        store
+            .upsert_reaction("m-1", "👍", &peer, true, "conv-z", Some(&key))
+            .unwrap();
+        let map = store
+            .get_reactions(&["m-1".to_string()], Some(&key))
+            .unwrap();
+        assert_eq!(map["m-1"].len(), 1);
+        assert_eq!(map["m-1"][0].0, "🎉", "the wrong reaction must not be deleted");
+    }
+
+    /// A wrong *key* is the same failure as a missing one and must be treated
+    /// the same way, not as "no match".
+    ///
+    /// Reaching this state means the vault key was replaced (a rekey) while the
+    /// database kept its rows. Silently reporting success there is how a user
+    /// ends up believing they removed a reaction that is still readable by
+    /// whoever holds the old key.
+    #[test]
+    fn test_reaction_remove_errors_on_a_wrong_key() {
+        let store = mem_messagestore();
+        let key = test_key();
+        let wrong = StorageKey::new([0xEE; 32]);
+        let peer = hex::encode([0x77u8; 32]);
+        store.ensure_conversation("conv-w", &[0x77; 32]).unwrap();
+        store
+            .store_message("m-1", "conv-w", "sent", &[0u8; 24], b"hello", 1000, true)
+            .unwrap();
+
+        store
+            .upsert_reaction("m-1", "👍", &peer, false, "conv-w", Some(&key))
+            .unwrap();
+
+        let result = store.upsert_reaction("m-1", "👍", &peer, true, "conv-w", Some(&wrong));
+        assert!(
+            result.is_err(),
+            "a wrong key is indistinguishable from no key here and must not \
+             be treated as 'no match'"
+        );
+        let count: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM reactions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "the row must survive");
+    }
+
+    /// A legacy plaintext row alongside a sealed one is still readable *with*
+    /// the right key — `open_meta_value` passes non-envelope values through —
+    /// so the guard must not fire for it.
+    #[test]
+    fn test_reaction_mixed_plaintext_and_sealed_rows_still_work_with_a_key() {
+        let store = mem_messagestore();
+        let key = test_key();
+        let peer = hex::encode([0x88u8; 32]);
+        store.ensure_conversation("conv-m", &[0x88; 32]).unwrap();
+        store
+            .store_message("m-1", "conv-m", "sent", &[0u8; 24], b"hello", 1000, true)
+            .unwrap();
+
+        // Plaintext (no key) and sealed (key) rows for the same peer/message.
+        store
+            .conn
+            .execute(
+                "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
+                 VALUES ('m-1', 'plain', ?1, 1000)",
+                params![peer],
+            )
+            .unwrap();
+        store
+            .upsert_reaction("m-1", "sealed", &peer, false, "conv-m", Some(&key))
+            .unwrap();
+
+        // Removing the plaintext one must succeed — it opens without a key.
+        store
+            .upsert_reaction("m-1", "plain", &peer, true, "conv-m", Some(&key))
+            .unwrap();
+        let map = store
+            .get_reactions(&["m-1".to_string()], Some(&key))
+            .unwrap();
+        assert_eq!(
+            map["m-1"].len(),
+            1,
+            "only the plaintext row should have been removed"
+        );
+        assert_eq!(map["m-1"][0].0, "sealed");
+    }
+
+    // ─── Atomicity of the destroy paths (HIGH-13) ────────────────────────────
+    //
+    // `evict_to_cap`, `delete_expired_messages`, `delete_conversation` and
+    // `delete_messages_by_retention_policy` all shred, checkpoint, then delete.
+    // The delete used to be a series of independent autocommit statements, so
+    // a crash between two of them left a half-destroyed batch: rows shredded
+    // but still present, which `load_messages` does not filter on (it only
+    // checks `expires_at`), so they rendered as "[encrypted]" forever. The
+    // shred-first ordering is the safe direction, so this is availability, not
+    // confidentiality — but a shred followed by a *torn* delete is the worst of
+    // both.
+
+    /// The shred is idempotent: re-running it must not double-count.
+    ///
+    /// A retry is the whole point — `evict_to_cap` can be interrupted between
+    /// the shred and the delete and re-run. Without the guard the second pass
+    /// rewrites zeros over zeros, reports the rows as changed again, and
+    /// `shredded_keys` claims more keys destroyed than exist. That counter is
+    /// the audit trail for a feature whose whole claim is "we destroyed your
+    /// key", so an inflated one is not cosmetic.
+    #[test]
+    fn test_shred_is_idempotent() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 200);
+
+        store.shred_message_keys(&["m0".to_string()]).unwrap();
+        assert_eq!(store.shredded_key_count(), 1, "first pass shreds one key");
+
+        // Retry, as a resumed eviction would.
+        store.shred_message_keys(&["m0".to_string()]).unwrap();
+        assert_eq!(
+            store.shredded_key_count(),
+            1,
+            "a repeated shred must not claim a second key was destroyed"
+        );
+
+        // And the bytes are still the zero blob.
+        let after: Vec<u8> = store
+            .conn
+            .query_row(
+                "SELECT content_key_wrapped FROM messages WHERE id = 'm0'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(after.len(), WRAPPED_CEK_LEN);
+        assert!(
+            after.iter().all(|&b| b == 0),
+            "the retry must leave the key destroyed"
+        );
+    }
+
+    /// Deleting a conversation removes its messages, the conversation row and
+    /// the byte accounting together.
+    ///
+    /// The two DELETEs share one transaction, so the observable invariant is
+    /// that neither half is reachable without the other. This asserts the
+    /// post-state, which is what the Hub renders.
+    #[test]
+    fn test_delete_conversation_leaves_no_orphans() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 4, 300);
+
+        // A reaction on one of the messages, which the delete must not strand.
+        store
+            .conn
+            .execute(
+                "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
+                 VALUES ('m1', 'x', 'peer', 1000)",
+                [],
+            )
+            .unwrap();
+
+        store.delete_conversation("c1").unwrap();
+
+        let msgs: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(msgs, 0, "no message may survive the conversation delete");
+        assert!(
+            store.get_conversation("c1").unwrap().is_none(),
+            "the conversation row must be gone too, not just its messages"
+        );
+        assert_eq!(
+            store.stored_bytes().unwrap(),
+            0,
+            "the byte counter must return to zero, or the cap counts bytes \
+             nobody can reach"
+        );
+    }
+
+    /// Expired-message destruction removes the rows *and* their orphaned
+    /// reactions in one unit.
+    ///
+    /// The orphan sweep reads `messages` to decide what is stranded, so it is
+    /// only correct inside the same transaction as the delete. A separate commit
+    /// is a coin flip on crash order, and the `reactions` table is invisible to
+    /// the storage cap — so stranded rows accumulate with nothing ever reclaiming
+    /// them.
+    #[test]
+    fn test_expiry_removes_rows_and_orphan_reactions_together() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        let past = chrono::Utc::now().timestamp() - 60;
+        store
+            .store_message_secure("m-old", "c1", "sent", b"x", past, Some(past), true, &test_key())
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
+                 VALUES ('m-old', 'x', 'peer', 1000)",
+                [],
+            )
+            .unwrap();
+
+        assert_eq!(store.delete_expired_messages().unwrap(), 1);
+
+        let reactions: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM reactions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            reactions, 0,
+            "a reaction must not outlive the message it annotates — the \
+             orphan sweep decides by reading `messages`, so it only works \
+             inside the delete's transaction"
+        );
+    }
+
+    // ─── Schema shape (MEDIUM-9) ─────────────────────────────────────────────
+
+    /// A fresh database has every column the migrations add, and records its
+    /// schema version.
+    ///
+    /// The table used to be created without `expires_at`, `read_at`, `edited_at`
+    /// or `deleted`, so *every* new install wrote the table and then issued four
+    /// `ALTER TABLE`s — four separate implicit transactions, meaning a crash
+    /// during setup could leave a permanently half-migrated schema. Asserting
+    /// the columns exist is the only way to catch a future edit that moves them
+    /// back out of the `CREATE TABLE`.
+    #[test]
+    fn test_fresh_database_has_all_migrated_columns() {
+        let store = mem_messagestore();
+
+        let mut stmt = store
+            .conn
+            .prepare("PRAGMA table_info(messages)")
+            .unwrap();
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt);
+
+        for expected in [
+            "expires_at",
+            "read_at",
+            "edited_at",
+            "deleted",
+            "content_key_wrapped",
+        ] {
+            assert!(
+                columns.iter().any(|c| c == expected),
+                "fresh database is missing `{expected}` — it must be declared in \
+                 CREATE TABLE, not added by ALTER; have: {columns:?}"
+            );
+        }
+
+        // The indexes that depend on `expires_at` must exist too, since they
+        // used to be deferred to the migration.
+        for index in [
+            "idx_messages_expires_at",
+            "idx_messages_read_status",
+            "idx_messages_conversation",
+        ] {
+            let n: i64 = store
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master
+                      WHERE type = 'index' AND name = ?1",
+                    params![index],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "index {index} must exist on a fresh database");
+        }
+    }
+
+    /// `user_version` records the schema as known-complete after the migrations.
+    ///
+    /// Nothing reads this today; it exists so migration state is explicit rather
+    /// than inferred from `PRAGMA table_info`, which cannot tell "migrated" from
+    /// "half-migrated" — a column that got added before the crash looks the same
+    /// as one that was always there.
+    #[test]
+    fn test_schema_version_is_recorded() {
+        let store = mem_messagestore();
+        let version: i64 = store
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            version, MESSAGE_DB_SCHEMA_VERSION,
+            "the schema version must be stamped after the migrations run"
+        );
+    }
+
+    // ─── CEK length is exact (MEDIUM-16) ─────────────────────────────────────
+
+    /// A wrapped CEK of the wrong length is rejected as unusable storage, not
+    /// as a decryption failure.
+    ///
+    /// The check was `len() < 24 + 1`, so a 25-byte blob passed and was handed
+    /// to the AEAD as a 24-byte nonce plus 1 byte of ciphertext — which the
+    /// Poly1305 tag rejected for a reason that has nothing to do with the real
+    /// cause. Both paths return an error, so this test pins *which* diagnosis a
+    /// corrupt row gets, and it is the one that survives the ciphertext being
+    /// absent entirely.
+    #[test]
+    fn test_cek_length_check_is_exact() {
+        let store = mem_messagestore();
+        // A wrapped key of every plausible wrong length must be rejected.
+        for len in [0usize, 1, 23, 25, WRAPPED_CEK_LEN - 1, WRAPPED_CEK_LEN + 1] {
+            let err = MessageStore::unwrap_cek(&vec![0xAA; len], &test_key()).unwrap_err();
+            assert!(
+                matches!(err, StorageError::KeyNotFound),
+                "a {len}-byte wrapped key must be rejected as unusable, got {err:?}"
+            );
+        }
+        // And the real length gets past the length check — proving the test
+        // above is not passing because *everything* fails.
+        // (It still fails to decrypt: the bytes are not a real wrapped key.)
+        let _ = MessageStore::unwrap_cek(&vec![0xAA; WRAPPED_CEK_LEN], &test_key());
+        let _ = &store;
+    }
+
+    /// A shredded key is exactly `WRAPPED_CEK_LEN` zeros and must be treated as
+    /// undecryptable, not as a length error.
+    ///
+    /// This is the boundary between the two failure modes and it matters: the
+    /// shred writes a full-width zero blob on purpose, so if the length check
+    /// were ever changed to "all zeros is invalid" the shred would silently
+    /// stop working.
+    #[test]
+    fn test_shredded_key_is_rejected_as_undecryptable_not_malformed() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 1, 200);
+
+        store.shred_message_keys(&["m0".to_string()]).unwrap();
+        let shredded: Vec<u8> = store
+            .conn
+            .query_row(
+                "SELECT content_key_wrapped FROM messages WHERE id = 'm0'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(shredded.len(), WRAPPED_CEK_LEN);
+
+        // Same error as a malformed key — both mean "you cannot read this" —
+        // but the blob must be the right shape, which is asserted above.
+        assert!(
+            MessageStore::unwrap_cek(&shredded, &test_key()).is_err(),
+            "a shredded key must not unwrap"
+        );
+    }
+
+    // ─── Family public-key length (LOW) ──────────────────────────────────────
+
+    /// A family row with a wrong-length public key is refused, not rendered.
+    ///
+    /// `list_family` used to hex-encode the unvalidated bytes while copying
+    /// them into a `pk_arr` that was never read, so a 31-byte key produced a
+    /// 62-char `public_key_hex`. Every caller decodes that back to `[u8; 32]`
+    /// for `remove_family_member` / `is_family_member`, so the member appeared
+    /// in the Hub and could not be acted on at all. Erroring is better than
+    /// rendering an unusable one.
+    #[test]
+    fn test_list_family_rejects_a_wrong_length_public_key() {
+        let store = mem_keystore();
+        // A good row, so the test proves the error is about the bad row and not
+        // an empty table.
+        store
+            .add_family_member(&[0x11u8; 32], "Alice", None, None, None)
+            .unwrap();
+        // A corrupt one, injected directly — `add_family_member` takes `&[u8; 32]`
+        // and cannot produce this.
+        store
+            .conn
+            .execute(
+                "INSERT INTO family (public_key, nickname, added_at, expires_at, last_address)
+                 VALUES (?1, 'Corrupt', 1000, NULL, NULL)",
+                params![vec![0x22u8; 31]],
+            )
+            .unwrap();
+
+        let err = store.list_family(None).unwrap_err();
+        assert!(
+            matches!(err, StorageError::PathError(_)),
+            "a wrong-length family key must be refused, got {err:?}"
+        );
+
+        // Same for the export path, which would otherwise write the unusable
+        // hex into a backup file.
+        assert!(
+            store.list_family_all(None).is_err(),
+            "the export path must refuse it too, or the bad hex is preserved \
+             in a backup that can never be re-imported"
+        );
+    }
+
+    /// A well-formed family row still reads back, and its hex is 64 chars.
+    #[test]
+    fn test_list_family_accepts_a_well_formed_key() {
+        let store = mem_keystore();
+        let pk = [0x33u8; 32];
+        store
+            .add_family_member(&pk, "Bob", None, Some("1.2.3.4:1"), None)
+            .unwrap();
+
+        let members = store.list_family(None).unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].public_key_hex, hex::encode(pk));
+        assert_eq!(
+            members[0].public_key_hex.len(),
+            64,
+            "a decodable fingerprint is exactly 64 hex chars"
+        );
+        assert_eq!(members[0].nickname, "Bob");
+    }
 }
