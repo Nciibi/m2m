@@ -351,9 +351,28 @@ pub async fn start(
         return Err(LanDiscoveryError::TorEnabled);
     }
 
-    // Bind to a random UDP port for multicast
-    let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))
-        .map_err(LanDiscoveryError::Io)?;
+    // ═══ Bind to MULTICAST_PORT, not to an ephemeral port ═══
+    //
+    // This bound to `0.0.0.0:0`, i.e. a kernel-chosen ephemeral port, while
+    // announcements are sent to `MULTICAST_PORT` (38553). A multicast datagram
+    // is delivered only to sockets that have joined the group **and** whose
+    // local port matches the destination port, so this socket could never receive
+    // one — not its own, not anybody else's. LAN discovery did not work at all:
+    // no peer was ever discovered, between any two instances, ever. The
+    // feature looked correct because every other part of it was.
+    //
+    // Binding a fixed port is what makes two instances on one host collide, so
+    // `SO_REUSEADDR` is set first (and `SO_REUSEPORT` on unix, where
+    // `SO_REUSEADDR` alone does not permit a second UDP bind on Linux). This is
+    // the standard multicast-receiver pattern: every instance binds the same
+    // port with reuse set, and the kernel delivers a copy of each datagram to
+    // each of them.
+    //
+    // The practical consequence for users: port 38553/udp must be allowed
+    // through the firewall for discovery to work. It is a fixed port precisely
+    // because that is inherent to multicast discovery, not something to be
+    // optimised away.
+    let socket = bind_multicast_listener(MULTICAST_PORT)?;
 
     // Do not loop our own announcements back to us. With loopback on, every
     // send is delivered to this host too, so `parse_announcement` accepted it
