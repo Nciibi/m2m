@@ -982,10 +982,12 @@ mod dht_tests {
         assert_eq!(parsed, original);
     }
 
-    fn lan_peer_at(addr: &str) -> crate::lan_discovery::LanPeer {
+    /// Each peer needs a distinct `token_hex`: that is the key of the LAN peer
+    /// table, so reusing one would make every `insert_peer` overwrite the last.
+    fn lan_peer_at(addr: &str, token: &str) -> crate::lan_discovery::LanPeer {
         crate::lan_discovery::LanPeer {
             session_token: [0x9D; 32],
-            token_hex: "token".to_string(),
+            token_hex: token.to_string(),
             connect_addr: addr.parse().unwrap(),
             last_seen: now_unix_secs(),
         }
@@ -998,7 +1000,7 @@ mod dht_tests {
     #[test]
     fn test_lan_seeds_require_a_completed_handshake() {
         let mut lan = crate::lan_discovery::LanDiscoveryState::new();
-        lan.insert_peer(lan_peer_at("192.168.1.50:5000"));
+        lan.insert_peer(lan_peer_at("192.168.1.50:5000", "tok-a"));
 
         let untrusted: HashSet<IpAddr> = HashSet::new();
         assert!(
@@ -1018,7 +1020,7 @@ mod dht_tests {
     #[test]
     fn test_lan_seeds_do_not_trust_unrelated_addresses() {
         let mut lan = crate::lan_discovery::LanDiscoveryState::new();
-        lan.insert_peer(lan_peer_at("192.168.1.99:5000"));
+        lan.insert_peer(lan_peer_at("192.168.1.99:5000", "tok-b"));
 
         let mut trusted: HashSet<IpAddr> = HashSet::new();
         trusted.insert("192.168.1.50".parse::<IpAddr>().unwrap());
@@ -1038,13 +1040,19 @@ mod dht_tests {
         let mut trusted: HashSet<IpAddr> = HashSet::new();
         for i in 0..(MAX_ANNOUNCE_SEEDS * 10) {
             let addr = format!("192.168.1.{}:5000", i + 1);
-            lan.insert_peer(lan_peer_at(&addr));
+            lan.insert_peer(lan_peer_at(&addr, &format!("tok{i}")));
             trusted.insert(
                 format!("192.168.1.{}", i + 1)
                     .parse::<IpAddr>()
                     .unwrap(),
             );
         }
+
+        assert_eq!(
+            lan.peers.len(),
+            MAX_ANNOUNCE_SEEDS * 10,
+            "the peer table itself must have accepted every distinct token"
+        );
 
         let seeds = lan_dht_seeds(&lan, &trusted);
         assert_eq!(
