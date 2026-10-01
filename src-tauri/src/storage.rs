@@ -546,23 +546,41 @@ impl KeyStore {
              FROM family WHERE expires_at IS NULL OR expires_at > ?1
              ORDER BY nickname ASC",
         )?;
-        let rows = stmt.query_map(params![now], |row| {
-            let pk_bytes: Vec<u8> = row.get(0)?;
-            let mut pk_arr = [0u8; 32];
-            if pk_bytes.len() == 32 {
-                pk_arr.copy_from_slice(&pk_bytes);
-            }
-            Ok(FamilyMember {
-                public_key_hex: hex::encode(&pk_bytes),
-                nickname: row.get(1)?,
-                added_at: row.get(2)?,
-                expires_at: row.get(3)?,
-                last_address: row.get(4)?,
-            })
-        })?;
+        // The closure cannot return a `StorageError`, so the length check runs
+        // on the collected rows below rather than inside `query_map`. It used to
+        // be done here into a `pk_arr` that was never read, while
+        // `public_key_hex` was hex-encoded from the *unvalidated* bytes — so a
+        // 31-byte key produced a 62-char hex string that no caller, all of which
+        // decode it back to `[u8; 32]`, could use. The member would be listed in
+        // the Hub and impossible to remove, verify or look up.
+        let raw: Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)> = stmt
+            .query_map(params![now], |row| {
+                Ok((
+                    row.get::<_, Vec<u8>>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            })?
+            .collect::<Result<_, _>>()?;
+        drop(stmt);
         let mut members = Vec::new();
-        for row in rows {
-            let mut m = row?;
+        for (pk_bytes, nickname, added_at, expires_at, last_address) in raw {
+            if pk_bytes.len() != 32 {
+                return Err(StorageError::PathError(format!(
+                    "family row has a {}-byte public key, expected 32 — refusing to \
+                     hand back a hex string no caller can decode",
+                    pk_bytes.len()
+                )));
+            }
+            let mut m = FamilyMember {
+                public_key_hex: hex::encode(&pk_bytes),
+                nickname,
+                added_at,
+                expires_at,
+                last_address,
+            };
             m.nickname = open_meta_value(key, &m.nickname, AAD_FAMILY)
                 .unwrap_or_else(|_| "[encrypted]".to_string());
             if let Some(addr) = &m.last_address {
