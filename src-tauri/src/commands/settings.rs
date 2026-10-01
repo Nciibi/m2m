@@ -224,38 +224,56 @@ pub async fn check_connectivity(
         .map(|a| a.to_string())
         .collect();
 
-    // Determine reachability based on NAT type and STUN consensus.
-    let (reachable, behind_symmetric) = match nat_type {
-        stun::NatType::Symmetric => {
-            // Symmetric NAT: STUN works for outbound, but inbound won't work
-            // without TURN. We still report the public IP but warn the user.
-            (true, true)
-        }
-        stun::NatType::Blocked => (false, false),
-        stun::NatType::None => (true, false),
-        _ => {
-            // Cone NAT types: inbound should work if the port mapping is stable.
-            // We can't fully verify without an external echo service, but we
-            // report optimistic reachability with a note.
-            (multi_result.consensus, false)
-        }
-    };
+    // ── What this check can actually establish ──
+    //
+    // The old code returned `reachable = true` for a symmetric NAT and
+    // `multi_result.consensus` for every cone type, under a doc comment reading
+    // "whether the listening port is reachable from the public internet", and
+    // the Settings view renders the field verbatim. Neither arm tested
+    // reachability: the address STUN reports is the UDP mapping of an ephemeral
+    // socket this command just created, which is generally not the TCP
+    // listening port at all. So the button reported a claim it could not back,
+    // and a symmetric-NAT user — the one case where inbound connections really
+    // do need TURN — was told "reachable: true".
+    //
+    // Verifying inbound reachability for real needs an external service that
+    // dials our TCP port. That is a product decision (another party learns the
+    // user's address on every "Check"), not something to smuggle in as an
+    // optimistic default, so `reachable` is reported as `None` = not measured.
+    //
+    // What *is* measured is cross-server agreement, so that is what carries a
+    // value. `consensus` already requires `stun::MIN_CONSENSUS_SERVERS`
+    // responders; the second condition is restated so the field stays correct if
+    // that rule is ever moved.
+    let stun_agreement = Some(
+        multi_result.consensus && multi_result.responding_servers >= stun::MIN_CONSENSUS_SERVERS,
+    );
+    let behind_symmetric = nat_type == stun::NatType::Symmetric;
 
     let status = stun::ConnectivityStatus {
-        reachable,
+        reachable: None,
+        stun_agreement,
         nat_type,
         public_addr: multi_result.consensus_addr.map(|a| a.to_string()),
         host_addrs,
         behind_symmetric_nat: behind_symmetric,
     };
 
-    // Update state
+    // No measurement happened, so nothing is recorded as verified. Storing a
+    // derived value here is what let the stale claim reappear later in
+    // `collect_network_diagnostics`.
     {
         let mut cv = state.connectivity_verified.write().await;
-        *cv = reachable;
+        *cv = None;
     }
 
-    tracing::info!(reachable = reachable, nat = %nat_type, "connectivity check complete");
+    tracing::info!(
+        stun_agreement = ?stun_agreement,
+        servers_responding = multi_result.responding_servers,
+        servers_total = multi_result.total_servers,
+        nat = %nat_type,
+        "STUN agreement check complete (inbound TCP reachability not measured)"
+    );
     Ok(status)
 }
 
@@ -294,6 +312,12 @@ async fn collect_network_diagnostics(
     let public_addr = state.public_ip.read().await.map(|a| a.to_string());
     let connectivity = stun::ConnectivityStatus {
         reachable: *state.connectivity_verified.read().await,
+        // `check_all_servers` probes per-server liveness (did the query get an
+        // answer at all). It runs no agreement check and discards the reported
+        // addresses, so reporting agreement here would be inventing a fact.
+        // `None` means "not checked here", not "servers disagreed" — the
+        // Settings view must say so rather than printing `false`.
+        stun_agreement: None,
         nat_type,
         public_addr,
         host_addrs,
