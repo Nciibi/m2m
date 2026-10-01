@@ -542,13 +542,28 @@ pub async fn announce_loop(
     // Track the current ephemeral ID so we can re-announce if it rotates
     let mut current_id = ephemeral_id.read().await.id;
 
+    // `DhtState::running` is the completion signal the stop path in
+    // `commands::discovery` polls, for the same reason
+    // `LanDiscoveryState::enabled` is used there: that path only holds the
+    // cancel flag, not this task's `JoinHandle`, so "cancelled" has to be
+    // observable in the state object it already has a handle to.
+    dht_state.write().await.running = true;
+
     loop {
         if cancel.load(Ordering::SeqCst) {
-            tracing::info!("DHT announce loop cancelled");
-            return;
+            break;
         }
 
         time::sleep(ANNOUNCE_INTERVAL).await;
+
+        // Re-read the flag *after* the sleep. Checking only at the top of the
+        // loop let a sleep that began while DHT discovery was still enabled run
+        // to completion after the user turned it off, and the loop then went on
+        // to publish this node's real listen address and current ephemeral id
+        // to every seed — a disclosure the user believes they had stopped.
+        if cancel.load(Ordering::SeqCst) {
+            break;
+        }
 
         // Check if we should rotate the ephemeral ID
         let should_rotate = {
@@ -579,7 +594,8 @@ pub async fn announce_loop(
         }
 
         // Node list: explicit bootstrap nodes, plus — when none are
-        // configured — peers learned from LAN discovery.
+        // configured — peers learned from LAN discovery that this node has
+        // already completed a handshake with.
         //
         // This module previously read `config.bootstrap_nodes` and nothing
         // ever wrote it, so the loop woke every `ANNOUNCE_INTERVAL`, found an
@@ -591,23 +607,27 @@ pub async fn announce_loop(
         // BitTorrent DHT would contradict the threat model outright: it would
         // hand the node's address to an unrelated third party on every start.
         // So the only coherent seed source is peers we already trust enough to
-        // have found by ourselves on the LAN.
+        // have found by ourselves on the LAN — and "already trust enough" now
+        // means we have actually completed a handshake with them, not merely
+        // that some unauthenticated datagram claimed their address. See
+        // [`lan_dht_seeds`].
         let (nodes, warned) = {
             let state = dht_state.read().await;
             (state.config.bootstrap_nodes.clone(), state.warned_no_bootstrap)
         };
 
         let nodes = if nodes.is_empty() {
-            let lan = lan_dht_seeds(&*lan_state.read().await);
+            let trusted_ips = handshaked_peer_ips(&app).await;
+            let lan = lan_dht_seeds(&lan_state.read().await, &trusted_ips);
             if lan.is_empty() && !warned {
                 dht_state.write().await.warned_no_bootstrap = true;
                 tracing::warn!(
                     "DHT enabled but no bootstrap nodes are configured and no LAN peers \
-                     have been discovered yet — nothing to announce to. M2M ships no \
-                     public bootstrap set on purpose (joining a public DHT would disclose \
-                     this node's address to an unrelated third party). Peer gossip will \
-                     populate the node list once LAN discovery finds a peer, or set \
-                     dht bootstrap_nodes explicitly. Discovery will stay inert until then."
+                     with a completed handshake have been discovered yet — nothing to announce \
+                     to. M2M ships no public bootstrap set on purpose (joining a public DHT would \
+                     disclose this node's address to an unrelated third party). Peer gossip will \
+                     populate the node list once a peer found on the LAN has completed a handshake, \
+                     or set dht bootstrap_nodes explicitly. Discovery will stay inert until then."
                 );
             }
             lan
@@ -625,12 +645,91 @@ pub async fn announce_loop(
             }
         };
 
-        for node in &nodes {
-            if let Err(e) = announce_to_node(node.address, &current_id, addr).await {
-                tracing::debug!(node = %node.address, error = %e, "DHT announce failed");
+        // ── Fan out concurrently, bounded, under one deadline ──
+        //
+        // This used to be a strictly serial `for` loop with no bound and no
+        // cancellation check inside it. `announce_to_node` costs up to
+        // `DHT_CONNECT_TIMEOUT` for the dial and another for the read, so one
+        // black-holed address cost ~10s and every address queued behind it cost
+        // that again — a lever a remote host holds over the announce tick,
+        // reachable because `nodes` comes from unauthenticated LAN
+        // announcements and was itself unbounded.
+        //
+        // Cancellation is re-checked here as well: with the check only at the
+        // top of the loop, "disable DHT discovery" was not observed until the
+        // entire serial fan-out had finished, so announce bodies carrying this
+        // node's real listen address and ephemeral id kept going out after the
+        // UI reported the feature off.
+        let mut set: JoinSet<()> = JoinSet::new();
+        for node in nodes.iter().take(MAX_ANNOUNCE_SEEDS) {
+            if cancel.load(Ordering::SeqCst) {
+                break;
+            }
+            let node_addr = node.address;
+            let ephemeral = current_id;
+            let announced_addr = addr;
+            set.spawn(async move {
+                if let Err(e) =
+                    announce_to_node(node_addr, &ephemeral, announced_addr).await
+                {
+                    tracing::debug!(node = %node_addr, error = %e, "DHT announce failed");
+                }
+            });
+        }
+
+        let deadline = std::time::Instant::now() + ANNOUNCE_FANOUT_DEADLINE;
+        while !set.is_empty() {
+            if cancel.load(Ordering::SeqCst) {
+                // Dropping the in-flight dials is the best that can be done for
+                // a body already written to a socket; the point of the
+                // cancellation checks above is to never *start* one.
+                set.abort_all();
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                set.abort_all();
+                break;
+            }
+            if time::timeout(remaining, set.join_next()).await.is_err() {
+                // Deadline reached with a seed still outstanding. Bound the
+                // tick here rather than letting one unresponsive node decide
+                // how long discovery takes to respond.
+                set.abort_all();
+                break;
             }
         }
     }
+
+    tracing::info!("DHT announce loop cancelled");
+    dht_state.write().await.running = false;
+}
+
+/// IPs this node holds an established session with.
+///
+/// A `PeerConnection` only exists once an X3DH handshake has completed and the
+/// identity has been resolved, so membership here means "this address proved
+/// it holds the private key for an identity we actually talked to". This is
+/// the authentication gate that keeps unauthenticated LAN announcements from
+/// becoming DHT announce targets.
+///
+/// The handles are snapshotted out from under the map guard *before* any
+/// per-peer lock is taken: `connections` is one global `RwLock`, and holding
+/// its read guard across a `conn.lock().await` freezes every
+/// `disconnect_peer`, every heartbeat teardown and every new-connection insert
+/// in the process for as long as one peer is slow. See `state::peer_connection`.
+async fn handshaked_peer_ips(app: &crate::state::AppState) -> HashSet<IpAddr> {
+    let handles: Vec<Arc<crate::state::PeerConnectionHandle>> = {
+        let conns = app.connections.read().await;
+        conns.values().cloned().collect()
+    };
+
+    let mut ips = HashSet::new();
+    for handle in handles {
+        let remote = { handle.lock().await.remote_addr };
+        ips.insert(remote.ip());
+    }
+    ips
 }
 
 /// Derive DHT bootstrap seeds from peers already discovered on the LAN.
