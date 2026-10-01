@@ -1399,6 +1399,77 @@ fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
     None
 }
 
+/// Byte offset, within `xml`, of the closing tag `</name>`.
+///
+/// The match is exact: `</serviceType>` is *not* `</service>`. A service body is
+/// full of elements whose names merely start with the one being searched for
+/// (`serviceType`, `serviceId`, `SCPDURL`), so a prefix match terminates the
+/// block early and hands back a fragment of the wrong element.
+fn find_closing_tag(xml: &str, name: &str) -> Option<usize> {
+    let mut from = 0usize;
+    while let Some(rel) = xml[from..].find("</") {
+        let at = from + rel;
+        let after_name = match xml[at + 2..].strip_prefix(name) {
+            Some(rest) => rest,
+            None => {
+                from = at + 2;
+                continue;
+            }
+        };
+        if matches!(after_name.chars().next(), Some('>') | Some(c) if c.is_whitespace()) {
+            return Some(at);
+        }
+        from = at + 2;
+    }
+    None
+}
+
+/// Return the contents of the `<service>` block that declares the
+/// `WANIPConnection` service type.
+///
+/// `extract_xml_tag` returns the *first* textual occurrence of a tag anywhere in
+/// the document, so `serviceType` and `controlURL` were looked up
+/// independently and independently of each other: the `WANIPConnection` gate
+/// could be satisfied by service #1 while `controlURL` was read from service #1
+/// regardless of which service actually declared the type. On a real IGD the
+/// first `<service>` is normally `WANCommonInterfaceConfig`, whose controlURL
+/// does not implement `AddPortMapping` — so the gate passed, we POSTed the SOAP
+/// action to the wrong service, and the device answered with a fault. Reading
+/// both tags out of one block makes that divergence impossible.
+///
+/// Returns the inner XML of the block, without the `<service>` tags themselves.
+fn extract_wanip_service_block(xml: &str) -> Option<&str> {
+    const OPEN_TAG: &str = "<service";
+
+    let mut from = 0usize;
+    while let Some(rel) = xml[from..].find(OPEN_TAG) {
+        let open = from + rel;
+        let after_open = &xml[open + OPEN_TAG.len()..];
+        // `<serviceList>` also starts with "<service"; require the tag name to
+        // end here.
+        let is_service_tag =
+            matches!(after_open.chars().next(), Some('>') | Some(c) if c.is_whitespace());
+        if !is_service_tag {
+            from = open + OPEN_TAG.len();
+            continue;
+        }
+        // `<service>` does not nest, so the first *exact* `</service>` after this
+        // opening tag is this element's own.
+        let close = match find_closing_tag(after_open, "service") {
+            Some(c) => c,
+            // An unterminated `<service>` means the document is truncated; the
+            // HTTP body limit is the only thing that could have allowed it.
+            None => return None,
+        };
+        let block = &after_open[..close];
+        if extract_xml_tag(block, "serviceType").is_some_and(|t| t.contains("WANIPConnection")) {
+            return Some(block);
+        }
+        from = open + OPEN_TAG.len() + close;
+    }
+    None
+}
+
 /// Fetch and parse a UPnP device description XML to find the
 /// WANIPConnection service's control URL.
 async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapError> {
