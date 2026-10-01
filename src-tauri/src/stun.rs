@@ -1267,22 +1267,22 @@ mod tests {
     #[test]
     fn test_non_publishable_addresses_are_rejected() {
         for addr in [
-            "127.0.0.1:1",      // loopback — redirect the peer into a loop
-            "127.255.255.254:1",// whole 127/8 is loopback
-            "::1:1",            // IPv6 loopback
-            "0.0.0.0:1",        // unspecified
-            "192.168.1.5:1",    // LAN address published into an invite
+            "127.0.0.1:1",       // loopback — redirect the peer into a loop
+            "127.255.255.254:1", // the whole 127/8 is loopback
+            "0.0.0.0:1",         // unspecified
+            "192.168.1.5:1",     // LAN address published into an invite
             "10.0.0.1:1",
             "172.16.0.1:1",
-            "100.64.0.1:1",     // CGNAT — identifies the ISP, not routable
+            "100.64.0.1:1",      // CGNAT — identifies the ISP, not routable
             "169.254.169.254:80", // cloud instance metadata (SSRF target)
-            "224.0.0.1:1",      // multicast
-            "255.255.255.255:1",// broadcast
-            "::ffff:192.168.1.5:1", // private address in IPv4-mapped form
-            "fc00::1:1",        // unique local
-            "fe80::1:1",        // link local
-            "ff02::1:1",        // multicast
-            "2001:db8::1:1",    // documentation
+            "224.0.0.1:1",       // multicast
+            "255.255.255.255:1", // broadcast
+            "[::1]:1",           // IPv6 loopback
+            "[::ffff:192.168.1.5]:1", // private address in IPv4-mapped form
+            "[fc00::1]:1",       // unique local
+            "[fe80::1]:1",       // link local
+            "[ff02::1]:1",       // multicast
+            "[2001:db8::1]:1",   // documentation (RFC 3849)
         ] {
             let parsed: SocketAddr = addr
                 .parse()
@@ -1304,11 +1304,8 @@ mod tests {
             "45.33.32.156:41234",
             "172.32.0.1:1000",   // just outside 172.16/12
             "100.128.0.1:1000",  // just outside 100.64/10
-            "203.0.113.1:1",     // no: documentation — asserted below, kept out
+            "[2606:4700:4700::1111]:3478", // global IPv6 unicast
         ] {
-            if addr.starts_with("203.0.113.") {
-                continue;
-            }
             let parsed: SocketAddr = addr.parse().expect("SocketAddr");
             assert!(
                 is_publishable_public_addr(&parsed),
@@ -1317,14 +1314,10 @@ mod tests {
         }
 
         // 203.0.113.0/24 is RFC 5737 documentation space and is rejected, which
-        // is why the RFC 5769 parser vectors (192.0.2.1) test parsing only and
-        // never reach publication.
+        // is why the RFC 5769 parser vectors (192.0.2.1) exercise parsing only
+        // and never reach publication.
         let doc: SocketAddr = "203.0.113.1:1".parse().unwrap();
         assert!(!is_publishable_public_addr(&doc));
-
-        // Global IPv6 unicast is a legitimate reflexive candidate.
-        let v6: SocketAddr = "[2606:4700:4700::1111]:3478".parse().unwrap();
-        assert!(is_publishable_public_addr(&v6));
     }
 
     #[test]
