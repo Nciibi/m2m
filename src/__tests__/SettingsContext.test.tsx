@@ -120,7 +120,11 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_network_settings":
       return { public_ip: null };
     case "check_connectivity":
-      return { reachable: true };
+      // `reachable: null`, not `true`. The backend cannot measure inbound TCP
+    // reachability from a local STUN probe — the STUN-mapped UDP port belongs
+    // to a throwaway socket — so it always returns `None` here, and `true`
+    // documented a state the wire cannot produce.
+    return { reachable: null, stun_agreement: true, nat_type: "Full Cone", public_addr: null, host_addrs: [], behind_symmetric_nat: false };
     case "discover_public_ip":
       return "203.0.113.1";
     case "set_private_mode":
