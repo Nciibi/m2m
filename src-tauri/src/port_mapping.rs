@@ -2016,7 +2016,8 @@ mod port_mapping_tests {
   </serviceList>
 </root>"#;
 
-        let block = extract_wanip_service_block(doc).expect("WANIPConnection service must be found");
+        let block =
+            extract_wanip_service_block(doc).expect("WANIPConnection service must be found");
         assert_eq!(
             extract_xml_tag(block, "controlURL").as_deref(),
             Some("/ctl/IPConn"),

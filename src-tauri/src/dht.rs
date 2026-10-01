@@ -719,7 +719,7 @@ pub async fn announce_loop(
 /// `disconnect_peer`, every heartbeat teardown and every new-connection insert
 /// in the process for as long as one peer is slow. See `state::peer_connection`.
 async fn handshaked_peer_ips(app: &crate::state::AppState) -> HashSet<IpAddr> {
-    let handles: Vec<Arc<crate::state::PeerConnectionHandle>> = {
+    let handles: Vec<_> = {
         let conns = app.connections.read().await;
         conns.values().cloned().collect()
     };
