@@ -1436,22 +1436,14 @@ async fn upnp_parse_description(location_url: &str) -> Result<String, PortMapErr
     let (_status, body_bytes) = read_http_response_body(&mut stream).await?;
     let body = String::from_utf8_lossy(&body_bytes);
 
-    // Find the WANIPConnection service and extract its controlURL.
-    // Use the robust XML tag extractor which handles whitespace, multiline,
-    // and namespace prefixes like <ns:controlURL>.
-    extract_xml_tag(&body, "serviceType")
-        .and_then(|t| {
-            if t.contains("WANIPConnection") {
-                Some(())
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| {
-            PortMapError::Upnp("WANIPConnection service not found in device description".into())
-        })?;
+    // Find the WANIPConnection service and extract its controlURL — reading both
+    // tags out of the *same* `<service>` block. See
+    // `extract_wanip_service_block` for what went wrong when they were not.
+    let service_block = extract_wanip_service_block(&body).ok_or_else(|| {
+        PortMapError::Upnp("WANIPConnection service not found in device description".into())
+    })?;
 
-    let control_url = extract_xml_tag(&body, "controlURL").ok_or_else(|| {
+    let control_url = extract_xml_tag(service_block, "controlURL").ok_or_else(|| {
         PortMapError::Upnp("controlURL not found in WANIPConnection service".into())
     })?;
 
