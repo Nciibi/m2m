@@ -56,6 +56,24 @@ const PEER_EXPIRY_SECS: u64 = 90;
 /// Current LAN discovery protocol version.
 const LAN_DISCOVERY_VERSION: u8 = 0x01;
 
+/// Upper bound on the LAN peer table.
+///
+/// Every entry is keyed on a 32-byte token chosen by whoever sent the
+/// datagram, and the datagram is not authenticated at all. Without a bound,
+/// one host on the LAN can mint unlimited fresh tokens — growing this map,
+/// and the list of diallable addresses the UI offers, without limit — well
+/// inside the 90-second peer expiry window. See
+/// [`LanDiscoveryState::insert_peer`].
+const MAX_LAN_PEERS: usize = 64;
+
+/// How often the listener re-reads the cancel flag while waiting on a
+/// datagram.
+///
+/// The receive is now a genuine async wait, so on a quiet LAN no datagram
+/// arrives for minutes. A flag check only at the top of the loop would keep
+/// the socket open and the task alive long after the user disabled discovery.
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(500);
+
 /// A peer discovered on the local network.
 ///
 /// Contains only an **ephemeral session token** — NOT the peer's
