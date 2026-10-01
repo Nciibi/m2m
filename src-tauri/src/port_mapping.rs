@@ -397,7 +397,41 @@ async fn discover_gateway() -> Option<IpAddr> {
     }
 
     // ── Strategy 4: Fallback (probe common gateways via NAT-PMP) ──
-    discover_gateway_fallback().await
+    //
+    // The fallback can only ever produce a *proved* router or nothing. Handing
+    // the guess through here would put a LAN-only protocol on the wire to an
+    // address we know nothing about (F4) — see `discover_gateway_fallback`.
+    match discover_gateway_fallback().await? {
+        GatewayCandidate::Verified(ip) => Some(ip),
+        GatewayCandidate::Unverified(ip) => {
+            // Nothing answered a NAT-PMP request at any candidate, so we have no
+            // evidence that *any* of them is a router. PCP and NAT-PMP are LAN
+            // protocols: sending them to a guess means sending them to an internet
+            // host (or to nothing at all), and `add_port_mapping` would then report
+            // a mapping built from an address nobody verified. Fail closed.
+            tracing::warn!(
+                gateway = %ip,
+                "no router answered a NAT-PMP probe; refusing to send LAN port-mapping \
+                 requests to an unverified address"
+            );
+            None
+        }
+    }
+}
+
+/// How much is known about an address returned by the fallback discovery path.
+///
+/// `Option<IpAddr>` could not carry this: the old code returned a guess on the
+/// same path as a probe-confirmed router, and every caller treated both as a
+/// gateway to send PCP / NAT-PMP datagrams to.
+#[derive(Debug, Clone, Copy)]
+enum GatewayCandidate {
+    /// The address answered a NAT-PMP public-address request, which only a
+    /// NAT-capable router on this LAN does.
+    Verified(IpAddr),
+    /// Nothing proved this address is a router — it was derived from our own
+    /// subnet or from a hard-coded list. Must never be used as a mapping target.
+    Unverified(IpAddr),
 }
 
 /// Parse an IPv4 address from `/proc/net/route` hex format.
