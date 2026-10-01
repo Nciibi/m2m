@@ -15,6 +15,7 @@
 use crate::error::AppError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::RwLock;
@@ -26,6 +27,19 @@ use crate::state::{AppState, DiscoveryConfig};
 
 use super::util;
 use super::{ConnectionEvent, ConnectionInfo};
+
+/// How long the disable path waits for a discovery task to observe its cancel
+/// flag and actually exit.
+///
+/// The two announcers poll at most every `CANCEL_POLL_INTERVAL` / on the tick
+/// boundary, so this is generous. It is a bound rather than a wait-forever
+/// because a UI command must not hang: on expiry the handles are cleared and
+/// the situation is logged, and the re-checks inside both loops mean the worst
+/// case is "no further announcement", not "announcement after teardown".
+const STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Poll interval used while waiting for a discovery task to stop.
+const STOP_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 /// A peer discovered via LAN or DHT, exposed to the frontend.
 #[derive(Debug, Clone, serde::Serialize)]
