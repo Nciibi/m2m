@@ -2387,6 +2387,22 @@ let expired_messages = self.delete_expired_messages()?;
     /// `key = None` stores it as plaintext (legacy/no-vault profiles).
     /// Lookup keys (message_id, peer_key_hex) stay plaintext so queries
     /// remain indexable.
+    ///
+    /// # A failed decryption is not a failed match
+    ///
+    /// Both the dedup and the remove path have to open every candidate row to
+    /// compare it, because envelopes carry a fresh random nonce each write and
+    /// so the stored form of "👍" never equals a freshly-sealed probe. The
+    /// comparison used to collapse `Err` into `false`, which is the CLAUDE.md
+    /// failure class exactly: with the vault locked (`key = None`) every
+    /// comparison against a sealed row fails, so `remove` deleted nothing and
+    /// still returned `Ok(true)` — the caller surfaced success and the reaction
+    /// the user tapped was still on disk and still visible.
+    ///
+    /// [`Self::matching_reaction_rowids`] therefore reports decryption failure
+    /// separately from "did not match", and this function turns it into an
+    /// error. Failing loudly is the only safe option: a wrong guess in the
+    /// other direction would delete a *different* peer's reaction.
     pub fn upsert_reaction(
         &self,
         message_id: &str,
@@ -2408,23 +2424,14 @@ let expired_messages = self.delete_expired_messages()?;
         if remove {
             // Match by DECRYPTED text: envelopes carry fresh random nonces,
             // so re-encrypting the probe would never equal the stored form.
-            let mut stmt = self.conn.prepare(
-                "SELECT rowid, reaction FROM reactions
-                 WHERE message_id = ?1 AND peer_key_hex = ?2",
-            )?;
-            let rows = stmt.query_map(rusqlite::params![message_id, peer_key_hex], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-            })?;
-            let matched: Vec<i64> = rows
-                .filter_map(|r| r.ok())
-                .filter(|(_, stored)| {
-                    open_meta_value(key, stored, AAD_REACTION)
-                        .map(|plain| plain == reaction)
-                        .unwrap_or(false)
-                })
-                .map(|(rowid, _)| rowid)
-                .collect();
-            drop(stmt);
+            let (matched, undecryptable) =
+                self.matching_reaction_rowids(message_id, peer_key_hex, reaction, key)?;
+            if undecryptable {
+                // Refuse rather than claim the reaction was removed. The
+                // caller would report success for a delete that did not
+                // happen; the row is still present and still rendered.
+                return Err(StorageError::KeyNotFound);
+            }
             for rowid in matched {
                 self.conn.execute(
                     "DELETE FROM reactions WHERE rowid = ?1",
@@ -2438,23 +2445,14 @@ let expired_messages = self.delete_expired_messages()?;
             // UNIQUE constraint cannot see them as equal. Remove prior rows
             // from this peer on this message whose DECRYPTED reaction
             // matches, then insert fresh.
-            let dup_rowids: Vec<i64> = {
-                let mut stmt = self.conn.prepare(
-                    "SELECT rowid, reaction FROM reactions
-                     WHERE message_id = ?1 AND peer_key_hex = ?2",
-                )?;
-                let rows = stmt.query_map(rusqlite::params![message_id, peer_key_hex], |row| {
-                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-                })?;
-                rows.filter_map(|r| r.ok())
-                    .filter(|(_, stored)| {
-                        open_meta_value(key, stored, AAD_REACTION)
-                            .map(|plain| plain == reaction)
-                            .unwrap_or(false)
-                    })
-                    .map(|(rowid, _)| rowid)
-                    .collect()
-            };
+            let (dup_rowids, undecryptable) =
+                self.matching_reaction_rowids(message_id, peer_key_hex, reaction, key)?;
+            if undecryptable {
+                // Without this the insert would go ahead alongside rows we
+                // could not read, producing a duplicate reaction that SQL
+                // cannot see and no UI path can remove.
+                return Err(StorageError::KeyNotFound);
+            }
             for rowid in dup_rowids {
                 self.conn.execute(
                     "DELETE FROM reactions WHERE rowid = ?1",
@@ -2469,6 +2467,56 @@ let expired_messages = self.delete_expired_messages()?;
             )?;
         }
         Ok(true)
+    }
+
+    /// Row ids of this peer's reactions on `message_id` whose DECRYPTED text
+    /// equals `reaction`, plus whether any candidate row could not be opened.
+    ///
+    /// Envelopes are sealed with a fresh random nonce per write, so
+    /// `reaction == stored_reaction` is false for two identical reactions and
+    /// the match has to happen on the plaintext. That requires the key, and
+    /// when it is absent (vault locked) or wrong, `open_meta_value` fails for
+    /// every sealed row while succeeding for legacy plaintext ones — so the
+    /// boolean is the only way to tell "this peer never reacted that way" from
+    /// "I could not find out".
+    ///
+    /// The two are not interchangeable. Callers that treat them alike report a
+    /// successful remove that deleted nothing, or insert a duplicate that no
+    /// subsequent remove can target.
+    fn matching_reaction_rowids(
+        &self,
+        message_id: &str,
+        peer_key_hex: &str,
+        reaction: &str,
+        key: Option<&crate::secure_key::StorageKey>,
+    ) -> Result<(Vec<i64>, bool), StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT rowid, reaction FROM reactions
+             WHERE message_id = ?1 AND peer_key_hex = ?2",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![message_id, peer_key_hex], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut matched = Vec::new();
+        let mut undecryptable = false;
+        // Collected eagerly so `stmt` is released before the caller deletes
+        // rows — the drop is explicit rather than relying on NLL, because a
+        // live statement over the table being written is a foot-gun.
+        let candidates: Vec<(i64, String)> = rows.filter_map(|r| r.ok()).collect();
+        drop(stmt);
+        for (rowid, stored) in candidates {
+            match open_meta_value(key, &stored, AAD_REACTION) {
+                Ok(plain) => {
+                    if plain == reaction {
+                        matched.push(rowid);
+                    }
+                }
+                // Vault locked, wrong key, or a tampered row. Not a negative
+                // answer, so it must not be allowed to look like one.
+                Err(_) => undecryptable = true,
+            }
+        }
+        Ok((matched, undecryptable))
     }
 
     /// Check whether `message_id` exists in `conversation_id` with the
