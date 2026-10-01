@@ -921,6 +921,24 @@ pub(crate) async fn complete_inbound_connection(
             );
             return;
         }
+        // Refuse *before* inserting, and count the refusal. Without this the
+        // only ceiling on `connections` was the accept-path limiter's count of
+        // in-flight handshakes, which a peer drives back to zero by finishing
+        // each handshake: the relay (a full MITM by design) could bridge
+        // unlimited peers, each leaving a permanent entry holding a socket, a
+        // `Session` and ratchet state — and all of them arrive from the relay's
+        // single address, so the per-IP rotation defence never sees them. The
+        // check is inside the same `write()` guard as the insert, so two peers
+        // racing the last slot cannot both win it.
+        if conns.len() >= MAX_ESTABLISHED_CONNECTIONS {
+            tracing::warn!(
+                peer = %peer_key_hex,
+                established = conns.len(),
+                cap = MAX_ESTABLISHED_CONNECTIONS,
+                "refusing incoming connection: connection map at capacity"
+            );
+            return;
+        }
         conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
     }
     // Re-read the `Arc` we just stored so the teardown paths in the receive loop
