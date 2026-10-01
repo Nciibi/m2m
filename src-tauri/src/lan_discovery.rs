@@ -790,15 +790,15 @@ mod lan_discovery_tests {
         assert!(!state.peers.contains_key("flood0"));
     }
 
-    /// Refreshing an existing peer must not be treated as a new insert: it
-    /// would otherwise push a stable peer table over the bound and evict a
-    /// peer for simply talking to us again.
+    /// Refreshing an existing peer must not be treated as a new insert. A table
+    /// sitting exactly at the bound is the case that catches it: a "refresh"
+    /// that incremented the count would evict a peer for the crime of talking
+    /// to us again.
     #[test]
     fn test_insert_peer_refresh_keeps_table_size() {
         let mut state = LanDiscoveryState::new();
         let now = now_unix_secs();
 
-        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now));
         for i in 0..MAX_LAN_PEERS {
             state.insert_peer(peer_named(
                 &format!("peer{i}"),
@@ -806,10 +806,20 @@ mod lan_discovery_tests {
                 now,
             ));
         }
-        let len_after_fill = state.peers.len();
+        assert_eq!(
+            state.peers.len(),
+            MAX_LAN_PEERS,
+            "table should sit exactly at the bound"
+        );
 
-        state.insert_peer(peer_named("genuine", "192.168.1.10:4000", now + 5));
-        assert_eq!(state.peers.len(), len_after_fill);
-        assert!(state.peers.contains_key("genuine"));
+        // An existing peer announces again, five seconds later.
+        state.insert_peer(peer_named("peer0", "192.168.1.20:4000", now + 5));
+
+        assert_eq!(
+            state.peers.len(),
+            MAX_LAN_PEERS,
+            "a refresh must refresh in place, not add a row"
+        );
+        assert_eq!(state.peers.get("peer0").map(|p| p.last_seen), Some(now + 5));
     }
 }
