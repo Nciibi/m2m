@@ -3704,35 +3704,20 @@ pub fn spawn_receive_loop(
         loop {
             interval.tick().await;
 
-            // `lock_vault` scrubs every session (`Session::lock` takes the ratchet
-            // and the session keys) but deliberately keeps the sockets open so a
-            // call can resume after unlock. A heartbeat cannot be sent on a
-            // scrubbed session, so without this the probe below would fail, be
-            // recorded as "heartbeat send failed", and tear the connection down —
-            // which is the opposite of what "active connections remain open" means,
-            // and would make "Lock Now" silently disconnect every peer within one
-            // poll interval (5s).
-            if !hb_state.vault_unlocked.read().await {
-                // Reset the liveness bookkeeping so the stale probe timestamp
-                // does not immediately mark the peer dead once the vault reopens.
-                if let Ok(mut conn) = hb_conn.try_lock() {
-                    conn.last_hb_sent = None;
-                    conn.last_hb_ack = None;
-                }
-                continue;
-            }
-
+// Resolve *this* session, never whatever currently holds the map
+            // slot. A re-dial for the same peer replaces the entry, and looking
+            // the peer up by key here would probe the replacement's socket while
+            // this worker still believed it owned the old one — and, worse, clear
+            // the replacement's liveness bookkeeping. `hb_conn` is the identity
+            // that matches `remove_own_connection` below.
+            //
+            // A `None` here means our session is gone — `lock_vault` now tears
+            // connections down rather than scrubbing them (a discarded Double
+            // Ratchet root key cannot be resumed) — so this worker stops, which
+            // is the correct outcome.
             let mut dead_reason: Option<String> = None;
             {
-                // Clone-and-drop rather than holding the map guard: this
-                // worker runs every few seconds per peer and sends on the
-                // socket below, so holding the global read lock across a write
-                // (up to NETWORK_TIMEOUT) starved every connection writer in
-                // the process whenever several peers probed together.
-                let Some(conn_arc) = hb_state.peer_connection(&hb_peer).await else {
-                    // Connection removed — stop heartbeat
-                    break;
-                };
+                let conn_arc = hb_conn.clone();
                 let mut conn = conn_arc.lock().await;
 
                 // Liveness check: was the most recent probe answered in time?
