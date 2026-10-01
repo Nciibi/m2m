@@ -1229,6 +1229,12 @@ impl Session {
 pub fn lock(&mut self) {
     // Both fields' own `Drop` impls zeroize correctly (crypto.rs), so `take()`
     // is the whole mechanism — the same one `Drop for Session` uses.
+    //
+    // NOTE: there is no counterpart that restores the keys. A Double Ratchet
+    // whose root key has been discarded cannot be resumed — resuming is what the
+    // root key is *for* — so a session locked this way must be re-established,
+    // not un-locked. `lock_vault` consequently tears connections down rather than
+    // scrubbing them in place.
     self.session_keys.take();
     self.ratchet.take();
     self.state = ConnectionState::Disconnected;
