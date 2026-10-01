@@ -24,10 +24,23 @@
 ///   [version: u8] [listen_port: u16 BE] [ephemeral_token: 32B]
 ///   [timestamp: u64 BE]
 ///
-/// Note: No permanent identity key, no signature — the token is
-/// ephemeral and carries no linkable information.
+/// Note: No permanent identity key, no signature — the token is ephemeral
+/// and carries no linkable information.
 ///
 /// Total: 1 + 2 + 32 + 8 = 43 bytes
+///
+/// ## What that means for trust
+///
+/// The announcement is *not* authenticated in any way: the token is invented
+/// by the sender for that one packet and proves nothing. The only field that
+/// can be checked is the source address, and [`is_acceptable_lan_source`]
+/// checks it — a peer must present a private, link-local or loopback IPv4
+/// address. An entry that reaches `LanDiscoveryState::peers` is therefore
+/// "some host on a local network said this", nothing more: it is a candidate
+/// address the UI may offer to dial, not an identity. Nothing downstream may
+/// treat it as authenticated — in particular `dht::lan_dht_seeds` only
+/// promotes a peer to a DHT seed once a handshake has actually completed with
+/// the address involved.
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
