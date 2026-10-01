@@ -262,7 +262,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const handleAcceptFileTransfer = useCallback(async (req: FileRequest) => {
     try {
       const { save } = await import("@tauri-apps/plugin-dialog");
-      const savePath = await save({ title: "Save incoming file", defaultPath: req.filename });
+      const savePath = await save({ title: `Save "${req.filename}"`, defaultPath: req.filename });
       if (!savePath) return;
       await invoke("accept_file_transfer", {
         peerKeyHex: req.peer_key_hex,
