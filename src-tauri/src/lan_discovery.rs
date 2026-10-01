@@ -391,9 +391,7 @@ pub async fn start(
     // and it also meant `cancel` was only observed after each 5s block.
     // `from_std` requires non-blocking mode to already be set.
     socket.set_nonblocking(true).map_err(LanDiscoveryError::Io)?;
-    let socket = Arc::new(
-        tokio::net::UdpSocket::from_std(socket).map_err(LanDiscoveryError::Io)?,
-    );
+    let socket = Arc::new(tokio::net::UdpSocket::from_std(socket).map_err(LanDiscoveryError::Io)?);
     let socket_listener = socket.clone();
     let socket_announcer = socket.clone();
 
