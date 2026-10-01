@@ -278,13 +278,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [addToast]);
 
-  const handleTorToggle = useCallback(async () => {
-    if (!networkSettings) return;
+const handleTorToggle = useCallback(async () => {
+    // Refuse rather than silently no-op. This control is what the entire
+    // `dial.rs` chokepoint depends on, and the previous bare `return` left
+    // the caller free to flip its own optimistic state - so a Tor checkbox
+    // could read "enabled" with nothing persisted anywhere.
+    if (!networkSettings) {
+      addToast("Network settings not loaded yet - try again in a moment", "error");
+      return;
+    }
     const newVal = !networkSettings.tor_enabled;
     try {
       await invoke("set_tor_enabled", { enabled: newVal });
       setNetworkSettings({ ...networkSettings, tor_enabled: newVal });
     } catch (e) {
+      // Left `networkSettings` untouched, so the checkbox cannot show a state
+      // the backend rejected.
       addToast("Tor toggle failed: " + errorMessage(e), "error");
     }
   }, [networkSettings, addToast]);

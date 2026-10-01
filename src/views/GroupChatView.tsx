@@ -13,7 +13,7 @@ import { useApp } from "../context/AppContext";
 import type { GroupInfo, GroupDetail, ChatMessage } from "../types";
 
 export default function GroupChatView() {
-  const { toasts, removeToast, addToast, setView } = useApp();
+  const { identity, toasts, removeToast, addToast, setView } = useApp();
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [activeGroup, setActiveGroup] = useState<GroupDetail | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -27,6 +27,11 @@ export default function GroupChatView() {
   // when the store is in fact locked or unreadable — which reads as data loss
   // rather than as an error, and there is no way to tell the two apart.
   const [loadFailed, setLoadFailed] = useState(false);
+  // Same reasoning for the *message* list, which never got the treatment the
+  // group list has. A failed `load_group_messages` was swallowed, leaving
+  // `messages` empty, so the user was shown "No messages yet" for a group they
+  // knew had history — indistinguishable from the group having been wiped.
+  const [messagesLoadFailed, setMessagesLoadFailed] = useState(false);
   // Mirrors `activeGroup` for the `m2m://group-message` listener, which is
   // registered once and therefore cannot close over the state value.
   const activeGroupRef = useRef<GroupDetail | null>(null);
@@ -47,8 +52,12 @@ export default function GroupChatView() {
   const loadMessages = useCallback(async (groupId: string) => {
     try {
       setMessages(asArray<ChatMessage>(await invoke("load_group_messages", { groupId, limit: 100 })));
-    } catch { /* noop */ }
-  }, []);
+      setMessagesLoadFailed(false);
+    } catch (e) {
+      setMessagesLoadFailed(true);
+      addToast("Could not load group messages: " + errorMessage(e), "error");
+    }
+  }, [addToast]);
 
   useEffect(() => {
     loadGroups();
@@ -145,7 +154,7 @@ export default function GroupChatView() {
 
   return (
     <div className="app-shell">
-      <Sidebar currentView="groups" onNavigate={setView} />
+      <Sidebar currentView="groups" onNavigate={setView} onError={(m) => addToast(m, "error", 6000)} />
       <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
@@ -236,12 +245,35 @@ export default function GroupChatView() {
             {messages.length === 0 ? (
               <div className="conv-empty" style={{ marginTop: 'var(--space-2xl)' }}>
                 <MessageIcon size={48} color="var(--color-text-muted)" />
-                <p className="conv-empty__title">No messages yet</p>
-                <p className="conv-empty__desc">Start the conversation!</p>
+                {messagesLoadFailed ? (
+                  <>
+                    <p className="conv-empty__title">Could not load messages</p>
+                    <p className="conv-empty__desc">
+                      This group's history could not be read. This is not the same as
+                      having no messages &mdash; retry before concluding anything.
+                    </p>
+                    {activeGroup && (
+                      <Button variant="secondary" size="sm" onClick={() => loadMessages(activeGroup.group_id)}>
+                        Retry
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="conv-empty__title">No messages yet</p>
+                    <p className="conv-empty__desc">Start the conversation!</p>
+                  </>
+                )}
               </div>
             ) : (
               messages.map((m, i) => (
-                <MessageBubble key={m.id} message={m} index={i} plain />
+                <MessageBubble
+                  key={m.id}
+                  message={m}
+                  index={i}
+                  plain
+                  myPeerKeyHex={identity?.public_key_hex}
+                />
               ))
             )}
           </div>

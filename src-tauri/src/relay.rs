@@ -163,9 +163,26 @@ pub struct RelayState {
 async fn read_relay_frame<R: AsyncReadExt + Unpin>(
     stream: &mut R,
 ) -> Result<RelayFrame, RelayError> {
+    read_relay_frame_with_deadline(stream, network::RELAY_DEFAULT_READ_DEADLINE).await
+}
+
+/// [`read_relay_frame`] with an explicit total read deadline.
+///
+/// The deadline has to be a parameter, not a constant. `read_exact_timeout`
+/// applies its budget per *call*, so a caller that is deliberately parked
+/// waiting for a reply that may not arrive — the keepalive loop — must pass a
+/// budget longer than its own wait, or the inner read always wins the race and
+/// the caller's timeout branch is unreachable. That is exactly what happened:
+/// the keepalive branch below was dead code and every idle relay registration
+/// was torn down after ~1s.
+async fn read_relay_frame_with_deadline<R: AsyncReadExt + Unpin>(
+    stream: &mut R,
+    deadline: Duration,
+) -> Result<RelayFrame, RelayError> {
     // Read 4-byte length prefix with Slowloris protection
+    let started = std::time::Instant::now();
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
-    network::read_exact_timeout(stream, &mut len_buf, "relay len prefix")
+    network::read_exact_timeout_with(stream, &mut len_buf, "relay len prefix", deadline)
         .await
         .map_err(|e| match e {
             network::NetworkError::PeerClosed => RelayError::ConnectionClosed,
@@ -185,9 +202,12 @@ async fn read_relay_frame<R: AsyncReadExt + Unpin>(
         return Err(RelayError::Protocol("empty relay frame".into()));
     }
 
-    // Read body with Slowloris protection
+    // Read body with Slowloris protection. The remaining budget is carried
+    // over rather than restarted, so a slow length prefix cannot double the
+    // time a peer has to occupy this slot.
+    let remaining = deadline.saturating_sub(started.elapsed());
     let mut body = vec![0u8; body_len];
-    network::read_exact_timeout(stream, &mut body, "relay body")
+    network::read_exact_timeout_with(stream, &mut body, "relay body", remaining)
         .await
         .map_err(|e| match e {
             network::NetworkError::PeerClosed => RelayError::ConnectionClosed,
@@ -411,8 +431,18 @@ pub async fn wait_for_bridge(
     // every invite it generated.
     let mut consecutive_misses: u32 = 0;
     loop {
-        let frame = match time::timeout(KEEPALIVE_INTERVAL, read_relay_frame(&mut relay_stream))
-            .await
+        // The inner read deadline is deliberately *longer* than the outer wait,
+        // so the outer `timeout` is the one that fires and the keepalive branch
+        // below is reachable. With the shared default deadline the inner read
+        // always won the race, the `Err(_)` arm never executed, and every idle
+        // registration was torn down ~1s after registering while the app still
+        // reported `connected: true`.
+        let inner_deadline = KEEPALIVE_INTERVAL + Duration::from_secs(5);
+        let frame = match time::timeout(
+            KEEPALIVE_INTERVAL,
+            read_relay_frame_with_deadline(&mut relay_stream, inner_deadline),
+        )
+        .await
         {
             Ok(Ok(f)) => {
                 consecutive_misses = 0;

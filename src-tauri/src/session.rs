@@ -1208,6 +1208,32 @@ impl Session {
     }
 }
 
+/// Scrub every secret this session holds, leaving it unusable but intact.
+///
+/// `lock_vault` zeroizes the identity keys, the prekeys, the storage key and
+/// every store, and its first line says it "zeroizes keys in memory and marks
+/// the vault as locked" — but a `Session` owns the Double Ratchet root key, the
+/// sending and receiving chain keys and up to `MAX_SKIP` cached skipped keys,
+/// and none of that is reachable from `lock_vault`. `Drop` is the only other
+/// teardown, and nothing on the lock path drops a connection.
+///
+/// So after "Lock Now" or an idle lock the process still holds live ratchet
+/// state for every peer, with the sockets open and the receive loops still
+/// running and decrypting. This exists so a session can be scrubbed *without*
+/// dropping the connection: the documented behaviour is that calls stay up
+/// across a lock, and that is a reasonable product choice — the residual key
+/// material was the part that was neither documented nor reachable.
+///
+/// After this, `decrypt_*` returns an error and `establish` must be called
+/// again to get a session back.
+pub fn lock(&mut self) {
+    // Both fields' own `Drop` impls zeroize correctly (crypto.rs), so `take()`
+    // is the whole mechanism — the same one `Drop for Session` uses.
+    self.session_keys.take();
+    self.ratchet.take();
+    self.state = ConnectionState::Disconnected;
+}
+
 impl Drop for Session {
     fn drop(&mut self) {
         // Ensure session keys are zeroized on drop (SessionKeys has its own Drop).

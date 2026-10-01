@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "../ui";
 import { SmileyIcon, ChevronDownIcon, CheckDoubleIcon, ClockIcon } from "../ui/Icons";
 import SelfDestructTimer from "./SelfDestructTimer";
@@ -15,6 +15,15 @@ export interface MessageBubbleProps {
   onRemoveReaction?: (messageId: string, emoji: string) => void;
   onEditSave?: (messageId: string, content: string) => Promise<void> | void;
   onDelete?: (messageId: string) => Promise<void> | void;
+  /**
+   * Our own Ed25519 public key, hex. Used to decide whether a reaction chip is
+   * ours.
+   *
+   * A prop rather than `useApp()` so this component stays renderable in
+   * isolation — the whole test suite mounts it bare, and a context read would
+   * force a provider onto every one of those tests for no behavioural gain.
+   */
+  myPeerKeyHex?: string;
 }
 
 const PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
@@ -28,6 +37,7 @@ export default function MessageBubble({
   onRemoveReaction,
   onEditSave,
   onDelete,
+  myPeerKeyHex,
 }: MessageBubbleProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -47,10 +57,47 @@ export default function MessageBubble({
     return () => window.removeEventListener("click", handler);
   }, [menuOpen]);
 
+  // Only treat a *failed* edit save as a failure.
+  //
+  // `await onEditSave?.(...)` then `setEditing(false)` unconditionally meant a
+  // rejected save closed the editor and discarded the user's retyped text with
+  // no message — indistinguishable from a successful edit. The error itself is
+  // reported by the caller (`handleEditMessage` toasts it), so here we only
+  // need to keep the editor open when the promise rejects.
+  const saveEdit = useCallback(async () => {
+    if (!onEditSave) return;
+    try {
+      await onEditSave(m.id, editText);
+      setEditing(false);
+    } catch {
+      // Editor stays open with the text intact. The caller has already told
+      // the user why.
+    }
+  }, [onEditSave, m.id, editText]);
+
   const canEdit = typeof onEditSave === "function";
   const canDelete = typeof onDelete === "function";
   const canReact = typeof onReact === "function" || typeof onRemoveReaction === "function";
   const senderLabel = m.direction === "sent" ? "you" : m.sender_peer_key_hex ? m.sender_peer_key_hex.substring(0, 8) : "peer";
+
+  // "Did I react to this?" — by comparing against our OWN key.
+  //
+  // This used to test `reactors.includes("self")`, a sentinel the context wrote
+  // optimistically. But the backend persists the real Ed25519 key
+  // (`send_reaction` → `upsert_reaction(..., &peer_key_hex, ...)`), so
+  // `load_messages` returns `[<64-hex>]` and never `"self"`. After a reload the
+  // chip rendered unhighlighted with `aria-pressed="false"` and clicking it
+  // *added* the reaction again instead of removing it — so a user could add
+  // their own reaction and never take it back.
+  //
+  // It also violated this app's own event boundary: `events.ts` validates every
+  // reactor with `isPeerKeyHex`, so `"self"` is a value the validator would
+  // reject. Both sides now speak the persisted shape. The `"self"` case is still
+  // accepted as a fallback so an unrecognised or absent `myPeerKeyHex` degrades
+  // to the old behaviour instead of treating the user's own reaction as
+  // someone else's and letting them add it twice.
+  const reactedByMe = (reactors: string[]) =>
+    (!!myPeerKeyHex && reactors.includes(myPeerKeyHex)) || reactors.includes("self");
 
   return (
     <div
@@ -102,11 +149,10 @@ export default function MessageBubble({
         <div className="msg-edit-inline">
           <textarea className="msg-edit-input" value={editText}
             onChange={(e) => setEditText(e.target.value)}
-            onKeyDown={async (e) => {
+            onKeyDown={(e) => {
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                await onEditSave?.(m.id, editText);
-                setEditing(false);
+                void saveEdit();
               }
               if (e.key === "Escape") { e.stopPropagation(); setEditing(false); }
             }}
@@ -114,7 +160,7 @@ export default function MessageBubble({
             rows={2}
           />
           <div className="msg-edit-actions">
-            <Button size="xs" onClick={async () => { await onEditSave?.(m.id, editText); setEditing(false); }}>Save</Button>
+            <Button size="xs" onClick={() => { void saveEdit(); }}>Save</Button>
             <Button variant="secondary" size="xs" onClick={() => setEditing(false)}>Cancel</Button>
           </div>
         </div>
@@ -162,11 +208,11 @@ export default function MessageBubble({
           {Object.entries(m.reactions).map(([emoji, reactors]) => (
             <button
               key={emoji}
-              className={`msg-reaction ${reactors.includes("self") ? "msg-reaction--self" : ""}`}
+              className={`msg-reaction ${reactedByMe(reactors) ? "msg-reaction--self" : ""}`}
               aria-label={"React " + emoji}
-              aria-pressed={reactors.includes("self")}
+              aria-pressed={reactedByMe(reactors)}
               onClick={() => {
-                if (reactors.includes("self")) {
+                if (reactedByMe(reactors)) {
                   onRemoveReaction?.(m.id, emoji);
                 } else {
                   onReact?.(m.id, emoji);
@@ -185,13 +231,13 @@ export default function MessageBubble({
           {PICKER_EMOJIS.map((emoji) => (
             <button
               key={emoji}
-              className={`reaction-picker__btn ${(m.reactions?.[emoji] || []).includes("self") ? "reaction-picker__btn--active" : ""}`}
+              className={`reaction-picker__btn ${reactedByMe(m.reactions?.[emoji] || []) ? "reaction-picker__btn--active" : ""}`}
               aria-label={"React " + emoji}
-              aria-pressed={(m.reactions?.[emoji] || []).includes("self")}
+              aria-pressed={reactedByMe(m.reactions?.[emoji] || [])}
               onClick={(e) => {
                 e.stopPropagation();
                 const reactors = m.reactions?.[emoji] || [];
-                if (reactors.includes("self")) {
+                if (reactedByMe(reactors)) {
                   onRemoveReaction?.(m.id, emoji);
                 } else {
                   onReact?.(m.id, emoji);

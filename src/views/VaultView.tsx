@@ -7,7 +7,7 @@ import { useApp } from "../context/AppContext";
 import { useVault } from "../context/VaultContext";
 
 export default function VaultView() {
-  const { identity, vaultInitialized, setView, toasts, removeToast, addToast } = useApp();
+  const { identity, vaultInitialized, refreshVault, toasts, removeToast, addToast } = useApp();
   const { handleUnlockVault } = useVault();
   const [passphrase, setPassphrase] = useState("");
   const [passphraseConfirm, setPassphraseConfirm] = useState("");
@@ -61,7 +61,11 @@ export default function VaultView() {
       if (createMode) {
         await invoke("create_vault_account", { passphrase });
         setCreateMode(false);
-        setView("hub");
+        // `refreshVault`, not `setView` — same reason as `handleUnlockVault`:
+        // `setView` is gated on `unlockedRef`, which only `refreshVault` writes,
+        // so `setView("hub")` here was dropped and account creation looked like
+        // it did nothing after the account was in fact created.
+        await refreshVault();
       } else {
         await handleUnlockVault(passphrase);
       }

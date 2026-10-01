@@ -205,28 +205,24 @@ impl KeyStore {
     }
 
     /// Store a vault metadata value (duress hash, capability flags, …).
+    ///
+    /// Both the key and the value are bound parameters. The key used to be
+    /// formatted into the statement behind a `'`/`\0` denylist, which is a
+    /// shape that reads as safe and is not — it needs one more caller to pass
+    /// a derived string before it is an injection.
     pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StorageError> {
-        if key.contains('\'') || key.contains('\0') {
-            return Err(StorageError::PathError("invalid meta key".into()));
-        }
         self.conn.execute(
-            &format!(
-                "INSERT OR REPLACE INTO vault_meta (key, value) VALUES ('{}', ?1)",
-                key
-            ),
-            params![value],
+            "INSERT OR REPLACE INTO vault_meta (key, value) VALUES (?1, ?2)",
+            params![key, value],
         )?;
         Ok(())
     }
 
     /// Read a vault metadata value. `None` when absent.
     pub fn get_meta(&self, key: &str) -> Result<Option<String>, StorageError> {
-        if key.contains('\'') || key.contains('\0') {
-            return Err(StorageError::PathError("invalid meta key".into()));
-        }
         let result: Result<String, _> = self.conn.query_row(
-            &format!("SELECT value FROM vault_meta WHERE key = '{}'", key),
-            [],
+            "SELECT value FROM vault_meta WHERE key = ?1",
+            params![key],
             |row| row.get(0),
         );
         Ok(result.ok())
@@ -1058,11 +1054,6 @@ impl MessageStore {
             conn,
             shredded_keys: std::sync::atomic::AtomicU64::new(0),
         };
-        // Seed the storage-cap counter from the tables. Done once, at open, so
-        // a database that already holds messages is accounted for from its
-        // first launch — otherwise the cap would appear to be 0 bytes and
-        // nothing would ever be evicted.
-        store.recompute_stored_bytes()?;
         // Destroy anything whose self-destruct timer elapsed while the app was
         // not running.
         //
@@ -1078,6 +1069,45 @@ impl MessageStore {
         // this covers the closed one, and runs before the first query can read
         // the row back, so an expired message is never even returned by
         // `load_messages` after a restart.
+        //
+        // It must also run *before* `recompute_stored_bytes`, because the byte
+        // counter is derived from the tables: counting rows that are about to
+        // be destroyed leaves the cap permanently inflated by the size of
+        // everything that already expired.
+        match store.delete_expired_messages() {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(
+                expired = n,
+                "self-destruct timer elapsed while closed — messages permanently destroyed"
+            ),
+            // A failure here means expired content is still on disk. Logged
+            // rather than swallowed: the user has no other way to find out.
+            Err(e) => tracing::error!(
+                error = %e,
+                "could not destroy elapsed self-destruct timers at startup"
+            ),
+        }
+
+        // Same guarantee for the conversation retention policy, which is the
+        // deadline the user set on the conversation itself rather than on an
+        // individual message.
+        match store.delete_messages_by_retention_policy() {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(
+                messages = n,
+                "retention policy elapsed while closed — messages permanently destroyed"
+            ),
+            Err(e) => tracing::error!(
+                error = %e,
+                "could not enforce conversation retention policies at startup"
+            ),
+        }
+
+        // Seed the storage-cap counter from the tables. Done once, at open, so
+        // a database that already holds messages is accounted for from its
+        // first launch — otherwise the cap would appear to be 0 bytes and
+        // nothing would ever be evicted.
+        store.recompute_stored_bytes()?;
         Ok(store)
     }
 
@@ -1457,13 +1487,19 @@ impl MessageStore {
     /// about to enforce a limit should use [`Self::stored_bytes_verified`], which
     /// re-derives from SQL first so a stale low count cannot overshoot the cap.
     pub fn stored_bytes(&self) -> Result<u64, StorageError> {
-        let total: i64 = self
+        // Distinguish "no row yet" (legitimately zero) from "the counter is
+        // unreadable". Collapsing the second into zero makes a broken counter
+        // read as an empty store, which disables the cap and shows the user
+        // "0 bytes used" on a full disk — a claim the disk cannot back.
+        match self
             .conn
             .query_row("SELECT total_bytes FROM storage_stats WHERE id = 1", [], |row| {
-                row.get(0)
-            })
-            .unwrap_or(0);
-        Ok(total.max(0) as u64)
+                row.get::<_, i64>(0)
+            }) {
+            Ok(total) => Ok(total.max(0) as u64),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// Current stored bytes, re-derived from SQL so the number is exact.
@@ -1521,8 +1557,43 @@ impl MessageStore {
         &self,
         cap_bytes: u64,
     ) -> Result<Option<EvictionReport>, StorageError> {
-        if self.stored_bytes()? <= cap_bytes {
+        // The gate must be able to *disagree* with the cached counter, or it is
+        // not a check at all.
+        //
+        // `stored_bytes()` is O(1) but is only correct if every write path
+        // remembered to call `add_stored_bytes`. A single path that did not
+        // leaves the counter low, and a gate that trusts it returns early and
+        // does nothing — the counter has to first exceed the cap on its own
+        // before the scan that would have corrected it ever runs. A cap that
+        // most write paths bypass is not a cap.
+        //
+        // So: the fast O(1) counter decides when usage is nowhere near the cap,
+        // and the authoritative SQL re-derivation decides the moment it could
+        // matter. The margin band keeps the hot path (30 inbound frames/s)
+        // cheap while making drift unable to hide below the ceiling.
+        // The band has to be *proportional*, not fixed. A fixed 64 MiB band means the
+        // store is "close enough to the cap" for a large fraction of its whole
+        // life, and `stored_bytes_verified` is an unindexed `SUM(LENGTH(...))`
+        // over every row — which would then run on every inbound frame, while the
+        // caller holds `state.message_store.lock()`. 1/16 of the cap keeps the
+        // check close enough that drift cannot hide while bounding the window.
+        let verify_margin = (cap_bytes / 16).min(64 * 1024 * 1024);
+        let cached = self.stored_bytes()?;
+        let needs_verified = cached <= cap_bytes
+            && cached.saturating_add(verify_margin) >= cap_bytes;
+        let usage = if needs_verified {
+            self.stored_bytes_verified()?
+        } else {
+            cached
+        };
+        if usage <= cap_bytes {
             return Ok(None);
+        }
+        // The verified pass already refreshed the counter, but an eviction on
+        // the cached path needs the same correction before it starts, so the
+        // batch accounting below starts from the truth either way.
+        if !needs_verified {
+            self.recompute_stored_bytes()?;
         }
         let report = self.evict_to_cap(cap_bytes)?;
         if report.messages_evicted == 0 && report.group_messages_evicted == 0 {
@@ -1550,9 +1621,19 @@ impl MessageStore {
                 "self-destruct timer elapsed — messages permanently destroyed"
             );
         }
+        // Conversation retention policies are the *other* thing that destroys
+        // stored history, so they belong in the same pass. Leaving them out is
+        // what let "Auto-Delete After 24h" persist, display, and never fire.
+        let retention_deleted = self.delete_messages_by_retention_policy()?;
+        if retention_deleted > 0 {
+            tracing::info!(
+                messages = retention_deleted,
+                "conversation retention policy elapsed — messages permanently destroyed"
+            );
+        }
         let evicted = self.enforce_storage_cap(cap_bytes)?;
         Ok(SweepOutcome {
-            expired_messages,
+            expired_messages: expired_messages + retention_deleted,
             evicted: evicted.unwrap_or_default(),
         })
     }
@@ -1891,17 +1972,23 @@ impl MessageStore {
             "SELECT c.id, c.peer_id, c.created_at, c.last_message_at,
                     c.display_name, c.peer_display_name,
                     c.auto_delete_at, c.retention_policy,
-                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count,
+                    (SELECT COUNT(*) FROM messages m
+                      WHERE m.conversation_id = c.id
+                        AND m.deleted = 0
+                        AND (m.expires_at IS NULL OR m.expires_at > ?1)) as msg_count,
                     COALESCE(c.is_favorite, 0) as is_favorite,
                     COALESCE(c.archived, 0) as archived,
                     (SELECT COUNT(*) FROM messages m
                      WHERE m.conversation_id = c.id
-                     AND m.direction = 'received' AND m.read_at IS NULL) as unread_count
+                       AND m.direction = 'received' AND m.read_at IS NULL
+                       AND m.deleted = 0
+                       AND (m.expires_at IS NULL OR m.expires_at > ?1)) as unread_count
              FROM conversations c
              ORDER BY archived ASC, COALESCE(c.is_favorite, 0) DESC,
                       COALESCE(c.last_message_at, c.created_at) DESC",
         )?;
-        let rows = stmt.query_map([], |row| {
+        let now = chrono::Utc::now().timestamp();
+        let rows = stmt.query_map(params![now], |row| {
             Ok(ConversationSummary {
                 id: row.get(0)?,
                 peer_id: row.get(1)?,
@@ -1953,6 +2040,15 @@ impl MessageStore {
     }
 
     /// Set per-conversation retention policy and auto-delete timer.
+    ///
+    /// When `policy` is `delete` and a duration is given, the timer is applied
+    /// **retroactively** to the messages already stored: `auto_delete_at` is a
+    /// conversation-wide deadline enforced by [`Self::sweep`], so a policy the
+    /// user sets now has to cover the history it is meant to be a policy *for*.
+    /// Only messages already stamped with their own (longer) self-destruct
+    /// timer are left alone — a per-message timer is the more specific promise,
+    /// and silently shortening it would be a data-destruction the user did not
+    /// ask for.
     pub fn set_conversation_retention(
         &self,
         conversation_id: &str,
@@ -1964,7 +2060,90 @@ impl MessageStore {
             "UPDATE conversations SET retention_policy = ?1, auto_delete_at = ?2 WHERE id = ?3",
             params![policy, auto_delete_at, conversation_id],
         )?;
+        if policy == "delete" {
+            if let Some(deadline) = auto_delete_at {
+                self.conn.execute(
+                    "UPDATE messages SET expires_at = ?1
+                      WHERE conversation_id = ?2
+                        AND expires_at IS NULL",
+                    params![deadline, conversation_id],
+                )?;
+            }
+        }
         Ok(())
+    }
+
+    /// Permanently destroy messages in conversations whose retention deadline
+    /// has elapsed.
+    ///
+    /// This is what makes the conversation policy selector real. It used to be
+    /// written to `conversations.retention_policy` / `auto_delete_at` and
+    /// displayed back to the user, and **nothing ever deleted anything on that
+    /// basis** — `sweep` consulted only `messages.expires_at`, a different
+    /// column. So "Auto-Delete After 24h" was a control that reported success
+    /// when the thing it described did not happen, on the exact feature
+    /// CLAUDE.md names as the worst instance of that failure.
+    ///
+    /// Shredding order matches [`Self::delete_expired_messages`]: zero the
+    /// wrapped content keys first (so the bytes are unrecoverable even if the
+    /// delete itself is interrupted), truncate the WAL, then delete.
+    ///
+    /// Returns the number of messages destroyed.
+    pub fn delete_messages_by_retention_policy(&self) -> Result<u32, StorageError> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn
+            .pragma_update(None, "secure_delete", "ON")?;
+
+        // Only conversations that actually asked for destruction. `policy =
+        // 'export'` means "keep it, I'll export it", so it must not be swept.
+        let freed: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(LENGTH(m.content_encrypted)
+                                    + LENGTH(m.content_nonce)
+                                    + ?1), 0)
+                   FROM messages m
+                   JOIN conversations c ON c.id = m.conversation_id
+                  WHERE c.retention_policy = 'delete'
+                    AND c.auto_delete_at IS NOT NULL
+                    AND c.auto_delete_at <= ?2",
+                params![Self::MSG_ROW_OVERHEAD, now],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        self.conn.execute(
+            "UPDATE messages SET content_key_wrapped = ?2
+              WHERE content_key_wrapped IS NOT NULL
+                AND conversation_id IN (
+                    SELECT id FROM conversations
+                     WHERE retention_policy = 'delete'
+                       AND auto_delete_at IS NOT NULL
+                       AND auto_delete_at <= ?1)",
+            rusqlite::params![now, vec![0u8; WRAPPED_CEK_LEN]],
+        )?;
+        self.wal_checkpoint_truncate()?;
+
+        let count = self.conn.execute(
+            "DELETE FROM messages
+              WHERE conversation_id IN (
+                    SELECT id FROM conversations
+                     WHERE retention_policy = 'delete'
+                       AND auto_delete_at IS NOT NULL
+                       AND auto_delete_at <= ?1)",
+            rusqlite::params![now],
+        )?;
+        // Reactions are keyed by message id with no foreign key, so they would
+        // otherwise outlive the message they annotate — and count as nothing
+        // toward the cap, which is how the table became invisible to it.
+        self.conn.execute(
+            "DELETE FROM reactions
+              WHERE message_id NOT IN (SELECT id FROM messages)",
+            [],
+        )?;
+        self.add_stored_bytes(-freed);
+        self.wal_checkpoint_truncate()?;
+        Ok(count as u32)
     }
 
     /// Toggle the favorite status of a conversation. Returns the new value.
@@ -2021,15 +2200,21 @@ impl MessageStore {
             "SELECT c.id, c.peer_id, c.created_at, c.last_message_at,
                     c.display_name, c.peer_display_name,
                     c.auto_delete_at, c.retention_policy,
-                    (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as msg_count,
+                    (SELECT COUNT(*) FROM messages m
+                      WHERE m.conversation_id = c.id
+                        AND m.deleted = 0
+                        AND (m.expires_at IS NULL OR m.expires_at > ?2)) as msg_count,
                     COALESCE(c.is_favorite, 0) as is_favorite,
                     COALESCE(c.archived, 0) as archived,
                     (SELECT COUNT(*) FROM messages m
                      WHERE m.conversation_id = c.id
-                     AND m.direction = 'received' AND m.read_at IS NULL) as unread_count
+                       AND m.direction = 'received' AND m.read_at IS NULL
+                       AND m.deleted = 0
+                       AND (m.expires_at IS NULL OR m.expires_at > ?2)) as unread_count
              FROM conversations c WHERE c.id = ?1",
         )?;
-        let result = stmt.query_row(params![conversation_id], |row| {
+        let now = chrono::Utc::now().timestamp();
+        let result = stmt.query_row(params![conversation_id, now], |row| {
             Ok(ConversationSummary {
                 id: row.get(0)?,
                 peer_id: row.get(1)?,
@@ -2283,8 +2468,14 @@ impl MessageStore {
     pub fn mark_messages_read(&self, conversation_id: &str) -> Result<u32, StorageError> {
         let now = chrono::Utc::now().timestamp();
         let count = self.conn.execute(
+            // Expired and soft-deleted rows are excluded so the returned count
+            // is "messages the user just marked read", not "rows this UPDATE
+            // happened to touch". Including them inflated the badge with
+            // content that is logically already gone.
             "UPDATE messages SET read_at = ?1
-             WHERE conversation_id = ?2 AND direction = 'received' AND read_at IS NULL",
+             WHERE conversation_id = ?2 AND direction = 'received' AND read_at IS NULL
+               AND deleted = 0
+               AND (expires_at IS NULL OR expires_at > ?1)",
             rusqlite::params![now, conversation_id],
         )?;
         Ok(count as u32)
@@ -2399,6 +2590,13 @@ impl MessageStore {
             "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?1",
             rusqlite::params![now],
         )?;
+        // Reactions carry no foreign key to `messages`, so every self-destruct
+        // left them behind: orphaned rows naming messages that no longer
+        // exist. They were also invisible to the storage cap, which counts only
+        // message rows — so the one table that could grow without bound was the
+        // one the ceiling could not see.
+        self.conn
+            .execute("DELETE FROM reactions WHERE message_id NOT IN (SELECT id FROM messages)", [])?;
         self.add_stored_bytes(-freed);
         self.wal_checkpoint_truncate()?;
         Ok(count as u32)
@@ -4534,6 +4732,211 @@ mod tests {
         assert!(
             outcome.destroyed_anything(),
             "a pass that evicted must report that it destroyed something"
+        );
+    }
+
+    // ─── Conversation retention policy ───
+    //
+    // `retention_policy` / `auto_delete_at` were written by
+    // `set_conversation_retention`, read back for display, and **never acted
+    // on by anything**. So the UI's "Auto-Delete After 24h" persisted,
+    // displayed, toasted success on write, and destroyed nothing — the exact
+    // failure CLAUDE.md calls out as the worst instance of a control that
+    // reports success when the thing it describes did not happen.
+
+    #[test]
+    fn test_sweep_enforces_conversation_retention_policy() {
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 4, 500);
+
+        // Already past its deadline.
+        store
+            .conn
+            .execute(
+                "UPDATE conversations SET retention_policy = 'delete', auto_delete_at = 1 WHERE id = 'c1'",
+                [],
+            )
+            .unwrap();
+
+        let outcome = store.sweep(u64::MAX / 4).unwrap();
+        assert_eq!(
+            outcome.expired_messages, 4,
+            "an elapsed conversation policy must destroy the conversation's messages"
+        );
+
+        // The observable is the disk, not the read path: `load_messages` filters
+        // expired rows, so asserting through it would prove nothing.
+        let on_disk: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages WHERE conversation_id = 'c1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(on_disk, 0, "the rows must be physically removed, not just hidden");
+    }
+
+    #[test]
+    fn test_export_policy_is_never_swept() {
+        // `export` means "keep it so I can export it". Sweeping it would be
+        // data destruction the user explicitly asked NOT to happen.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 4, 500);
+        store
+            .conn
+            .execute(
+                "UPDATE conversations SET retention_policy = 'export', auto_delete_at = 1 WHERE id = 'c1'",
+                [],
+            )
+            .unwrap();
+
+        let outcome = store.sweep(u64::MAX / 4).unwrap();
+        assert_eq!(outcome.expired_messages, 0, "an 'export' policy must not destroy");
+        let on_disk: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(on_disk, 4);
+    }
+
+    #[test]
+    fn test_setting_retention_applies_retroactively_to_existing_messages() {
+        // A policy the user sets now has to cover the history it is a policy
+        // *for*. Without this the messages already stored were never swept and
+        // the policy only ever affected messages sent afterwards.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 3, 400);
+
+        store
+            .set_conversation_retention("c1", "delete", Some(3600))
+            .unwrap();
+
+        let unstamped: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = 'c1' AND expires_at IS NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            unstamped, 0,
+            "existing messages must inherit the conversation deadline, or the policy only covers new messages"
+        );
+    }
+
+    #[test]
+    fn test_setting_retention_does_not_shorten_a_per_message_timer() {
+        // A per-message self-destruct is the more specific promise. Silently
+        // lowering it would destroy content the user asked to keep for longer.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        let far = chrono::Utc::now().timestamp() + 7 * 86_400;
+        store
+            .store_message_secure("m7d", "c1", "sent", b"keep", 1_000, Some(far), true, &test_key())
+            .unwrap();
+
+        store.set_conversation_retention("c1", "delete", Some(3600)).unwrap();
+
+        let got: i64 = store
+            .conn
+            .query_row("SELECT expires_at FROM messages WHERE id = 'm7d'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(got, far, "the longer per-message timer must win");
+    }
+
+    #[test]
+    fn test_expiry_removes_orphan_reactions() {
+        // `reactions` has no foreign key to `messages`, so every self-destruct
+        // left its reactions behind, naming messages that no longer existed.
+        // They were also invisible to the storage cap, which counts message rows
+        // only — so the one table that could grow unboundedly was the one the
+        // ceiling could not see.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        let past = chrono::Utc::now().timestamp() - 60;
+        store
+            .store_message_secure("m-gone", "c1", "sent", b"x", past, Some(past), true, &test_key())
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO reactions (message_id, reaction, peer_key_hex, created_at)
+                 VALUES ('m-gone', 'X', ?1, 1)",
+                params!["a".repeat(64)],
+            )
+            .unwrap();
+
+        store.delete_expired_messages().unwrap();
+
+        let remaining: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM reactions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining, 0, "a reaction must not outlive the message it annotates");
+    }
+
+    #[test]
+    fn test_mark_messages_read_and_unread_count_ignore_expired_and_deleted() {
+        // Both the badge and the write counted rows that are logically already
+        // gone, so the count was permanently inflated by anything awaiting a
+        // sweep and by the user's own "delete for everyone" tombstones.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        let past = chrono::Utc::now().timestamp() - 60;
+        store
+            .store_message_secure("m-exp", "c1", "received", b"x", past, Some(past), true, &test_key())
+            .unwrap();
+        store
+            .store_message_secure("m-live", "c1", "received", b"y", 2_000, None, true, &test_key())
+            .unwrap();
+        store
+            .conn
+            .execute("UPDATE messages SET deleted = 1 WHERE id = 'm-live'", [])
+            .unwrap();
+
+        let marked = store.mark_messages_read("c1").unwrap();
+        assert_eq!(
+            marked, 0,
+            "no live unread message exists, so marking read must report zero"
+        );
+
+        let summary = store.list_conversations().unwrap();
+        let c1 = summary.iter().find(|c| c.id == "c1").unwrap();
+        assert_eq!(c1.unread_count, 0, "expired and deleted rows must not inflate the badge");
+        assert_eq!(c1.message_count, 0);
+    }
+
+    #[test]
+    fn test_enforce_cap_recovers_from_counter_drift() {
+        // The gate used to trust the O(1) cached counter, so any write path that
+        // forgot `add_stored_bytes` left it low and enforcement never fired: the
+        // counter had to first exceed the cap on its own before the scan that
+        // would have corrected it ran.
+        let store = mem_messagestore();
+        store.ensure_conversation("c1", &[0x11; 32]).unwrap();
+        fill_messages(&store, "c1", 6, 1000);
+        let one_msg = store.stored_bytes().unwrap() / 6;
+
+        // Simulate drift: the counter claims the store is far below the cap.
+        store
+            .conn
+            .execute("UPDATE storage_stats SET total_bytes = 0 WHERE id = 1", [])
+            .unwrap();
+        assert_eq!(store.stored_bytes().unwrap(), 0, "the counter is now wrong");
+
+        // A cap the truth violates but the cached number does not.
+        let report = store.enforce_storage_cap(one_msg * 3).unwrap();
+        assert!(
+            report.is_some(),
+            "a drifted-low counter must not be able to switch the cap off"
+        );
+        assert!(report.unwrap().messages_evicted > 0);
+        assert!(
+            store.stored_bytes().unwrap() <= one_msg * 3,
+            "usage must end up under the cap, not merely reported as over it"
         );
     }
 

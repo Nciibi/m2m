@@ -305,6 +305,7 @@ pub async fn unlock_vault(
         {
             let mut sk_lock = state.storage_key.write().await;
             *sk_lock = Some(storage_key);
+            crate::commands::util::mlock_storage_key(&sk_lock);
         }
 
         (kp, xkp, x_needs_store, None)
@@ -351,6 +352,7 @@ pub async fn unlock_vault(
         {
             let mut sk_lock = state.storage_key.write().await;
             *sk_lock = Some(new_key);
+            crate::commands::util::mlock_storage_key(&sk_lock);
         }
 
         (kp, xkp, true, legacy_store_data)
@@ -396,6 +398,7 @@ pub async fn unlock_vault(
         {
             let mut sk_lock = state.storage_key.write().await;
             *sk_lock = Some(storage_key);
+            crate::commands::util::mlock_storage_key(&sk_lock);
         }
 
         (kp, xkp, false, None)
@@ -554,6 +557,7 @@ pub async fn create_vault_account(
     {
         let mut sk_lock = state.storage_key.write().await;
         *sk_lock = Some(storage_key);
+        crate::commands::util::mlock_storage_key(&sk_lock);
     }
     {
         let mut vi = state.vault_initialized.write().await;
@@ -775,12 +779,13 @@ pub async fn connect_family_member(
                     last_hb_ack: None,
                 };
 
+                // Bound to a name so the receive loop's teardown paths can identify THIS
+                // session by `Arc::ptr_eq`; see
+                // `commands::network::remove_own_connection`.
+                let my_conn = Arc::new(tokio::sync::Mutex::new(conn));
                 {
                     let mut conns = state.connections.write().await;
-                    conns.insert(
-                        actual_peer_key.clone(),
-                        Arc::new(tokio::sync::Mutex::new(conn)),
-                    );
+                    conns.insert(actual_peer_key.clone(), my_conn.clone());
                 }
 
                 let _ = app_handle.emit(
@@ -806,6 +811,7 @@ pub async fn connect_family_member(
                     state.inner().clone(),
                     read_half,
                     actual_peer_key.clone(),
+                    my_conn,
                     None,
                 );
 
@@ -1076,6 +1082,7 @@ pub async fn import_identity(
     {
         let mut sk_lock = state.storage_key.write().await;
         *sk_lock = Some(storage_key);
+        crate::commands::util::mlock_storage_key(&sk_lock);
     }
     {
         let mut vi = state.vault_initialized.write().await;
@@ -1286,6 +1293,40 @@ pub async fn lock_vault(
     let mut ts = state.transfer_store.lock().await;
     *ts = None;
     drop(ts);
+
+    // Scrub the live session keys.
+    //
+    // "Active connections remain open" is a reasonable product choice — a call
+    // should survive a lock. But a `Session` owns the Double Ratchet root key,
+    // both chain keys and the skipped-key cache, and *nothing* on this path
+    // dropped a connection, so those secrets survived the lock while the
+    // function's own contract said keys were zeroized. `Session::lock` takes and
+    // drops both key holders, whose `Drop` impls already zeroize.
+    //
+    // Deliberately not `connections.clear()`: the sockets stay up so the call
+    // can resume after unlock. Every send on a scrubbed session now fails loudly
+    // rather than encrypting under a key the user believes is gone.
+    {
+        // Clone the `Arc`s out, then release the map guard. Holding the global
+        // `connections` lock across a per-peer `lock().await` is the exact
+        // anti-pattern this codebase warns about — it would block every
+        // `disconnect_peer`, every heartbeat teardown and every new-connection
+        // insert — so the map guard is dropped first and only the per-peer locks
+        // are taken while held.
+        let conns: Vec<_> = {
+            let map = state.connections.read().await;
+            map.values().cloned().collect()
+        };
+        for conn_arc in conns {
+            match conn_arc.try_lock() {
+                Ok(mut conn) => conn.session.lock(),
+                Err(_) => tracing::error!(
+                    "lock_vault: a connection's mutex was busy - its session keys \
+                     may not have been scrubbed"
+                ),
+            }
+        }
+    }
 
     // Mark vault as locked
     let mut vu = state.vault_unlocked.write().await;

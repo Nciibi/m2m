@@ -89,18 +89,6 @@ describe("MessageBubble", () => {
     expect(onReact).toHaveBeenCalledWith("m1", "👍");
   });
 
-  it("marks a reaction the current user has already applied", () => {
-    render(
-      <MessageBubble
-        message={msg({ reactions: { "👍": ["self"] } })}
-        onReact={vi.fn()}
-      />,
-    );
-    const chip = screen.getByRole("button", { name: "React 👍" });
-    expect(chip).toHaveAttribute("aria-pressed", "true");
-    expect(chip).toHaveClass("msg-reaction--self");
-  });
-
   it("un-presses a reaction the current user has not applied", () => {
     render(
       <MessageBubble
@@ -114,15 +102,69 @@ describe("MessageBubble", () => {
     );
   });
 
-  it("removes a reaction the current user applied", async () => {
-    const onRemoveReaction = vi.fn();
+  // ─── Which chips are "ours": by real identity key, not a "self" sentinel ───
+  //
+  // The backend persists the reactor's Ed25519 key, so the shapes below are what
+  // `load_messages` actually returns. When the chip was matched on the `"self"`
+  // sentinel instead, a reaction the user applied came back unhighlighted after
+  // a reload and clicking it added a second one rather than removing it.
+
+  const MY_KEY = "a".repeat(64);
+  const PEER_KEY = "b".repeat(64);
+
+  it("marks a reaction keyed with the local identity key as ours", () => {
+    render(
+      <MessageBubble
+        message={msg({ reactions: { "👍": [MY_KEY] } })}
+        myPeerKeyHex={MY_KEY}
+        onReact={vi.fn()}
+      />,
+    );
+    const chip = screen.getByRole("button", { name: "React 👍" });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    expect(chip).toHaveClass("msg-reaction--self");
+  });
+
+  it("does not mark a reaction keyed with the peer's identity as ours", () => {
+    render(
+      <MessageBubble
+        message={msg({ reactions: { "👍": [PEER_KEY] } })}
+        myPeerKeyHex={MY_KEY}
+        onReact={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "React 👍" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("still honours a legacy 'self' sentinel when no identity key is supplied", () => {
+    // Defensive: an unrecognised/absent key must degrade to the old behaviour
+    // rather than treating the user's own reaction as someone else's.
     render(
       <MessageBubble
         message={msg({ reactions: { "👍": ["self"] } })}
+        onReact={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "React 👍" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("removes a reaction the current user applied (real key)", async () => {
+    const onRemoveReaction = vi.fn();
+    render(
+      <MessageBubble
+        message={msg({ reactions: { "👍": [MY_KEY, PEER_KEY] } })}
+        myPeerKeyHex={MY_KEY}
         onRemoveReaction={onRemoveReaction}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "React 👍" }));
+    // Must call REMOVE, not add — the bug this guards against.
     expect(onRemoveReaction).toHaveBeenCalledWith("m1", "👍");
   });
 
@@ -130,7 +172,8 @@ describe("MessageBubble", () => {
     const onRemoveReaction = vi.fn();
     render(
       <MessageBubble
-        message={msg({ reactions: { "👍": ["someone-else"] } })}
+        message={msg({ reactions: { "👍": [PEER_KEY] } })}
+        myPeerKeyHex={MY_KEY}
         onRemoveReaction={onRemoveReaction}
       />,
     );
@@ -207,6 +250,41 @@ describe("MessageBubble", () => {
     await userEvent.keyboard("{Escape}");
     expect(onEditSave).not.toHaveBeenCalled();
     expect(screen.getByText("original")).toBeInTheDocument();
+  });
+
+  // ─── A failed edit save must not look like a successful one ───
+  //
+  // The editor used to close unconditionally after awaiting `onEditSave`, and
+  // the context handler swallowed its own error. A rejected save therefore
+  // discarded the user's retyped text and rendered exactly as a successful edit
+  // would — the one interaction where "looks done" and "is done" have to agree.
+
+  it("keeps the editor open and the text intact when saving rejects", async () => {
+    const onEditSave = vi.fn().mockRejectedValue("backend refused");
+    render(<MessageBubble message={msg({ content: "original" })} onEditSave={onEditSave} />);
+    fireEvent.contextMenu(screen.getByRole("group"));
+    await userEvent.click(await screen.findByRole("button", { name: /Edit/ }));
+    const box = screen.getByDisplayValue("original");
+    await userEvent.clear(box);
+    await userEvent.type(box, "work that must not vanish");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // Editor still open, still holding the text.
+    const stillOpen = screen.getByDisplayValue("work that must not vanish");
+    expect(stillOpen).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("keeps the editor open when a Ctrl+Enter save rejects", async () => {
+    const onEditSave = vi.fn().mockRejectedValue("nope");
+    render(<MessageBubble message={msg({ content: "original" })} onEditSave={onEditSave} />);
+    fireEvent.contextMenu(screen.getByRole("group"));
+    await userEvent.click(await screen.findByRole("button", { name: /Edit/ }));
+    const box = screen.getByDisplayValue("original");
+    await userEvent.clear(box);
+    await userEvent.type(box, "still here");
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(screen.getByDisplayValue("still here")).toBeInTheDocument();
   });
 
   // ── Badges ─────────────────────────────────────────────────────────────

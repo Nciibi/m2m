@@ -286,11 +286,76 @@ pub async fn get_network_settings(
 
 /// Enable or disable Tor routing.
 #[tauri::command]
-pub async fn set_tor_enabled(state: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), AppError> {
+pub async fn set_tor_enabled(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    enabled: bool,
+) -> Result<(), AppError> {
     // Air-gap mode: Tor traffic is internet-facing by definition.
     if enabled {
         state.ensure_not_air_gapped().await?;
     }
+
+    // Enabling Tor must also stop the two things Tor cannot protect against.
+    //
+    // `set_discovery_config` refuses to *start* LAN discovery while Tor is on,
+    // and its own comment names the gap this closes: the two settings are
+    // separate toggles, so a user can plausibly have LAN discovery enabled from
+    // before and then switch Tor on. Nothing on the Tor path touched
+    // `state.lan_cancel` / `state.dht_cancel`, so the announcer kept
+    // broadcasting the real listening port and a rotating token to every host
+    // on the LAN every 30s forever, and the DHT loop kept announcing the real
+    // bind address plus the current ephemeral id to every seed — while the UI
+    // showed Tor ON.
+    if enabled {
+        let lan_was_on = state.lan_cancel.read().await.is_some();
+        let dht_was_on = state.dht_cancel.read().await.is_some();
+
+        if lan_was_on {
+            if let Some(c) = state.lan_cancel.read().await.as_ref() {
+                c.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            *state.lan_state.write().await = None;
+            *state.lan_cancel.write().await = None;
+            tracing::info!("LAN discovery stopped — Tor enabled");
+            // `source` is part of the payload contract that `events.ts::asSecurityError`
+            // enforces, so the event has to carry it or the frontend validator
+            // drops the whole payload and the user never learns their
+            // protection changed.
+            let _ = tauri::Emitter::emit(
+                &app_handle,
+                "m2m://security-error",
+                serde_json::json!({
+                    "source": "tor",
+                    "message": "LAN discovery was turned off because Tor was enabled. \
+                                It broadcasts your listening port to every host on this \
+                                network, which Tor cannot protect against.",
+                }),
+            );
+        }
+        if dht_was_on {
+            if let Some(c) = state.dht_cancel.read().await.as_ref() {
+                c.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            *state.dht_state.write().await = None;
+            *state.dht_cancel.write().await = None;
+            tracing::info!("DHT discovery stopped — Tor enabled");
+            // Reported like the LAN case. Without an event the Settings DHT
+            // toggle keeps reading as enabled while the DHT loop is gone, which
+            // is the same "the UI asserts a state the backend does not hold".
+            let _ = tauri::Emitter::emit(
+                &app_handle,
+                "m2m://security-error",
+                serde_json::json!({
+                    "source": "tor",
+                    "message": "Peer discovery (DHT) was turned off because Tor was enabled. \
+                                It announces your listening address and a rotating identifier \
+                                to other peers, which Tor cannot protect against.",
+                }),
+            );
+        }
+    }
+
     tor::set_enabled(enabled);
     Ok(())
 }

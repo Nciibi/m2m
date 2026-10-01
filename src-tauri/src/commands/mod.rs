@@ -330,12 +330,26 @@ pub async fn attempt_reconnect(
 
                 let mut session = crate::session::Session::new();
                 {
-                    let id_lock = state.identity.read().await;
-                    let kp = id_lock.as_ref().ok_or("identity not initialized")?;
+// Snapshot, then release. `handshake_as_initiator` is a
+                    // blocking read of a peer-supplied frame bounded by a real
+                    // wall-clock deadline - so a slow peer costs this guard real
+                    // time, and with it `lock_vault`, `unlock_vault` and the
+                    // duress/panic wipes. `complete_inbound_connection` already
+                    // fixed this exact shape on the inbound side with the same
+                    // reasoning.
+                    let kp = {
+                        let id_lock = state.identity.read().await;
+                        let kp = id_lock.as_ref().ok_or("identity not initialized")?;
+                        crate::crypto::IdentityKeypair::from_bytes(
+                            &kp.public_key_bytes(),
+                            &kp.secret_key_bytes(),
+                        )
+                        .map_err(|e| format!("identity unusable: {e}"))?
+                    };
                     if let Err(e) = session
                         .handshake_as_initiator(
                             &mut stream,
-                            kp,
+                            &kp,
                             &expected_peer_pub,
                             Vec::new(),
                             x25519_pub,
@@ -381,12 +395,13 @@ pub async fn attempt_reconnect(
                     last_hb_ack: None,
                 };
 
+                // See `commands::network::remove_own_connection`: a re-dial replaces
+                // the map entry, so the previous session's teardown would otherwise
+                // delete this new one by peer key alone.
+                let my_conn = std::sync::Arc::new(tokio::sync::Mutex::new(conn));
                 {
                     let mut conns = state.connections.write().await;
-                    conns.insert(
-                        peer_key_hex.clone(),
-                        std::sync::Arc::new(tokio::sync::Mutex::new(conn)),
-                    );
+                    conns.insert(peer_key_hex.clone(), my_conn.clone());
                 }
 
                 let _ = app_handle.emit(
@@ -416,6 +431,7 @@ pub async fn attempt_reconnect(
                     state.inner().clone(),
                     read_half,
                     peer_key_hex.clone(),
+                    my_conn,
                     None,
                 );
 

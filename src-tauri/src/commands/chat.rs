@@ -128,13 +128,20 @@ pub async fn load_messages(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
+    // `limit` arrives from the webview and is never validated there. An
+    // unclamped value is not just a big query: it becomes the bind-variable
+    // count in `get_reactions`'s `IN (...)` list, and past
+    // `SQLITE_MAX_VARIABLE_NUMBER` the prepare fails — at which point the
+    // `.unwrap_or_default()` below silently drops *every* reaction on the page.
+    let limit = limit.unwrap_or(100).clamp(1, 500);
+
     let stored = if let Some(before) = before_timestamp {
         store
-            .load_messages_before(&peer_key_hex, before, limit.unwrap_or(100))
+            .load_messages_before(&peer_key_hex, before, limit)
             .map_err(|e| AppError::invalid(format!("failed to load older messages: {e}")))?
     } else {
         store
-            .load_messages(&peer_key_hex, limit.unwrap_or(100))
+            .load_messages(&peer_key_hex, limit)
             .map_err(|e| AppError::invalid(format!("failed to load messages: {e}")))?
     };
 

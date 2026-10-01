@@ -7,6 +7,7 @@ import {
   StarIcon, BellIcon, FolderIcon, AlertTriangleIcon,
 } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
+import type { ToastData } from "../components/ui/Toast";
 import { useApp } from "../context/AppContext";
 import { useChat } from "../context/ChatContext";
 import { asArray } from "../events";
@@ -23,10 +24,10 @@ import type {
   NetworkSettings,
   SecurityConfig,
 } from "../types";
-import { hashToColor, formatTime } from "../utils";
+import { hashToColor, formatTime, copyToClipboard, errorMessage } from "../utils";
 
 export default function HubView() {
-  const { identity, setView, toasts, removeToast } = useApp();
+  const { identity, setView, toasts, removeToast, addToast } = useApp();
   const {
     connection, generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
     isConnecting, handleGenerateInvite, copyInvite, setInviteToConnect,
@@ -114,7 +115,7 @@ export default function HubView() {
 
   return (
     <div className="app-shell">
-      <Sidebar currentView="hub" onNavigate={setView} />
+      <Sidebar currentView="hub" onNavigate={setView} onError={(m) => addToast(m, "error", 6000)} />
       <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
@@ -182,8 +183,9 @@ export default function HubView() {
             setInviteToConnect={setInviteToConnect} onConnect={handleConnect}
             setNamingMyName={setNamingMyName} setNamingTheirName={setNamingTheirName}
             networkSettings={networkSettings} privateMode={privateMode} identity={identity}
-            securityConfig={securityConfig} scheduleClipboardClear={scheduleClipboardClear}
-          />
+          securityConfig={securityConfig} scheduleClipboardClear={scheduleClipboardClear}
+          addToast={addToast}
+        />
         ) : tab === "nearby" ? (
           <NearbyTab
             discoveryConfig={discoveryConfig}
@@ -196,7 +198,7 @@ export default function HubView() {
         ) : tab === "family" ? (
           <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
         ) : (
-          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} mutedConversations={mutedConversations} onMute={handleMuteConversation} onUnmute={handleUnmuteConversation} />
+          <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} mutedConversations={mutedConversations} onMute={handleMuteConversation} onUnmute={handleUnmuteConversation} addToast={addToast} />
         )}
       </div>
 
@@ -239,13 +241,15 @@ interface ConnectTabProps {
   identity: IdentityInfo | null;
   securityConfig: SecurityConfig | null;
   scheduleClipboardClear: (secs: number) => void;
+  /** Report a failed action. Copy and favourite failures must never be silent. */
+  addToast: (msg: string, type?: ToastData["type"], duration?: number) => void;
 }
 
 function ConnectTab({
   generatedInvite, inviteToConnect, inviteValid, namingMyName, namingTheirName,
   isConnecting, onGenerateInvite, onCopyInvite, copied, setInviteToConnect, onConnect,
   setNamingMyName, setNamingTheirName, networkSettings, privateMode, identity,
-  securityConfig, scheduleClipboardClear,
+  securityConfig, scheduleClipboardClear, addToast,
 }: ConnectTabProps) {
   const [generating, setGenerating] = useState(false);
   const [fpCopied, setFpCopied] = useState(false);
@@ -326,12 +330,21 @@ function ConnectTab({
             <div className="invite-history">
               <div className="invite-history__title">Recent Invites</div>
               {inviteHistory.map((inv, i) => (
-                <div key={i} className="invite-history__item" onClick={() => {
-                  navigator.clipboard.writeText(inv);
-                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
-                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
-                  }
-                }}>
+                <div key={i} className="invite-history__item" role="button" tabIndex={0}
+                  onClick={() => {
+                    void copyToClipboard(inv).then((ok) => {
+                      if (!ok) { addToast("Could not copy to the clipboard", "error"); return; }
+                      if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                        scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                      }
+                    });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.currentTarget.click();
+                    }
+                  }}>
                   <span>{inv.substring(0, 40)}…</span>
                   <CopyIcon size={12} />
                 </div>
@@ -367,11 +380,12 @@ function ConnectTab({
           <span className="fingerprint-value-row">
             {identity?.fingerprint}
             <button className="btn btn--ghost btn--icon-sm" onClick={() => {
-              if (identity?.fingerprint) {
-                navigator.clipboard.writeText(identity.fingerprint);
+              if (!identity?.fingerprint) return;
+              void copyToClipboard(identity.fingerprint).then((ok) => {
+                if (!ok) { addToast("Could not copy to the clipboard", "error"); return; }
                 setFpCopied(true);
                 setTimeout(() => setFpCopied(false), 2000);
-              }
+              });
             }} aria-label="Copy">
               {fpCopied ? <span className="copied-pop"><CheckIcon size={14} /></span> : <CopyIcon size={14} />}
             </button>
@@ -392,11 +406,13 @@ interface ChatsTabProps {
   mutedConversations: string[];
   onMute: (peerKeyHex: string) => void;
   onUnmute: (peerKeyHex: string) => void;
+  /** Report a failed action. Favourite/archive writes must never be silent. */
+  addToast: (msg: string, type?: ToastData["type"], duration?: number) => void;
 }
 
 function ChatsTab({
   conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted,
-  mutedConversations, onMute, onUnmute,
+  mutedConversations, onMute, onUnmute, addToast,
 }: ChatsTabProps) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [archived, setArchived] = useState<Set<string>>(new Set());
@@ -416,7 +432,14 @@ function ChatsTab({
         if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
         return next;
       });
-    } catch { /* noop */ }
+    } catch (err) {
+      // Not cosmetic. `catch {}` here meant a failed write left the star
+      // un-moved and said nothing, so the user's only evidence was their own
+      // click — and CLAUDE.md names favourites explicitly as a control that
+      // must not silently fail. Note the optimistic update above is applied
+      // only after the invoke resolves, so nothing needs rolling back.
+      addToast("Could not update favourite: " + errorMessage(err), "error");
+    }
   };
 
   const toggleArch = async (peerKeyHex: string, e: React.MouseEvent) => {
@@ -428,7 +451,9 @@ function ChatsTab({
         if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
         return next;
       });
-    } catch { /* noop */ }
+    } catch (err) {
+      addToast("Could not update archive: " + errorMessage(err), "error");
+    }
   };
   // Sort conversations: favorites first, then by recency, archived at bottom
   const sorted = [...conversations].sort((a: ConversationEntry, b: ConversationEntry) => {

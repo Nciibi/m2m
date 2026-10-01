@@ -435,8 +435,13 @@ fn detect_substitution_penalty(
 }
 
 /// Derive a storage encryption key from a user-supplied passphrase using Argon2id.
-/// Returns a `StorageKey` which is locked in physical RAM (mlock/VirtualLock)
-/// and automatically zeroized on drop.
+///
+/// Returns a `StorageKey` that is zeroized on drop. It is **not** yet pinned in
+/// physical RAM: `mlock` works on an address, and this value is about to be
+/// moved into `state.storage_key`, so the caller must call
+/// [`mlock_storage_key`] once it is installed there. Every installation site in
+/// `vault.rs` does.
+///
 /// The `salt` should be unique per identity (we use the public key).
 pub fn derive_storage_key_from_passphrase(
     passphrase: &str,
@@ -476,6 +481,25 @@ pub fn derive_storage_key(public_key: &[u8]) -> crate::secure_key::StorageKey {
     input.extend_from_slice(public_key);
     let hash = sha2::Sha256::digest(&input);
     crate::secure_key::StorageKey::new(hash.into())
+}
+
+/// Pin the vault storage key once it is installed in `AppState`.
+///
+/// `mlock` works on an *address*, and `StorageKey::new` deliberately does not
+/// lock: its `self` is a local that the caller moves, so locking there pinned a
+/// stack page that was abandoned while leaving the live key — now behind
+/// `state.storage_key` — pageable. That also leaked `RLIMIT_MEMLOCK`, so after
+/// enough unlocks every subsequent `mlock` failed and only warned.
+///
+/// Call this immediately after `*state.storage_key.write().await = Some(key)`,
+/// while the write guard still holds the value in place. Every installation
+/// site in `vault.rs` goes through here.
+///
+/// Best-effort by design: see [`crate::secure_key::StorageKey::lock_memory`].
+pub fn mlock_storage_key(slot: &Option<crate::secure_key::StorageKey>) {
+    if let Some(k) = slot {
+        k.lock_memory();
+    }
 }
 
 /// Encrypt data for storage using XChaCha20-Poly1305.
@@ -551,6 +575,65 @@ pub fn create_temp_file() -> std::io::Result<(std::fs::File, std::path::PathBuf)
     let file = std::fs::File::create(&path)?;
 
     Ok((file, path))
+}
+
+/// Move a file, falling back to copy + delete across filesystem boundaries.
+///
+/// `std::fs::rename` is not a copy: it fails with `EXDEV` /
+/// `ERROR_NOT_SAME_DEVICE` when source and destination are on different
+/// filesystems. That is the *normal* case for a received download — `/tmp` is a
+/// separate tmpfs mount on most Linux systems, and `%LOCALAPPDATA%\Temp` is very
+/// often a different volume from the user's Downloads folder.
+///
+/// The receiving path treated that failure as fatal and deleted the temp file,
+/// so a fully received, per-chunk-verified, whole-file-SHA-256-verified
+/// download was destroyed with nothing saved and nothing reported.
+///
+/// Blockingly: `read`/`write`/`sync_all` are syscalls that can stall on a slow
+/// or full volume, so this must be called off the async runtime
+/// (`spawn_blocking`). The `rename` fast path is kept first because it is atomic
+/// and free.
+pub fn move_across_filesystems(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    use std::io::{Read, Write};
+
+    match std::fs::rename(from, to) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() != std::io::ErrorKind::CrossesDevices => return Err(e),
+        Err(_) => {} // genuinely cross-device: fall through to copy
+    }
+
+    let mut src = std::fs::File::open(from)?;
+    // Write to a sibling temp name and rename into place, so a crash mid-copy
+    // cannot leave a truncated file at the destination path looking complete.
+    // `set_file_name`, not `push`: `push` with a separator-free string *appends* a
+    // component rather than replacing the last one, which would turn
+    // `/home/u/Downloads/report.pdf` into `.../report.pdf/report.pdf.m2m-partial`
+    // and fail `File::create` with ENOTDIR — i.e. the fallback would be dead on
+    // arrival, which is the exact failure it exists to fix.
+    let stem = to
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "download".to_string());
+    let mut dest_tmp = to.to_path_buf();
+    dest_tmp.set_file_name(format!("{stem}.m2m-partial"));
+
+    {
+        let mut dst = std::fs::File::create(&dest_tmp)?;
+        let mut buf = vec![0u8; crate::protocol::MAX_FILE_CHUNK_SIZE];
+        loop {
+            let n = src.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            dst.write_all(&buf[..n])?;
+        }
+        // Flush before the rename so a crash cannot leave a renamed-but-empty
+        // destination.
+        dst.sync_all()?;
+    }
+    std::fs::rename(&dest_tmp, to)?;
+    let _ = std::fs::remove_file(from);
+    Ok(())
 }
 
 #[cfg(test)]

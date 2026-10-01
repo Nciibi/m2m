@@ -642,9 +642,11 @@ pub async fn load_group_messages(
     let store = ms.as_ref().ok_or("message store not initialised")?;
     let key = sk.as_ref().ok_or("storage key not available")?;
 
-    // Load stored messages with encrypted content
+    // Clamped for the same reason as `load_messages`: this value comes straight
+    // from the webview and a negative `LIMIT` is a SQLite syntax error, not an
+    // empty result.
     let stored = store
-        .load_group_messages_with_content(&group_id, limit.unwrap_or(100), 0)
+        .load_group_messages_with_content(&group_id, limit.unwrap_or(100).clamp(1, 500), 0)
         .map_err(|e| AppError::storage(format!("failed to load group messages: {e}")))?;
 
     let mut messages: Vec<ChatMessage> = Vec::with_capacity(stored.len());

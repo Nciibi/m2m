@@ -186,6 +186,30 @@ export function errorMessage(e: unknown, fallback = "Unknown error"): string {
 }
 
 /**
+ * Copy text to the clipboard, reporting whether it actually worked.
+ *
+ * `navigator.clipboard.writeText` returns a promise that rejects in a Tauri
+ * webview routinely — an unfocused document, a denied permission, or a
+ * non-secure context. Fire-and-forget was the bug CLAUDE.md records as fixed in
+ * one place and missed in four: the ✓ confirmation (and the clipboard
+ * auto-clear timer) was shown unconditionally, so a one-time invite that never
+ * left the app looked identical to one that did, and the rejection became an
+ * unhandled promise rejection.
+ *
+ * The caller must gate every success affordance on the return value. This
+ * function deliberately does not toast: whether a failed copy warrants a toast
+ * depends on what was being copied.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The standing notice shown when the storage cap permanently destroyed history.
  *
  * Extracted from the `m2m://storage-evicted` listener so the text is testable

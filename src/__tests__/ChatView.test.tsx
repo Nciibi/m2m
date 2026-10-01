@@ -6,7 +6,10 @@ import userEvent from "@testing-library/user-event";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save: vi.fn() }));
+// `ChatView` no longer imports `@tauri-apps/plugin-dialog` directly: the save
+// dialog moved into `ChatContext`'s accept handler, which is also what removes
+// the request card from state. A stale `vi.mock` here would have kept passing
+// while masking a future real import.
 
 const state = {
   connection: null as DeepPartial<ConnectionInfo> | null,
@@ -35,8 +38,11 @@ const state = {
   handleSendReaction: vi.fn(),
   handleRemoveReaction: vi.fn(),
   handleMarkConversationRead: vi.fn(),
-  handleEditMessage: vi.fn(),
-  handleDeleteMessage: vi.fn(),
+handleEditMessage: vi.fn(),
+handleDeleteMessage: vi.fn(),
+sendFileAtPath: vi.fn(),
+handleAcceptFileTransfer: vi.fn(),
+handleRejectFileTransfer: vi.fn(),
   removeToast: vi.fn(),
   addToast: vi.fn(),
 };
@@ -78,6 +84,12 @@ vi.mock("../context/ChatContext", () => ({
     handleMarkConversationRead: state.handleMarkConversationRead,
     handleEditMessage: state.handleEditMessage,
     handleDeleteMessage: state.handleDeleteMessage,
+    // Drag-and-drop sends by path; accept/reject go through the context so the
+    // request card is removed from `fileRequests`. Omitting them from the mock
+    // would leave these call sites `undefined` in any test that reaches them.
+    sendFileAtPath: state.sendFileAtPath,
+    handleAcceptFileTransfer: state.handleAcceptFileTransfer,
+    handleRejectFileTransfer: state.handleRejectFileTransfer,
   }),
 }));
 

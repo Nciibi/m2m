@@ -437,32 +437,97 @@ pub struct RawFrame {
     pub body: Vec<u8>,
 }
 
-/// Read exactly `buf.len()` bytes from an async reader with a per-byte 1s timeout.
+/// Read exactly `buf.len()` bytes from an async reader, bounded by a total
+/// deadline.
 ///
 /// This is the core Slowloris-protection primitive used across the codebase.
-/// Each call to `reader.read()` has a 1-second timeout rather than one timeout
-/// for the entire read, preventing an attacker from holding a connection open
-/// by sending data at a trickle (e.g. 1 byte / 9 seconds).
+/// The deadline is **per call, not per `read()`**. A per-`read()` budget only
+/// stops a peer that stalls; it does nothing against a peer that keeps each
+/// individual `read()` under the limit. One byte every 900 ms satisfies a 1 s
+/// per-`read()` timeout indefinitely, and `read_frame_impl` calls this three
+/// times (length prefix, header, body), so the aggregate wait was unbounded.
+///
+/// That is not theoretical: `MAX_TOTAL_CONNECTIONS` is 50 and each accepted
+/// socket runs a spawned task parked here, so 50 trickling sockets hold every
+/// inbound slot for as long as the attacker likes, at a few bytes per second
+/// each. `connection_limiter.decrement()` is never reached.
+///
+/// A secondary guard is kept for the stall case: an idle socket that produces
+/// nothing at all is dropped when the total deadline passes, which is the same
+/// outcome as a trickle. There is deliberately no second, shorter per-`read()`
+/// budget layered on top — that is exactly the scheme that let a
+/// 1-byte-per-900 ms peer hold a connection slot indefinitely.
 ///
 /// Returns `PeerClosed` on EOF before filling `buf`, `Io` on transport errors,
-/// and `ReadTimeout` if any single `read()` call takes longer than 1 second.
+/// and `ReadTimeout` when the deadline passes.
+///
+/// Convenience wrapper over [`read_exact_timeout_with`] at the default budget.
+/// Every current caller wants an explicit budget — the relay keepalive loop must
+/// pass a *longer* one, because it is deliberately parked — so prefer the
+/// `_with` form where the wait is meaningful.
 pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
     reader: &mut R,
     buf: &mut [u8],
     label: &'static str,
 ) -> Result<(), NetworkError> {
+    read_exact_timeout_with(reader, buf, label, FRAME_READ_DEADLINE).await
+}
+
+/// Total wall-clock budget for one `read_exact_timeout` call.
+///
+/// Matches [`NETWORK_TIMEOUT`] (the socket *write* budget), so a frame's three
+/// reads share one deadline of the same order as a single write. A second,
+/// shorter per-`read()` budget is deliberately not layered on top: that is
+/// exactly the scheme that let a 1-byte-per-900 ms peer hold a connection slot
+/// indefinitely.
+const FRAME_READ_DEADLINE: Duration = Duration::from_secs(10);
+
+/// Default read deadline for relay frames, exported so `relay.rs` can pick a
+/// longer budget for its parked keepalive loop.
+pub(crate) const RELAY_DEFAULT_READ_DEADLINE: Duration = Duration::from_secs(30);
+
+/// Time left until `deadline`, floored at zero so a caller can pass the result
+/// straight into `read_exact_timeout_with` without re-checking.
+fn remaining(deadline: time::Instant) -> Duration {
+    deadline.saturating_duration_since(time::Instant::now())
+}
+
+/// [`read_exact_timeout`] with an explicit total deadline.
+///
+/// Defaults to [`FRAME_READ_DEADLINE`]. The relay keepalive loop passes a longer
+/// one, because it is *parked* waiting for a reply that legitimately does not
+/// arrive; anything that must bound a hostile peer should pass a short one.
+pub(crate) async fn read_exact_timeout_with<R: AsyncRead + Unpin>(
+    reader: &mut R,
+    buf: &mut [u8],
+    label: &'static str,
+    deadline: Duration,
+) -> Result<(), NetworkError> {
+    // One deadline for the whole call, so a trickle cannot extend it.
+    let overall = time::Instant::now() + deadline;
     let mut read_pos = 0;
     while read_pos < buf.len() {
-        match time::timeout(Duration::from_secs(1), reader.read(&mut buf[read_pos..])).await {
+        let left = remaining(overall);
+        if left.is_zero() {
+            tracing::warn!(
+                "Slowloris detected: overall deadline on {} (progress: {}/{})",
+                label,
+                read_pos,
+                buf.len()
+            );
+            return Err(NetworkError::ReadTimeout);
+        }
+        match time::timeout(left, reader.read(&mut buf[read_pos..])).await {
             Ok(Ok(0)) => return Err(NetworkError::PeerClosed),
             Ok(Ok(n)) => read_pos += n,
             Ok(Err(e)) => return Err(NetworkError::Io(e)),
             Err(_) => {
                 tracing::warn!(
-                    "Slowloris detected: read timeout on {} (progress: {}/{})",
+                    "Slowloris detected: read timeout on {} (progress: {}/{}, budget {:?})",
                     label,
                     read_pos,
-                    buf.len()
+                    buf.len(),
+                    left
                 );
                 return Err(NetworkError::ReadTimeout);
             }
@@ -472,9 +537,10 @@ pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
 }
 
 /// Internal: read a frame from any AsyncRead source.
-/// Includes Slowloris protection: each bytes-read iteration has a 1s timeout
-/// instead of a single N-second timeout for the entire frame. An attacker
-/// sending 1 byte every 9 seconds will timeout after the first byte.
+///
+/// Slowloris protection is the *total* deadline in [`read_exact_timeout`]: one
+/// budget covering all three reads (length prefix, header, body), so a peer
+/// trickling a byte every 900 ms cannot hold the slot indefinitely.
 ///
 /// ## Allocation order (why this is split into three reads)
 ///
@@ -497,16 +563,20 @@ pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
 pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(
     reader: &mut R,
 ) -> Result<RawFrame, NetworkError> {
+    // One deadline for the whole frame, shared across all three reads. Restarting
+    // it per read would let a peer stretch a single frame across 3x the budget.
+    let deadline = time::Instant::now() + FRAME_READ_DEADLINE;
+
     // ── Step 1: length prefix + global bound (no allocation) ──
     let mut len_buf = [0u8; LENGTH_PREFIX_SIZE];
-    read_exact_timeout(reader, &mut len_buf, "length prefix").await?;
+    read_exact_timeout_with(reader, &mut len_buf, "length prefix", FRAME_READ_DEADLINE).await?;
 
     let frame_len = u32::from_be_bytes(len_buf);
     validate_frame_size(frame_len)?;
 
     // ── Step 2: the 2-byte header, needed before we can bound the size ──
     let mut header = [0u8; 2];
-    read_exact_timeout(reader, &mut header, "frame header").await?;
+    read_exact_timeout_with(reader, &mut header, "frame header", remaining(deadline)).await?;
 
     // A frame must carry at least version(1) + packet_type(1). (Fuzzing found
     // the pre-fix version panicking on payload[0]/[1] for tiny frames.)
@@ -531,7 +601,7 @@ pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(
     // ── Step 4: allocate and read the remaining body ──
     let body_len = frame_len as usize - 2;
     let mut body = vec![0u8; body_len];
-    read_exact_timeout(reader, &mut body, "frame body").await?;
+    read_exact_timeout_with(reader, &mut body, "frame body", remaining(deadline)).await?;
 
     // The body we hand out excludes the version and type bytes.
     let _ = version;

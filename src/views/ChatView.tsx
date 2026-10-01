@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
 import { errorMessage } from "../utils";
 import { listen } from "@tauri-apps/api/event";
 import { asArray, asTransferCancelledEvent, asTransferCompletedEvent, asTransferProgressEvent } from "../events";
@@ -23,20 +22,21 @@ export default function ChatView() {
     connection, messages, setMessages, fileRequests, activeConversationId, typingPeers,
     reconnecting, reconnectAttempt,
     handleSendMessage, handleSendMessageWithTimer, handleSendFile, handleVerify, handleDisconnect,
-    handleReconnect,
+    handleReconnect, sendFileAtPath,
     handleExportConversation, handleSetRetention,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
     handleSendReaction, handleRemoveReaction, handleMarkConversationRead,
     handleEditMessage, handleDeleteMessage,
+    handleAcceptFileTransfer, handleRejectFileTransfer,
   } = useChat();
   const [text, setText] = useState("");
   const [showFp, setShowFp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [sending, setSending] = useState(false);
   const [timerSecs, setTimerSecs] = useState<number>(0);
-  // Search
+  // Search. `searchResults` is declared next to `doSearch` below, because it
+  // carries the peer it belongs to.
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<ChatMessage[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   // Typing indicator timer (auto-clear after 3s)
@@ -221,22 +221,43 @@ export default function ChatView() {
   };
 
   // Search handler
+  //
+// Sequencing matters: the input fires this on every keystroke, so several
+  // `search_messages` calls are in flight at once. Without a token, a slow
+  // early query could resolve after a fast later one and overwrite the results
+  // with matches for a query the user had already typed past. `searchSeq` is
+  // bumped on every call and on close, so a result is only ever shown if it
+  // belongs to the newest request.
+  const searchSeq = useRef(0);
+  // Which peer the current results belong to. Derived at *set* time, not cleared
+  // in an effect: clearing from an effect on `activeConversationId` was a
+  // `set-state-in-effect` (one render of the previous peer's decrypted snippets
+  // under the new peer's header, plus a lint warning), and gating at render time
+  // cannot be wrong — the strip simply does not match and renders nothing.
+  const [searchResults, setSearchResults] = useState<{ peer: string; results: ChatMessage[] } | null>(null);
+  const visibleResults = searchResults?.peer === activeConversationId ? searchResults.results : null;
   const doSearch = useCallback(async (query: string) => {
     if (!query.trim() || !activeConversationId) {
-      setSearchResults([]);
+      searchSeq.current += 1;
+      setSearchResults(null);
+      setIsSearching(false);
       return;
     }
+    const mySeq = ++searchSeq.current;
+    const forPeer = activeConversationId;
     setIsSearching(true);
     try {
       const results = asArray<ChatMessage>(await invoke("search_messages", {
-        peerKeyHex: activeConversationId,
+        peerKeyHex: forPeer,
         query: query.trim(),
       }));
-      setSearchResults(results);
+      if (mySeq !== searchSeq.current) return; // superseded
+      setSearchResults({ peer: forPeer, results });
     } catch {
+      if (mySeq !== searchSeq.current) return;
       addToast("Search failed", "error");
     } finally {
-      setIsSearching(false);
+      if (mySeq === searchSeq.current) setIsSearching(false);
     }
   }, [activeConversationId, addToast]);
 
@@ -279,7 +300,7 @@ export default function ChatView() {
 
   return (
     <div className="app-shell">
-      <Sidebar currentView="chat" onNavigate={setView} />
+      <Sidebar currentView="chat" onNavigate={setView} onError={(m) => addToast(m, "error", 6000)} />
       <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
@@ -314,11 +335,16 @@ export default function ChatView() {
                 <div><div className="file-req__name">{r.filename}</div><span className="file-req__size">{fmt(r.total_size)}</span></div>
               </div>
               <div className="file-req__actions">
-                <Button size="xs" onClick={async () => {
-                  const p = await save({ title: `Save "${r.filename}"`, defaultPath: r.filename });
-                  if (p) invoke("accept_file_transfer", { peerKeyHex: r.peer_key_hex, transferId: r.transfer_id, saveDir: p }).catch(e => addToast("Accept failed: " + errorMessage(e), "error"));
-                }}>Accept</Button>
-                <Button variant="secondary" size="xs" onClick={() => invoke("reject_file_transfer", { peerKeyHex: r.peer_key_hex, transferId: r.transfer_id }).catch(e => addToast("Reject failed: " + errorMessage(e), "error"))}>Reject</Button>
+                {/* The context handlers, not inline copies.
+                 *
+                 * These two buttons used to `invoke` directly, which meant they
+                 * never called `setFileRequests` — so the request card stayed on
+                 * screen after a *successful* accept, and every further click
+                 * reopened the save dialog and started a duplicate transfer of
+                 * the same `transfer_id`. One way to do it, per CLAUDE.md.
+                 */}
+                <Button size="xs" onClick={() => { void handleAcceptFileTransfer(r); }}>Accept</Button>
+                <Button variant="secondary" size="xs" onClick={() => { void handleRejectFileTransfer(r); }}>Reject</Button>
               </div>
             </div>
           ))}
@@ -339,7 +365,7 @@ export default function ChatView() {
                 <span className={`badge badge--${fp.state === "completed" ? "success" : fp.state === "cancelled" ? "danger" : "info"}`}>{fp.state}</span>
                 <span className="file-progress-speed">
                   {fp.speed_bytes_per_sec > 0 ? `${fmt(fp.speed_bytes_per_sec)}/s` : ""}
-                  {fp.estimated_remaining_secs > 0 && fp.state === "transferring" ? ` · ${Math.round(fp.estimated_remaining_secs)}s remaining` : ""}
+                  {(fp.estimated_remaining_secs > 0 && (fp.state === "sending" || fp.state === "receiving")) ? ` · ${Math.round(fp.estimated_remaining_secs)}s remaining` : ""}
                 </span>
               </div>
             </div>
@@ -358,26 +384,39 @@ export default function ChatView() {
               setSearchQuery(e.target.value);
               if (e.target.value.length >= 2) doSearch(e.target.value);
             }}
-            onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); setSearchResults([]); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                // Invalidate any in-flight `search_messages` as well as clearing
+                // the results. Without the bump, a query issued before the close
+                // resolves afterwards, passes the sequence check, and repopulates
+                // the strip under a closed bar — showing decrypted snippets from a
+                // conversation the user has left.
+                searchSeq.current += 1;
+                setShowSearch(false);
+                setSearchQuery("");
+                setSearchResults(null);
+                setIsSearching(false);
+              }
+            }}
             className="search-bar__input"
             autoFocus
           />
           {isSearching && <span className="spinner--sm" />}
-          {searchResults.length > 0 && (
+          {visibleResults !== null && visibleResults.length > 0 && (
             <span className="search-bar__count">
-              {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+              {visibleResults.length} result{visibleResults.length !== 1 ? "s" : ""}
             </span>
           )}
-          <button className="btn btn--icon btn--icon-sm" onClick={() => { setShowSearch(false); setSearchQuery(""); setSearchResults([]); }} aria-label="Close search">✕</button>
+          <button className="btn btn--icon btn--icon-sm" onClick={() => { searchSeq.current += 1; setShowSearch(false); setSearchQuery(""); setSearchResults(null); setIsSearching(false); }} aria-label="Close search">✕</button>
         </div>
       )}
-      {searchResults.length > 0 && (
+      {visibleResults !== null && visibleResults.length > 0 && (
         <div className="search-results">
-          {searchResults.map((r) => (
+          {visibleResults.map((r) => (
             <div key={r.id} className="search-result-item"
               onClick={() => {
                 setSearchQuery("");
-                setSearchResults([]);
+                setSearchResults(null);
                 setShowSearch(false);
               }}>
               <span className="msg-content">{renderMarkdown(r.content.substring(0, 100))}</span>
@@ -471,6 +510,7 @@ export default function ChatView() {
                 message={m}
                 index={i}
                 msgStatus={msgStatus[m.id]}
+                myPeerKeyHex={identity?.public_key_hex}
                 onReact={handleSendReaction}
                 onRemoveReaction={handleRemoveReaction}
                 onEditSave={handleEditMessage}
@@ -506,14 +546,31 @@ export default function ChatView() {
         className="drop-zone"
         onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drop-zone--active'); }}
         onDragLeave={(e) => { e.currentTarget.classList.remove('drop-zone--active'); }}
-        onDrop={async (e) => {
+        onDrop={(e) => {
           e.preventDefault();
           e.currentTarget.classList.remove('drop-zone--active');
           const files = Array.from(e.dataTransfer.files);
-          if (files.length > 0 && connection?.state === "established") {
-            addToast(`Dropped ${files[0].name} — sending via file dialog...`, "info");
-            await handleSendFile();
+          if (files.length === 0) return;
+          if (connection?.state !== "established") {
+            addToast("Not connected — cannot send files", "error");
+            return;
           }
+          // Send the dropped file, by name, to that peer.
+          //
+          // This used to toast `"Dropped <name> — sending via file dialog..."`
+          // and then call the *picker*-based `handleSendFile`, so the dropped
+          // file was discarded entirely: the toast named a file and asserted it
+          // was being transmitted while a file chooser opened and any selection
+          // replaced it. `dataTransfer.files` carries a `path` in the Tauri
+          // webview, which is what the `send_file` command needs.
+          const dropped = files[0] as File & { path?: string };
+          if (!dropped.path) {
+            addToast("This drop has no local path — use the attach button", "error");
+            return;
+          }
+          void sendFileAtPath(dropped.path).catch((err) => {
+            addToast("Failed to send " + (dropped.name || "file") + ": " + errorMessage(err), "error");
+          });
         }}
       >
         <span className="drop-zone__hint">Drop files here to send</span>

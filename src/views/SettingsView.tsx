@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { errorMessage } from "../utils";
+import { errorMessage, copyToClipboard } from "../utils";
 import { Button, Input, Badge, ToastContainer } from "../components/ui";
 import { ArrowLeftIcon, GearIcon, CopyIcon, CheckIcon, CloseIcon, WifiIcon, GlobeIcon, LockIcon, EyeOffIcon, MonitorIcon, SunIcon, MoonIcon } from "../components/ui/Icons";
 import Sidebar from "../components/Sidebar";
@@ -33,8 +33,22 @@ function formatBytes(bytes: number): string {
   return `${Math.max(0, Math.round(bytes / 1024))} KB`;
 }
 
-/** Snap a raw byte cap onto the nearest preset for the <select>. */
-function capChoiceFor(bytes: number): number {
+/**
+ * The value the `<select>` should carry for a persisted cap, and whether that
+ * value needs its own option.
+ *
+ * The two must be derived from ONE predicate. An earlier version computed the
+ * selected value by snapping *down* to the nearest preset and computed
+ * `isCustom` by an independent `includes` check — and for any cap between two
+ * presets (e.g. a persisted 2 GiB) the two disagreed: the select was given
+ * "1 GB" while the "2 GB (current)" option sat unselected below it. So the
+ * control claimed a cap the backend did not have, on the one setting whose
+ * consequence is permanent message deletion.
+ *
+ * A `<select>` whose `value` matches no option renders blank, so a non-preset
+ * value must be offered explicitly.
+ */
+function capSelection(bytes: number): { value: number; isCustom: boolean } {
   const presets = [
     STORAGE_CAP_CHOICES.gb1,
     STORAGE_CAP_CHOICES.gb5,
@@ -43,13 +57,24 @@ function capChoiceFor(bytes: number): number {
     STORAGE_CAP_CHOICES.gb100,
     STORAGE_CAP_CHOICES.unlimited,
   ];
-  // Anything at or beyond the largest preset reads as "Unlimited", which is
-  // what a custom oversized value means to the user.
-  let best = presets[0];
-  for (const p of presets) {
-    if (bytes >= p) best = p;
+  // At or beyond the largest preset, "Unlimited" is what an oversized value
+  // means to the user.
+  if (bytes >= STORAGE_CAP_CHOICES.unlimited) {
+    return { value: STORAGE_CAP_CHOICES.unlimited, isCustom: false };
   }
-  return best;
+  // A value below the smallest preset (or between two of them) is real and must
+  // be shown as itself.
+  const isCustom = !presets.includes(bytes);
+  return { value: bytes, isCustom };
+}
+
+/** Human label for a raw byte cap. */
+function capLabel(bytes: number): string {
+  if (bytes === STORAGE_CAP_CHOICES.unlimited) return "Unlimited";
+  const gb = bytes / 1024 ** 3;
+  if (Number.isInteger(gb)) return `${gb} GB`;
+  const mb = bytes / 1024 ** 2;
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
 }
 
 export default function SettingsView() {
@@ -77,22 +102,48 @@ export default function SettingsView() {
     duressConfigured, setDuressPassphrase, clearDuressPassphrase,
     handleClipboardClearSecsChange,
     handleIdleLockSecsChange, handleRequireKnownContactToggle, handleLockVault, handleClearClipboard,
-    scheduleClipboardClear,
+    scheduleClipboardClear, openSettings,
   } = useSettings();
   const [fpCopied, setFpCopied] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
-  const [torEnabled, setTorEnabled] = useState(networkSettings?.tor_enabled ?? false);
+  // Tor is derived from the backend's own answer, not held as local state.
+  //
+  // It was `useState(networkSettings?.tor_enabled ?? false)` plus an
+  // unconditional `setTorEnabled(!torEnabled)` after the `await`. That produced
+  // three distinct lies: the toggle rendered "on" with no IPC at all when
+  // `networkSettings` was still null (the handler returns early and nothing was
+  // persisted), it flipped to "on" even when `set_tor_enabled` rejected, and it
+  // could not represent a change the backend made on its own (air-gap mode
+  // refuses Tor).
+  const torEnabled = networkSettings?.tor_enabled ?? false;
   const [appVersion, setAppVersion] = useState<string>("");
-  // The cap the <select> shows. Derived from the persisted config rather than
+// The cap the <select> shows. Derived from the persisted config rather than
   // held as its own state, so it cannot drift out of step with what the backend
-  // actually has — the same mistake the Tor toggle used to make.
-  const storageCapChoice = capChoiceFor(
-    securityConfig?.storage_cap_bytes ? securityConfig.storage_cap_bytes : 10 * 1024 ** 3,
-  );
+  // actually has - the same mistake the Tor toggle used to make. One call
+  // produces both the selected value and the custom flag, so they cannot
+  // disagree.
+  const storedCapBytes = securityConfig?.storage_cap_bytes || 10 * 1024 ** 3;
+  const { value: storageCapChoice, isCustom: capIsCustom } = capSelection(storedCapBytes);
 
   useEffect(() => {
     void refreshStorageUsage();
   }, [refreshStorageUsage]);
+
+  // Load the settings every time this screen is entered.
+  //
+  // Five things navigate here: the Hub gear, the Nearby empty state, the
+  // sidebar item, `Ctrl+,`, and `Ctrl+K` from a chat. Only the first two called
+  // `openSettings()`, so on the other three `networkSettings`, `stunConfig`,
+  // `discoveryConfig`, `captureCapability`, `networkDiagnostics` and
+  // `discoveredPeers` were all still null — the entire Network, Discovery and
+  // STUN sections rendered blank with no error and no indication that they
+  // simply had not been fetched.
+  useEffect(() => {
+    void openSettings();
+    // Intentionally mount-only: this screen is unmounted on navigation, so this
+    // runs on every entry. Re-running it on every settings value would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion(""));
@@ -102,7 +153,7 @@ export default function SettingsView() {
 
   return (
     <div className="app-shell">
-      <Sidebar currentView="settings" onNavigate={setView} />
+      <Sidebar currentView="settings" onNavigate={setView} onError={(m) => addToast(m, "error", 6000)} />
       <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
@@ -125,15 +176,16 @@ export default function SettingsView() {
               <span className="settings-label">Fingerprint</span>
               <span className="settings-mono">{identity?.fingerprint || "—"}</span>
               <button className="btn btn--ghost btn--icon-sm" onClick={() => {
-                if (identity?.fingerprint) {
-                  navigator.clipboard.writeText(identity.fingerprint);
-                  setFpCopied(true);
-                  setTimeout(() => setFpCopied(false), 2000);
-                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
-                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
-                  }
-                }
-              }} aria-label="Copy fingerprint">
+                  if (!identity?.fingerprint) return;
+                  void copyToClipboard(identity.fingerprint).then((ok) => {
+                    if (!ok) { addToast("Could not copy to the clipboard", "error"); return; }
+                    setFpCopied(true);
+                    setTimeout(() => setFpCopied(false), 2000);
+                    if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                      scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                    }
+                  });
+                }} aria-label="Copy fingerprint">
                 {fpCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
               </button>
             </div>
@@ -169,12 +221,14 @@ export default function SettingsView() {
               <span className="settings-mono">{publicIp || "Not yet discovered"}</span>
               {publicIp && (
                 <button className="btn btn--ghost btn--icon-sm" onClick={() => {
-                  navigator.clipboard.writeText(publicIp);
-                  setIpCopied(true);
-                  setTimeout(() => setIpCopied(false), 2000);
-                  if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
-                    scheduleClipboardClear(securityConfig.clipboard_clear_secs);
-                  }
+                  void copyToClipboard(publicIp).then((ok) => {
+                    if (!ok) { addToast("Could not copy to the clipboard", "error"); return; }
+                    setIpCopied(true);
+                    setTimeout(() => setIpCopied(false), 2000);
+                    if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
+                      scheduleClipboardClear(securityConfig.clipboard_clear_secs);
+                    }
+                  });
                 }} aria-label="Copy IP">
                   {ipCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
                 </button>
@@ -211,7 +265,7 @@ export default function SettingsView() {
             <div className="settings-row">
               <span className="settings-label">Tor</span>
               <label className="toggle">
-                <input type="checkbox" checked={torEnabled} onChange={async () => { await handleTorToggle(); setTorEnabled(!torEnabled); }} aria-label="Toggle Tor" />
+                <input type="checkbox" checked={torEnabled} onChange={() => { void handleTorToggle(); }} aria-label="Toggle Tor" />
                 <span className="toggle-slider" />
               </label>
               <span className="settings-hint">Route connections via Tor</span>
@@ -498,6 +552,11 @@ export default function SettingsView() {
                 <option value={STORAGE_CAP_CHOICES.gb25}>25 GB</option>
                 <option value={STORAGE_CAP_CHOICES.gb100}>100 GB</option>
                 <option value={STORAGE_CAP_CHOICES.unlimited}>Unlimited</option>
+                {capIsCustom && (
+                  // Surfaced explicitly rather than silently rounded, so the
+                  // select always shows the cap that is actually in force.
+                  <option value={storedCapBytes}>{capLabel(storedCapBytes)} (current)</option>
+                )}
               </select>
               <span className="settings-hint" id="storage-cap-hint">
                 When the limit is reached, the oldest messages are{" "}

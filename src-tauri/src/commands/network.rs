@@ -122,6 +122,58 @@ fn advance_ack_watermark(last_acked_index: u32, acked_index: u32) -> Option<u32>
     }
 }
 
+/// Remove `peer_key_hex` from the connection map **only if it is still ours**.
+///
+/// `connections` is keyed by peer key, not by connection identity, so a bare
+/// `remove(&peer_key_hex)` from an old task's teardown path cannot tell its own
+/// dead entry from a live replacement that has since taken the same slot. All
+/// four *outbound* connect paths (`connect_to_peer`, `attempt_reconnect`,
+/// `connect_discovered_peer`, `connect_family_member`) `insert` over an existing
+/// entry; the shared inbound path refuses duplicates with a comment explaining
+/// exactly this, and the outbound forks never got the same guard.
+///
+/// The resulting sequence, entirely reachable by ordinary use: Alice is connected
+/// to Bob (inbound). She clicks Connect on the chat, or Bob is re-dialled via
+/// discovery or family. `connect_to_peer` overwrites the map entry; the *old*
+/// receive loop's read then fails, and its teardown removes the NEW connection.
+/// Her UI shows `established` and then, within one heartbeat interval, shows
+/// `disconnected` with the new session gone.
+///
+/// `Arc::ptr_eq` is the identity test: only the task that owns the exact
+/// `Arc<Mutex<PeerConnection>>` it was spawned for may remove it.
+async fn remove_own_connection(
+    state: &Arc<AppState>,
+    peer_key_hex: &str,
+    mine: &Arc<tokio::sync::Mutex<PeerConnection>>,
+) -> bool {
+    let mut conns = state.connections.write().await;
+    match conns.get(peer_key_hex) {
+        Some(current) if Arc::ptr_eq(current, mine) => {
+            conns.remove(peer_key_hex);
+            true
+        }
+        // Someone else owns the slot now. Leaving it alone is the whole point.
+        _ => false,
+    }
+}
+
+/// Tell the frontend that an incoming transfer failed, so the download row does
+/// not sit at its last progress value forever.
+///
+/// The sender side has always emitted `m2m://transfer-error` (`finish_and_chain`
+/// in `files.rs`); the four *receiving* failure branches emitted nothing at all.
+/// Mirrors that payload exactly, including the optional machine-readable code.
+fn emit_transfer_error(app_handle: &tauri::AppHandle, transfer_id: &str, error: &str) {
+    let _ = tauri::Emitter::emit(
+        app_handle,
+        "m2m://transfer-error",
+        serde_json::json!({
+            "transfer_id": transfer_id,
+            "error": error,
+        }),
+    );
+}
+
 /// Did the initiator's handshake frame claim to have used a one-time prekey?
 ///
 /// Inspects the `used_opk` field of the X3DH `HandshakeInit`. A malformed
@@ -251,12 +303,36 @@ pub async fn create_invite(
     // all internet-facing. LAN invites are still possible via manual
     // address exchange, so this is a hard block rather than silent degrade.
     state.ensure_not_air_gapped().await?;
-    let identity = state.identity.read().await;
-    let kp = identity.as_ref().ok_or("identity not initialized")?;
+
+    // ─── Snapshot the identity, then release the lock ───
+    //
+    // `state.identity` is a write-preferring `RwLock`, and everything below
+    // wants `identity.write()`: `lock_vault`, `unlock_vault`,
+    // `create_vault_account`, `import_identity`, `execute_duress_wipe` and
+    // `panic_wipe`. `kp` was last used at the very end of this function, so
+    // NLL kept the read guard alive for the whole body — across
+    // `add_port_mapping` (PCP 3s → NAT-PMP 3s → SSDP 4s → HTTP 5s → SOAP 5s →
+    // GetExternalIPAddress 5s) and `relay::register` (8s connect + 5s frame).
+    //
+    // Worst case ~30s of sequential timeouts, during which one queued writer
+    // also blocks every subsequent reader. A duress wipe or a panic-hotkey wipe
+    // is the one operation that must never be delayed, and this is the UI path
+    // that can delay it. The same snapshot idiom is used at
+    // `complete_inbound_connection`, with the same reasoning.
+    let kp = {
+        let identity = state.identity.read().await;
+        let kp = identity.as_ref().ok_or("identity not initialized")?;
+        crate::crypto::IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
+            .map_err(|e| AppError::invalid(format!("identity unusable: {e}")))?
+    };
 
     // ─── X3DH Prekey Bundle ───
-    let x25519 = state.x25519_identity.read().await;
-    let x25519_kp = x25519.as_ref().ok_or("X25519 identity not initialized")?;
+    let x25519_kp = {
+        let x25519 = state.x25519_identity.read().await;
+        let kp = x25519.as_ref().ok_or("X25519 identity not initialized")?;
+        crate::crypto::X25519IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
+            .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
+    };
     // Generate a signed prekey for this invite
     let spk = crate::crypto::EphemeralKeypair::generate();
     let spk_pub = spk.public_key_bytes();
@@ -445,10 +521,46 @@ pub async fn create_invite(
             tracing::debug!(relay_addr = %addr, relay_id = %rid, "relay candidate added to invite");
         }
 
-        all
+        // ═══ NEVER PUBLISH AN UNFILTERED CANDIDATE LIST ═══
+        //
+        // The `HandshakeInit`/`HandshakeResponse` frames are written before any
+        // key exists, so every byte of them is readable by the peer, the Tor
+        // exit and every AS in between. An invite is strictly worse: it is a
+        // shareable link handed to a third party, and `state.candidates` holds
+        // the LAN address, the global IPv6 and the STUN server-reflexive public
+        // IP.
+        //
+        // Every other publication site (`network.rs:690` responder, `:952`
+        // `connect_to_peer`, `discovery.rs:290`, `vault.rs:735`) already routed
+        // through this filter and this one did not. The `relay_id: None` on
+        // every entry above is what makes the point: `filter_advertised_candidates`
+        // keeps only relay entries under Tor, so it would have dropped all of
+        // them. That is the correct outcome.
+        //
+        // Note the Tor guard above only refuses when `!private_mode`, so Tor +
+        // Private Mode — the explicitly-permitted combination — is exactly the
+        // one where this leak reaches the user, while `port_mapping` and relay
+        // registration are correctly skipped.
+        // The filter keeps only relay entries under Tor, and is a no-op with Tor
+        // off. Private Mode additionally withholds the server-reflexive entry
+        // even with Tor off: it is the user's public IP, and Private Mode is
+        // documented as "the public IP is NOT included".
+        //
+        // No `return` here: this block is a plain expression, and an early
+        // `return` would skip the rest of `create_invite` entirely (including
+        // the invite serialisation) and yield the wrong `Result`.
+        let filtered = crate::dial::filter_advertised_candidates(all);
+        if private_mode {
+            filtered
+                .into_iter()
+                .filter(|c| c.candidate_type != crate::candidate::CandidateType::ServerReflexive as u8)
+                .collect()
+        } else {
+            filtered
+        }
     };
     identity::create_invite(
-        kp,
+        &kp,
         &actual_address,
         validity_secs,
         one_time,
@@ -626,16 +738,14 @@ pub(crate) async fn complete_inbound_connection(
     // ── Snapshot the identity, then release the lock ──
     //
     // The handshake is a blocking read of a peer-supplied frame, so holding
-    // `state.identity` across it turns an unauthenticated socket into a lever
+// `state.identity` across it turns an unauthenticated socket into a lever
     // on the vault. `handshake_as_responder_x3dh` waits for a
-    // `HandshakeComplete` frame bounded at 256 KiB, and
-    // `network::read_exact_timeout` applies its timeout per `read()` call
-    // rather than per frame — so a peer that trickles a byte every 900 ms can
-    // hold the guard for minutes. Everything downstream of this point needs
+    // `HandshakeComplete` frame bounded at 256 KiB, and `read_frame_impl` reads
+    // three times per frame under a shared total deadline — so a slow peer still
+    // costs real wall-clock time here. Everything downstream of this point needs
     // `identity.write()` (lock_vault, unlock_vault, create_vault_account,
     // import_identity), so holding it across the handshake let a remote
-    // stranger prevent the user from locking their vault for as long as it
-    // liked.
+    // stranger delay the user locking their vault for as long as it liked.
     //
     // This routine returns `()`, so these cannot use `?`; each failure is
     // logged and drops the connection.
@@ -795,6 +905,14 @@ pub(crate) async fn complete_inbound_connection(
         }
         conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
     }
+    // Re-read the `Arc` we just stored so the teardown paths in the receive loop
+    // can identify *this* session. `complete_inbound_connection` refuses
+    // duplicates, so this can only ever be its own entry — but the guard costs
+    // nothing and keeps the invariant explicit.
+    let my_conn = match state.peer_connection(&peer_key_hex).await {
+        Some(arc) => arc,
+        None => return,
+    };
 
     let _ = app_handle.emit(
         "m2m://connection",
@@ -846,7 +964,14 @@ pub(crate) async fn complete_inbound_connection(
         }
     }
 
-    spawn_receive_loop(app_handle.clone(), state.clone(), read_half, peer_key_hex, None);
+    spawn_receive_loop(
+        app_handle.clone(),
+        state.clone(),
+        read_half,
+        peer_key_hex,
+        my_conn,
+        None,
+    );
 }
 
 /// Handle an incoming direct-TCP connection.
@@ -920,11 +1045,20 @@ pub async fn connect_to_peer(
         "connection established via connection manager"
     );
 
-    let identity = state.identity.read().await;
-    let kp = identity.as_ref().ok_or("identity not initialized")?;
+    // Snapshot, then release — same reasoning as `create_invite`. `kp` is used
+    // for the handshake at the end of this function, so without the copy NLL
+    // keeps `state.identity` read-locked across STUN discovery and the whole
+    // X3DH exchange, and `lock_vault` / the duress and panic wipes queue behind
+    // a remote peer's handshake.
+    let kp = {
+        let identity = state.identity.read().await;
+        let kp = identity.as_ref().ok_or("identity not initialized")?;
+        crate::crypto::IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
+            .map_err(|e| format!("identity unusable: {e}"))?
+    };
 
     // Gather our local candidates to share with the peer during handshake.
-    let config = state.stun_config.read().await;
+    let config = state.stun_config.read().await.clone();
     let stun_result = stun::discover_public_addrs(&config).await.ok();
     drop(config);
 
@@ -977,8 +1111,19 @@ pub async fn connect_to_peer(
         .map_err(|_| "invalid signed prekey signature in invite".to_string())?;
     }
 
-    let x25519 = state.x25519_identity.read().await;
-    let x25519_kp = x25519.as_ref();
+    // Snapshot the X25519 identity too. `lock_vault` and `unlock_vault` both
+    // *write* `x25519_identity`, and `tokio`'s `RwLock` is write-preferring, so
+    // holding this read guard across the handshake below delays the vault lock
+    // and the duress/panic wipes behind a remote peer — the same hole the
+    // `identity` snapshot above closes, one lock over.
+    //
+    // Two snapshots: the public half for the legacy handshake, the whole keypair
+    // for X3DH (which needs the secret for DH4). Both are taken inside the arms
+    // below so no `x25519_identity` guard survives the handshake.
+    let x25519_pub_key = {
+        let x25519 = state.x25519_identity.read().await;
+        x25519.as_ref().map(|k| k.public_key_bytes())
+    };
 
     // The dialer only ever produces `Role::Initiator` (see below), so this is
     // not a match — there is exactly one handshake to perform here.
@@ -986,7 +1131,17 @@ pub async fn connect_to_peer(
         {
             tracing::debug!("hole-punch role: Initiator (outgoing connect won)");
             if has_x3dh {
-                let xkp = x25519_kp.ok_or("X25519 key not initialized for X3DH")?;
+                // Snapshot the whole keypair, not just its public half: the secret is
+                // required for DH4 and a public-key-only copy cannot perform it.
+                let xkp = {
+                    let x25519 = state.x25519_identity.read().await;
+                    let kp = x25519.as_ref().ok_or("X25519 key not initialized for X3DH")?;
+                    crate::crypto::X25519IdentityKeypair::from_bytes(
+                        &kp.public_key_bytes(),
+                        &kp.secret_key_bytes(),
+                    )
+                    .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
+                };
                 let bundle = crate::crypto::PrekeyBundle {
                     identity_key: signed.payload.x25519_identity_pub,
                     signed_prekey: signed.payload.signed_prekey,
@@ -996,21 +1151,20 @@ pub async fn connect_to_peer(
                 session
                     .handshake_as_initiator_x3dh(
                         &mut stream,
-                        kp,
-                        xkp,
+                        &kp,
+                        &xkp,
                         &expected_peer_pub,
                         &bundle,
                         our_candidates,
                         identity::is_one_time(&signed),
                     )
-                    .await
-                    ?;
+                    .await?;
             } else {
-                let x25519_pub = x25519_kp.map(|k| k.public_key_bytes()).unwrap_or([0u8; 32]);
+                let x25519_pub = x25519_pub_key.unwrap_or([0u8; 32]);
                 session
                     .handshake_as_initiator(
                         &mut stream,
-                        kp,
+                        &kp,
                         &expected_peer_pub,
                         our_candidates,
                         x25519_pub,
@@ -1052,8 +1206,16 @@ pub async fn connect_to_peer(
         last_hb_ack: None,
     };
 
-    let mut conns = state.connections.write().await;
-    conns.insert(peer_key_hex.clone(), Arc::new(Mutex::new(conn)));
+    let conn_arc = Arc::new(Mutex::new(conn));
+    {
+        let mut conns = state.connections.write().await;
+        // Deliberate replace, but now identity-tagged: the `Arc` is handed to
+        // `spawn_receive_loop`, whose teardown paths remove by `Arc::ptr_eq`
+        // rather than by peer key. See `remove_own_connection` for the race
+        // this closes — without it, this `insert` drops the live session and the
+        // OLD receive loop's teardown then deletes the NEW one.
+        conns.insert(peer_key_hex.clone(), conn_arc.clone());
+    }
 
     // Start the receive loop for this peer
     spawn_receive_loop(
@@ -1061,6 +1223,7 @@ pub async fn connect_to_peer(
         state.inner().clone(),
         read_half,
         peer_key_hex.clone(),
+        conn_arc,
         reconnect_info,
     );
 
@@ -1494,7 +1657,7 @@ async fn handle_file_transfer_packet(
                                     let safe_name = network::sanitize_filename(&filename)
                                         .unwrap_or_else(|| format!("file_{}", transfer_id));
 
-                                    let accepted;
+                                    let (accepted, inserted);
                                     {
                                         const MAX_PENDING_INCOMING_TRANSFERS: usize = 20;
                                         const STALE_TRANSFER_SECS: u64 = 60 * 60;
@@ -1507,46 +1670,119 @@ async fn handle_file_transfer_packet(
                                             .unwrap_or_default()
                                             .as_secs();
                                         if transfers.len() >= MAX_PENDING_INCOMING_TRANSFERS {
+                                            // Drop the stale entries, and *collect*
+                                            // their temp paths rather
+                                            // than deleting inline: `remove_file` is a blocking syscall, and
+                                            // doing it inside `retain` holds the global
+                                            // `incoming_transfers` write lock across every delete.
+                                            let mut orphaned: Vec<std::path::PathBuf> =
+                                                Vec::new();
                                             transfers.retain(|_, t| {
-                                                now.saturating_sub(t.created_at)
-                                                    < STALE_TRANSFER_SECS
-                                            });
-                                        }
-                                        accepted = transfers.len() < MAX_PENDING_INCOMING_TRANSFERS;
-                                        if accepted {
-                                            transfers.entry(transfer_id.clone()).or_insert_with(|| {
-                                            let (temp_file, temp_path) = match util::create_temp_file() {
-                                                Ok((f, p)) => (Some(f), Some(p)),
-                                                Err(e) => {
-                                                    tracing::warn!(error = %e, "failed to create temp file for transfer");
-                                                    (None, None)
+                                                let fresh = now.saturating_sub(t.created_at)
+                                                    < STALE_TRANSFER_SECS;
+                                                if !fresh {
+                                                    if let Some(path) = &t.temp_path {
+                                                        orphaned.push(path.clone());
+                                                    }
                                                 }
-                                            };
-
-                                            IncomingFileTransfer {
-                                                transfer_id: transfer_id.clone(),
-                                                peer_key_hex: peer_key_hex.clone(),
-                                                filename: safe_name,
-                                                total_size,
-                                                total_chunks,
-                                                file_hash,
-                                                chunk_hashes: req.chunk_hashes.clone(),
-                                                peer_protocol_version: req.file_transfer_version,
-                                                save_path: std::path::PathBuf::new(),
-                                                temp_file,
-                                                temp_path,
-                                                chunks_received: 0,
-                                                bytes_received: 0,
-                                                chunk_stride,
-                                                chunks_bitmask: vec![false; total_chunks as usize],
-                                                state: crate::state::TransferState::Pending,
-                                                created_at: std::time::SystemTime::now()
-                                                    .duration_since(std::time::UNIX_EPOCH)
-                                                    .unwrap_or_default()
-                                                    .as_secs(),
-                                                error: None,
+                                                fresh
+                                            });
+                                            // The guard is released here.
+                                            drop(transfers);
+                                            if !orphaned.is_empty() {
+                                                // Off the runtime: a blocking delete
+                                                // on a tokio worker stalls every
+                                                // other socket and timer on it.
+                                                let _ = tokio::task::spawn_blocking(
+                                                    move || {
+                                                        for path in &orphaned {
+                                                            let _ = std::fs::remove_file(path);
+                                                        }
+                                                    },
+                                                )
+                                                .await;
                                             }
-                                        });
+                                        }
+                                        // `inserted` is whether *this* request created the entry.
+                                        //
+                                        // `accepted` is a capacity check, so a peer re-sending a request
+                                        // for an id that already exists passed it without changing anything — and
+                                        // the emit below fired anyway, re-prompting the user's modal up to 30×/s
+                                        // and never repairing a transfer the user had already accepted (whose
+                                        // placeholder has `total_chunks: 0`).
+                                        accepted = transfers.len() < MAX_PENDING_INCOMING_TRANSFERS;
+                                        inserted = false;
+                                        if accepted {
+                                            use std::collections::hash_map::Entry;
+                                            match transfers.entry(transfer_id.clone()) {
+                                                Entry::Occupied(o) => {
+                                                    // A re-send for an id we already
+                                                    // know. Refresh the state the
+                                                    // placeholder path could not know
+                                                    // (the accept handler inserts a
+                                                    // stub with `total_chunks: 0`),
+                                                    // so a request arriving after the
+                                                    // user accepted is repaired rather
+                                                    // than silently dropped.
+                                                    let slot = o.into_mut();
+                                                    if slot.total_chunks == 0 {
+                                                        slot.total_size = total_size;
+                                                        slot.total_chunks = total_chunks;
+                                                        slot.file_hash = file_hash;
+                                                        slot.chunk_hashes =
+                                                            req.chunk_hashes.clone();
+                                                        slot.chunk_stride = chunk_stride;
+                                                        slot.chunks_bitmask =
+                                                            vec![false; total_chunks as usize];
+                                                        slot.chunks_received = 0;
+                                                        slot.bytes_received = 0;
+                                                    }
+                                                }
+                                                Entry::Vacant(v) => {
+                                                    inserted = true;
+                                                    let (temp_file, temp_path) =
+                                                        match util::create_temp_file() {
+                                                            Ok((f, p)) => (Some(f), Some(p)),
+                                                            Err(e) => {
+                                                                tracing::warn!(
+                                                                    error = %e,
+                                                                    "failed to create temp file for transfer"
+                                                                );
+                                                                (None, None)
+                                                            }
+                                                        };
+
+                                                    v.insert(IncomingFileTransfer {
+                                                        transfer_id: transfer_id.clone(),
+                                                        peer_key_hex: peer_key_hex.clone(),
+                                                        filename: safe_name,
+                                                        total_size,
+                                                        total_chunks,
+                                                        file_hash,
+                                                        chunk_hashes: req.chunk_hashes.clone(),
+                                                        peer_protocol_version: req
+                                                            .file_transfer_version,
+                                                        save_path: std::path::PathBuf::new(),
+                                                        temp_file,
+                                                        temp_path,
+                                                        chunks_received: 0,
+                                                        bytes_received: 0,
+                                                        chunk_stride,
+                                                        chunks_bitmask: vec![
+                                                            false;
+                                                            total_chunks as usize
+                                                        ],
+                                                        state: crate::state::TransferState::Pending,
+                                                        created_at: std::time::SystemTime::now()
+                                                            .duration_since(
+                                                                std::time::UNIX_EPOCH,
+                                                            )
+                                                            .unwrap_or_default()
+                                                            .as_secs(),
+                                                        error: None,
+                                                    });
+                                                }
+                                            }
                                         } else {
                                             tracing::warn!(
                                                 peer = %peer_key_hex,
@@ -1555,7 +1791,12 @@ async fn handle_file_transfer_packet(
                                             );
                                         }
                                     }
-                                    if accepted {
+                                    if accepted && inserted {
+                                        // Only prompt for a transfer we actually
+                                        // created. Re-emitting on a duplicate
+                                        // `transfer_id` re-triggered the user's
+                                        // accept/reject modal repeatedly for one
+                                        // file.
                                         let _ = app_handle.emit(
                                             "m2m://file-request",
                                             FileRequestEvent {
@@ -1705,15 +1946,41 @@ async fn handle_file_transfer_packet(
             }
         }
         PacketType::FileTransferComplete => {
+            // Four branches below can destroy the transfer (incomplete, hash
+            // mismatch, rename failure, cross-device copy failure) and only the
+            // success branch emitted an event. The frontend's `m2m://transfer-error`
+            // handler and its validator already exist, so this is exactly the
+            // "the event and its listener both exist and nothing fires" gap:
+            // the user watched a download stall at 40% forever with no error and
+            // no way to tell a failure from a hang.
             if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
-                let mut conn = conn_arc.lock().await;
-                match conn.session.decrypt_typed_frame(frame) {
+                // Decrypt, then drop the connection lock immediately. The whole
+                // completion path below (SHA-256 over up to `MAX_FILE_SIZE`, a
+                // cross-device copy, a rename) used to run while holding this
+                // per-peer mutex, so every other send to the same peer blocked
+                // behind it — and the file's own doc comment for the *sender*
+                // half explains why blocking work must not sit on the runtime.
+                let decrypted = {
+                    let mut conn = conn_arc.lock().await;
+                    conn.session.decrypt_typed_frame(frame)
+                };
+                match decrypted {
                     Ok(plaintext) => {
                         if let Ok(complete) =
                             protocol::deserialize::<protocol::FileTransferCompleteData>(&plaintext)
                         {
-                            let mut transfers = state.incoming_transfers.write().await;
-                            if let Some(mut transfer) = transfers.remove(&complete.transfer_id) {
+                            // Take the transfer out of the map FIRST, then release the
+                            // global `incoming_transfers` write lock. Holding it across
+                            // the whole verification below meant that while ONE peer
+                            // finished a 2 GiB download, every other peer's chunks
+                            // and requests queued behind it, and the per-peer
+                            // `conn.lock()` was held for the same span — so this was a
+                            // process-wide stall, not a per-transfer one.
+                            let finished = {
+                                let mut transfers = state.incoming_transfers.write().await;
+                                transfers.remove(&complete.transfer_id)
+                            };
+                            if let Some(mut transfer) = finished {
                                 let transfer_id = complete.transfer_id.clone();
                                 let all_received = transfer.chunks_received
                                     == transfer.total_chunks
@@ -1725,45 +1992,93 @@ async fn handle_file_transfer_packet(
                                         total = transfer.total_chunks,
                                         "file transfer incomplete - missing chunks"
                                     );
+                                    // Every other teardown path emits an event;
+                                    // this one did not, so the download row sat at
+                                    // its last progress value forever with no
+                                    // error — indistinguishable from a hang.
+                                    emit_transfer_error(
+                                        &app_handle,
+                                        &complete.transfer_id,
+                                        "the transfer ended before every chunk arrived",
+                                    );
                                     drop(transfer.temp_file);
                                     if let Some(ref path) = transfer.temp_path {
                                         let _ = std::fs::remove_file(path);
                                     }
                                 } else {
-                                    let hash_valid = if let Some(ref mut file) = transfer.temp_file
-                                    {
-                                        use std::io::{Read, Seek};
-                                        // Stream-hash the temp file in fixed-size chunks —
-                                        // never buffer the whole file in RAM (peer could
-                                        // have declared up to MAX_FILE_SIZE).
-                                        let mut hasher = sha2::Sha256::new();
-                                        let mut buf =
-                                            vec![0u8; crate::protocol::MAX_FILE_CHUNK_SIZE];
-                                        let mut hashed_len: u64 = 0;
-                                        let mut read_ok = true;
-                                        if file.seek(std::io::SeekFrom::Start(0)).is_err() {
-                                            read_ok = false;
-                                        }
-                                        while read_ok {
-                                            match file.read(&mut buf) {
-                                                Ok(0) => break,
-                                                Ok(n) => {
-                                                    hasher.update(&buf[..n]);
-                                                    hashed_len += n as u64;
-                                                }
+                                    // Stream-hash the temp file on the blocking
+                                    // pool, taking the handle out of the
+                                    // transfer so nothing else can touch it.
+                                    //
+                                    // This used to run inline in an `async fn`
+                                    // while holding the peer's connection lock
+                                    // and the global `incoming_transfers` write
+                                    // lock. `read` on a slow or full volume
+                                    // blocks the OS thread, so a tokio worker
+                                    // stops polling every other socket and timer
+                                    // on it — and *all* peers' chunk handlers were
+                                    // queued behind the global lock anyway. The
+                                    // sender half of this same feature already
+                                    // documents why this matters.
+                                    let handle = transfer.temp_file.take();
+                                    let expected_size = transfer.total_size;
+                                    let expected_hash = transfer.file_hash.clone();
+                                    let (hashed_len, digest) = match handle {
+                                        Some(mut file) => {
+                                            match tokio::task::spawn_blocking(
+                                                move || -> (u64, [u8; 32]) {
+                                                    use std::io::{Read, Seek};
+                                                    let mut hasher = sha2::Sha256::new();
+                                                    let mut buf = vec![
+                                                        0u8;
+                                                        crate::protocol::MAX_FILE_CHUNK_SIZE
+                                                    ];
+                                                    let mut hashed_len: u64 = 0;
+                                                    if file
+                                                        .seek(std::io::SeekFrom::Start(0))
+                                                        .is_err()
+                                                    {
+                                                        return (0, [0u8; 32]);
+                                                    }
+                                                    loop {
+                                                        match file.read(&mut buf) {
+                                                            Ok(0) => break,
+                                                            Ok(n) => {
+                                                                hasher.update(&buf[..n]);
+                                                                hashed_len += n as u64;
+                                                            }
+                                                            Err(e) => {
+                                                                tracing::warn!(
+                                                                    error = %e,
+                                                                    "failed to read temp file for hash verification"
+                                                                );
+                                                                // `u64::MAX` can never
+                                                                // equal `total_size`,
+                                                                // so a read error
+                                                                // fails verification.
+                                                                return (u64::MAX, [0u8; 32]);
+                                                            }
+                                                        }
+                                                    }
+                                                    (hashed_len, hasher.finalize().into())
+                                                },
+                                            )
+                                            .await
+                                            {
+                                                Ok(v) => v,
                                                 Err(e) => {
-                                                    tracing::warn!(error = %e, "failed to read temp file for hash verification");
-                                                    read_ok = false;
+                                                    tracing::warn!(
+                                                        error = %e,
+                                                        "hash verification task failed"
+                                                    );
+                                                    (u64::MAX, [0u8; 32])
                                                 }
                                             }
                                         }
-                                        let digest: [u8; 32] = hasher.finalize().into();
-                                        read_ok
-                                            && hashed_len == transfer.total_size
-                                            && digest.to_vec() == transfer.file_hash
-                                    } else {
-                                        false
+                                        None => (u64::MAX, [0u8; 32]),
                                     };
+                                    let hash_valid = hashed_len == expected_size
+                                        && digest.to_vec() == expected_hash;
 
                                     if hash_valid {
                                         let safe_name =
@@ -1780,38 +2095,135 @@ async fn handle_file_transfer_packet(
                                                 transfer.save_path.clone()
                                             };
 
-                                        let rename_ok = if let (Some(ref temp_path), Some(_)) = (
-                                            transfer.temp_path.as_ref(),
-                                            transfer.temp_file.as_mut(),
-                                        ) {
-                                            // Take ownership of the temp file to close it,
-                                            // so rename can work on Windows.
-                                            transfer.temp_file.take();
-                                            std::fs::rename(temp_path, &final_path).is_ok()
-                                        } else {
-                                            false
-                                        };
+                                        // `transfer.temp_file` was already `.take()`n and moved into the
+                                            // `spawn_blocking` hash closure above, which has returned by now —
+                                            // so the handle is closed, which is what Windows needs before a
+                                            // rename. The guard is on the *path* only.
+                                            let rename_result = match transfer.temp_path.as_ref() {
+                                                Some(temp_path) => {
+                                                    std::fs::rename(temp_path, &final_path)
+                                                }
+                                                None => Err(std::io::Error::new(
+                                                    std::io::ErrorKind::Other,
+                                                    "transfer was missing its temp path",
+                                                )),
+                                            };
 
-                                        if rename_ok {
-                                            let _ = app_handle.emit(
-                                                "m2m://file-complete",
-                                                serde_json::json!({
-                                                    "transfer_id": transfer_id,
-                                                    "filename": safe_name,
-                                                    "path": final_path.to_string_lossy(),
-                                                }),
-                                            );
-                                        } else {
-                                            tracing::warn!(
-                                                "failed to rename temp file - cleaning up"
-                                            );
-                                            if let Some(ref path) = transfer.temp_path {
-                                                let _ = std::fs::remove_file(path);
+                                        match rename_result {
+                                            Ok(()) => {
+                                                let _ = app_handle.emit(
+                                                    "m2m://file-complete",
+                                                    serde_json::json!({
+                                                        "transfer_id": transfer_id,
+                                                        "filename": safe_name,
+                                                        "path": final_path.to_string_lossy(),
+                                                    }),
+                                                );
+                                            }
+                                            // `rename` is not a copy. Across
+                                            // filesystems it fails with `EXDEV`
+                                            // (Linux) / `ERROR_NOT_SAME_DEVICE`
+                                            // (Windows), and `/tmp` is a separate
+                                            // mount on most Linux systems while
+                                            // `%LOCALAPPDATA%\Temp` is very often
+                                            // a different volume from the user's
+                                            // Downloads folder.
+                                            //
+                                            // The old code treated that as a hard
+                                            // failure and DELETED the temp file —
+                                            // so a fully received, per-chunk
+                                            // hash-verified, whole-file-SHA-256
+                                            // verified download was destroyed,
+                                            // with no event on either the failure
+                                            // or the loss. Fall back to a copy.
+                                            Err(e)
+                                                if e.kind()
+                                                    == std::io::ErrorKind::CrossesDevices =>
+                                            {
+                                                // `spawn_blocking`: the fallback is a
+                                                // full-file read/write/sync, and a
+                                                // blocking syscall on a tokio worker
+                                                // stalls every other socket and
+                                                // timer on that thread. The peer lock
+                                                // and the global transfer-map lock
+                                                // are already released above, so this
+                                                // is about the runtime rather than
+                                                // about contention.
+                                                let temp = transfer.temp_path.clone();
+                                                let dest = final_path.clone();
+                                                let copied = match temp {
+                                                    Some(t) => {
+                                                        match tokio::task::spawn_blocking(
+                                                            move || util::move_across_filesystems(
+                                                                &t, &dest,
+                                                            ),
+                                                        )
+                                                        .await
+                                                        {
+                                                            Ok(r) => r,
+                                                            Err(e) => Err(std::io::Error::new(
+                                                                std::io::ErrorKind::Other,
+                                                                format!("copy task failed: {e}"),
+                                                            )),
+                                                        }
+                                                    }
+                                                    None => Err(std::io::Error::new(
+                                                        std::io::ErrorKind::Other,
+                                                        "transfer was missing its temp path",
+                                                    )),
+                                                };
+                                                match copied {
+                                                    Ok(()) => {
+                                                        let _ = app_handle.emit(
+                                                            "m2m://file-complete",
+                                                            serde_json::json!({
+                                                                "transfer_id": transfer_id,
+                                                                "filename": safe_name,
+                                                                "path": final_path.to_string_lossy(),
+                                                            }),
+                                                        );
+                                                    }
+                                                    Err(ce) => {
+                                                        tracing::warn!(
+                                                            error = %ce,
+                                                            "cross-device copy failed - cleaning up"
+                                                        );
+                                                        emit_transfer_error(
+                                                            &app_handle,
+                                                            &transfer_id,
+                                                            &format!(
+                                                                "could not save the file to {}: {ce}",
+                                                                final_path.display()
+                                                            ),
+                                                        );
+                                                        if let Some(ref path) = transfer.temp_path {
+                                                            let _ = std::fs::remove_file(path);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    error = %e,
+                                                    "failed to rename temp file - cleaning up"
+                                                );
+                                                emit_transfer_error(
+                                                    &app_handle,
+                                                    &transfer_id,
+                                                    "could not save the received file",
+                                                );
+                                                if let Some(ref path) = transfer.temp_path {
+                                                    let _ = std::fs::remove_file(path);
+                                                }
                                             }
                                         }
                                     } else {
                                         tracing::warn!("file hash verification failed - deleting corrupted temp file");
-                                        drop(transfer.temp_file);
+                                        emit_transfer_error(
+                                            &app_handle,
+                                            &transfer_id,
+                                            "the received file failed its integrity check and was discarded",
+                                        );
                                         if let Some(ref path) = transfer.temp_path {
                                             let _ = std::fs::remove_file(path);
                                         }
@@ -1832,26 +2244,45 @@ async fn handle_file_transfer_packet(
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
                     Ok(plaintext) => {
-                        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
-                            if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
-                                // Check if we have an outgoing transfer with filepath
-                                let filepath = {
-                                    let transfers = state.outgoing_transfers.read().await;
-                                    transfers
-                                        .get(tid)
-                                        .map(|t| t.file_path.to_string_lossy().to_string())
-                                };
-                                if filepath.is_some() {
-                                    let tid = tid.to_string();
-                                    let state_c = state.clone();
-                                    let app_c = app_handle.clone();
-                                    let peer_c = peer_key_hex.clone();
-                                    drop(conn);
-                                    // Start via queue-aware transfer lifecycle
-                                    super::files::try_start_outgoing_transfer(
-                                        app_c, state_c, peer_c, tid,
-                                    );
+                        // MUST be `protocol::deserialize` (MessagePack), not
+                        // `serde_json`. `send_file_accept` writes via
+                        // `protocol::serialize` = `rmp_serde::to_vec`, whose
+                        // first byte is a map header, and `serde_json` rejects
+                        // anything that is not `{`/`[`/a literal — so this
+                        // branch could never succeed, no chunk was ever sent,
+                        // and the sender's UI sat in `Pending` forever with no
+                        // error. The sibling handlers 40 lines away used the
+                        // right deserialiser, which is why two of four were
+                        // converted and two were not.
+                        match protocol::deserialize::<protocol::FileTransferAcceptData>(&plaintext)
+                        {
+                            Ok(accept) => {
+                                let tid = accept.transfer_id;
+                                // The map lookup below is keyed by an
+                                // attacker-supplied string, so bound it before
+                                // it reaches the map and `save_dir` handling.
+                                if !tid.is_empty() && tid.len() <= 64 {
+                                    // Check if we have an outgoing transfer with filepath
+                                    let filepath = {
+                                        let transfers = state.outgoing_transfers.read().await;
+                                        transfers
+                                            .get(&tid)
+                                            .map(|t| t.file_path.to_string_lossy().to_string())
+                                    };
+                                    if filepath.is_some() {
+                                        let state_c = state.clone();
+                                        let app_c = app_handle.clone();
+                                        let peer_c = peer_key_hex.clone();
+                                        drop(conn);
+                                        // Start via queue-aware transfer lifecycle
+                                        super::files::try_start_outgoing_transfer(
+                                            app_c, state_c, peer_c, tid,
+                                        );
+                                    }
                                 }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "malformed file-transfer accept");
                             }
                         }
                     }
@@ -1863,10 +2294,20 @@ async fn handle_file_transfer_packet(
             if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 if let Ok(plaintext) = conn.session.decrypt_typed_frame(frame) {
-                    if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&plaintext) {
-                        if let Some(tid) = val.get("transfer_id").and_then(|v| v.as_str()) {
-                            state.outgoing_transfers.write().await.remove(tid);
-                            tracing::info!(transfer_id = %tid, "file transfer rejected by peer");
+                    // Same defect as `FileTransferAccept` above: the wire format
+                    // is MessagePack. This branch silently never matched, so a
+                    // rejected transfer was never removed from
+                    // `outgoing_transfers` and permanently leaked its queue slot.
+                    match protocol::deserialize::<protocol::FileTransferRejectData>(&plaintext) {
+                        Ok(reject) => {
+                            let tid = reject.transfer_id;
+                            if !tid.is_empty() && tid.len() <= 64 {
+                                state.outgoing_transfers.write().await.remove(&tid);
+                                tracing::info!(transfer_id = %tid, "file transfer rejected by peer");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "malformed file-transfer reject");
                         }
                     }
                 }
@@ -3226,17 +3667,26 @@ async fn handle_group_frame(
     }
 }
 
+/// Spawn the receive loop and its heartbeat worker for one established session.
+///
+/// `conn_arc` is the *identity* of this session. Both workers must be able to
+/// tell "the connection I was spawned for died" apart from "the slot for this
+/// peer now holds a different, live connection", and `connections` is keyed by
+/// peer key alone — so a bare `remove(&peer_key_hex)` from either worker deletes
+/// whatever is there now. See [`remove_own_connection`].
 pub fn spawn_receive_loop(
     app_handle: AppHandle,
     state: Arc<AppState>,
     mut read_half: tokio::net::tcp::OwnedReadHalf,
     peer_key_hex: String,
+    conn_arc: Arc<tokio::sync::Mutex<PeerConnection>>,
     reconnect_info: Option<crate::reconnect::ReconnectInfo>,
 ) {
     let hb_peer = peer_key_hex.clone();
     let hb_state = state.clone();
     let hb_app = app_handle.clone();
     let hb_reconnect = reconnect_info.clone();
+    let hb_conn = conn_arc.clone();
     // Spawn a heartbeat worker: probes the peer with a Heartbeat every
     // HEARTBEAT_INTERVAL_SECS and requires a HeartbeatAck within
     // HEARTBEAT_TIMEOUT_SECS of each probe; otherwise the connection is
@@ -3252,6 +3702,24 @@ pub fn spawn_receive_loop(
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
+
+            // `lock_vault` scrubs every session (`Session::lock` takes the ratchet
+            // and the session keys) but deliberately keeps the sockets open so a
+            // call can resume after unlock. A heartbeat cannot be sent on a
+            // scrubbed session, so without this the probe below would fail, be
+            // recorded as "heartbeat send failed", and tear the connection down —
+            // which is the opposite of what "active connections remain open" means,
+            // and would make "Lock Now" silently disconnect every peer within one
+            // poll interval (5s).
+            if !hb_state.vault_unlocked.read().await {
+                // Reset the liveness bookkeeping so the stale probe timestamp
+                // does not immediately mark the peer dead once the vault reopens.
+                if let Ok(mut conn) = hb_conn.try_lock() {
+                    conn.last_hb_sent = None;
+                    conn.last_hb_ack = None;
+                }
+                continue;
+            }
 
             let mut dead_reason: Option<String> = None;
             {
@@ -3328,7 +3796,7 @@ pub fn spawn_receive_loop(
                         peer_verified: was_verified,
                     },
                 );
-                hb_state.connections.write().await.remove(&hb_peer);
+                remove_own_connection(&hb_state, &hb_peer, &hb_conn).await;
                 break;
             }
         }
@@ -3341,6 +3809,12 @@ pub fn spawn_receive_loop(
         let frame_limiter = network::FrameRateLimiter::new();
         // Consecutive over-budget frames; reset by any accepted frame.
         let mut rate_limit_strikes: u32 = 0;
+
+        // Captured out of the outer scope so the teardown paths below can use
+        // `Arc::ptr_eq` instead of a bare `remove(&peer_key_hex)`, which cannot
+        // distinguish this dead session from a live replacement that has since
+        // taken the same slot. See `remove_own_connection`.
+        let my_conn = conn_arc.clone();
 
         loop {
             // Read a frame from the peer's read half
@@ -3368,8 +3842,7 @@ pub fn spawn_receive_loop(
                         },
                     );
                     // Remove connection
-                    let mut conns = state.connections.write().await;
-                    conns.remove(&peer_key_hex);
+                    remove_own_connection(&state, &peer_key_hex, &my_conn).await;
                     break;
                 }
             };
@@ -3427,7 +3900,7 @@ pub fn spawn_receive_loop(
                                 .unwrap_or(false),
                         },
                     );
-                    state.connections.write().await.remove(&peer_key_hex);
+                    remove_own_connection(&state, &peer_key_hex, &my_conn).await;
                     break;
                 }
             }
@@ -3535,8 +4008,7 @@ pub fn spawn_receive_loop(
                             peer_verified: was_verified,
                         },
                     );
-                    let mut conns = state.connections.write().await;
-                    conns.remove(&peer_key_hex);
+                    remove_own_connection(&state, &peer_key_hex, &my_conn).await;
                     break;
                 }
                 PacketType::Error => {

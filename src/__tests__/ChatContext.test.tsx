@@ -28,6 +28,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 const appState = {
   addToast: vi.fn(),
   setView: vi.fn(),
+  // `ChatProvider` reads `identity?.public_key_hex` to decide which reaction
+  // chips are the local user's, and clears messages on `m2m://vault-locked`.
+  // A 64-char hex key, so `isPeerKeyHex`-shaped rather than a sentinel.
+  identity: { public_key_hex: "a".repeat(64), fingerprint: "f", has_identity: true },
 };
 vi.mock("../context/AppContext", () => ({
   useApp: () => appState,
@@ -79,6 +83,14 @@ function TestConsumer() {
       <button onClick={() => handleRemoveReaction("msg-1", "👍")}>Remove Reaction</button>
       <button onClick={handleMarkConversationRead}>Mark Read</button>
     </div>
+  );
+}
+
+/** Surfaces `messages[0].reactions` so a test can assert the optimistic shape. */
+function ReactionProbe() {
+  const { messages } = useChat();
+  return (
+    <span data-testid="reactors">{JSON.stringify(messages[0]?.reactions ?? {})}</span>
   );
 }
 
@@ -195,13 +207,78 @@ describe("ChatContext", () => {
     });
   });
 
+  // ─── Optimistic reactions use the REAL identity key, not a "self" sentinel ───
+  //
+  // The backend persists the reactor's Ed25519 key (`send_reaction` →
+  // `upsert_reaction(..., &peer_key_hex, ...)`), so `load_messages` returns
+  // `[<64-hex>]` and never `"self"`. The optimistic write used a `"self"`
+  // sentinel, which meant the two halves disagreed the instant the page was
+  // reloaded: the chip came back unhighlighted and a second click re-sent the
+  // reaction instead of removing it. `events.ts` also validates every reactor
+  // with `isPeerKeyHex`, so `"self"` was a value the app's own event boundary
+  // would reject.
+
+  it("optimistic reaction insert uses the local identity key, not a sentinel", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue([
+      { id: "msg-1", content: "hi", direction: "received", timestamp: 1, reactions: {} },
+    ]);
+    render(
+      <ChatProvider>
+        <TestConsumer />
+        <ReactionProbe />
+      </ChatProvider>,
+    );
+
+    await user.click(screen.getByText("Open Chat"));
+    mockInvoke.mockClear();
+    mockInvoke.mockResolvedValue(undefined);
+    await user.click(screen.getByText("Send Reaction"));
+
+    await waitFor(() => expect(screen.getByTestId("reactors").textContent).not.toBe(""));
+    const reactors = JSON.parse(screen.getByTestId("reactors").textContent || "{}") as Record<string, string[]>;
+    expect(reactors["👍"]).toEqual(["a".repeat(64)]);
+    // And explicitly not the sentinel the old code wrote.
+    expect(reactors["👍"]).not.toContain("self");
+  });
+
+  it("failed reaction insert rolls back the optimistic key", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockResolvedValue([
+      { id: "msg-1", content: "hi", direction: "received", timestamp: 1, reactions: {} },
+    ]);
+    render(
+      <ChatProvider>
+        <TestConsumer />
+        <ReactionProbe />
+      </ChatProvider>,
+    );
+
+    await user.click(screen.getByText("Open Chat"));
+    mockInvoke.mockClear();
+    // Reject only the reaction write.
+    mockInvoke.mockImplementation((cmd: string) =>
+      cmd === "send_reaction" ? Promise.reject("nope") : Promise.resolve([]),
+    );
+    await user.click(screen.getByText("Send Reaction"));
+
+    // The user must not be left believing a reaction was delivered.
+    await waitFor(() =>
+      expect(appState.addToast).toHaveBeenCalledWith(
+        expect.stringContaining("Reaction failed"),
+        "error",
+      ),
+    );
+    expect(screen.getByTestId("reactors").textContent).toBe("{}");
+  });
+
   it("handleMarkConversationRead calls mark_messages_read", async () => {
     const user = userEvent.setup();
     mockInvoke.mockResolvedValue([]); // default for load_messages
     render(
       <ChatProvider>
         <TestConsumer />
-      </ChatProvider>
+      </ChatProvider>,
     );
 
     // Need activeConversationId first — open a chat

@@ -1072,12 +1072,28 @@ impl DoubleRatchet {
             ($err:expr) => {{
                 tent_root.zeroize();
                 tent_chain_opt.zeroize();
+                // Zero on every exit, including the ones taken before the chain
+                // is loaded (where it is still all zeros and this is a no-op).
+                tent_chain.zeroize();
                 for (_, _, k) in staged_skips.iter_mut() {
                     k.zeroize();
                 }
                 return Err($err);
             }};
         }
+
+        // `tent_chain` is declared up front, all-zero, and filled in *after* the
+        // ratchet step so that `scrub_and!` can scrub it on every exit above as
+        // well as below. It is a separate binding from `tent_chain_opt` because
+        // `Option<[u8; 32]>` is `Copy`: taking the chain out of the `Option`
+        // copies the bytes rather than moving them, and `[u8; 32]` has no `Drop`
+        // to clean up the copy. Without this, every `scrub_and!` exit below
+        // returned with the live receive chain key live on the stack — including
+        // the gap-limit and MAX_SKIP rejects, which any unauthenticated peer can
+        // reach with one garbage frame, and the normal AEAD-failure path. The
+        // module states this invariant twice in its own comments and it did not
+        // hold.
+        let mut tent_chain = [0u8; 32];
 
         // If peer sent a new ratchet key, compute the DH ratchet on locals.
         let mut ratchet_reset = None;
@@ -1143,32 +1159,60 @@ impl DoubleRatchet {
             tent_epoch = tent_epoch.wrapping_add(1);
         }
 
-        let mut tent_chain = match tent_chain_opt {
+        // `tent_chain` is a SECOND, independent copy of the bytes held in
+        // `tent_chain_opt`: `Option<[u8; 32]>` is `Copy`, so the `match` above
+        // copies rather than moves, and `[u8; 32]` has no `Drop` to zeroize it.
+        // `scrub_and!` therefore has to be told about *both* names, and the
+        // success path has to scrub it too.
+        //
+        // Without this, every one of the `scrub_and!` exits below returned with
+        // the live receive chain key on the stack — including the gap-limit and
+        // MAX_SKIP rejects, which any unauthenticated peer can trigger with one
+        // garbage frame, and the normal AEAD-failure path. The module's own
+        // comments state the invariant twice ("Every secret computed here lives
+        // in locals and is zeroized on any error path"), and it did not hold.
+        tent_chain = match tent_chain_opt {
             Some(c) => c,
             None => scrub_and!(CryptoError::DoubleRatchetError("no recv chain key".into(),)),
         };
+        tent_chain_opt = None;
 
         // ── Cap gap size: reject absurd message numbers before burning CPU ──
         // `checked_sub` is belt-and-braces: the guards above already make an
         // underflow unreachable, but with `overflow-checks = true` +
         // `panic = "abort"` any future refactor that relaxes them would turn
         // this into a remotely-triggerable process abort. Fail closed.
+        // `message_number` is a `u64` read straight off the wire, so the bound must
+        // be compared in `u64` and not after a cast to `usize`. On a 32-bit
+        // target a peer sending `0x1_0000_0005` truncates the gap to 5, passes
+        // `MAX_GAP_DERIVATION`, and the derivation loop below runs billions of
+        // HKDF evaluations on an async task — a hung task rather than a bounded
+        // error. The cast itself is now confined to the loop it bounds.
         let gap = match message_number.checked_sub(tent_recv_num) {
-            Some(g) => g as usize,
+            Some(g) => g,
             None => scrub_and!(CryptoError::DoubleRatchetError(format!(
                 "message number {} is behind the receive counter {}",
                 message_number, tent_recv_num
             ))),
         };
-        if gap > MAX_GAP_DERIVATION {
+        if gap > MAX_GAP_DERIVATION as u64 {
             scrub_and!(CryptoError::DoubleRatchetError(format!(
-                "message number {} is {} messages ahead — exceeds max gap derivation ({})",
+                "message number {} is {} messages ahead, exceeds max gap derivation ({})",
                 message_number, gap, MAX_GAP_DERIVATION
             )));
         }
 
         // ── Derive through gap, staging intermediate keys ──
+        //
+        // `gap` is a `u64` read off the wire, so the bound is enforced in that
+        // type and the cast happens here rather than at the comparison. The
+        // explicit counter keeps the guarantee local to this loop instead of
+        // depending on a reasoning chain two scopes up.
+        let mut derived = 0u64;
         while tent_recv_num < message_number {
+            if derived >= MAX_GAP_DERIVATION as u64 {
+                scrub_and!(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
+            }
             if dr.skipped_keys.len() + staged_skips.len() >= MAX_SKIP {
                 scrub_and!(CryptoError::MaxSkippedKeysExceeded(MAX_SKIP));
             }
@@ -1177,6 +1221,7 @@ impl DoubleRatchet {
             tent_chain.zeroize();
             tent_chain = next_chain;
             tent_recv_num += 1;
+            derived += 1;
         }
 
         // Derive the message key for THIS message
@@ -1188,16 +1233,23 @@ impl DoubleRatchet {
         // an attacker stripped or altered `ratchet_key` / `message_number`,
         // this AAD differs from the one used at seal time and the tag fails.
         let full_aad = Self::dr_header_aad(aad, ratchet_key, message_number);
+        // `tent_chain` is still live here even on success: it is this message's
+        // *input* key, and `next_chain` (moved into the result) is the only
+        // copy that belongs to the caller. The caller commits `next_chain`, and
+        // `tent_chain` has to be scrubbed on every path.
         match Self::decrypt_with_key(&msg_key.0, ciphertext, nonce, &full_aad) {
-            Ok(plaintext) => Ok(TentativeReceive {
-                root_key: tent_root,
-                recv_chain_key: next_chain,
-                their_ratchet_pub: tent_their_pub,
-                recv_message_number: tent_recv_num + 1,
-                ratchet_reset,
-                staged_skips,
-                plaintext,
-            }),
+            Ok(plaintext) => {
+                tent_chain.zeroize();
+                Ok(TentativeReceive {
+                    root_key: tent_root,
+                    recv_chain_key: next_chain,
+                    their_ratchet_pub: tent_their_pub,
+                    recv_message_number: tent_recv_num + 1,
+                    ratchet_reset,
+                    staged_skips,
+                    plaintext,
+                })
+            }
             Err(e) => {
                 drop(msg_key); // MessageKey zeroizes its bytes
                 let mut discard = next_chain;

@@ -294,6 +294,22 @@ describe("SettingsView", () => {
     expect((select as HTMLSelectElement).value).toBe(String(25 * 1024 ** 3));
   });
 
+  it("shows a non-preset cap as itself, not snapped down to a preset", () => {
+    // The bug this guards: the selected value was snapped *down* to the nearest
+    // preset while `isCustom` was computed by an independent `includes` check,
+    // so for any cap between two presets (here 2 GiB) the two disagreed — the
+    // `<select>` was given "1 GB" while the "2 GB (current)" option sat
+    // unselected below it. On the one control whose consequence is permanent
+    // message deletion, the UI was claiming a cap the backend did not have.
+    settingsState.securityConfig = { storage_cap_bytes: 2 * 1024 ** 3 };
+    render(<SettingsView />);
+    const select = screen.getByLabelText("Maximum stored message history");
+    expect((select as HTMLSelectElement).value).toBe(String(2 * 1024 ** 3));
+    // And the option is actually present, since a `<select>` whose value matches
+    // no option renders blank.
+    expect(screen.getByRole("option", { name: "2 GB (current)" })).toBeInTheDocument();
+  });
+
   it("falls back to the 10 GB default when the backend reports 0", () => {
     // `storage_cap_bytes: 0` means "use the default" — `AppState::new` builds
     // `SecurityConfig::default()` on every launch with no config file, and

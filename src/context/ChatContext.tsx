@@ -76,6 +76,8 @@ interface ChatContextValue {
   handleDisconnect: () => Promise<void>;
   handleReconnect: () => Promise<void>;
   handleSendFile: () => Promise<void>;
+  /** Send a file whose path is already known (drag-and-drop). */
+  sendFileAtPath: (filePath: string) => Promise<void>;
   handleExportConversation: () => Promise<void>;
   handleSetRetention: (policy: string, durationSecs: number | null) => Promise<void>;
   handleGenerateInvite: () => Promise<void>;
@@ -109,7 +111,7 @@ export function useChat(): ChatContextValue {
 }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const { addToast, setView } = useApp();
+  const { addToast, setView, identity } = useApp();
   const t = useT();
 
   // ─── State ───
@@ -154,6 +156,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // key no longer invalidates them).
   const peerKeyHex = connection?.peer_key_hex;
 
+  // Mirror of `activeConversationId` for the long-lived listeners, plus a single
+  // setter that writes *both* synchronously.
+  //
+  // Syncing the ref only in an effect leaves it one commit stale, and the
+  // `m2m://connection` handler reads it to decide whether an inbound
+  // `established` event may take over the view (see `adoptingPeer` there). In
+  // that one-commit window the ref still held the previous value — so a peer
+  // completing a handshake immediately after the user opened a different
+  // conversation could still hijack it, which is the misdelivery the guard
+  // exists to prevent.
+  const activeConversationIdRef = useRef(activeConversationId);
+  const setActiveConversation = useCallback((peerKeyHex: string | null) => {
+    activeConversationIdRef.current = peerKeyHex;
+    setActiveConversationId(peerKeyHex);
+  }, []);
+
   const handleSendMessage = useCallback(async (content: string): Promise<ChatMessage> => {
     if (!peerKeyHex) throw new Error("Not connected");
     const msg = await invoke<ChatMessage>("send_message", {
@@ -189,6 +207,45 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
   }, [peerKeyHex, setView]);
 
+  /// Send one file at a known path and show the optimistic local row.
+  ///
+  /// Split out of `handleSendFile` so drag-and-drop can use it. The drop
+  /// handler used to toast `"Dropped <name> — sending..."` and then call the
+  /// picker-based handler, so the dropped file was never sent and the toast
+  /// named a file that was not being transmitted.
+  const sendFileAtPath = useCallback(async (filePath: string) => {
+    if (!peerKeyHex) throw new Error("Not connected");
+    await invoke("send_file", { peerKeyHex: peerKeyHex, filePath });
+    const filename = filePath.split(/[\\/]/).pop() || "file";
+    // An optimistic local row so the send feels immediate. Built as a
+    // `ChatMessage` rather than cast into one: the previous `as ChatMessage`
+    // suppressed the compiler on exactly the fields that reach a className
+    // and a text node, including a peer-influenced `filename`.
+    //
+    // `crypto.randomUUID()` rather than `Date.now().toString()`: the id is
+    // used as a React key and as the handle later edits and reactions
+    // address, and two sends in the same millisecond produced a duplicate key.
+    //
+    // `sender_peer_key_hex` is left empty, matching `ChatMessage::new` on the
+    // Rust side: it names the *sender*, and for a 1:1 message that is implicit
+    // from the conversation. Setting it to the remote peer's key made
+    // `MessageBubble` render the peer's key prefix as the label on the user's
+    // own outgoing bubble.
+    const optimistic: ChatMessage = {
+      id: crypto.randomUUID(),
+      content: `File request sent: ${filename}`,
+      direction: "sent",
+      timestamp: Math.floor(Date.now() / 1000),
+      read_at: null,
+      edited_at: null,
+      deleted: false,
+      expires_at: null,
+      reactions: {},
+      sender_peer_key_hex: "",
+    };
+    setMessages((prev) => [...prev, optimistic]);
+  }, [peerKeyHex]);
+
   const handleSendFile = useCallback(async () => {
     if (!peerKeyHex) return;
     try {
@@ -196,33 +253,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const selected = await open({ multiple: false, title: "Select file to send" });
       if (!selected) return;
       const filePath = typeof selected === "string" ? selected : selected;
-      await invoke("send_file", { peerKeyHex: peerKeyHex, filePath });
-      const filename = filePath.split(/[\\/]/).pop() || "file";
-      // An optimistic local row so the send feels immediate. Built as a
-      // `ChatMessage` rather than cast into one: the previous `as ChatMessage`
-      // suppressed the compiler on exactly the fields that reach a className
-      // and a text node, including a peer-influenced `filename`.
-      //
-      // `crypto.randomUUID()` rather than `Date.now().toString()`: the id is
-      // used as a React key and as the handle later edits and reactions
-      // address, and two sends in the same millisecond produced a duplicate key.
-      const optimistic: ChatMessage = {
-        id: crypto.randomUUID(),
-        content: `File request sent: ${filename}`,
-        direction: "sent",
-        timestamp: Math.floor(Date.now() / 1000),
-        read_at: null,
-        edited_at: null,
-        deleted: false,
-        expires_at: null,
-        reactions: {},
-        sender_peer_key_hex: peerKeyHex,
-      };
-      setMessages((prev) => [...prev, optimistic]);
+      await sendFileAtPath(filePath);
     } catch (e) {
       addToast("Failed to send file: " + errorMessage(e), "error");
     }
-  }, [peerKeyHex, addToast]);
+  }, [peerKeyHex, addToast, sendFileAtPath]);
 
   const handleAcceptFileTransfer = useCallback(async (req: FileRequest) => {
     try {
@@ -322,7 +357,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     try {
       const info = await invoke<ConnectionInfo>("connect_to_peer", { inviteStr: inviteToConnect });
       setConnection(info);
-      setActiveConversationId(info.peer_key_hex || null);
+      setActiveConversation(info.peer_key_hex || null);
       if (info.peer_key_hex && (namingMyName || namingTheirName)) {
         await invoke("send_conversation_names", {
           peerKeyHex: info.peer_key_hex, myName: namingMyName, theirName: namingTheirName,
@@ -337,10 +372,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, [inviteToConnect, namingMyName, namingTheirName, addToast, setView]);
+  }, [inviteToConnect, namingMyName, namingTheirName, addToast, setView, setActiveConversation]);
 
   const handleOpenChat = useCallback(async (conv: ConversationEntry) => {
-    setActiveConversationId(conv.peer_key_hex);
+    setActiveConversation(conv.peer_key_hex);
     setRetentionPolicy(conv.retention_policy || "none");
     setView("chat");
     // The backend is the only thing that knows whether this peer was ever
@@ -383,7 +418,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch { /* noop */ }
     // Refresh conversation list to update unread counts
     loadConversations();
-  }, [setView, loadConversations]);
+  }, [setView, loadConversations, setActiveConversation]);
 
   // Owns the delete, including the IPC call.
   //
@@ -407,6 +442,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [loadConversations, addToast]);
 
   // ─── Reaction handlers ───
+  //
+  // The optimistic write uses our **real** Ed25519 key, not a `"self"`
+  // sentinel. The backend persists the key (`send_reaction` →
+  // `upsert_reaction(..., &peer_key_hex, ...)`), so a sentinel diverged from
+  // the stored shape the instant the page was reloaded: the chip went
+  // unhighlighted and a second click re-sent the reaction instead of removing
+  // it. It also violated `events.ts`, which validates every reactor with
+  // `isPeerKeyHex` — so `"self"` was a value this app's own event boundary
+  // would reject. `MessageBubble` compares against the same key.
+  const myPeerKey = identity?.public_key_hex ?? "";
 
   const handleSendReaction = useCallback(async (messageId: string, reaction: string) => {
     if (!peerKeyHex) return;
@@ -417,8 +462,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (m.id !== messageId) return m;
         const reactions = { ...m.reactions };
         const reactors = reactions[reaction] || [];
-        if (!reactors.includes("self")) {
-          reactions[reaction] = [...reactors, "self"];
+        if (myPeerKey && !reactors.includes(myPeerKey)) {
+          reactions[reaction] = [...reactors, myPeerKey];
         }
         return { ...m, reactions };
       }));
@@ -427,13 +472,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // on failure — otherwise the user sees a reaction that the peer will
       // never receive, and believes it was delivered.
       addToast("Reaction failed: " + errorMessage(e), "error");
-      setMessages((prev) => prev.map((m) =>
-        m.id === messageId
-          ? { ...m, reactions: { ...m.reactions, [reaction]: (m.reactions[reaction] ?? []).filter((r) => r !== "self") } }
-          : m,
-      ));
+      // Delete the key when nothing is left, exactly as `handleRemoveReaction`
+      // and the `m2m://reaction` listener do. Leaving `{"👍": []}` behind makes
+      // `MessageBubble` render a chip reading "0" for a reaction that never
+      // reached the peer — the same phantom-state problem in a new place.
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...m.reactions };
+        const remaining = (reactions[reaction] || []).filter((r) => r !== myPeerKey);
+        if (remaining.length === 0) {
+          delete reactions[reaction];
+        } else {
+          reactions[reaction] = remaining;
+        }
+        return { ...m, reactions };
+      }));
     }
-  }, [peerKeyHex, addToast]);
+  }, [peerKeyHex, addToast, myPeerKey]);
 
   const handleRemoveReaction = useCallback(async (messageId: string, reaction: string) => {
     if (!peerKeyHex) return;
@@ -443,7 +498,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m;
         const reactions = { ...m.reactions };
-        const reactors = (reactions[reaction] || []).filter((r: string) => r !== "self");
+        const reactors = (reactions[reaction] || []).filter((r: string) => r !== myPeerKey);
         if (reactors.length === 0) {
           delete reactions[reaction];
         } else {
@@ -453,13 +508,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }));
     } catch (e) {
       addToast("Could not remove reaction: " + errorMessage(e), "error");
+      // Roll back by re-adding our key — the state before the failed removal.
       setMessages((prev) => prev.map((m) =>
-        m.id === messageId
-          ? { ...m, reactions: { ...m.reactions, [reaction]: [...new Set([...(m.reactions[reaction] ?? []), "self"])] } }
+        m.id === messageId && myPeerKey
+          ? { ...m, reactions: { ...m.reactions, [reaction]: [...new Set([...(m.reactions[reaction] ?? []), myPeerKey])] } }
           : m,
       ));
     }
-  }, [peerKeyHex, addToast]);
+  }, [peerKeyHex, addToast, myPeerKey]);
 
   const handleReconnect = useCallback(async () => {
     if (!connection?.peer_key_hex) return;
@@ -513,6 +569,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setMessages((prev) => prev.map((m) => m.id === messageId ? updated : m));
     } catch (e) {
       addToast("Edit failed: " + errorMessage(e), "error");
+      // Rethrow. `MessageBubble` awaited this and closed its editor
+      // unconditionally, so a failed save discarded the user's retyped text and
+      // looked identical to a successful edit. The bubble now keeps the editor
+      // open on rejection; the toast above is already the user-facing report.
+      throw e;
     }
   }, [peerKeyHex, addToast]);
 
@@ -614,7 +675,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // gives the listeners live translations without any re-registration.
   const tRef = useRef(t);
   useEffect(() => { tRef.current = t; }, [t]);
-  const activeConversationIdRef = useRef(activeConversationId);
   const mutedConversationsRef = useRef(mutedConversations);
   useEffect(() => { notifPermissionRef.current = notifPermission; }, [notifPermission]);
   useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
@@ -630,13 +690,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (navIntentRef.current) {
       const { peerKeyHex } = navIntentRef.current;
       navIntentRef.current = null;
-      setActiveConversationId(peerKeyHex);
+      setActiveConversation(peerKeyHex);
       setView("chat");
       invoke("load_messages", { peerKeyHex })
         .then((r) => setMessages(asList<ChatMessage>(r)))
         .catch((e) => addToast("Could not open conversation: " + errorMessage(e), "error"));
     }
-  }, [activeConversationId, setView, addToast]);
+  }, [setActiveConversation, setView, addToast]);
 
   useEffect(() => {
     const unlistenMsg = listen("m2m://message", (event) => {
@@ -723,28 +783,63 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return;
       }
       const stateStr = conn.state;
-      setConnection({
-        state: stateStr,
-        peer_fingerprint: conn.peer_fingerprint,
-        peer_verified: conn.peer_verified,
-        peer_key_hex: conn.peer_key_hex,
-      });
+      // A connection event is a statement about ONE peer, not about the session
+      // the user is currently looking at.
+      //
+      // `setActiveConversationId(conn.peer_key_hex)` used to run unconditionally
+      // for every `established` event, so any peer completing a handshake — a
+      // known contact, a family member, or with `require_known_contact` off any
+      // stranger holding an invite — silently switched the open conversation to
+      // itself and navigated to the chat view.
+      //
+      // The composer text is local state in ChatView and is never cleared on a
+      // conversation change, and `peerKeyHex` (which every send handler closes
+      // over) followed the switch. So a message the user was composing for peer
+      // B, with peer B still on screen and in the header, was delivered to peer
+      // C. The `m2m://message` listener below was already hardened against
+      // cross-conversation contamination; this was the same hole one level up.
+      //
+      // Adopt the connection only when no peer is already open, or when it is
+      // this same peer. Otherwise update the conversation list (below) and
+      // leave the view alone.
+      const openPeer = activeConversationIdRef.current;
+      const adoptingPeer = openPeer === null || openPeer === conn.peer_key_hex;
+
+      if (adoptingPeer) {
+        setConnection({
+          state: stateStr,
+          peer_fingerprint: conn.peer_fingerprint,
+          peer_verified: conn.peer_verified,
+          peer_key_hex: conn.peer_key_hex,
+        });
+      }
       if (stateStr === "established") {
+        if (!adoptingPeer) {
+          // Not ours to adopt — but the conversation list should still reflect
+          // that this peer is now online.
+          try {
+            setConversations(asList<ConversationEntry>(await invoke("list_conversations")));
+          } catch { /* noop */ }
+          return;
+        }
         setReconnecting(false);
         setReconnectAttempt(0);
-        setActiveConversationId(conn.peer_key_hex);
+        // `setActiveConversation` writes both the state and the ref, synchronously.
+        setActiveConversation(conn.peer_key_hex);
         setView("chat");
         try {
           setMessages(asList<ChatMessage>(await invoke("load_messages", { peerKeyHex: conn.peer_key_hex })));
         } catch { /* noop */ }
       } else if (stateStr === "disconnected") {
+        // Only meaningful for the conversation actually on screen.
+        if (!adoptingPeer) return;
         // For verified peers, stay on ChatView so user can attempt reconnect.
         // For unverified peers, go back to hub (no reconnect possible).
         if (!conn.peer_verified) {
           setView("hub");
           setConnection(null);
           setMessages([]);
-          setActiveConversationId(null);
+          setActiveConversation(null);
         }
       }
       try { setConversations(asList<ConversationEntry>(await invoke("list_conversations"))); } catch { /* noop */ }
@@ -944,8 +1039,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
     // Only genuinely stable dependencies. Adding any state value here tears
     // down and re-registers all 13 listeners, which both churns the IPC bridge
-    // and opens a window where incoming messages are dropped.
-  }, [setView, addToast]);
+    // and opens a window where incoming messages are dropped. `addToast` and
+    // `setView` are stable `useCallback`s; `setActiveConversation` is too (empty
+    // deps), so listing it here does *not* re-register anything — and omitting
+    // it would be a stale closure over a function that writes the ref the
+    // connection listener reads.
+  }, [setView, addToast, setActiveConversation]);
 
   /**
    * Memoized — this is the single biggest render-cost fix in the app.
@@ -967,6 +1066,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     generatedInvite,
     retentionPolicy, setRetentionPolicy, retentionDuration, setRetentionDuration,
     handleSendMessage, handleVerify, handleDisconnect, handleReconnect, handleSendFile,
+    sendFileAtPath,
     handleExportConversation, handleSetRetention,
     handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
     handleDeleteConversation,
@@ -983,6 +1083,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setMessages, setInviteToConnect, setNamingMyName, setNamingTheirName,
     setRetentionPolicy, setRetentionDuration,
     handleSendMessage, handleVerify, handleDisconnect, handleReconnect, handleSendFile,
+    sendFileAtPath,
     handleExportConversation, handleSetRetention,
     handleGenerateInvite, copyInvite, handleConnect, handleOpenChat,
     handleDeleteConversation,
@@ -991,6 +1092,53 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     mutedConversations, handleMuteConversation, handleUnmuteConversation,
     handleAcceptFileTransfer, handleRejectFileTransfer,
   ]);
+
+  // ─── Scrub decrypted state when the vault locks ───
+  //
+  // `lock_vault` zeroizes the Rust keys, closes every store, drops the storage
+  // key and emits `m2m://vault-locked`. `AppContext` handles that event, but
+  // everything decrypted lives *here*, in a provider that sits above the view
+  // switch and is therefore never unmounted by navigating to the unlock screen.
+  //
+  // The result was: after idle-lock or "Lock Now", every decrypted message body,
+  // the peer fingerprint, pending file requests and a still-valid one-time invite
+  // (with the user's own address embedded in it) stayed resident in JS heap for
+  // the life of the process and reappeared the instant `messages` was next
+  // rendered. The Rust half of this fix existed; the React half did not.
+  //
+  // `GroupChatView` holds its messages in component state and *is* unmounted by
+  // the view switch, so only this long-lived provider leaks.
+  useEffect(() => {
+    let disposed = false;
+    const stop = listen("m2m://vault-locked", () => {
+      if (disposed) return;
+      setMessages([]);
+      setConnection(null);
+      setFileRequests([]);
+      setTransfers([]);
+      setConversations([]);
+      setTypingPeers([]);
+      setActiveConversation(null);
+      setGeneratedInvite("");
+      setInviteToConnect("");
+      setInviteValid(false);
+      setIsConnecting(false);
+      setReconnecting(false);
+      setReconnectAttempt(0);
+      // Also drop the per-conversation naming/retention/mute state: it is
+      // identifying metadata and describes a conversation the vault can no
+      // longer decrypt.
+      setRetentionPolicy("none");
+      setRetentionDuration("86400");
+      setNamingMyName("");
+      setNamingTheirName("");
+      navIntentRef.current = null;
+    }).catch(() => {});
+    return () => {
+      disposed = true;
+      stop.then((f) => f()).catch(() => {});
+    };
+  }, []);
 
   return (
     <ChatContext.Provider value={value}>

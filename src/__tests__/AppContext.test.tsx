@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, screen, waitFor } from "@testing-library/react";
 import { render } from "./setup";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { useApp, AppProvider } from "../context/AppContext";
+import { VaultProvider, useVault } from "../context/VaultContext";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const { eventHandlers } = vi.hoisted(() => ({
@@ -26,6 +28,30 @@ function TestConsumer() {
       <button onClick={() => setView("chat")}>Set Chat</button>
       <button onClick={() => addToast("Test Toast", "info")}>Add Toast</button>
       <button onClick={() => toasts[0] && removeToast(toasts[0].id)}>Remove Toast</button>
+      <button onClick={() => setView("hub")}>Set Hub</button>
+    </div>
+  );
+}
+
+/** Drives the real `handleUnlockVault` from `VaultContext`. */
+function UnlockDriver() {
+  const { handleUnlockVault } = useVault();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      <button
+        onClick={async () => {
+          try {
+            await handleUnlockVault("correct horse battery staple");
+            setError(null);
+          } catch (e) {
+            setError(typeof e === "string" && e.includes("No account") ? "no-match" : "other");
+          }
+        }}
+      >
+        Unlock
+      </button>
+      <span data-testid="unlock-error">{error ?? "none"}</span>
     </div>
   );
 }
@@ -161,5 +187,86 @@ describe("AppContext", () => {
     await waitFor(() => expect(screen.getByTestId("view")).toHaveTextContent("hub"));
     expect(screen.getByTestId("vault-initialized")).toHaveTextContent("true");
     expect(screen.getByTestId("identity")).toHaveTextContent("ABCD");
+  });
+
+  // ─── The unlock path must actually navigate ───
+  //
+  // `handleUnlockVault` used to `await invoke("unlock_vault")` and then call
+  // `setView("hub")`. `setView` is gated on `unlockedRef.current`, which is
+  // written *only* by `refreshVault` and the vault-locked handler — and
+  // `refreshVault` last ran during the mount effect. So after a correct
+  // passphrase the guard still read `false`, the navigation was silently
+  // dropped, and the user was left staring at the unlock screen having typed
+  // the right passphrase, with no error and no movement.
+  //
+  // `VaultProvider` now routes the unlock through `refreshVault` instead. This
+  // drives the real thing rather than re-implementing it: `VaultProvider`
+  // inside `AppProvider`, with the backend flipping to `unlocked: true` when
+  // `unlock_vault` is invoked.
+
+  it("navigates to the hub after a successful unlock", async () => {
+    const invoke = (await import("@tauri-apps/api/core")).invoke as ReturnType<typeof vi.fn>;
+    let vaultUnlocked = false;
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "unlock_vault") {
+        vaultUnlocked = true; // the backend now considers the vault open
+        return null;
+      }
+      if (cmd === "get_vault_status") return { initialized: true, unlocked: vaultUnlocked };
+      if (cmd === "get_identity") {
+        return { fingerprint: "ABCD", public_key_hex: "ff", has_identity: true };
+      }
+      return null;
+    });
+
+    render(
+      <AppProvider>
+        <VaultProvider>
+          <UnlockDriver />
+          <TestConsumer />
+        </VaultProvider>
+      </AppProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("view")).toHaveTextContent("vault"));
+
+    // Confirm navigation is refused while locked, so the later assertion cannot
+    // pass for the wrong reason.
+    await userEvent.click(screen.getByText("Set Hub"));
+    expect(screen.getByTestId("view")).toHaveTextContent("vault");
+
+    // The real unlock path.
+    await userEvent.click(screen.getByText("Unlock"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("view")).toHaveTextContent("hub"),
+    );
+    expect(screen.getByTestId("identity")).toHaveTextContent("ABCD");
+  });
+
+  it("stays on the lock screen when the unlock is rejected", async () => {
+    const invoke = (await import("@tauri-apps/api/core")).invoke as ReturnType<typeof vi.fn>;
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "unlock_vault") throw "No account matches this passphrase.";
+      if (cmd === "get_vault_status") return { initialized: true, unlocked: false };
+      if (cmd === "get_identity") {
+        return { fingerprint: "ABCD", public_key_hex: "ff", has_identity: true };
+      }
+      return null;
+    });
+
+    render(
+      <AppProvider>
+        <VaultProvider>
+          <UnlockDriver />
+          <TestConsumer />
+        </VaultProvider>
+      </AppProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("view")).toHaveTextContent("vault"));
+
+    await userEvent.click(screen.getByText("Unlock"));
+
+    await waitFor(() => expect(screen.getByTestId("unlock-error")).toHaveTextContent("no-match"));
+    expect(screen.getByTestId("view")).toHaveTextContent("vault");
   });
 });

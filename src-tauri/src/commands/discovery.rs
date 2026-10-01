@@ -346,12 +346,15 @@ pub async fn connect_discovered_peer(
         last_hb_ack: None,
     };
 
+    // Bound to a name so the receive loop's teardown paths can identify THIS
+    // session by `Arc::ptr_eq`. `connections` is keyed by peer key alone, so a
+    // bare `remove(&peer_key_hex)` from a stale task deletes whatever now holds
+    // that slot — including a live replacement. See
+    // `commands::network::remove_own_connection`.
+    let my_conn = Arc::new(tokio::sync::Mutex::new(conn));
     {
         let mut conns = state.connections.write().await;
-        conns.insert(
-            peer_key_hex.clone(),
-            Arc::new(tokio::sync::Mutex::new(conn)),
-        );
+        conns.insert(peer_key_hex.clone(), my_conn.clone());
     }
 
     // Emit connection event to frontend
@@ -379,6 +382,7 @@ pub async fn connect_discovered_peer(
         state.inner().clone(),
         read_half,
         peer_key_hex.clone(),
+        my_conn,
         None,
     );
 
