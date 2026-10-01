@@ -5473,7 +5473,7 @@ mod tests {
         {
             let store = MessageStore::open(&db_path).unwrap();
             store.ensure_conversation("c1", &[0x11; 32]).unwrap();
-            for id in ["m-gone", "m-shredded", "m-keep"] {
+            for id in ["m-gone", "m-shredded", "m-keep", "m-tombstone"] {
                 store
                     .store_message_secure(id, "c1", "sent", b"content", 1000, None, true, &test_key())
                     .unwrap();
