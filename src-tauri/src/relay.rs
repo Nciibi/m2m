@@ -603,6 +603,12 @@ pub async fn wait_for_bridge(
 /// It now delegates to the single shared implementation, which is the whole
 /// point: the relay cannot fall behind the direct path again, because there is
 /// no second copy to fall behind.
+///
+/// The per-IP `ConnectionLimiter` accounting lives in [`wait_for_bridge`]
+/// rather than here, because that is where the direct path's equivalent lives
+/// (`start_listening`): the limiter bounds *attempts* per source address, and
+/// the bridge has exactly one source address — the relay — no matter how many
+/// peers stand behind it.
 async fn handle_relay_incoming_with_frame(
     stream: TcpStream,
     peer_addr: SocketAddr,
