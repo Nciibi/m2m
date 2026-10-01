@@ -120,8 +120,8 @@ pub async fn set_discovery_config(
         // the toggle could never be re-enabled because the guard on this branch
         // is "not already running". A failed start looked exactly like a
         // working one.
-        if let Err(e) = lan_discovery::start(listen_addr, lan_state.clone(), eid, lan_cancel.clone())
-            .await
+        if let Err(e) =
+            lan_discovery::start(listen_addr, lan_state.clone(), eid, lan_cancel.clone()).await
         {
             return Err(match e {
                 lan_discovery::LanDiscoveryError::TorEnabled => AppError::blocked(
