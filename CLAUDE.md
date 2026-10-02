@@ -326,6 +326,22 @@ exists because the shell chrome (sidebar, right panel, sticky-header scrim, the
 shimmer and cursor sheens) previously carried hardcoded dark rgba() values in
 theme-agnostic files, which meant a dark sidebar rendered on the light theme.
 
+**This rule is now enforced, not just stated.**
+`src/__tests__/designTokens.test.ts` fails the build on a colour literal in any
+`.ts`/`.tsx`/`.css` outside the two token files, and on any `var(--token)` whose
+definition is missing. Writing the test found **41 further violations** that the
+prose rule had been letting through for months: seven `color="white"` in `.tsx`
+(white-on-white on the light theme), a runtime `hsl()` in `utils.ts::hashToColor`
+that put every avatar outside the palette, and ~30 inline `rgba()` in the
+component sheets. Both were fixed rather than grandfathered.
+
+Two named exceptions, both enforced:
+- `App.tsx` — the sanctioned `var(--token, <literal>)` fallback.
+- `context/ThemeContext.tsx` — `DEFAULT_ACCENT`, which seeds the `--color-accent`
+  custom property at runtime and so cannot itself be a token. A separate check
+  asserts it is the **only** place `#6366f1` appears, because it used to be
+  duplicated in `SettingsView`'s reset handler.
+
 `--focus-ring` must be used for `:focus-visible` outlines rather than a bare
 1px-equivalent border, since a single flat ring disappears against both the dark
 canvas and the light accent surfaces.
