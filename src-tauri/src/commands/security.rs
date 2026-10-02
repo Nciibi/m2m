@@ -175,10 +175,41 @@ pub async fn get_capture_capability() -> Result<crate::window_security::CaptureC
     Ok(window_security::platform_capability())
 }
 
+/// Arm the Rust-side clipboard auto-clear deadline.
+///
+/// `SecurityConfig::clipboard_clear_secs` had **no reader in Rust** before this:
+/// the timer lived entirely in the webview (`SettingsContext.scheduleClipboard-
+/// Clear`), so a hung or crashed renderer left a copied passphrase in the OS
+/// clipboard indefinitely. The frontend still schedules its own timer — this is
+/// the backstop that holds when the renderer does not.
+#[tauri::command]
+pub async fn arm_clipboard_auto_clear(
+    state: State<'_, Arc<AppState>>,
+    secs: u64,
+) -> Result<(), AppError> {
+    crate::maintenance::arm_clipboard_deadline(&state, secs);
+    Ok(())
+}
+
+/// Report user activity, pushing the Rust-side idle-lock deadline out.
+///
+/// The webview's `useIdleDetection` remains the primary timer; this exists so an
+/// idle period still ends in a locked vault when the renderer's timer stops
+/// firing. `secs` comes from `SecurityConfig::idle_lock_secs`; 0 disarms
+/// auto-lock entirely.
+#[tauri::command]
+pub async fn note_activity(
+    state: State<'_, Arc<AppState>>,
+    secs: u64,
+) -> Result<(), AppError> {
+    crate::maintenance::note_activity(&state, secs);
+    Ok(())
+}
+
 /// Clear the system clipboard.
 ///
-/// Called by the frontend after the auto-clear timer fires,
-/// or manually from the settings panel.
+/// Called by the frontend after the auto-clear timer fires, by the Rust-side
+/// deadline task, or manually from the settings panel.
 #[tauri::command]
 pub async fn clear_clipboard() -> Result<(), AppError> {
     #[cfg(target_os = "windows")]
