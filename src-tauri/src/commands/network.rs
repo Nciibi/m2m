@@ -2692,6 +2692,16 @@ async fn handle_message_update_frame(
                                         tracing::warn!(error = %e, "failed to store reaction");
                                     }
                                 }
+                                // Inbound reactions are a `messages.db` write
+                                // path like the outbound ones, so the cap
+                                // applies here too — a peer sending repeated
+                                // Reaction frames must not be able to grow the
+                                // store past its ceiling.
+                                crate::maintenance::enforce_cap(
+                                    app_handle,
+                                    store,
+                                    storage_cap,
+                                );
                             }
                         }
                         if !accepted {
