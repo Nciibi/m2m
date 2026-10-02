@@ -149,7 +149,15 @@ fn reject_unusable_external_addr(
     if addr.port() == 0 {
         return Err(unusable("external port is 0, so nothing is reachable"));
     }
-    if !addr.ip().is_global_unicast() {
+    // `is_global_unicast` is on `Ipv4Addr`/`Ipv6Addr`, not on `IpAddr`, so it has
+    // to be dispatched. `127.0.0.1`, `192.168.x.x`, `10.x.x.x`, link-local and
+    // unique-local addresses all answer false, which is the point: none of them
+    // is reachable by a peer.
+    let globally_routable = match addr.ip() {
+        std::net::IpAddr::V4(v4) => v4.is_global_unicast(),
+        std::net::IpAddr::V6(v6) => v6.is_global_unicast(),
+    };
+    if !globally_routable {
         return Err(unusable("address is not globally routable"));
     }
     Ok(addr)
