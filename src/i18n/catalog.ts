@@ -607,11 +607,33 @@ export type PartialTranslation = {
   [K in keyof typeof en]?: Partial<(typeof en)[K]>;
 };
 
+/**
+ * The only locale the app ships.
+ *
+ * English is both the source language and the only translation, so `t()` always
+ * resolves against `en` and there is nothing to fall back from. `Partial` is
+ * still the declared type because it is what a *second* locale would be, and
+ * keeping it means adding one requires no type change.
+ *
+ * ## This is not localisation yet
+ *
+ * The infrastructure is real — typed keys, interpolation, a locale provider —
+ * but only English exists, there is no language picker, and most UI strings are
+ * still literals at their call sites. Roughly half the catalog is therefore
+ * unreachable from any rendered view.
+ *
+ * Do not describe the app as translated, or add a language switcher that offers
+ * a single option. Both are claims the code does not back.
+ */
 export type LocaleCode = "en";
 
 export const LOCALES: Record<LocaleCode, PartialTranslation> = {
   en,
 };
+
+/** Whether the app offers more than one language. Drives UI that must not
+ *  imply otherwise — see the note above. */
+export const HAS_MULTIPLE_LOCALES = (Object.keys(LOCALES) as LocaleCode[]).length > 1;
 
 /** Interpolate `{{name}}` placeholders. React renders the result as text. */
 export function interpolate(
