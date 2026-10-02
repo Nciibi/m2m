@@ -533,6 +533,8 @@ impl AppState {
             sync_manager: RwLock::new(crate::sync::SyncManager::new()),
             group_manager: RwLock::new(GroupManager::new()),
             capture_monitor_running: AtomicBool::new(false),
+            clipboard_clear_deadline: AtomicU64::new(0),
+            idle_lock_deadline: AtomicU64::new(0),
         }
     }
 
