@@ -1162,20 +1162,33 @@ pub async fn connect_to_peer(
     let expected_peer_pub = signed.payload.identity_pub;
     let mut session = Session::new();
 
-    // Check if the invite contains an X3DH prekey bundle
+    // A 5.0.0 peer must always X3DH.
+    //
+    // This used to be a branch: `if has_x3dh { …x3dh… } else { …legacy… }`.
+    // The condition reads the *invite*, which is plaintext on the wire before
+    // any key exists, so a peer that omitted or zeroed the prekey bundle could
+    // choose which handshake a 5.0.0 initiator performed — and the legacy arm
+    // (`handshake_as_initiator`) has no one-time prekey and therefore no forward
+    // secrecy. That is a downgrade an on-path peer could force, so the initiator
+    // now demands X3DH and fails loudly instead.
     let has_x3dh = signed.payload.x25519_identity_pub != [0u8; 32]
         && signed.payload.signed_prekey != [0u8; 32]
         && !signed.payload.signed_prekey_sig.is_empty();
 
-    if has_x3dh {
-        // Verify the signed prekey's Ed25519 signature
-        crate::crypto::verify_signature(
-            &expected_peer_pub,
-            &signed.payload.signed_prekey,
-            &signed.payload.signed_prekey_sig,
-        )
-        .map_err(|_| "invalid signed prekey signature in invite".to_string())?;
+    if !has_x3dh {
+        return Err(AppError::invalid(
+            "peer invite carries no X3DH prekey bundle; refusing to downgrade to the \
+             pre-5.0.0 handshake. Ask the sender to upgrade to M2M 5.0.0 or later.",
+        ));
     }
+
+    // Verify the signed prekey's Ed25519 signature.
+    crate::crypto::verify_signature(
+        &expected_peer_pub,
+        &signed.payload.signed_prekey,
+        &signed.payload.signed_prekey_sig,
+    )
+    .map_err(|_| "invalid signed prekey signature in invite".to_string())?;
 
     // Snapshot the X25519 identity too. `lock_vault` and `unlock_vault` both
     // *write* `x25519_identity`, and `tokio`'s `RwLock` is write-preferring, so
