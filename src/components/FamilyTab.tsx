@@ -140,6 +140,33 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
         );
       })}
 
+    {/* Removing a family member revokes their standing trust — they can no
+          longer be reached without a fresh invite. It used to be a bare `×`
+          with no accessible name and no confirmation: a screen reader announced
+          "multiplication sign", and one misclick silently dropped someone out
+          of the trust list. */}
+      {pendingRemoval && (
+        <ConfirmDialog
+          open
+          destructive
+          title="Remove family member"
+          body={`Remove ${pendingRemoval.nickname} from your family? They will need a fresh invite before you can message them again.`}
+          confirmLabel="Remove"
+          cancelLabel="Cancel"
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={async () => {
+            const target = pendingRemoval;
+            setPendingRemoval(null);
+            try {
+              await invoke("remove_family_member", { peerKeyHex: target.public_key_hex });
+              onRefresh();
+              addToast(`Removed ${target.nickname}`, "success");
+            } catch (e) {
+              addToast("Failed to remove: " + errorMessage(e), "error");
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
