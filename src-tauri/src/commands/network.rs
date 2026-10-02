@@ -445,6 +445,9 @@ pub async fn create_invite(
                 // address as a high-priority candidate — a route the app believed
                 // in and the network had already dropped.
                 let mapping = std::sync::Arc::new(mapping);
+                // Clone the value for the return *before* the `Arc` is moved
+                // into the state slot below.
+                let for_candidate = mapping.as_ref().clone();
                 let renew_cancel =
                     crate::port_mapping::PortMapper::spawn_renewal(std::sync::Arc::clone(&mapping));
                 {
@@ -454,7 +457,7 @@ pub async fn create_invite(
                         renew_cancel,
                     });
                 }
-                Some(mapping.as_ref().clone())
+                Some(for_candidate)
             }
             Err(e) => {
                 tracing::debug!(error = %e, "NAT port mapping unavailable");
