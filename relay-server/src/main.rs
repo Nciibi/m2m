@@ -946,11 +946,14 @@ mod tests {
         // optimised away the way a `const`-folded `assert!(...)` in a test body
         // is â€” a failing check here becomes a build error, which is the point of
         // asserting that these limits are coherent with each other.
+        // Compared on the `_SECS` values rather than the `Duration`s, because
+        // `Duration`'s `PartialOrd` is not a `const fn` and so cannot be
+        // evaluated in a `const` block.
         const {
             assert!(MAX_PENDING_REGISTRATIONS > 0);
             assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
             assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
-            assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
+            assert!(BRIDGE_IDLE_TIMEOUT_SECS > READER_IDLE_TIMEOUT_SECS);
             assert!(MAX_BODY_SIZE > 0);
         }
     }
