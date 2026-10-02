@@ -82,8 +82,10 @@ jobs:
     # so the one Rust verification the project actually trusts was the one thing
     # never run automatically.
     - name: Crypto probe (executes crypto/group/protocol/secure_key/storage tests)
+      # Must run from the repo root: sync.sh locates the live sources via
+      # `$(dirname $0)/../..` and copies them in before testing, so it always
+      # executes against the real tree rather than a stale copy.
       run: ./tools/crypto-probe/sync.sh
-      working-directory: ${{ runner.temp }}/crypto-probe-workspace
 
     - name: Typecheck harness (all Rust modules, Tauri stubbed)
       run: ./tools/typecheck-harness/check.sh --run
