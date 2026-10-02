@@ -91,49 +91,33 @@ export default function Modal({
 
   if (!open) return null;
 
-  // `role="dialog"` belongs on the panel, not the backdrop.
-  //
-  // On the overlay it described the full-screen click-catcher as the dialog, and
-  // the actual dialog panel was `role="document"` — so assistive tech was told
-  // the dialog was the thing behind it. `aria-modal` on the overlay also does
-  // not make the rest of the page inert; the Tab trap handles keyboard order,
-  // but a screen reader's virtual cursor and background click targets are still
-  // live. `inert` on the background is what actually hides them.
-  const background = document.querySelector<HTMLElement>("#app-root > *:not(.modal-layer)");
-
   return (
-    <>
-      {background &&
-        Array.from(document.querySelectorAll<HTMLElement>("#app-root > *:not(.modal-layer)")).map(
-          (el) => (
-            <div key={el.id || el.className} className="modal-backdrop-blocker" inert />
-          ),
-        )}
-      <div className="modal-layer">
-        <div className="modal-overlay" onClick={onClose}>
-          <div
-            ref={dialogRef}
-            className="modal"
-            style={{ maxWidth }}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            // `aria-labelledby` points at the visible <h2> rather than
-            // duplicating the title string in `aria-label`: one source of truth,
-            // and no chance of the two drifting apart.
-            aria-labelledby="modal-title"
-          >
-            <div className="modal__header">
-              <h2 className="modal__title" id="modal-title">{title}</h2>
-              <button type="button" className="modal__close" onClick={onClose} aria-label="Close dialog">
-                <CloseIcon size={18} />
-              </button>
-            </div>
-            <div className="modal__body">{children}</div>
-            {footer && <div className="modal__footer">{footer}</div>}
-          </div>
+    <div className="modal-overlay" onClick={onClose}>
+      {/* `role="dialog"` belongs on the panel, not the backdrop.
+
+          On the overlay it described the full-screen click-catcher as the dialog
+          while the actual dialog panel was `role="document"` — so assistive tech
+          was told the dialog was the thing *behind* it. `aria-labelledby` points
+          at the visible <h2> rather than duplicating the title string in
+          `aria-label`: one source of truth, and no chance of the two drifting. */}
+      <div
+        ref={dialogRef}
+        className="modal"
+        style={{ maxWidth }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div className="modal__header">
+          <h2 className="modal__title" id="modal-title">{title}</h2>
+          <button type="button" className="modal__close" onClick={onClose} aria-label="Close dialog">
+            <CloseIcon size={18} />
+          </button>
         </div>
+        <div className="modal__body">{children}</div>
+        {footer && <div className="modal__footer">{footer}</div>}
       </div>
-    </>
+    </div>
   );
 }
