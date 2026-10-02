@@ -44,6 +44,17 @@ interface SettingsContextValue {
   /** Resolves with the established connection; rethrows on failure. */
   handleConnectDiscoveredPeer: (address: string) => Promise<ConnectionInfo>;
   handleRefreshDiscovery: () => Promise<void>;
+  // Relay. `RelayConfigView` is what the backend returns from `get_relay_config`
+  // — host and port plus a *boolean* for the token. The token itself never
+  // crosses the IPC boundary, so it cannot be re-displayed or logged here, and
+  // the form therefore tracks its own token draft separately.
+  relayConfig: RelayConfigView | null;
+  setRelayHost: (host: string) => void;
+  setRelayPort: (port: string) => void;
+  /** Empty clears the relay, which is what disabling it means. */
+  handleRelaySave: () => Promise<void>;
+  handleRelayClear: () => Promise<void>;
+  relaySaving: boolean;
   // Security
   securityConfig: SecurityConfig | null;
   captureCapability: CaptureCapability | null;
