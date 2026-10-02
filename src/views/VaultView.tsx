@@ -86,7 +86,19 @@ export default function VaultView() {
     }
   };
 
-  const colorMap: Record<string, string> = { weak: "var(--color-danger)", fair: "var(--color-warning)", strong: "var(--color-success)", "very-strong": "#22d3ee" };
+  // Hoisted to module scope: this was a literal inside the component body, so a
+  // fresh object was allocated on every render — including every keystroke in
+  // the passphrase field, which is the one input on this screen that re-renders
+  // continuously.
+  //
+  // "very-strong" was `#22d3ee`, a colour literal outside the token system, so
+  // the strongest rating could not follow the theme.
+  const STRENGTH_COLOR: Record<string, string> = {
+    weak: "var(--color-danger)",
+    fair: "var(--color-warning)",
+    strong: "var(--color-success)",
+    "very-strong": "var(--color-info)",
+  };
   const confirmMismatch = passphraseConfirm.length > 0 && passphraseConfirm !== passphrase;
 
   // On-screen keyboard insertion — routes to the focused/targeted field and
