@@ -273,6 +273,13 @@
      prevent. White is correct on both a #6366f1 and a #4f46e5 fill, in both
      themes, so this is the same value in both files and needs no override. */
   --color-on-fill: #ffffff;
+  /* Informational accent (cyan). Distinct from `--color-accent` (the
+   * user-chosen brand hue) so informational UI does not shift when the
+   * accent is changed. Used by the passphrase strength meter's top rating.
+   */
+  --color-info: #22d3ee;
+  --color-info-bg: rgba(34, 211, 238, 0.12);
+  --color-info-glow: rgba(34, 211, 238, 0.25);
   --color-avatar-0: hsl(210, 55%, 42%);
   --color-avatar-1: hsl(172, 48%, 38%);
   --color-avatar-2: hsl(28, 62%, 46%);

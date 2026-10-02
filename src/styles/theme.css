@@ -117,6 +117,12 @@
      against; on a near-white card the same lightness gives a washed-out chip
      with poor contrast, so the light ramp drops lightness and raises
      saturation. Kept as eight entries so `hashToColor` needs no theme branch. */
+  /* Darkened for the light theme: the dark-theme cyan is too light to
+   * read against a near-white card.
+   */
+  --color-info: #0891b2;
+  --color-info-bg: rgba(8, 145, 178, 0.1);
+  --color-info-glow: rgba(8, 145, 178, 0.22);
   --color-avatar-0: hsl(210, 62%, 52%);
   --color-avatar-1: hsl(172, 52%, 34%);
   --color-avatar-2: hsl(28, 68%, 44%);
