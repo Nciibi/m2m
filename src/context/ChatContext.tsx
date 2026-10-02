@@ -326,14 +326,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [activeConversationId, retentionPolicy, retentionDuration, addToast]);
 
-  const handleGenerateInvite = useCallback(async () => {
+  // Returns whether an invite was actually created.
+  //
+  // This was `async () => { try {...} catch { toast } }` — it reported success
+  // by returning `undefined`, and the caller could not distinguish a real invite
+  // from a failure. It toasts the failure itself, so the caller's `finally` ran
+  // on both paths, which meant `HubView` set a countdown and "Listening for
+  // incoming connections" for an invite that had never been created. A
+  // one-time invite that never left the app looked exactly like one that had.
+  const handleGenerateInvite = useCallback(async (): Promise<boolean> => {
     try {
       await invoke("start_listening", { address: "0.0.0.0:0" });
       const address = await invoke<string>("get_listen_address");
       const invite = await invoke<string>("create_invite", { address, validityMinutes: 60, oneTime: true });
       setGeneratedInvite(invite);
+      return true;
     } catch (e) {
       addToast(errorMessage(e), "error", 6000);
+      return false;
     }
   }, [addToast]);
 
