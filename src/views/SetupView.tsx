@@ -56,7 +56,7 @@ export default function SetupView() {
       <div className="app-shell">
         <div className="centered-view">
           <div className="setup-icon__container">
-            <KeyIcon size={36} color="white" />
+            <KeyIcon size={36} color="var(--color-on-fill)" />
             <div className="sonar-ring sonar-ring--1" />
             <div className="sonar-ring sonar-ring--2" />
             <div className="sonar-ring sonar-ring--3" />
@@ -78,7 +78,7 @@ export default function SetupView() {
       <div className="app-shell">
         <div className="centered-view">
           <div className="setup-icon__container">
-            <LockIcon size={36} color="white" />
+            <LockIcon size={36} color="var(--color-on-fill)" />
             <div className="sonar-ring sonar-ring--1" />
           </div>
           <h2 className="setup-title">
@@ -119,7 +119,7 @@ export default function SetupView() {
         <div className="step-indicator" role="tablist" aria-label="Onboarding steps">
           {STEPS.map((_, i) => (
             <div key={i} className={`step-dot ${i === step ? "step-dot--active" : ""} ${i < step ? "step-dot--done" : ""}`} role="tab" aria-selected={i === step}>
-              {i < step && <CheckIcon size={12} color="white" />}
+              {i < step && <CheckIcon size={12} color="var(--color-on-fill)" />}
             </div>
           ))}
         </div>
