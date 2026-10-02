@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn clipboard_deadline_is_armed_in_the_future_and_disarmed_by_zero() {
-let s = state();
+        let s = state();
         assert_eq!(
             s.clipboard_clear_deadline.load(Ordering::Relaxed),
             0,
@@ -346,7 +346,7 @@ let s = state();
         // doubling horizon.
         note_activity(&s, 600);
         let second = s.idle_lock_deadline.load(Ordering::Relaxed);
-assert!(
+        assert!(
             second - first < 5,
             "re-arming must replace the deadline, not add to it (first={first}, second={second})"
         );
