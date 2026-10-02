@@ -463,19 +463,36 @@ The relay server is lightweight (~5 MB binary, ~8 MB RSS). Configure your M2M cl
 
 ## 🧪 Test Status
 
-| Module | Tests | What's tested |
-|--------|-------|--------------|
-| [`crypto.rs`](src-tauri/src/crypto.rs) | 5 | Padding round-trip, ratchet, variable padding length hiding |
-| [`protocol.rs`](src-tauri/src/protocol.rs) | 16 | All 14 packet types round-trip, version validation, frame size boundaries, serde round-trips, garbage rejection |
-| [`network.rs`](src-tauri/src/network.rs) | 20 | Filename sanitization (10), rate limiter (6), frame read/write (4) |
-| [`session.rs`](src-tauri/src/session.rs) | 21 | State machine, replay protection, ratchet integration, file transfer round-trips, conversation meta, handshake integration |
-| [`local_addr.rs`](src-tauri/src/local_addr.rs) | 3 | IPv6 link-local detection, host candidate gathering, IPv6 candidate gathering |
-| [`hole_punch.rs`](src-tauri/src/hole_punch.rs) | 6 | Candidate extraction (5), strategy names (1), error display (1) |
-| [`port_mapping.rs`](src-tauri/src/port_mapping.rs) | 5 | URL parsing, host extraction, debug formatting |
-| [`stun.rs`](src-tauri/src/stun.rs) | 11 | RFC 5769 IPv4 test vector, request invariants, response validation, NAT classification (4), default config |
-| [`identity.rs`](src-tauri/src/identity.rs) | 0 | ⏳ Planned |
-| [`storage.rs`](src-tauri/src/storage.rs) | 0 | ⏳ Planned |
-| **Total** | **87** | 1 suite skipped (storage needs test harness) |
+Counts are `#[test]` / `#[tokio::test]` attributes in the tree, as of
+2026-10-02. **This table was previously claiming 87 tests with `identity` and
+`storage` marked "⏳ Planned" — both have had real suites for a long time.** If a
+number here disagrees with `CLAUDE.md`, `CLAUDE.md` is the one that was run.
+
+| Module | Tests | Notes |
+|--------|-------|-------|
+| [`crypto.rs`](src-tauri/src/crypto.rs) | 43 | X3DH, Double Ratchet, AEAD, HKDF, padding, ct_eq, golden vectors |
+| [`storage.rs`](src-tauri/src/storage.rs) | 79 | KeyStore, MessageStore, encryption envelopes, sweep/eviction, byte accounting |
+| [`session.rs`](src-tauri/src/session.rs) | 46 | State machine, replay protection, ratchet integration, heartbeats |
+| [`protocol.rs`](src-tauri/src/protocol.rs) | 38 | Packet round-trips (34 packet types), version validation, frame boundaries, garbage rejection |
+| [`network.rs`](src-tauri/src/network.rs) | 47 | Frame read/write, rate limiter, filename sanitization, receive loop |
+| [`group.rs`](src-tauri/src/group.rs) | 29 | Group membership, roles, group message envelopes |
+| [`stun.rs`](src-tauri/src/stun.rs) | 23 | RFC 5769 vector, response validation, NAT classification, multi-server quorum |
+| [`port_mapping.rs`](src-tauri/src/port_mapping.rs) | 20 | UPnP / NAT-PMP / PCP |
+| [`dht.rs`](src-tauri/src/dht.rs) | 16 | Kademlia routing |
+| [`identity.rs`](src-tauri/src/identity.rs) | 16 | Invite sign/verify, one-time invites |
+| [`vault.rs`](src-tauri/src/vault.rs) | 20 | Duress, export/import, unlock |
+| [`dial.rs`](src-tauri/src/dial.rs) | 13 | Tor refusal gate, UDP bind guard, Tor-filtered candidate publishing |
+| [`lan_discovery.rs`](src-tauri/src/lan_discovery.rs) | 13 | Multicast announce/response |
+| [`capture_monitor.rs`](src-tauri/src/capture_monitor.rs) | 6 | Capture-process detection |
+| [`secure_key.rs`](src-tauri/src/secure_key.rs) | 5 | mlock / VirtualLock |
+| [`protocol_fuzz_regression.rs`](src-tauri/src/protocol_fuzz_regression.rs) | 12 | Regressions from 4 fuzz targets |
+| `crypto-probe` (executable subset) | 169 | crypto + group + protocol + secure_key + storage, run via `tools/crypto-probe/sync.sh` |
+| Frontend (`pnpm test`) | **379** | 20 files |
+| **Rust total in tree** | **~463** | across 27 modules |
+
+> **None of the Rust rows can be executed on a machine without a C toolchain.**
+> The app crate needs one for `rusqlite` (bundled SQLite) and Tauri. Only the
+> `crypto-probe` subset is designed to run standalone. See `CLAUDE.md`.
 
 ---
 
