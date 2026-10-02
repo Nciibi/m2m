@@ -1,7 +1,10 @@
 import { useNow } from "../hooks/useNow";
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, Input, Modal, ConfirmDialog } from "./ui";
+import { Button, Input, Modal } from "./ui";
+// `ConfirmDialog` is not in the `./ui` barrel — `SettingsView` imports it from
+// the module directly too.
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { PlusIcon, AlertTriangleIcon } from "./ui/Icons";
 import { useApp } from "../context/AppContext";
 import type { FamilyMember } from "../types";
