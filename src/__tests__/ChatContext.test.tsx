@@ -589,4 +589,51 @@ describe("ChatContext — inbound 1:1 messages", () => {
     expect(screen.getByTestId("messages-count")).toHaveTextContent("0");
     warn.mockRestore();
   });
+
+  /**
+   * Regression: the notification→navigate path was completely dead.
+   *
+   * `ChatContext` queued a `{peerKeyHex}` intent into a ref and bumped a
+   * `forceNavRender` counter to trigger a second effect that drained it. That
+   * effect's deps were `[setActiveConversation, setView, addToast]` — three
+   * stable `useCallback`s — so it ran once, on mount, with the ref still null.
+   * A counter bump schedules a re-render, and a `useEffect` with unchanged deps
+   * does not re-run on one. Clicking the OS notification therefore focused the
+   * window and never opened the conversation: no error, no log, no test failure.
+   *
+   * Asserted on `load_messages` rather than on rendered state, because opening
+   * the conversation *is* that call — `handleOpenChat` is never invoked here, so
+   * the drain is the only thing that can produce it.
+   */
+  it("opens the conversation when a message arrives for a peer that is not open", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_conversations") return Promise.resolve([]);
+      if (cmd === "load_messages") return Promise.resolve([]);
+      if (cmd === "get_muted_conversations") return Promise.resolve([]);
+      if (cmd === "get_connection_state") {
+        return Promise.resolve({ state: "established", peer_verified: false, peer_key_hex: "b".repeat(64) });
+      }
+      return Promise.resolve(null);
+    });
+    render(
+      <ChatProvider>
+        <TestConsumer />
+      </ChatProvider>,
+    );
+    await waitFor(() =>
+      expect(eventHandlers.get("m2m://message")).toBeDefined(),
+    );
+    // No conversation is open, so the notification branch is reachable. The
+    // permission effect resolves asynchronously; let it land.
+    await act(async () => { await Promise.resolve(); });
+
+    mockInvoke.mockClear();
+    act(() => {
+      eventHandlers.get("m2m://message")?.({ payload: directMessage() });
+    });
+
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("load_messages", { peerKeyHex: "b".repeat(64) }),
+    );
+  });
 });
