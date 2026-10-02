@@ -48,11 +48,14 @@ Can be disabled entirely (no message persistence).
 **reactions**, **groups**, **group_members**, **group_messages**,
 **storage_stats** — five more this document omitted
 
-## 4. Attachment Storage
+## 4. File Transfer Storage
 
-Each attachment encrypted individually:
-`attachment_key = random 32 bytes` (stored in messages.db alongside message)
-`encrypted_file = XChaCha20-Poly1305(file_bytes, attachment_key, nonce)`
+Transfers **stream to a temp file**; they are never buffered whole in memory and
+never held in an `attachments/` table. Each 256 KiB chunk is hashed (SHA-256),
+sent encrypted under the session key, and acknowledged individually, so a
+transfer is resumable and an interrupted one leaves at most one chunk of
+uncommitted data on disk. `transfers.db` holds the transfer *state* — offsets,
+chunk bitmask, totals — not the bytes.
 
 ## 5. Secure Deletion
 
