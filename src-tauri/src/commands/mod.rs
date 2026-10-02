@@ -8,7 +8,6 @@ use crate::error::AppError;
 pub mod chat;
 pub mod discovery;
 pub mod files;
-pub mod forwards;
 pub mod groups;
 pub mod network;
 pub mod relay;
