@@ -64,10 +64,19 @@ const handleCopy = async (): Promise<boolean> => {
   const loadFamily = useCallback(async () => {
     try {
       setFamilyLoading(true);
+      setFamilyLoadError(null);
       // `asArray`: asserts vs. checks — see `events.ts`.
       const f = asArray<FamilyMember>(await invoke("list_family"));
       setFamily(f);
-    } catch { /* noop */ }
+    } catch (e) {
+      // Was `catch { /* noop */ }`. With the read failing, `family` stays `[]`
+      // and `FamilyTab` renders its empty state — "No family members / Add
+      // people you trust" — which is indistinguishable from every member having
+      // been deleted, and invites the user to re-add people who are already
+      // there. `GroupChatView` already has a `loadFailed` state for exactly
+      // this; the family list did not.
+      setFamilyLoadError(errorMessage(e));
+    }
     finally { setFamilyLoading(false); }
   }, []);
 
