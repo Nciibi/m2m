@@ -386,6 +386,32 @@ describe("MessageBubble", () => {
   });
 
   // ── Accessibility ──────────────────────────────────────────────────────
+  // Unreadable content.
+  //
+  // The Rust side used to write the literal string `[encrypted]` into
+  // `content` on a decrypt failure. That made an unreadable message
+  // indistinguishable from a message whose plaintext was that string, and
+  // rendered an empty edit box over the only remaining copy of the content.
+  it("says the message is unreadable instead of showing the content", () => {
+    render(<MessageBubble message={msg({ decrypt_failed: true, content: "" })} />);
+    expect(screen.getByText(/unable to decrypt/i)).toBeInTheDocument();
+    expect(document.querySelector(".msg-content")).toBeNull();
+  });
+
+  it("withdraws edit for an unreadable message so it cannot be blanked", () => {
+    const onEditSave = vi.fn();
+    render(
+      <MessageBubble
+        message={msg({ decrypt_failed: true, content: "" })}
+        onEditSave={onEditSave}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Edit/ })).not.toBeInTheDocument();
+    // Deleting and reacting stay available: those act on the row rather than
+    // the plaintext, so offering them is not incoherent.
+    expect(screen.getByRole("button", { name: "Message options" })).toBeInTheDocument();
+  });
+
   it("is a labelled group, not a tab stop", () => {
     render(<MessageBubble message={msg({ direction: "sent" })} />);
     const group = screen.getByRole("group");
