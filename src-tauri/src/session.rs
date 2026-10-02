@@ -2196,10 +2196,11 @@ mod session_tests {
 
         let eph = EphemeralKeypair::generate();
         let timestamp = now_unix_secs(); // fresh — this test targets bad HandshakeComplete
-        let mut sign_data = Vec::new();
+let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &[]);
+        append_used_opk_to_sign_data(&mut sign_data, None, false);
         let signature = alice_identity.sign(&sign_data);
 
         let init = HandshakeInit {
