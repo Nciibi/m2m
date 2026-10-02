@@ -242,7 +242,7 @@ Peer receives invite ──▶ Verifies Ed25519 signature
 - **Per-IP**: Max 10 new connections per 60-second window (lock-free `DashMap`, shard-level locking).
 - **Global**: Max 50 concurrent connections total (atomic counter).
 - **Slowloris**: Per-byte 1-second timeout on frame reads — an attacker sending 1 byte/9 seconds times out after 1 byte.
-- **Max Frame**: 16 MiB per packet, 64 KiB per text message, 256 KiB per file chunk.
+- **Max Frame**: **1 MiB** per packet, 64 KiB per text message, 256 KiB per file chunk. The 16 MiB figure this used to claim was a single unattributed ceiling applied to every packet type; nothing needed it, and a *declared* length of 16 MiB forced a 16 MiB zeroed allocation before any body byte arrived — 800 MiB of attacker-paced committed memory across the 50-connection cap. `protocol.rs` carries the full rationale.
 
 ### Encrypted at Rest
 
