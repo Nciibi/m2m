@@ -198,10 +198,7 @@ pub async fn arm_clipboard_auto_clear(
 /// firing. `secs` comes from `SecurityConfig::idle_lock_secs`; 0 disarms
 /// auto-lock entirely.
 #[tauri::command]
-pub async fn note_activity(
-    state: State<'_, Arc<AppState>>,
-    secs: u64,
-) -> Result<(), AppError> {
+pub async fn note_activity(state: State<'_, Arc<AppState>>, secs: u64) -> Result<(), AppError> {
     crate::maintenance::note_activity(&state, secs);
     Ok(())
 }
