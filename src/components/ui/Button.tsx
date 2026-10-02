@@ -44,7 +44,6 @@ export default function Button({
 
   return (
     <button
-      ref={btnRef}
       type={type}
       className={classes}
       disabled={disabled || loading}
