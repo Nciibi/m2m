@@ -6164,7 +6164,7 @@ mod tests {
         // not passing because everything fails. (It still fails to decrypt: these
         // are not real wrapped keys.)
         assert!(
-            MessageStore::unwrap_cek(&vec![0xAA; WRAPPED_CEK_LEN], &test_key()).is_err(),
+            MessageStore::unwrap_cek(&[0xAA; WRAPPED_CEK_LEN], &test_key()).is_err(),
             "a well-formed-length blob of the wrong bytes must still fail to open"
         );
     }

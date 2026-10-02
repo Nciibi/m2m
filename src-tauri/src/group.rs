@@ -1595,7 +1595,7 @@ mod group_tests {
                 "G".into(),
                 1,
                 alice_hex.clone(),
-                &[bob_hex.clone()],
+                std::slice::from_ref(&bob_hex),
             )
             .unwrap();
 
