@@ -180,7 +180,9 @@ export default function MessageBubble({
               {m.sender_peer_key_hex.substring(0, 8)}…
             </div>
           )}
+          {!m.decrypt_failed && (
           <div className="msg-content">{plain ? m.content : renderMarkdown(m.content)}</div>
+        )}
         </div>
       )}
       <span className="msg-footer-row">
