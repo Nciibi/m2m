@@ -52,7 +52,7 @@ See `docs/architecture.md` for the full module map. Key modules:
 
 - ✅ X3DH + Double Ratchet (Signal-protocol E2EE)
 - ✅ DHT peer discovery + LAN multicast discovery (OFF by default)
-- ✅ TURN relay server (self-hosted)
+- ✅ TURN relay server (self-hosted), with a relay configuration UI in Settings
 - ✅ Identity export/import + family contacts
 - ✅ File transfer with streaming, chunk hashing, ACK/cancel/resume
 - ✅ Conversation retention policies (auto-delete/export)
