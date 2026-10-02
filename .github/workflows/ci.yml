@@ -73,6 +73,21 @@ jobs:
       run: cargo test
       working-directory: src-tauri
 
+    # ─── The Rust suites that are actually executable ───
+    #
+    # `cargo test` above compiles the whole Tauri app, which needs GTK
+    # development headers. Where that is unavailable the job cannot pass at all,
+    # and the two harnesses below are what CLAUDE.md treats as the *only* way to
+    # execute a Rust test in that situation. They were absent from CI entirely —
+    # so the one Rust verification the project actually trusts was the one thing
+    # never run automatically.
+    - name: Crypto probe (executes crypto/group/protocol/secure_key/storage tests)
+      run: ./tools/crypto-probe/sync.sh
+      working-directory: ${{ runner.temp }}/crypto-probe-workspace
+
+    - name: Typecheck harness (all Rust modules, Tauri stubbed)
+      run: ./tools/typecheck-harness/check.sh --run
+
     - name: Cargo Audit (Rust dependency vulnerabilities)
       uses: rustsec/audit-check@v2
       with:
