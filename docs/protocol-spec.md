@@ -8,11 +8,11 @@
 
 Every M2M packet begins with a protocol version byte.
 
-- `0x03` = Protocol Version 3 (current; this document)`r
+- `0x03` = Protocol Version 3 (current; this document)
 - `0x02` = Protocol Version 2 — X3DH with an *unauthenticated* DR header. NOT accepted:
-  its AEAD AAD differs from `0x03`'s, so a v2 peer would handshake and then fail to`r
-  decrypt everything.`r
-- `0x01` = Protocol Version 1 — pre-X3DH, SHA-256 KDF ratchet, no one-time prekey,`r
+  its AEAD AAD differs from `0x03`'s, so a v2 peer would handshake and then fail to
+  decrypt everything.
+- `0x01` = Protocol Version 1 — pre-X3DH, SHA-256 KDF ratchet, no one-time prekey,
   therefore **no forward secrecy**. NOT accepted.
 - `0x00`, `0xFE`, `0xFF` are reserved (must never be assigned — prevents downgrade detection mistakes)
 - Version mismatch → `Error` packet + disconnect
