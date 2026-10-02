@@ -304,10 +304,24 @@ export default function ChatView() {
       <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
-          <span onClick={() => setShowFp(true)} title={connection?.peer_verified ? "Verified" : "Verify"}
-            className={`app-header__icon-bg ${connection?.peer_verified ? 'app-header__icon-bg--success' : 'app-header__icon-bg--warning'}`}>
+          // A real <button>, not a <span onClick>.
+          //
+          // This is the app's trust anchor — the control that opens the
+          // fingerprint the user is supposed to check before trusting a peer —
+          // and it was unreachable by keyboard: no role, no tabIndex, no key
+          // handler. A `title` on a non-focusable element is not reliably
+          // announced either, so a screen reader had nothing for it either.
+          // `HubView` does this correctly with `role="button" tabIndex={0}` plus
+          // Enter/Space; this site had neither.
+          <button
+            type="button"
+            onClick={() => setShowFp(true)}
+            title={connection?.peer_verified ? "Verified — show fingerprint" : "Verify this peer's fingerprint"}
+            aria-label={connection?.peer_verified ? "Verified — show fingerprint" : "Verify this peer's fingerprint"}
+            className={`app-header__icon-bg ${connection?.peer_verified ? 'app-header__icon-bg--success' : 'app-header__icon-bg--warning'}`}
+          >
             {connection?.peer_verified ? <VerifiedIcon size={16} color="var(--color-success)" /> : <ShieldIcon size={16} color="var(--color-warning)" />}
-          </span>
+          </button>
           Encrypted Session
         </h1>
         <div className="app-header__actions">
