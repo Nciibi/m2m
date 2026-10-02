@@ -651,6 +651,7 @@ pub async fn send_message_with_timer(
 /// Edit a previously-sent message.
 #[tauri::command]
 pub async fn edit_message(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     message_id: String,
