@@ -15,7 +15,10 @@ pub struct AppError {
 
 impl AppError {
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+        Self {
+            code,
+            message: message.into(),
+        }
     }
     pub fn invalid(message: impl Into<String>) -> Self {
         Self::new("invalid_input", message)

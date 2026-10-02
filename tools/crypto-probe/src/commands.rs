@@ -45,7 +45,10 @@ pub mod util {
         let ct = cipher
             .encrypt(
                 nonce,
-                chacha20poly1305::aead::Payload { msg: plaintext, aad },
+                chacha20poly1305::aead::Payload {
+                    msg: plaintext,
+                    aad,
+                },
             )
             .map_err(|_| AppError::new("storage.encryption_failed", "encryption failed"))?;
         Ok((nonce_bytes, ct))
@@ -66,7 +69,10 @@ pub mod util {
         cipher
             .decrypt(
                 chacha20poly1305::XNonce::from_slice(nonce_bytes),
-                chacha20poly1305::aead::Payload { msg: ciphertext, aad },
+                chacha20poly1305::aead::Payload {
+                    msg: ciphertext,
+                    aad,
+                },
             )
             .map_err(|_| {
                 AppError::new(
