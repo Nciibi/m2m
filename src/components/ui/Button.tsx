@@ -17,10 +17,20 @@ export default function Button({
   children,
   disabled,
   className = "",
+  // Defaults to "button", not the HTML implicit "submit".
+  //
+  // `<button>` inside a `<form>` submits that form unless `type` says
+  // otherwise, so every Button was a latent submit trigger. Nothing here is
+  // currently inside a `<form>`, which is exactly why it had never fired — the
+  // bug surfaces the day someone wraps a modal body in a `<form>`, which is a
+  // normal thing to do. `FamilyTab`'s save handler is even typed
+  // `React.MouseEvent | React.FormEvent` in anticipation.
+  //
+  // A caller can still pass `type="submit"` explicitly; the default only applies
+  // when they do not.
+  type = "button",
   ...rest
 }: ButtonProps & { className?: string }) {
-  const btnRef = useRef<HTMLButtonElement>(null);
-
   const classes = [
     "btn",
     `btn--${variant}`,
@@ -35,6 +45,7 @@ export default function Button({
   return (
     <button
       ref={btnRef}
+      type={type}
       className={classes}
       disabled={disabled || loading}
       {...rest}
