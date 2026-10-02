@@ -15,6 +15,13 @@ interface FamilyTabProps {
   family: FamilyMember[];
   onRefresh: () => Promise<void>;
   onConnect: (peerKeyHex: string) => Promise<void>;
+  /**
+   * Non-null when the list read failed. An empty list and an unreadable list are
+   * not the same thing: rendering the empty state for a failed read tells the
+   * user every family member was deleted.
+   */
+  loadError?: string | null;
+  loading?: boolean;
 }
 
 export default function FamilyTab({ family, onRefresh, onConnect, loadError = null, loading = false }: FamilyTabProps) {
