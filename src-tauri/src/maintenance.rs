@@ -29,6 +29,7 @@
 //! half of the guarantee is already covered at `MessageStore::open`, which is
 //! what covers the app-closed case.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
