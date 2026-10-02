@@ -547,12 +547,17 @@ export function asArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
-export function asCaptureWarning(v: unknown): { active: string[] } | null {
+export function asCaptureWarning(v: unknown): { active: string[]; scanFailed: boolean } | null {
   if (typeof v !== "object" || v === null) return null;
   const p = v as Record<string, unknown>;
   if (!Array.isArray(p.active) || p.active.length > 32) return null;
   if (!p.active.every(isDisplayText)) return null;
-  return { active: p.active };
+  // `scan_failed` distinguishes "scanned, found nothing" from "could not
+  // scan". It is optional so a peer-less older build that omits it is treated
+  // as healthy, but when present it must actually be a boolean — a truthy
+  // string here would let a malformed payload reach the failure banner.
+  if (p.scan_failed !== undefined && typeof p.scan_failed !== "boolean") return null;
+  return { active: p.active, scanFailed: p.scan_failed === true };
 }
 
 export function asVaultLocked(v: unknown): Record<string, never> | null {
