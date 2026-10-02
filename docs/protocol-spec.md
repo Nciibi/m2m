@@ -76,6 +76,27 @@ for i in 0..4 {
 | `0x41` | MessageReaction | Established |
 | `0x42` | MessageEdit | Established |
 | `0x43` | MessageDelete | Established |
+| `0x16` | FileTransferChunkAck | Established |
+| `0x17` | FileTransferCancel | Established |
+| `0x44` | SyncRequest | Established |
+| `0x45` | SyncDeviceInfo | Established |
+| `0x46` | SyncPayload | Established |
+| `0x50` | GroupCreate | Established |
+| `0x51` | GroupInvite | Established |
+| `0x52` | GroupRemove | Established |
+| `0x53` | GroupSenderKey | Established |
+| `0x54` | GroupEncryptedMessage | Established |
+| `0x55` | GroupInfo | Established |
+| `0x56` | GroupLeave | Established |
+| `0x60` | TypingIndicator | Established |
+| `0x61` | TypingIndicatorClear | Established |
+
+**This table was previously 17 entries.** It omitted the X3DH handshake trio
+(`0x04`–`0x06`), both file-transfer control packets, all three sync packets,
+all seven group packets and both typing packets — 17 of the 34 defined types.
+The authority is the `PacketType` enum in `protocol.rs`, which carries golden
+round-trip tests; this table is a convenience and should be regenerated from it
+rather than maintained by hand.
 
 Unknown types → Error packet + close connection.
 
