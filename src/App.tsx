@@ -3,7 +3,7 @@ import { I18nProvider } from "./i18n/I18nContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { errorMessage, evictionNoticeText } from "./utils";
-import { asCaptureWarning, asSecurityError, asStorageEvicted } from "./events";
+import { asCaptureWarning, asSecurityError, asStorageEvicted, asNavigate } from "./events";
 import "./styles/tokens.css";
 import "./styles/theme.css";
 import "./styles/animations.css";
