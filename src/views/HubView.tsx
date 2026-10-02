@@ -293,7 +293,7 @@ function ConnectTab({
       // Check the value, not just `null`: a `void`-returning caller (a stale
       // mock, or plain JS) would otherwise push `undefined` into the history
       // and every `inv.substring` in the list would throw.
-      
+      if (typeof invite !== "string" || invite.length === 0) return;
       setInviteCreatedAt(Date.now() / 1000);
       setInviteExpiry(60);
       setIsListening(true);
