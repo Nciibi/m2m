@@ -238,21 +238,7 @@ pub async fn accept_file_transfer(
     // string an arbitrary-write primitive: a relative path lands in the app's
     // working directory, and a short one truncates into a system directory.
     //
-    // An empty path is still allowed — the chunk handler already treats it as
-    // "use the sanitized filename in the CWD" — so this rejects only what is
-    // genuinely unsafe rather than breaking the default path.
-    if save_dir.len() > 4096 {
-        return Err(AppError::invalid("save path is implausibly long"));
-    }
-    if save_dir.contains('\0') {
-        return Err(AppError::invalid("save path contains a NUL byte"));
-    }
-    if !save_dir.is_empty() && !std::path::Path::new(&save_dir).is_absolute() {
-        return Err(AppError::invalid(
-            "save path must be absolute; a relative path would resolve against \
-             the app's working directory",
-        ));
-    }
+    validate_save_dir(&save_dir)?;
 
     // Store the save_dir and update state
     {
