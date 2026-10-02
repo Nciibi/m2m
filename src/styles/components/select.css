@@ -25,10 +25,22 @@
   -moz-appearance: none;
   appearance: none;
   padding-right: 40px;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 16px;
+  /* The chevron is a *mask*, not a background image.
+     A `data:` SVG cannot reference a CSS custom property — `var(--x)` is
+     resolved by the CSS parser, not inside the URL — so painting it as a
+     background image required hardcoding `rgba(255,255,255,0.5)` into the
+     encoded SVG, which then stayed white-tinted on the light theme.
+     Masking the same shape and letting `background-color` supply the paint
+     means the colour comes from the cascade like every other element. */
+  -webkit-mask-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  mask-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: right 12px center;
+  mask-position: right 12px center;
+  -webkit-mask-size: 16px;
+  mask-size: 16px;
+  background-color: var(--color-text-muted);
 }
 
 .select-wrap > select:focus {
