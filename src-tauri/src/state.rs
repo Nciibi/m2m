@@ -214,7 +214,6 @@ impl TransferQueue {
     }
 }
 
-
 /// Security configuration (screen capture, clipboard, idle lock).
 ///
 /// All features are OFF by default — user must opt in.
