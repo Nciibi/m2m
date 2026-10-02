@@ -396,10 +396,23 @@ const handleTorToggle = useCallback(async () => {
     }
   }, []);
 
-  const scheduleClipboardClear = useCallback((secs: number) => {
+const scheduleClipboardClear = useCallback((secs: number) => {
     if (clipboardTimerRef.current) {
       clearTimeout(clipboardTimerRef.current);
     }
+    // Arm the Rust-side deadline FIRST, so the guarantee exists even if this
+    // webview is throttled, backgrounded or dead before `secs` elapses.
+    //
+    // `SecurityConfig::clipboard_clear_secs` had no reader anywhere in Rust: the
+    // whole feature was this `setTimeout`. A timer that lives in the component
+    // being protected stops running exactly when the app is not being used, and
+    // a copied passphrase sitting in the OS clipboard is the exact thing a
+    // "clipboard auto-clear: 30s" setting promises will not happen.
+    //
+    // A failure here is not fatal — the local timer below still runs — so it is
+    // logged rather than surfaced, which would be a false alarm.
+    invoke("arm_clipboard_auto_clear", { secs })
+      .catch((e) => console.warn("could not arm Rust clipboard deadline:", e));
     if (secs > 0) {
       clipboardTimerRef.current = setTimeout(async () => {
         try {
@@ -411,7 +424,7 @@ const handleTorToggle = useCallback(async () => {
           // a copied passphrase or fingerprint sits in the clipboard
           // indefinitely with no feedback at all. That is the worst possible
           // failure for this specific feature, so it is surfaced loudly.
-          addToast("Clipboard auto-clear FAILED — clear it manually", "error");
+          addToast("Clipboard auto-clear FAILED - clear it manually", "error");
         }
       }, secs * 1000);
     }
