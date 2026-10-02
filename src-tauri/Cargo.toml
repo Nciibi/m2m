@@ -114,10 +114,9 @@ path = "examples/generate-identity.rs"
 [features]
 default = []
 
-[profile.release]
-strip = true
-lto = true
-codegen-units = 1
-opt-level = "z"       # Optimize for binary size over speed
-panic = "abort"
-overflow-checks = true
+# `[profile.release]` used to live here. Cargo ignores profiles in non-root
+# workspace members — it emits "profiles for the non root package will be
+# ignored" — so all six settings were dead and the release build silently ran at
+# `opt-level = 3` with LTO, stripping, `overflow-checks` and `panic = "abort"`
+# all off. It now lives in the workspace-root `Cargo.toml`, which is the only
+# place Cargo reads it from.
