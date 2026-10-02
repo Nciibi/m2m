@@ -282,7 +282,8 @@ impl PortMapper {
     ///
     /// Returns a handle that can be used to cancel the renewal loop (e.g. on
     /// app shutdown).
-    #[expect(dead_code, reason = "Reserved for automatic mapping renewal")]
+    // No `dead_code` expectation: `state::PortMappingHandle` holds the cancel
+    // sender and the network layer spawns this when a mapping is created.
     pub fn spawn_renewal(mapping: Arc<PortMapping>) -> tokio::sync::watch::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::watch::channel(());
 
