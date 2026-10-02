@@ -304,15 +304,15 @@ export default function ChatView() {
       <div className="app-main">
       <div className="app-header">
         <h1 className="app-header__title">
-          // A real <button>, not a <span onClick>.
-          //
-          // This is the app's trust anchor — the control that opens the
-          // fingerprint the user is supposed to check before trusting a peer —
-          // and it was unreachable by keyboard: no role, no tabIndex, no key
-          // handler. A `title` on a non-focusable element is not reliably
-          // announced either, so a screen reader had nothing for it either.
-          // `HubView` does this correctly with `role="button" tabIndex={0}` plus
-          // Enter/Space; this site had neither.
+          {/* A real <button>, not a <span onClick>.
+
+              This is the app's trust anchor — the control that opens the
+              fingerprint the user is supposed to check before trusting a peer —
+              and it was unreachable by keyboard: no role, no tabIndex, no key
+              handler. A `title` on a non-focusable element is not reliably
+              announced either. `HubView` does this correctly with
+              `role="button" tabIndex={0}` plus Enter/Space; this site had
+              neither. */}
           <button
             type="button"
             onClick={() => setShowFp(true)}
