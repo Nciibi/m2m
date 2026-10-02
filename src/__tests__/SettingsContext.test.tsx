@@ -154,6 +154,7 @@ describe("SettingsContext", () => {
     vi.clearAllMocks();
     appState.addToast.mockClear();
     appState.setView.mockClear();
+    relayStore = null;
     mockInvoke.mockImplementation(defaultInvoke);
   });
 
