@@ -71,6 +71,7 @@ export function useIdleDetection({ timeoutSecs, onIdle }: IdleDetectionOptions) 
       timerRef.current = setTimeout(() => {
         callbackRef.current();
       }, timeoutSecs * 1000);
+      reportActivityToRust(timeoutSecs);
     };
 
     // Reset on any user activity
