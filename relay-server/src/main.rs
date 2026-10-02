@@ -576,19 +576,33 @@ async fn main() {
             Ok((mut stream, peer_addr)) => {
                 // ── Connection caps (anti-DoS) ──
                 let ip = peer_addr.ip();
-                {
+                // Decide under the lock, act outside it.
+                //
+                // This used to `drop(counts)` explicitly and then
+                // `.await` in the same block. That is not enough: a
+                // `MutexGuard` has a `Drop` impl, so it stays drop-live until
+                // the end of its lexical scope even after a use, and holding a
+                // std mutex across an await point can block the whole runtime's
+                // worker threads. The decision is a plain bool, so the lock is
+                // released by the end of this block and the rejection path below
+                // never awaits with it alive.
+                let over_limit = {
                     let mut counts = conn_counts.lock().unwrap();
                     let total = total_conns.load(std::sync::atomic::Ordering::Relaxed);
                     if total >= MAX_TOTAL_CONNECTIONS
                         || counts.get(&ip).copied().unwrap_or(0) >= MAX_CONNECTIONS_PER_IP
                     {
-                        tracing::warn!(peer = %peer_addr, "connection limit exceeded — rejecting");
-                        drop(counts);
-                        let _ = stream.shutdown().await;
-                        continue;
+                        true
+                    } else {
+                        *counts.entry(ip).or_insert(0) += 1;
+                        total_conns.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        false
                     }
-                    *counts.entry(ip).or_insert(0) += 1;
-                    total_conns.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                };
+                if over_limit {
+                    tracing::warn!(peer = %peer_addr, "connection limit exceeded — rejecting");
+                    let _ = stream.shutdown().await;
+                    continue;
                 }
 
                 let state = state.clone();
