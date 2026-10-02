@@ -149,15 +149,16 @@ fn reject_unusable_external_addr(
     if addr.port() == 0 {
         return Err(unusable("external port is 0, so nothing is reachable"));
     }
-    // `is_global_unicast` is on `Ipv4Addr`/`Ipv6Addr`, not on `IpAddr`, so it has
-    // to be dispatched. `127.0.0.1`, `192.168.x.x`, `10.x.x.x`, link-local and
-    // unique-local addresses all answer false, which is the point: none of them
-    // is reachable by a peer.
-    let globally_routable = match addr.ip() {
-        std::net::IpAddr::V4(v4) => v4.is_global_unicast(),
-        std::net::IpAddr::V6(v6) => v6.is_global_unicast(),
-    };
-    if !globally_routable {
+    // Deliberately the shared `stun::is_global_unicast` rather than a local
+    // dispatch: this is the same predicate that decides whether a STUN-observed
+    // address may be advertised, and "may be advertised" must not have two
+    // definitions. It correctly rejects `127.0.0.1`, RFC 1918, link-local,
+    // unique-local, CGNAT and documentation ranges.
+    //
+    // Note there is no `is_global_unicast` on `IpAddr`/`Ipv4Addr`/`Ipv6Addr`
+    // in std at all — calling one was a compile error, which is why this
+    // rejection path has never run.
+    if !crate::stun::is_global_unicast(addr.ip()) {
         return Err(unusable("address is not globally routable"));
     }
     Ok(addr)
