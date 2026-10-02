@@ -1390,7 +1390,7 @@ pub async fn lock_vault_inner(
     // unlocked app when they are not. The frontend handler in `AppContext`
     // clears state and routes to the unlock screen; it has existed and was
     // correct, but nothing ever emitted this.
-    let _ = tauri::Emitter::emit(&app_handle, "m2m://vault-locked", serde_json::json!({}));
+    let _ = tauri::Emitter::emit(app_handle, "m2m://vault-locked", serde_json::json!({}));
 
     tracing::info!("Vault locked — keys zeroized, stores closed");
     Ok(())
