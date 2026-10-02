@@ -345,6 +345,79 @@ export default function SettingsView() {
           </div>
         </section>
 
+        {/* ─── Relay ─── */}
+        {/* The backend has had `get_relay_config` / `set_relay_config`
+            registered with Tauri since the relay server shipped, and nothing in
+            `src/` called either one. A user therefore had no way to configure
+            the relay at all, despite the repo shipping one.
+
+            No auth-token field is offered, on purpose. `get_relay_config`
+            returns a view whose token is reduced to `has_auth_token`, so the
+            secret cannot be displayed or edited — only cleared. A password box
+            here would suggest the value round-trips, which it does not, and
+            would be filled with the string "[redacted]" on every load. */}
+        <section className="settings-section">
+          <h2 className="settings-section__title">Relay</h2>
+          <div className="settings-card">
+            <div className="settings-row">
+              <span className="settings-label"><GlobeIcon size={16} /> Relay Server</span>
+              <span>{relayConfig ? `${relayConfig.host}:${relayConfig.port}` : "Not configured"}</span>
+            </div>
+
+            <div className="settings-row">
+              <label className="settings-label" htmlFor="relay-host">Host</label>
+              <input
+                id="relay-host"
+                className="settings-input"
+                value={relayHost}
+                onChange={(e) => setRelayHost(e.target.value)}
+                placeholder="relay.example.com"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+
+            <div className="settings-row">
+              <label className="settings-label" htmlFor="relay-port">Port</label>
+              <input
+                id="relay-port"
+                className="settings-input"
+                value={relayPort}
+                onChange={(e) => setRelayPort(e.target.value)}
+                inputMode="numeric"
+                placeholder="3478"
+              />
+            </div>
+
+            <div className="settings-row">
+              <Button size="xs" onClick={() => { void handleRelaySave(); }} disabled={relaySaving}>
+                Save Relay
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                onClick={() => { void handleRelayClear(); }}
+                disabled={relaySaving || !relayConfig}
+              >
+                Clear
+              </Button>
+              {/* Reflects what the backend holds. It cannot show the value, so
+                  the honest statement is "a token is set", not the token. */}
+              {relayConfig?.has_auth_token && (
+                <span className="settings-hint">An auth token is set (not shown)</span>
+              )}
+            </div>
+
+            <div className="settings-divider" />
+
+            <p className="text-muted text-sm">
+              Routes connections through a relay when a direct path fails. The
+              relay sees ciphertext only. <strong>OFF by default</strong> —
+              leaving it unset publishes no relay address in your invites.
+            </p>
+          </div>
+        </section>
+
         {/* ─── Discovery ─── */}
         <section className="settings-section">
           <h2 className="settings-section__title">Discovery</h2>
