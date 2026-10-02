@@ -511,10 +511,15 @@ describe("SettingsContext", () => {
       </SettingsProvider>,
     );
 
+    // An empty host is rejected before the port is even looked at, so a test
+    // for port validation needs a host present. Typed through the same setters
+    // the component uses.
     await user.click(screen.getByText("Set Relay Host"));
-    // `parseInt("3478x")` is 3478, so a string with trailing junk would otherwise
-    // be accepted silently.
     await user.click(screen.getByText("Set Relay Port"));
+    // Then blank the port. `parseInt("")` is NaN and `parseInt("3478x")` is
+    // 3478, so both must be refused rather than coerced to something sendable.
+    await user.click(screen.getByText("Blank Relay Port"));
+
     mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "set_relay_config") return Promise.reject(new Error("must not be called"));
       return defaultInvoke(cmd, args);
