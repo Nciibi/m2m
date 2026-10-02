@@ -373,7 +373,7 @@ mod tests {
     }
 
     /// The two deadlines are separate settings. Arming one must never disturb
-    /// the other — sharing a field would mean copying a secret arms auto-lock.
+    /// the other â€” sharing a field would mean copying a secret arms auto-lock.
     #[test]
     fn the_two_deadlines_are_independent() {
         let s = state();
