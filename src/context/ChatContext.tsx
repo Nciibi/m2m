@@ -1136,7 +1136,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setNamingMyName("");
       setNamingTheirName("");
       navIntentRef.current = null;
-    }).catch(() => {});
+      // Must return an UnlistenFn from the rejection handler, not nothing:
+      // `.catch(() => {})` types `stop` as `Promise<UnlistenFn | void>`, so the
+      // teardown below calls a `void`. A listener that failed to register would
+      // then crash the cleanup instead of no-op'ing, and `tsc` rejects it.
+    }).catch(() => () => {});
     return () => {
       disposed = true;
       stop.then((f) => f()).catch(() => {});
