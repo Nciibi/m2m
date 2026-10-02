@@ -170,6 +170,10 @@ describe("design tokens: no colour literals outside tokens.css / theme.css", () 
         }
         if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("{/*")) continue;
         for (const m of line.split("//")[0].matchAll(/var\(\s*(--[\w-]+)/g)) {
+          // A name ending in `-` is followed by a `${…}` interpolation — the
+          // runtime value cannot be checked statically, so it is skipped rather
+          // than reported as an undefined token.
+          if (m[1].endsWith("-")) continue;
           referenced.add(m[1]);
         }
       }
