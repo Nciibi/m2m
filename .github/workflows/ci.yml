@@ -18,15 +18,31 @@ jobs:
       with:
         components: rustfmt, clippy
 
+    # NOTE: `dtolnay/rust-toolchain@stable` does NOT honour
+    # `src-tauri/rust-toolchain.toml` when run from the repo root, so this job
+    # does not use the pinned 1.89.0 that `SECURITY-HARDENING.md` requires for
+    # release builds. fmt/clippy on `stable` is stricter than on the pin, so a
+    # green run here is still meaningful; it is not, however, evidence that the
+    # *release* toolchain is clean. Fix by pointing at the pinned toolchain.
+
     - name: Install dependencies (Ubuntu)
       run: |
         sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsodium-dev
+        # `libsodium-dev` was here from the pre-RustCrypto era. There has been
+        # no libsodium in Cargo.toml since the migration to ed25519-dalek /
+        # x25519-dalek / chacha20poly1305, so it only widens the supply chain.
+        # `libayatana-appindicator3-dev` replaces `libappindicator3-dev`: Tauri 2
+        # resolves the tray library via pkg-config and fails with "Can't detect
+        # any appindicator library" against the older package.
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri
+        # The Cargo workspace root is the REPO root (Cargo.toml members =
+        # src-tauri, relay-server). Pointing this at `src-tauri` made it look
+        # for src-tauri/src-tauri, so the cache missed on every single run.
+        workspaces: .
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
