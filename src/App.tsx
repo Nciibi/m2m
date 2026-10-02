@@ -277,9 +277,14 @@ function AppInner() {
         body={
           securityError ??
           evictionNotice ??
-          (captureWarning.length > 0
-            ? `⚠ Screen capture software detected: ${captureWarning.join(", ")} — your screen may be recorded.`
-            : null)
+          (captureScanFailed
+            // A failed scan is reported as its own state. Rendering nothing here
+            // would mean the app asserted nothing was detected at the exact
+            // moment it had lost the ability to detect.
+            ? `⚠ Screen capture detection is not working right now, so this screen may be recorded without warning.${captureWarning.length > 0 ? ` Currently flagged: ${captureWarning.join(", ")}.` : ""}`
+            : captureWarning.length > 0
+              ? `⚠ Screen capture software detected: ${captureWarning.join(", ")} — your screen may be recorded.`
+              : null)
         }
         onDismiss={evictionNotice ? () => setEvictionNotice(null) : undefined}
       />
