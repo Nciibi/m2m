@@ -43,7 +43,7 @@
 .btn--default:not(:disabled):hover {
   transform: translateY(-1.5px);
   box-shadow: var(--shadow-accent-strong), 0 0 20px var(--color-accent-glow);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--color-fill-line-strong);
 }
 
 .btn--default:not(:disabled):active {
