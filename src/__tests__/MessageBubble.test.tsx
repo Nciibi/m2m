@@ -19,6 +19,7 @@ function msg(overrides: Partial<ChatMessage> = {}): ChatMessage {
     expires_at: null,
     reactions: {},
     sender_peer_key_hex: "",
+    decrypt_failed: false,
     ...overrides,
   };
 }
