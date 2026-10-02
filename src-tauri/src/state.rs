@@ -458,6 +458,28 @@ pub struct AppState {
     /// Single-monitor invariant for the capture-software detector.
     /// true while the background scanner task is running.
     pub capture_monitor_running: AtomicBool,
+
+    // ─── Security deadlines enforced by the Rust side ───
+    //
+    // `clipboard_clear_secs` and `idle_lock_secs` had **no reader anywhere in
+    // Rust**. Both "✅ Clipboard auto-clear" and "✅ idle vault lock" were
+    // implemented purely in the webview: `SettingsContext` scheduled a JS timer
+    // for the clipboard, and `useIdleDetection` ran a JS timer for the lock. If
+    // the webview hung, was throttled into a background tab, or the renderer
+    // crashed, neither fired — so a copied passphrase sat in the OS clipboard
+    // indefinitely, and an unlocked vault stayed unlocked indefinitely.
+    //
+    // A security control that depends on the component it protects still being
+    // responsive is not a security control. These two deadlines are the Rust-side
+    // backstop, checked by `maintenance::spawn_security_timers` on a 1s tick, so
+    // they hold even when the renderer is not. The frontend still arms/refreshes
+    // them; it simply is not the only thing that can.
+    //
+    // Unix **seconds**; 0 means disarmed. `AtomicU64` rather than `RwLock` because
+    // this is read every second and written from a command handler, and it never
+    // needs to be observed together with any other lock.
+    pub clipboard_clear_deadline: AtomicU64,
+    pub idle_lock_deadline: AtomicU64,
 }
 
 impl AppState {
