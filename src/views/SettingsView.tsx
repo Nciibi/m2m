@@ -10,7 +10,7 @@ import { useApp } from "../context/AppContext";
 import { useSettings } from "../context/SettingsContext";
 import { useT } from "../i18n/I18nContext";
 import { ConfirmDialog, DuressPassphraseDialog } from "../components/ui/ConfirmDialog";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme, DEFAULT_ACCENT } from "../context/ThemeContext";
 
 /** Cap presets, in bytes. `unlimited` is a large finite value rather than 0,
  *  because the backend maps 0 to the 10 GiB default rather than to "no limit". */
@@ -740,7 +740,7 @@ export default function SettingsView() {
                 aria-label="Accent color"
               />
               <span className="settings-mono settings-mono--sm">{accentColor}</span>
-              <Button size="xs" variant="secondary" onClick={() => setAccentColor("#6366f1")} aria-label="Reset accent color">Reset</Button>
+              <Button size="xs" variant="secondary" onClick={() => setAccentColor(DEFAULT_ACCENT)} aria-label="Reset accent color">Reset</Button>
             </div>
           </div>
         </section>
