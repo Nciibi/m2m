@@ -522,6 +522,7 @@ mod tests {
             assert_eq!(
                 result.unwrap_err(),
                 "air-gap mode is enabled — this internet-facing operation is blocked"
+                    .into()
             );
         }
     }
