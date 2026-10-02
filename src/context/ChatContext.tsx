@@ -691,22 +691,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
   useEffect(() => { mutedConversationsRef.current = mutedConversations; }, [mutedConversations]);
 
-  // Navigation intents queued by the notification handler, drained by a
-  // separate effect. See the comment at `drainNavigationIntent` for why the
-  // listener cannot navigate directly.
-  const navIntentRef = useRef<{ peerKeyHex: string } | null>(null);
-  const [, forceNavRender] = useState(0);
-
-  useEffect(() => {
-    if (navIntentRef.current) {
-      const { peerKeyHex } = navIntentRef.current;
-      navIntentRef.current = null;
-      setActiveConversation(peerKeyHex);
-      setView("chat");
-      invoke("load_messages", { peerKeyHex })
-        .then((r) => setMessages(asList<ChatMessage>(r)))
-        .catch((e) => addToast("Could not open conversation: " + errorMessage(e), "error"));
-    }
+  // Navigation intents raised by the notification handler.
+  //
+  // This used to be a ref written by the listener plus a *separate* effect whose
+  // only job was to drain it, kicked by a `forceNavRender` counter. That could
+  // never work: the drain effect's dependencies were
+  // `[setActiveConversation, setView, addToast]` — three stable `useCallback`s —
+  // so it ran exactly once, on mount, when the ref was still `null`. Bumping a
+  // counter schedules a re-render, and a `useEffect` with unchanged dependencies
+  // does not re-run on a re-render. Clicking an OS notification therefore
+  // focused the window and never opened the conversation, with no error and no
+  // test failure.
+  //
+  // The original reason for deferring was a `document.addEventListener(
+  // "visibilitychange", …, { once: true })` in the listener that leaked one
+  // document-level listener per unread message and hijacked the next visibility
+  // change. That is gone, so there is nothing left to defer: calling the
+  // setters straight from the listener is batched by React into the same render
+  // and saves a second one.
+  const drainNavigationIntent = useCallback((peerKeyHex: string) => {
+    setActiveConversation(peerKeyHex);
+    setView("chat");
+    invoke("load_messages", { peerKeyHex })
+      .then((r) => setMessages(asList<ChatMessage>(r)))
+      .catch((e) => addToast("Could not open conversation: " + errorMessage(e), "error"));
   }, [setActiveConversation, setView, addToast]);
 
   useEffect(() => {
