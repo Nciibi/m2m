@@ -45,7 +45,10 @@ export default function HubView() {
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
   const [family, setFamily] = useState<FamilyMember[]>([]);
-  const [_familyLoading, setFamilyLoading] = useState(false);
+  const [familyLoading, setFamilyLoading] = useState(false);
+  // Non-null when the list read failed, so the tab can say so instead of
+  // rendering an empty list that looks like everyone was removed.
+  const [familyLoadError, setFamilyLoadError] = useState<string | null>(null);
 
 const handleCopy = async (): Promise<boolean> => {
     // `setCopied(true)` used to be unconditional, so the green ✓ the user's
