@@ -1209,25 +1209,24 @@ pub async fn connect_to_peer(
     {
         {
             tracing::debug!("hole-punch role: Initiator (outgoing connect won)");
-            if has_x3dh {
-                // Snapshot the whole keypair, not just its public half: the secret is
-                // required for DH4 and a public-key-only copy cannot perform it.
-                let xkp = {
-                    let x25519 = state.x25519_identity.read().await;
-                    let kp = x25519
-                        .as_ref()
-                        .ok_or("X25519 key not initialized for X3DH")?;
-                    crate::crypto::X25519IdentityKeypair::from_bytes(
-                        &kp.public_key_bytes(),
-                        &kp.secret_key_bytes(),
-                    )
-                    .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
-                };
-                let bundle = crate::crypto::PrekeyBundle {
-                    identity_key: signed.payload.x25519_identity_pub,
-                    signed_prekey: signed.payload.signed_prekey,
-                    signed_prekey_sig: signed.payload.signed_prekey_sig.clone(),
-                    one_time_prekey: signed.payload.one_time_prekey,
+            // Snapshot the whole keypair, not just its public half: the secret is
+            // required for DH4 and a public-key-only copy cannot perform it.
+            let xkp = {
+                let x25519 = state.x25519_identity.read().await;
+                let kp = x25519
+                    .as_ref()
+                    .ok_or("X25519 key not initialized for X3DH")?;
+                crate::crypto::X25519IdentityKeypair::from_bytes(
+                    &kp.public_key_bytes(),
+                    &kp.secret_key_bytes(),
+                )
+                .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
+            };
+            let bundle = crate::crypto::PrekeyBundle {
+                identity_key: signed.payload.x25519_identity_pub,
+                signed_prekey: signed.payload.signed_prekey,
+                signed_prekey_sig: signed.payload.signed_prekey_sig.clone(),
+                one_time_prekey: signed.payload.one_time_prekey,
                 };
                 session
                     .handshake_as_initiator_x3dh(
