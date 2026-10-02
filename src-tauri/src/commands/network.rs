@@ -2971,7 +2971,6 @@ pub async fn release_port_mapping(state: &Arc<AppState>) {
 
 async fn handle_sync_frame(
     state: &Arc<AppState>,
-    app_handle: &AppHandle,
     peer_key_hex: &str,
     frame: &crate::network::RawFrame,
 ) {
