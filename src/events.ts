@@ -561,6 +561,28 @@ export function asVaultLocked(v: unknown): Record<string, never> | null {
   return {};
 }
 
+/** The only two destinations the tray menu can ask for. */
+export type NavigateTarget = "hub" | "settings";
+
+/**
+ * Guard for `m2m://navigate`.
+ *
+ * Unusually for this file the payload is a bare JSON **string**, not an object,
+ * because it is emitted as `window.emit("m2m://navigate", "hub")` from the tray
+ * handler. It is still untrusted input, and it names the view to switch to — so
+ * it is matched against a closed set rather than passed through. An unrecognised
+ * value means we do not know where to go, and guessing would be worse than
+ * staying put.
+ *
+ * This event had no listener at all: the tray's "New Conversation" and
+ * "Settings" items focused the window and then did nothing, because the app
+ * was left showing whatever view was already open.
+ */
+export function asNavigate(v: unknown): NavigateTarget | null {
+  if (v === "hub" || v === "settings") return v;
+  return null;
+}
+
 export function asSyncStatus(v: unknown): { status: string; peer_key_hex: string } | null {
   if (typeof v !== "object" || v === null) return null;
   const p = v as Record<string, unknown>;
