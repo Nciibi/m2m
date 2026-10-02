@@ -223,12 +223,7 @@ impl Session {
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: x25519_pub,
-            used_opk: None,
-            one_time: false,
-            // The legacy handshake carries no prekey bundle, so there is no
-            // one-time property to assert. A legacy peer's replay exposure is
-            // the reduced-security mode documented on this path, not something
-            // this flag can address.
+used_opk: None,
             one_time: false,
             timestamp: now,
             signature,
