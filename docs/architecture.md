@@ -386,7 +386,7 @@ used for every derivation, and the Double Ratchet shipped.
 | TCP hole punch | Restricted cone NATs | Symmetric NAT | ✅ Simultaneous open |
 | UPnP/NAT-PMP/PCP | Consumer routers | Disabled/enterprise | ✅ Automatic on invite |
 | Manual forward | Any (user-configured) | User didn't set it up | ✅ Stored in state |
-| TURN relay | Everything | High latency | 🚧 Phase 3 |
+| TURN relay | Everything | High latency | Shipped (`relay-server/`, Docker image). Config UI still to be wired — see `CLAUDE.md`. |
 
 ### Why not generate a QR code for invite sharing?
 
