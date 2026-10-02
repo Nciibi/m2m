@@ -64,6 +64,7 @@ function TestConsumer() {
       <span data-testid="relay-form-port">{relayPort}</span>
       <button onClick={() => setRelayHost("relay.example.com")}>Set Relay Host</button>
       <button onClick={() => setRelayPort("3478")}>Set Relay Port</button>
+      <button onClick={() => setRelayPort("")}>Blank Relay Port</button>
       <button onClick={() => void handleRelaySave()}>Save Relay</button>
       <button onClick={() => void handleRelayClear()}>Clear Relay</button>
     </div>
