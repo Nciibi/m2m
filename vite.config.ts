@@ -34,21 +34,25 @@ export default defineConfig(async () => ({
         "src/main.tsx",
         "src/components/ui/icons/**"
       ],
-      // Coverage floors.
+// Coverage floors.
       //
-      // These were set to 45/55/30/45 — which is where coverage actually sat,
-      // so they could never fail and enforced nothing. Tightened to sit just
-      // under the current real numbers (52.1 / 64.7 / 35.8 / 52.1) so that a
-      // regression fails the build but a normal edit does not.
+      // These were 45/55/30/45 — where coverage actually sat at the time, so they
+      // could never fail and enforced nothing. Then they were raised to
+      // 50/60/34/50, set just under numbers that were themselves stale: the real
+      // figures are 65.42 / 76.57 / 55.72 / 65.42, leaving `functions` only
+      // 1.8 points of headroom, so one new uncovered function broke CI.
       //
-      // `functions` stays low because that is the honest number: a function
-      // counts as covered as soon as it runs once, and a meaningful share of
-      // the UI is render-only. Raising it further would be theatre.
+      // Raised again to sit comfortably under the measured values, which is what
+      // a floor is for: fail on a regression, not on ordinary churn.
+      //
+      // `functions` stays the lowest because that is the honest shape — a
+      // function counts as covered the moment it runs once, and a large share of
+      // this UI is render-only. Raising it further would be theatre.
       thresholds: {
-        statements: 50,
-        branches: 60,
-        functions: 34,
-        lines: 50
+        statements: 60,
+        branches: 70,
+        functions: 48,
+        lines: 60
       }
     }
   },
