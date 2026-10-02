@@ -294,3 +294,117 @@ pub fn spawn_security_timers(app_handle: AppHandle, state: Arc<AppState>) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    /// `AppState::new` is cheap and touches no I/O, so the deadline helpers can
+    /// be exercised without a Tauri runtime or an `AppHandle`.
+    fn state() -> Arc<AppState> {
+        Arc::new(AppState::new(String::new()))
+    }
+
+    #[test]
+    fn clipboard_deadline_is_armed_in_the_future_and_disarmed_by_zero() {
+        let s = state();
+        assert_eq!(
+            s.clipboard_clear_deadline.load(Ordering::Relaxed),
+            0,
+            "a fresh state must have no deadline, or the task would fire "
+                "immediately on startup"
+        );
+
+        arm_clipboard_deadline(&s, 30);
+        let armed = s.clipboard_clear_deadline.load(Ordering::Relaxed);
+        assert!(
+            armed >= now_unix_secs() + 29,
+            "30s must arm ~30s out, got {armed}"
+        );
+
+        // The documented disarm path. Getting this wrong is the "auto-clear
+        // fires with nothing to clear" bug.
+        arm_clipboard_deadline(&s, 0);
+        assert_eq!(
+            s.clipboard_clear_deadline.load(Ordering::Relaxed),
+            0,
+            "zero means disarmed, not 'fires now'"
+        );
+    }
+
+    #[test]
+    fn idle_deadline_follows_activity_and_zero_disarms() {
+        let s = state();
+        assert_eq!(s.idle_lock_deadline.load(Ordering::Relaxed), 0);
+
+        note_activity(&s, 600);
+        let first = s.idle_lock_deadline.load(Ordering::Relaxed);
+        assert!(first >= now_unix_secs() + 599, "activity must push it out");
+
+        // Every activity event re-arms from *now*, so it must not be additive:
+        // a second call moves the deadline forward, never further into a
+        // doubling horizon.
+        note_activity(&s, 600);
+        let second = s.idle_lock_deadline.load(Ordering::Relaxed);
+        assert!(
+            second - first < 5,
+            "re-arming must replace the deadline, not add to it \
+             (first={first}, second={second})"
+        );
+
+        // Idle lock switched off.
+        note_activity(&s, 0);
+        assert_eq!(s.idle_lock_deadline.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn disarm_clears_both_deadlines() {
+        let s = state();
+        arm_clipboard_deadline(&s, 60);
+        note_activity(&s, 600);
+        disarm_security_deadlines(&s);
+        assert_eq!(s.clipboard_clear_deadline.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            s.idle_lock_deadline.load(Ordering::Relaxed),
+            0,
+            "a stale idle deadline would re-lock an already-locked vault"
+        );
+    }
+
+    /// The two deadlines are separate settings. Arming one must never disturb
+    /// the other — sharing a field would mean copying a secret arms auto-lock.
+    #[test]
+    fn the_two_deadlines_are_independent() {
+        let s = state();
+        arm_clipboard_deadline(&s, 30);
+        assert_eq!(
+            s.idle_lock_deadline.load(Ordering::Relaxed),
+            0,
+            "arming the clipboard deadline must not arm idle lock"
+        );
+        note_activity(&s, 600);
+        assert!(
+            s.clipboard_clear_deadline.load(Ordering::Relaxed) != 0,
+            "reporting activity must not disarm the clipboard deadline"
+        );
+    }
+
+    #[test]
+    fn a_deadline_in_the_past_is_visible_as_reached() {
+        // The loop's own condition is `now >= deadline`. This asserts the
+        // comparison a re-arm has to keep satisfying after the clock advances,
+        // without sleeping for the configured duration.
+        let s = state();
+        arm_clipboard_deadline(&s, 1);
+        let armed = s.clipboard_clear_deadline.load(Ordering::Relaxed);
+        assert!(
+            armed > 0,
+            "1s must still arm a real deadline rather than reading as 0/disarmed"
+        );
+        // Simulate the clock having passed it.
+        s.clipboard_clear_deadline
+            .store(now_unix_secs() - 1, Ordering::Relaxed);
+        assert!(now_unix_secs() >= s.clipboard_clear_deadline.load(Ordering::Relaxed));
+    }
+}
