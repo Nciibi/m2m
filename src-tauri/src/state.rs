@@ -396,9 +396,6 @@ pub struct AppState {
     pub private_mode: RwLock<bool>,
     /// Connection rate limiter for DoS protection.
     pub connection_limiter: network::ConnectionLimiter,
-    /// User-configured manual port forwards (stored in state, not persisted).
-    /// The UI manages this list; each entry becomes a candidate in invites.
-    pub manual_forwards: RwLock<Vec<ManualForward>>,
     /// Relay server configuration (optional).
     /// When set, relay candidates are included in invites as a fallback.
     pub relay_config: RwLock<Option<relay::RelayConfig>>,
@@ -432,9 +429,6 @@ pub struct AppState {
     pub theme_preference: RwLock<String>,
     /// User's accent color (hex, e.g. "#6366f1").
     pub accent_color: RwLock<String>,
-    // ─── Multi-Device Sync ───
-    /// Manages sync device pairing, invites, and data exchange.
-    pub sync_manager: RwLock<crate::sync::SyncManager>,
     // ─── Group Chat (Phase 3) ───
     /// Manages group state, members, and Sender Key chains.
     pub group_manager: RwLock<GroupManager>,
