@@ -276,7 +276,7 @@ break. See "The Rust side had never been compiled" below.
 | `cargo test` (`relay-server`) | **15 passed** | run |
 | `cargo clippy --all-targets -- -D warnings` (`relay-server`) | **clean** | run. Was 7 findings. |
 | `tsc --noEmit` | clean | run. Was **1 error** (`ChatContext.tsx` `.catch(() => {})` typing). |
-| `pnpm test` | **386 passed**, 21 files | run |
+| `pnpm test` | **396 passed**, 21 files | run. Was 386 — the 10 added cover the capture-scan failure state, `decrypt_failed`, and the relay config UI. |
 | `pnpm lint` | 0 errors, **8** warnings (budget 8) | run. Was 11 — over a budget of 10, i.e. CI-red. |
 | `pnpm test:coverage` | 65.14 stmts / 76.63 branch / 56.15 funcs / 65.14 lines | run. Gates raised to 60/70/48/60 to match. |
 | `./tools/typecheck-harness/check.sh --run` | **still not run** | needs `bash`; this is a Windows shell. |
