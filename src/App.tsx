@@ -152,6 +152,7 @@ function AppInner() {
       unlisten.then((fn) => fn()).catch(() => {});
       unlistenSec.then((fn) => fn()).catch(() => {});
       unlistenEvict.then((fn) => fn()).catch(() => {});
+      unlistenNav.then((fn) => fn()).catch(() => {});
     };
   }, []);
 
