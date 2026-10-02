@@ -91,4 +91,19 @@
   --gradient-scrim-top: linear-gradient(to bottom, rgba(15, 23, 42, 0.06), transparent);
   --color-on-danger: #ffffff;
   --color-on-accent: #ffffff;
+
+  /* === Avatar ramp === */
+
+  /* Restated for light. The dark values are dark enough to read white initials
+     against; on a near-white card the same lightness gives a washed-out chip
+     with poor contrast, so the light ramp drops lightness and raises
+     saturation. Kept as eight entries so `hashToColor` needs no theme branch. */
+  --color-avatar-0: hsl(210, 62%, 52%);
+  --color-avatar-1: hsl(172, 52%, 34%);
+  --color-avatar-2: hsl(28, 68%, 44%);
+  --color-avatar-3: hsl(268, 50%, 54%);
+  --color-avatar-4: hsl(346, 58%, 46%);
+  --color-avatar-5: hsl(196, 64%, 42%);
+  --color-avatar-6: hsl(88, 44%, 32%);
+  --color-avatar-7: hsl(232, 50%, 52%);
 }
