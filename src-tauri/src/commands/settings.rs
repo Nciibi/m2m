@@ -541,7 +541,7 @@ mod tests {
 
         assert_eq!(
             result.unwrap_err(),
-            "Tor routing is enabled — direct STUN diagnostics are blocked"
+            "Tor routing is enabled — direct STUN diagnostics are blocked".into()
         );
     }
 
