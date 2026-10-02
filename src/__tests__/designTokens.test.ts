@@ -207,4 +207,26 @@ describe("design tokens: no colour literals outside tokens.css / theme.css", () 
       `Referenced but never defined in tokens.css: ${missing.join(", ")}`,
     ).toEqual([]);
   });
+
+  it("keeps exactly one copy of the default accent", () => {
+    // `DEFAULT_ACCENT` was duplicated in `SettingsView`'s "Reset accent"
+    // handler. Two copies of a default is the hand-synchronised-copy failure
+    // mode this codebase already has a scar from: change one and the reset
+    // button stops resetting to the real default, with nothing complaining.
+    const themePath = join(SRC, "context", "ThemeContext.tsx");
+    const declared = readFileSync(themePath, "utf8")
+      .split("\n")
+      .filter((l) => /DEFAULT_ACCENT\s*=/.test(l));
+    expect(declared, "DEFAULT_ACCENT must be declared exactly once").toHaveLength(1);
+
+    const elsewhere = walk(SRC)
+      .filter((f) => /\.tsx?$/.test(f) && !f.includes(`${join("__tests__")}`))
+      .filter((f) => f !== themePath)
+      .filter((f) => /#6366f1/.test(readFileSync(f, "utf8")))
+      .map((f) => relative(SRC, f).replace(/\\/g, "/"));
+    expect(
+      elsewhere,
+      "#6366f1 may only appear in context/ThemeContext.tsx (as DEFAULT_ACCENT)",
+    ).toEqual([]);
+  });
 });
