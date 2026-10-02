@@ -119,6 +119,11 @@ impl ChatMessage {
         self.sender_peer_key_hex = v;
         self
     }
+
+    pub fn with_decrypt_failed(mut self, v: bool) -> Self {
+        self.decrypt_failed = v;
+        self
+    }
 }
 
 impl Drop for ChatMessage {
