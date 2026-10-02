@@ -308,8 +308,8 @@ mod tests {
 
     #[test]
     fn clipboard_deadline_is_armed_in_the_future_and_disarmed_by_zero() {
-        let s = state();
-assert_eq!(
+let s = state();
+        assert_eq!(
             s.clipboard_clear_deadline.load(Ordering::Relaxed),
             0,
             "a fresh state must have no deadline, or the task would fire at once"
