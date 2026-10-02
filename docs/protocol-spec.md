@@ -36,7 +36,7 @@ Length-prefixed framing over TCP:
 
 | Constraint | Value | Rationale |
 |------------|-------|-----------|
-| Max frame | 1 MiB | Prevents memory exhaustion; large transfers use the chunked file protocol. Was 16 MiB until 5.0.0 — see the rationale in `protocol.rs`. |
+| Max frame | 1 MiB | Prevents memory exhaustion; large transfers use the chunked file protocol. Was 16 MiB until 5.0.0 â€” see the rationale in `protocol.rs`. |
 | Max text message body | 64 KiB | Limits ReDoS surface on message deserialization |
 | Max file chunk | 256 KiB | Balances throughput vs. per-chunk hash verification cost |
 | Min frame | 2 bytes | Version (1) + at least 1 byte of packet type |
