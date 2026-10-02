@@ -2942,6 +2942,26 @@ enum SyncResend {
     Refused(&'static str),
 }
 
+/// Stop renewing the NAT mapping we hold, and ask the router to remove it.
+///
+/// Idempotent: a second call with nothing held is a no-op.
+///
+/// Called before taking a new mapping and when private mode suppresses one.
+/// It is also registered against app exit in `lib.rs` so a normal quit does not
+/// leave a forward to a port nothing is listening on.
+pub async fn release_port_mapping(state: &Arc<AppState>) {
+    let handle = {
+        let mut slot = state.port_mapping.write().await;
+        slot.take()
+    };
+    let Some(handle) = handle else { return };
+
+    // Stop the renewal task first, so it cannot recreate the mapping while we
+    // are removing it.
+    let _ = handle.renew_cancel.send(());
+    crate::port_mapping::remove_port_mapping(&handle.mapping).await;
+}
+
 async fn handle_sync_frame(
     state: &Arc<AppState>,
     app_handle: &AppHandle,
