@@ -286,6 +286,21 @@ pub fn run() {
                 app.state::<Arc<AppState>>().inner().clone(),
             );
 
+            // Clipboard auto-clear and idle vault lock were both implemented
+            // *only* in the webview, so both stopped working the moment the
+            // renderer did — a hung tab meant a copied passphrase stayed on the
+            // OS clipboard and an unlocked vault stayed unlocked. This task holds
+            // the same two deadlines from the Rust side on a 1s tick, so the
+            // controls survive losing the frontend.
+            //
+            // Separate from `maintenance::spawn` above because the intervals
+            // differ by three orders of magnitude: 15 minutes for storage
+            // maintenance, 1 second for a deadline measured in seconds.
+            maintenance::spawn_security_timers(
+                app.handle().clone(),
+                app.state::<Arc<AppState>>().inner().clone(),
+            );
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
