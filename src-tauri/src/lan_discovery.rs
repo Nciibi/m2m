@@ -234,10 +234,7 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // `SockAddr::from(&SocketAddr)` is `socket2`'s own conversion; written as
     // an explicit `from` rather than `.into()` so the target type is stated
     // rather than inferred from `bind`'s signature.
-    let addr = socket2::SockAddr::from(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        port,
-    ));
+    let addr = socket2::SockAddr::from(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
     socket.bind(&addr).map_err(LanDiscoveryError::Io)?;
 
     // `From<Socket> for UdpSocket` transfers ownership, so the resulting
