@@ -19,6 +19,8 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
   const [showAdd, setShowAdd] = useState(false);
   const [showUpdate, setShowUpdate] = useState<string | null>(null);
   const [updateInvite, setUpdateInvite] = useState("");
+  // Which member is pending removal, for the confirmation dialog.
+  const [pendingRemoval, setPendingRemoval] = useState<FamilyMember | null>(null);
   // Day-level granularity is plenty for an expiry badge, and it keeps a long
   // family list from re-rendering every second.
   const now = useNow(60_000);
