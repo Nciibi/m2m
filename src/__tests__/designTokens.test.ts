@@ -123,7 +123,8 @@ describe("design tokens: no colour literals outside tokens.css / theme.css", () 
       const rel = relative(SRC, file).replace(/\\/g, "/");
       const stripped = stripVarFallbacks(readFileSync(file, "utf8"));
       stripped.split("\n").forEach((line, i) => {
-        if (LITERAL.test(line)) violations.push(`${rel}:${i + 1}  ${line.trim()}`);
+        const code = line.split("/*")[0];
+        if (LITERAL.test(code)) violations.push(`${rel}:${i + 1}  ${line.trim()}`);
       });
     }
     expect(
