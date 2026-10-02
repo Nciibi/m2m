@@ -27,6 +27,8 @@ function TestConsumer() {
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
     handleScreenCaptureToggle, handleLockVault, handleClearClipboard,
     handleStorageCapChange, storageUsage,
+    relayConfig, relayHost, relayPort, setRelayHost, setRelayPort,
+    handleRelaySave, handleRelayClear,
   } = useSettings();
   return (
     <div>
