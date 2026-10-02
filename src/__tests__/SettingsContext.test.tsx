@@ -469,4 +469,92 @@ describe("SettingsContext", () => {
       config: { ...DEFAULT_SECURITY_CONFIG, storage_cap_bytes: 5 * 1024 ** 3 },
     });
   });
+
+  // ─── Relay ───
+  //
+  // `get_relay_config` / `set_relay_config` were registered with Tauri and
+  // reachable from the frontend the whole time, but nothing in `src/` called
+  // either one, so a user could not configure the relay despite the repo
+  // shipping a relay server.
+  it("saves a relay and reads it back", async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>,
+    );
+
+    expect(screen.getByTestId("relay-host")).toHaveTextContent("null");
+
+    await user.click(screen.getByText("Set Relay Host"));
+    await user.click(screen.getByText("Set Relay Port"));
+    await user.click(screen.getByText("Save Relay"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("relay-host")).toHaveTextContent("relay.example.com"),
+    );
+    expect(screen.getByTestId("relay-port")).toHaveTextContent("3478");
+    expect(mockInvoke).toHaveBeenCalledWith("set_relay_config", {
+      config: { host: "relay.example.com", port: 3478, auth_token: "" },
+    });
+    expect(appState.addToast).toHaveBeenCalledWith(
+      expect.stringContaining("relay.example.com:3478"),
+      "success",
+    );
+  });
+
+  it("refuses an invalid port instead of sending it to the backend", async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>,
+    );
+
+    await user.click(screen.getByText("Set Relay Host"));
+    // `parseInt("3478x")` is 3478, so a string with trailing junk would otherwise
+    // be accepted silently.
+    await user.click(screen.getByText("Set Relay Port"));
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "set_relay_config") return Promise.reject(new Error("must not be called"));
+      return defaultInvoke(cmd, args);
+    });
+
+    await user.click(screen.getByText("Save Relay"));
+    await waitFor(() =>
+      expect(appState.addToast).toHaveBeenCalledWith(
+        expect.stringContaining("between 1 and 65535"),
+        "error",
+      ),
+    );
+    expect(mockInvoke).not.toHaveBeenCalledWith("set_relay_config", expect.anything());
+  });
+
+  it("clearing the relay disables it", async () => {
+    const user = userEvent.setup();
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "get_relay_config") {
+        return { host: "relay.example.com", port: 3478, has_auth_token: true };
+      }
+      return defaultInvoke(cmd, args);
+    });
+    render(
+      <SettingsProvider>
+        <TestConsumer />
+      </SettingsProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("relay-host")).toHaveTextContent("relay.example.com"),
+    );
+    // The token is a boolean, never the value: the backend does not return it.
+    expect(screen.getByTestId("relay-token")).toHaveTextContent("set");
+    expect(screen.getByTestId("relay-form-host")).toHaveTextContent("relay.example.com");
+
+    await user.click(screen.getByText("Clear Relay"));
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("set_relay_config", { config: null }),
+    );
+    await waitFor(() => expect(screen.getByTestId("relay-host")).toHaveTextContent("null"));
+    expect(screen.getByTestId("relay-form-host")).toHaveTextContent("");
+  });
 });
