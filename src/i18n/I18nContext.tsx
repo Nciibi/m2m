@@ -70,7 +70,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     // Resolve the bundle with English fallbacks so `strings.x.y` is always a
     // string, never undefined.
     const strings = LOCALES[locale] as Translation;
-    return { locale, setLocale, t, strings };
+    return { locale, setLocale, t, strings, hasMultipleLocales: HAS_MULTIPLE_LOCALES };
   }, [locale, setLocale]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
