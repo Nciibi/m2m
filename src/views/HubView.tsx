@@ -229,8 +229,12 @@ interface ConnectTabProps {
   namingMyName: string;
   namingTheirName: string;
   isConnecting: boolean;
-  onGenerateInvite: () => void;
-  onCopyInvite: () => void;
+  /** Resolves true only when an invite was actually created. Never a bare `void`:
+   *  the caller sets a countdown and a "listening" badge from this value, and a
+   *  void return made a failed generation indistinguishable from a successful one. */
+  onGenerateInvite: () => Promise<boolean>;
+  /** Resolves true only when the invite text actually reached the clipboard. */
+  onCopyInvite: () => Promise<boolean>;
   copied: boolean;
   setInviteToConnect: (v: string) => void;
   onConnect: () => void;
