@@ -553,7 +553,7 @@ impl KeyStore {
         // 31-byte key produced a 62-char hex string that no caller, all of which
         // decode it back to `[u8; 32]`, could use. The member would be listed in
         // the Hub and impossible to remove, verify or look up.
-        let raw: Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)> = stmt
+        let raw: Vec<RawStoredRow> = stmt
             .query_map(params![now], |row| {
                 Ok((
                     row.get::<_, Vec<u8>>(0)?,
@@ -729,7 +729,7 @@ impl KeyStore {
         // Same validation as `list_family`, and for the same reason: this is the
         // export path, so a bad row would be written into a backup file as a
         // hex string that could never be imported again.
-        let raw: Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)> = stmt
+        let raw: Vec<RawStoredRow> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, Vec<u8>>(0)?,
@@ -1004,6 +1004,13 @@ fn open_meta_value(
     String::from_utf8(pt).map_err(|_| StorageError::DecryptionFailed)
 }
 
+/// Columns returned by the two historical message scans below.
+///
+/// Named because clippy's 	ype_complexity fires on the inline 5-tuple, and
+/// because "(ciphertext, peer, timestamp, expires, key)" is not obvious from
+/// Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)>. One alias used by
+/// both scans, so the two cannot drift into returning different shapes.
+type RawStoredRow = (Vec<u8>, String, i64, Option<i64>, Option<String>);
 impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
     fn generate_cek() -> [u8; 32] {
@@ -3025,6 +3032,13 @@ pub struct StoredTransfer {
 // Group Chat — Query Methods (Phase 3)
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Columns returned by the two historical message scans below.
+///
+/// Named because clippy's 	ype_complexity fires on the inline 5-tuple, and
+/// because "(ciphertext, peer, timestamp, expires, key)" is not obvious from
+/// Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)>. One alias used by
+/// both scans, so the two cannot drift into returning different shapes.
+type RawStoredRow = (Vec<u8>, String, i64, Option<i64>, Option<String>);
 impl MessageStore {
     /// Create or update a group record.
     pub fn upsert_group(
