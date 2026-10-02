@@ -428,7 +428,33 @@ pub async fn create_invite(
                     external = %mapping.external_addr,
                     "NAT port mapping obtained"
                 );
-                Some(mapping)
+
+                // Release any mapping we were already holding before taking the
+                // new one. Generating a second invite used to stack a fresh
+                // router forward on every call and orphan the previous one —
+                // the router ends up with N forwards to the same local port and
+                // the app holds references to none of them.
+                release_port_mapping(&state).await;
+
+                // Retain it and start renewal.
+                //
+                // The mapping used to be dropped here, right after being turned
+                // into a candidate. That meant `spawn_renewal` was never called
+                // and `remove_port_mapping` never was either, so the router lease
+                // expired after an hour while `create_invite` kept publishing the
+                // address as a high-priority candidate — a route the app believed
+                // in and the network had already dropped.
+                let mapping = std::sync::Arc::new(mapping);
+                let renew_cancel =
+                    crate::port_mapping::spawn_renewal(std::sync::Arc::clone(&mapping));
+                {
+                    let mut slot = state.port_mapping.write().await;
+                    *slot = Some(crate::state::PortMappingHandle {
+                        mapping,
+                        renew_cancel,
+                    });
+                }
+                Some(mapping.as_ref().clone())
             }
             Err(e) => {
                 tracing::debug!(error = %e, "NAT port mapping unavailable");
@@ -436,6 +462,9 @@ pub async fn create_invite(
             }
         }
     } else {
+        // Private mode suppresses mapping entirely. Drop anything we were
+        // holding, or the previous non-private invite's forward would linger.
+        release_port_mapping(&state).await;
         None
     };
 
