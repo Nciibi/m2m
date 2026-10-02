@@ -3124,51 +3124,22 @@ async fn handle_sync_frame(
                 }
             }
         }
-        PacketType::SyncDeviceInfo => {
-            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
-                let mut conn = conn_arc.lock().await;
-                match conn.session.decrypt_typed_frame(frame) {
-                    Ok(plaintext) => {
-                        if let Ok(info) = crate::protocol::deserialize::<
-                            crate::protocol::SyncDeviceInfo,
-                        >(&plaintext)
-                        {
-                            // Drop conn lock before calling sync handler which may re-acquire it
-                            drop(conn);
-                            let _ = conn_arc;
-                            let _ = crate::sync::handle_sync_device_info(
-                                app_handle,
-                                state,
-                                &peer_key_hex,
-                                &info,
-                            )
-                            .await;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to decrypt sync device info");
-                    }
-                }
-            }
-        }
-        PacketType::SyncPayload => {
-            if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
-                let mut conn = conn_arc.lock().await;
-                match conn.session.decrypt_typed_frame(frame) {
-                    Ok(plaintext) => {
-                        if let Ok(payload) =
-                            crate::protocol::deserialize::<crate::protocol::SyncPayload>(&plaintext)
-                        {
-                            drop(conn);
-                            let _ = conn_arc;
-                            crate::sync::handle_sync_payload(state, &peer_key_hex, &payload).await;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to decrypt sync payload");
-                    }
-                }
-            }
+        // `SyncDeviceInfo` (0x45) and `SyncPayload` (0x46) belonged to the
+        // multi-device sync feature, which has been removed: its three Tauri
+        // commands had no frontend caller, so a device could never obtain an
+        // invite and therefore could never be paired. `handle_sync_device_info`
+        // failed closed on exactly that ("this device was not invited"), so the
+        // path was unreachable rather than insecure.
+        //
+        // The discriminants stay reserved in `PacketType` so the wire format
+        // does not shift under any future peer. `SyncRequest` (0x44) above is
+        // unrelated and still live — it is missed-message recovery after a
+        // reconnect, which is why this handler exists at all.
+        PacketType::SyncDeviceInfo | PacketType::SyncPayload => {
+            tracing::debug!(
+                peer = %peer_key_hex,
+                "ignoring multi-device sync frame — the feature was removed in 5.0.0"
+            );
         }
         _ => {}
     }
