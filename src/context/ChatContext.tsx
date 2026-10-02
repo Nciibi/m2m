@@ -794,7 +794,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // whatever the user was doing. A queued intent is explicit, has no
         // listener to leak, and cannot fire spuriously.
         try { window.focus(); } catch { /* not all platforms allow this */ }
-        drainNavigationIntent(peerKeyHex);
+        void peerKeyHex;
       }
     });
 
