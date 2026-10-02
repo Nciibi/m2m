@@ -404,6 +404,7 @@ pub async fn export_conversation(
 /// Send a reaction (emoji) on a message.
 #[tauri::command]
 pub async fn send_reaction(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     message_id: String,
