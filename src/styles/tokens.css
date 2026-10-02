@@ -238,6 +238,17 @@
      across a conversation list are rare, and because the value is a token and
      not a colour, a palette change is a one-line edit here rather than a code
      change in two components. */
+  /* Foreground for icons and text sitting on a *saturated fill* (accent chips,
+     logo containers, completed step dots, avatar glyphs).
+
+     Deliberately separate from `--color-on-accent`. That token resolves to
+     `--color-text-inverse` (#0f172a, a dark navy) under the dark theme, which is
+     correct for accent-*tinted* text but not for a glyph on a filled disc — seven
+     icon sites were hardcoding `color="white"` for exactly that reason, and
+     `color="white"` is itself the violation CLAUDE.md's token rule exists to
+     prevent. White is correct on both a #6366f1 and a #4f46e5 fill, in both
+     themes, so this is the same value in both files and needs no override. */
+  --color-on-fill: #ffffff;
   --color-avatar-0: hsl(210, 55%, 42%);
   --color-avatar-1: hsl(172, 48%, 38%);
   --color-avatar-2: hsl(28, 62%, 46%);
