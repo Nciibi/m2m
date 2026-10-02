@@ -27,7 +27,7 @@
 - **Goal**: Exploit parsing bugs, cause denial of service, exfiltrate data.
 - **Mitigation**:
   - Strict input validation on all received data.
-  - Frame size limits (16 MiB max), message size limits (64 KiB).
+  - Frame size limits (1 MiB max), message size limits (64 KiB).
   - DashMap-based per-IP rate limiting.
   - Slowloris protection via per-byte read timeouts (1s).
   - Streaming file transfers to temp file (no RAM buffering).
@@ -96,7 +96,7 @@
 | DNS poisoning | Cross-server STUN consistency check |
 | MITM (first use) | Fingerprint comparison modal |
 | SYM flooding | tokio Accept with backpressure |
-| DoS (large frames) | Frame size validation (16 MiB cap) |
+| DoS (large frames) | Frame size validation (1 MiB cap) |
 | DoS (file transfer) | Streaming to temp file, chunk hash verification |
 | Reaction injection | Max 10-char reaction string, validated emoji, stored via upsert |
 | Edit injection (replay) | Edited_at timestamp prevents replay; old content replaced<br>Edit only allowed for messages in the current session |

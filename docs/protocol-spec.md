@@ -28,7 +28,7 @@ Length-prefixed framing over TCP:
 ```
 
 - **Length**: size of Version + Payload (big-endian u32), excludes the 4-byte length field itself.
-  Max: 16 MiB. Min: 2 bytes (version + at least 1 byte of packet type).
+  Max: 1 MiB. Min: 2 bytes (version + at least 1 byte of packet type).
 - **Version**: protocol version byte (`0x01`).
 - **Payload**: packet type byte + serialized body.
 
@@ -36,7 +36,7 @@ Length-prefixed framing over TCP:
 
 | Constraint | Value | Rationale |
 |------------|-------|-----------|
-| Max frame | 16 MiB | Prevents memory exhaustion; large transfers use chunked file protocol |
+| Max frame | 1 MiB | Prevents memory exhaustion; large transfers use the chunked file protocol. Was 16 MiB until 5.0.0 — see the rationale in `protocol.rs`. |
 | Max text message body | 64 KiB | Limits ReDoS surface on message deserialization |
 | Max file chunk | 256 KiB | Balances throughput vs. per-chunk hash verification cost |
 | Min frame | 2 bytes | Version (1) + at least 1 byte of packet type |
