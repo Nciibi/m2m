@@ -296,7 +296,10 @@ async fn dht_recv(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), DhtError> {
 /// will want it; dead code is the honest state, and the previous
 /// `#![allow(dead_code)]` at the crate root hid this and five other unused
 /// items in this module at once.
-#[allow(dead_code, reason = "protocol PING/PONG; reserved for node-set quality scoring")]
+#[allow(
+    dead_code,
+    reason = "protocol PING/PONG; reserved for node-set quality scoring"
+)]
 async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
     let start = std::time::Instant::now();
     let mut stream = crate::dial::dial_with_timeout(addr, DHT_CONNECT_TIMEOUT)
