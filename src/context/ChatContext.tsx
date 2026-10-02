@@ -1153,7 +1153,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setRetentionDuration("86400");
       setNamingMyName("");
       setNamingTheirName("");
-      navIntentRef.current = null;
       // Must return an UnlistenFn from the rejection handler, not nothing:
       // `.catch(() => {})` types `stop` as `Promise<UnlistenFn | void>`, so the
       // teardown below calls a `void`. A listener that failed to register would
