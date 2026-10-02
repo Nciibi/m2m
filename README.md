@@ -377,9 +377,9 @@ sequenceDiagram
 | [`hole_punch.rs`](src-tauri/src/hole_punch.rs) | 560 | Connection Manager, Happy-Eyeballs race, hole punch |
 | [`port_mapping.rs`](src-tauri/src/port_mapping.rs) | 1257 | UPnP/NAT-PMP/PCP protocol implementations |
 | [`tor.rs`](src-tauri/src/tor.rs) | 99 | SOCKS5 proxy forwarding |
-| [`state.rs`](src-tauri/src/state.rs) | 185 | Central application state |
-| [`commands.rs`](src-tauri/src/commands.rs) | ~2100 | Tauri IPC bridge |
-| **Total** | **~8500** | |
+| [`state.rs`](src-tauri/src/state.rs) | 760 | Central application state |
+| [`commands/`](src-tauri/src/commands/) | ~4600 | Tauri IPC bridge, 11 submodules (split out of a single `commands.rs` in v2.0.3→2.1.1) |
+| **Total** | **~37,900** | |
 
 ---
 
