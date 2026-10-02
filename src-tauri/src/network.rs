@@ -431,7 +431,13 @@ impl std::fmt::Display for ConnectionState {
 /// A raw frame read from the wire.
 pub struct RawFrame {
     /// Protocol version.
-    #[allow(dead_code)]
+    ///
+    /// Read from the wire and validated by `validate_version` in
+    /// `read_frame_impl`, so it cannot arrive holding a value the protocol
+    /// rejects. It was previously `#[allow(dead_code)]` with a `let _ = version;`
+    /// to discard the only use, which meant the field existed but nothing could
+    /// observe it — the shape a future edit mistakes for "we already check
+    /// this".
     pub version: u8,
     pub packet_type: PacketType,
     pub body: Vec<u8>,
