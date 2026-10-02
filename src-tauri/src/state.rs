@@ -327,8 +327,6 @@ pub struct DiscoveryConfig {
     pub dht_enabled: bool,
 }
 
-/// Central application state.
-pub struct AppState {
 /// An active NAT port mapping plus the handle for its renewal task.
 ///
 /// `PortMapping` on its own was returned by `add_port_mapping`, used to build a
@@ -346,8 +344,8 @@ pub struct PortMappingHandle {
     /// Cancel channel for the renewal task. Dropping the receiver stops renewal.
     pub renew_cancel: tokio::sync::watch::Sender<()>,
 }
-pub struct AppState {
 
+/// Central application state.
 pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
     pub identity: RwLock<Option<IdentityKeypair>>,
