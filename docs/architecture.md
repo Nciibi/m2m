@@ -299,7 +299,7 @@ M2M uses shorter per-strategy timeouts (8s) than a typical TCP stack default (21
 Every untrusted input is validated at the earliest possible boundary:
 
 1. **TCP socket** — Rate limited (per-IP + global), Slowloris-protected (per-byte timeout).
-2. **Frame length** — Validated before allocation (max 16 MiB).
+2. **Frame length** — Validated before allocation (max 1 MiB; was 16 MiB until 5.0.0, see the rationale in `protocol.rs`).
 3. **Protocol version** — Rejected if reserved or unsupported (prevents downgrade).
 4. **Packet type** — Rejected if unknown.
 5. **Handshake** — Ed25519 signature verified before any state is allocated.
