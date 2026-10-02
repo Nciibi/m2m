@@ -286,15 +286,13 @@ function ConnectTab({
     } finally { setGenerating(false); }
   };
 
-  // Recent-invite history, derived during render rather than accumulated in an
-  // effect on `generatedInvite`. The effect was a second copy of the same
-  // derivation that ran a render late, and it re-created the array identity on
-  // every one of the five entries' changes.
-  const inviteHistory = useMemo(() => {
-    if (!generatedInvite) return [];
-    return [generatedInvite];
-  }, [generatedInvite]);
-  const inviteHistoryKey = generatedInvite;
+  // Recent-invite history. Appended at the point of a *successful* generation
+  // rather than accumulated by an effect on `generatedInvite`, which was a
+  // second copy of the same derivation running a render late — and which fired
+  // for invites that had in fact failed, because it could not tell.
+  const pushInviteHistory = (invite: string) => {
+    setInviteHistory((prev) => [invite, ...prev.filter((i) => i !== invite)].slice(0, 5));
+  };
 
   return (
     <div className="centered-view">
