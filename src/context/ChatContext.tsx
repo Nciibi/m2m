@@ -1156,7 +1156,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       disposed = true;
       stop.then((f) => f()).catch(() => {});
     };
-  }, []);
+    // `setActiveConversation` is a `useCallback` over `[]`, so listing it
+    // changes nothing at runtime; leaving it out made `exhaustive-deps` the one
+    // warning in the tree that was not `set-state-in-effect`.
+  }, [setActiveConversation]);
 
   return (
     <ChatContext.Provider value={value}>
