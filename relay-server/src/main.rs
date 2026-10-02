@@ -1,4 +1,4 @@
-/// M2M — TCP Relay Server
+/// M2M â€” TCP Relay Server
 ///
 /// Standalone relay server for the M2M TCP relay protocol. Peers behind
 /// symmetric NATs that cannot establish direct TCP connections can use this
@@ -7,22 +7,22 @@
 /// ## Protocol
 ///
 /// Length-prefixed frames over TCP:
-///   [4B length BE] [1B message type] [body…]
+///   [4B length BE] [1B message type] [bodyâ€¦]
 ///
-/// Client → Server:
-///   - 0x01 REGISTER  body=[auth_token]  — register for incoming connections
-///   - 0x02 CONNECT   body=[1B id_len][relay_id][1B tok_len][token] — request bridge
+/// Client â†’ Server:
+///   - 0x01 REGISTER  body=[auth_token]  â€” register for incoming connections
+///   - 0x02 CONNECT   body=[1B id_len][relay_id][1B tok_len][token] â€” request bridge
 ///     (the token section is required when RELAY_AUTH_TOKEN is set; optional otherwise)
-///   - 0x03 KEEPALIVE body=empty — extend registration TTL
+///   - 0x03 KEEPALIVE body=empty â€” extend registration TTL
 ///
-/// Server → Client:
-///   - 0x81 REGISTERED body=[1B id_len][relay_id] — registration confirmed
-///   - 0x82 CONNECTED  body=empty — bridge established → raw proxy mode
-///   - 0x83 ERROR      body=[1B code][message] — error occurred
-///   - 0x84 PONG       body=empty — keepalive acknowledged
+/// Server â†’ Client:
+///   - 0x81 REGISTERED body=[1B id_len][relay_id] â€” registration confirmed
+///   - 0x82 CONNECTED  body=empty â€” bridge established â†’ raw proxy mode
+///   - 0x83 ERROR      body=[1B code][message] â€” error occurred
+///   - 0x84 PONG       body=empty â€” keepalive acknowledged
 ///
 /// After CONNECTED is sent to both sides, raw TCP proxy mode begins
-/// (tokio::io::copy_bidirectional) — no more relay framing is parsed.
+/// (tokio::io::copy_bidirectional) â€” no more relay framing is parsed.
 ///
 /// ## Usage
 ///
@@ -53,7 +53,7 @@ const FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_BODY_SIZE: u32 = 65536;
 const DEFAULT_PORT: u16 = 3478;
 /// Reader idle timeout, in seconds. Kept as a plain `u64` so the compile-time
-/// invariant below can compare it — `Duration`'s ordering impls are not `const`,
+/// invariant below can compare it â€” `Duration`'s ordering impls are not `const`,
 /// so a `const` assertion on two `Duration` values is a hard compile error
 /// (E0015). The `Duration` is derived from this.
 const READER_IDLE_TIMEOUT_SECS: u64 = 300; // 5 min
@@ -68,8 +68,8 @@ const MAX_TOTAL_CONNECTIONS: usize = 1024;
 /// Maximum number of *pending registrations* held at once.
 ///
 /// The per-IP connection cap only throttles how fast a client can complete the
-/// REGISTER handshake — it does not bound how many registrations accumulate.
-/// A trivial loop (connect → REGISTER → read REGISTERED → close) added one
+/// REGISTER handshake â€” it does not bound how many registrations accumulate.
+/// A trivial loop (connect â†’ REGISTER â†’ read REGISTERED â†’ close) added one
 /// `HashMap` entry and one spawned task per iteration, each living for
 /// `READER_IDLE_TIMEOUT` (5 minutes), so a few thousand cheap connections could
 /// exhaust memory and task slots. Registration slots are a separate resource and
@@ -95,7 +95,6 @@ const BRIDGE_IDLE_TIMEOUT: Duration = Duration::from_secs(BRIDGE_IDLE_TIMEOUT_SE
 struct Registration {
     bridge_tx: oneshot::Sender<TcpStream>,
     peer_addr: SocketAddr,
-    created_at: Instant,
     /// Last time this client proved it was still there, refreshed by KEEPALIVE.
     ///
     /// A `std::sync::Mutex<Instant>` rather than a plain field because the
@@ -115,7 +114,7 @@ impl Registration {
     }
 }
 
-// ─── Frame I/O ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Frame I/O â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Generic over the transport so the codec can be unit-tested against an
 /// in-memory duplex stream instead of requiring a real socket.
@@ -179,19 +178,19 @@ async fn send_error(stream: &mut TcpStream, code: u8, msg: &str) {
     let _ = write_frame(stream, 0x83, &body).await;
 }
 
-// ─── Relay ID ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Relay ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Generate an unguessable relay bridge ID: 128 bits of CSPRNG output, hex-encoded.
 ///
 /// The old implementation used 32 bits of wall-clock nanoseconds, making
-/// bridge IDs enumerable — with unauthenticated CONNECT this allowed any
+/// bridge IDs enumerable â€” with unauthenticated CONNECT this allowed any
 /// third party to hijack a pending bridge.
 fn generate_relay_id() -> String {
     let bytes: [u8; 16] = rand::random();
     hex::encode(bytes)
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Constant-time byte-slice equality (no early exit on mismatch).
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -216,11 +215,11 @@ fn verify_auth(provided: &[u8], auth_token: &str) -> bool {
     constant_time_eq(provided, auth_token.as_bytes())
 }
 
-// ─── Registration Reader ─────────────────────────────────────────────────────
+// â”€â”€â”€ Registration Reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Task that reads relay frames from a registered client's stream.
 ///
-/// Handles KEEPALIVE (→ PONG), detects disconnects, and waits for the bridge
+/// Handles KEEPALIVE (â†’ PONG), detects disconnects, and waits for the bridge
 /// signal. When the bridge signal arrives (via oneshot), sends CONNECTED to
 /// both sides and enters raw TCP proxy mode.
 async fn registration_reader(
@@ -240,19 +239,19 @@ async fn registration_reader(
             frame = read_frame(&mut alice_stream) => {
                 match frame {
                     Ok((0x03, _)) => {
-                        // KEEPALIVE → refresh the idle timer, then PONG.
+                        // KEEPALIVE â†’ refresh the idle timer, then PONG.
                         //
                         // Without this refresh the registration was reaped on
                         // `created_at` age alone, so every invite outliving
                         // READER_IDLE_TIMEOUT (5 min) silently died even with
-                        // the client connected and sending keepalives — while
+                        // the client connected and sending keepalives â€” while
                         // the client still reported itself connected.
                         *last_seen.lock().expect("last_seen mutex poisoned") = Instant::now();
                         let _ = write_frame(&mut alice_stream, 0x84, &[]).await;
                     }
                     Ok((other, _)) => {
                         tracing::warn!(relay_id = %relay_id, msg_type = other, "unexpected frame from registered client");
-                        // Continue — could be a late frame before bridge
+                        // Continue â€” could be a late frame before bridge
                     }
                     Err(e) => {
                         tracing::info!(relay_id = %relay_id, error = %e, "registered client disconnected");
@@ -265,7 +264,7 @@ async fn registration_reader(
             bob_stream = &mut bridge_rx => {
                 match bob_stream {
                     Ok(mut bob_stream) => {
-                        tracing::info!(relay_id = %relay_id, "bridge requested — entering proxy mode");
+                        tracing::info!(relay_id = %relay_id, "bridge requested â€” entering proxy mode");
 
                         // Send CONNECTED to both sides
                         if write_frame(&mut alice_stream, 0x82, &[]).await.is_err() {
@@ -282,7 +281,7 @@ async fn registration_reader(
                         // Enter raw TCP proxy mode, bounded by an idle
                         // deadline. Without it a single registration plus one
                         // CONNECT yielded a permanently open socket with no
-                        // cap and no byte budget — free server capacity for
+                        // cap and no byte budget â€” free server capacity for
                         // anyone who felt like holding it.
                         //
                         // `copy_bidirectional` returns when EITHER direction
@@ -310,7 +309,7 @@ async fn registration_reader(
                                 tracing::warn!(
                                     relay_id = %relay_id,
                                     timeout_secs = BRIDGE_IDLE_TIMEOUT.as_secs(),
-                                    "bridge idle timeout — tearing down"
+                                    "bridge idle timeout â€” tearing down"
                                 );
                             }
                         }
@@ -325,7 +324,7 @@ async fn registration_reader(
     }
 }
 
-// ─── Request Handlers ────────────────────────────────────────────────────────
+// â”€â”€â”€ Request Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async fn handle_register(
     mut stream: TcpStream,
@@ -365,10 +364,10 @@ async fn handle_register(
             tracing::warn!(
                 peer = %peer_addr,
                 pending = map.len(),
-                "registration table full — rejecting"
+                "registration table full â€” rejecting"
             );
             drop(map);
-            let _ = send_error(&mut stream, 5, "relay at capacity — try again later").await;
+            let _ = send_error(&mut stream, 5, "relay at capacity â€” try again later").await;
             return;
         }
         map.insert(
@@ -376,13 +375,12 @@ async fn handle_register(
             Registration {
                 bridge_tx,
                 peer_addr,
-                created_at: Instant::now(),
                 last_seen: Arc::new(StdMutex::new(Instant::now())),
             },
         );
     }
 
-    // Spawn the reader task — it owns the stream and waits for bridge or keepalive
+    // Spawn the reader task â€” it owns the stream and waits for bridge or keepalive
     let last_seen = {
         let map = state.read().await;
         map.get(&relay_id)
@@ -431,7 +429,7 @@ async fn handle_connect(
         &[]
     };
 
-    // CONNECT is authenticated too — without this, anyone who guesses or
+    // CONNECT is authenticated too â€” without this, anyone who guesses or
     // learns a pending relay_id could hijack the bridge.
     if !verify_auth(provided_token, auth_token) {
         tracing::warn!(peer = %peer_addr, "CONNECT authentication failed");
@@ -439,7 +437,7 @@ async fn handle_connect(
         return;
     }
 
-    // Remove the registration (consume it — single-use)
+    // Remove the registration (consume it â€” single-use)
     let registration = state.write().await.remove(&relay_id);
 
     match registration {
@@ -465,13 +463,13 @@ async fn handle_connect(
     }
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Releases a per-IP and global connection slot on drop.
 ///
 /// Held for the whole lifetime of a connection task. Using a guard (rather
 /// than an inline release at the end of the handler) is what keeps the slot
-/// held for as long as the socket is actually open — including after
+/// held for as long as the socket is actually open â€” including after
 /// `handle_register` hands ownership to `registration_reader`.
 struct ConnectionSlot {
     ip: std::net::IpAddr,
@@ -572,7 +570,7 @@ async fn main() {
     loop {
         match listener.accept().await {
             Ok((mut stream, peer_addr)) => {
-                // ── Connection caps (anti-DoS) ──
+                // â”€â”€ Connection caps (anti-DoS) â”€â”€
                 let ip = peer_addr.ip();
                 // Decide under the lock, act outside it.
                 //
@@ -598,7 +596,7 @@ async fn main() {
                     }
                 };
                 if over_limit {
-                    tracing::warn!(peer = %peer_addr, "connection limit exceeded — rejecting");
+                    tracing::warn!(peer = %peer_addr, "connection limit exceeded â€” rejecting");
                     let _ = stream.shutdown().await;
                     continue;
                 }
@@ -614,7 +612,7 @@ async fn main() {
                     // Previously the release was inline after the handler
                     // returned. But `handle_register` returns as soon as it has
                     // spawned `registration_reader`, which then owns the socket
-                    // for up to READER_IDLE_TIMEOUT — and a bridged connection
+                    // for up to READER_IDLE_TIMEOUT â€” and a bridged connection
                     // can then live indefinitely. So the slots were handed back
                     // while the sockets were still open, meaning
                     // MAX_TOTAL_CONNECTIONS bounded only handshakes in flight
@@ -660,9 +658,9 @@ async fn main() {
     }
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
-// This file had no tests at all, and the relay was never referenced by CI — so
+// This file had no tests at all, and the relay was never referenced by CI â€” so
 // none of the anti-DoS limits below, the constant-time token comparison, or
 // the frame parser were exercised anywhere. The security-relevant properties
 // are covered below.
@@ -682,7 +680,7 @@ mod tests {
     use super::*;
     use tokio::io::AsyncWriteExt;
 
-    // ── constant_time_eq / verify_auth ────────────────────────────
+    // â”€â”€ constant_time_eq / verify_auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     #[test]
     fn constant_time_eq_matches_equality() {
@@ -700,7 +698,7 @@ mod tests {
         }
     }
 
-    /// With no token configured the relay is open — documented, but it must be
+    /// With no token configured the relay is open â€” documented, but it must be
     /// an explicit consequence of an empty config, not a fallback that silently
     /// applies when a token IS set.
     #[test]
@@ -717,7 +715,7 @@ mod tests {
         assert!(!verify_auth(b"hunter2", "hunter2x"));
     }
 
-    // ── relay_id ──────────────────────────────────────────────────
+    // â”€â”€ relay_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /// 128 bits of CSPRNG output. The old implementation used 32 bits of
     /// wall-clock nanoseconds, which made bridge IDs enumerable and let any
@@ -733,7 +731,7 @@ mod tests {
         }
     }
 
-    // ── frame codec ───────────────────────────────────────────────
+    // â”€â”€ frame codec â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     #[tokio::test]
     async fn frame_roundtrip() {
@@ -793,7 +791,7 @@ mod tests {
         );
     }
 
-    // ── ConnectionSlot ────────────────────────────────────────────
+    // â”€â”€ ConnectionSlot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     fn new_counters() -> (
         Arc<std::sync::Mutex<std::collections::HashMap<std::net::IpAddr, usize>>>,
@@ -805,7 +803,7 @@ mod tests {
         )
     }
 
-    /// The guard must release the slot on drop — including on panic — which is
+    /// The guard must release the slot on drop â€” including on panic â€” which is
     /// the whole reason it replaced the inline release.
     #[test]
     fn connection_slot_releases_on_drop() {
@@ -872,7 +870,7 @@ mod tests {
         );
     }
 
-    // ── registration cap ──────────────────────────────────────────
+    // â”€â”€ registration cap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /// The registration table is a separate resource from connection slots and
     /// needs its own bound: REGISTER is cheap, so without a cap a loop of
@@ -890,7 +888,6 @@ mod tests {
                 Registration {
                     bridge_tx: tx,
                     peer_addr: "127.0.0.1:1".parse().unwrap(),
-                    created_at: Instant::now(),
                     last_seen: Arc::new(StdMutex::new(Instant::now())),
                 },
             );
@@ -908,7 +905,7 @@ mod tests {
     ///
     /// The reaper previously compared `created_at.elapsed()`, so a client that
     /// was connected and answering keepalives was still evicted after
-    /// `READER_IDLE_TIMEOUT` — the keepalive handler refreshed nothing. On the
+    /// `READER_IDLE_TIMEOUT` â€” the keepalive handler refreshed nothing. On the
     /// client side `relay_state.connected` stayed `true` and the dead
     /// `relay_id` kept being advertised in newly generated invites, so peers
     /// dialled a registration the relay had already dropped.
@@ -918,7 +915,6 @@ mod tests {
         let reg = Registration {
             bridge_tx: _tx,
             peer_addr: "127.0.0.1:1".parse().unwrap(),
-            created_at: Instant::now(),
             last_seen: Arc::new(StdMutex::new(Instant::now())),
         };
         assert!(reg.idle_for() < Duration::from_secs(1));
@@ -938,7 +934,6 @@ mod tests {
                 tx
             },
             peer_addr: "127.0.0.1:1".parse().unwrap(),
-            created_at: Instant::now(),
             last_seen: Arc::new(StdMutex::new(Instant::now() - READER_IDLE_TIMEOUT)),
         };
         assert!(reg2.idle_for() >= READER_IDLE_TIMEOUT);
@@ -948,7 +943,7 @@ mod tests {
     fn limits_are_sane() {
         // `const {}` blocks are evaluated at compile time and cannot be
         // optimised away the way a `const`-folded `assert!(...)` in a test body
-        // is — a failing check here becomes a build error, which is the point of
+        // is â€” a failing check here becomes a build error, which is the point of
         // asserting that these limits are coherent with each other.
         const {
             assert!(MAX_PENDING_REGISTRATIONS > 0);
