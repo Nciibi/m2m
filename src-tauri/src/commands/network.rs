@@ -4208,7 +4208,7 @@ pub fn spawn_receive_loop(
                 frame.packet_type,
                 PacketType::SyncRequest | PacketType::SyncDeviceInfo | PacketType::SyncPayload
             ) {
-                handle_sync_frame(&state, &app_handle, &peer_key_hex, &frame).await;
+                handle_sync_frame(&state, &peer_key_hex, &frame).await;
                 continue;
             }
             if matches!(
