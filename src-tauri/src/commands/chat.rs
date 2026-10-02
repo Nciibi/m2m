@@ -674,8 +674,21 @@ pub async fn edit_message(
     // Validate + persist locally BEFORE sending, so edits to messages we
     // don't own (wrong conversation or not our own sent message) are
     // rejected outright (H4). Ephemeral mode: skip persistence.
-    let history =
-        *state.history_enabled.read().await && !state.security_config.read().await.ephemeral_mode;
+    // Snapshot both flags through *separate* statements.
+    //
+    // This was one expression:
+    //   *state.history_enabled.read().await && !state.security_config.read().await.ephemeral_mode
+    // which holds the `history_enabled` read guard across the `security_config`
+    // acquisition — a `history_enabled ⇄ security_config` nesting, i.e. exactly
+    // the cycle class this crate has been bitten by three times. The two
+    // `inbound` sites in `commands/network.rs` already write this the correct
+    // way; this one did not.
+    let history_enabled = *state.history_enabled.read().await;
+    let (ephemeral, storage_cap) = {
+        let cfg = state.security_config.read().await;
+        (cfg.ephemeral_mode, cfg.effective_storage_cap())
+    };
+    let history = history_enabled && !ephemeral;
     if history {
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
@@ -695,6 +708,12 @@ pub async fn edit_message(
                     tracing::error!(error = %e, "failed to persist edited message");
                 }
             }
+            // An edit re-encrypts AND re-keys the row, so it changes the stored
+            // size. Without this the cap was not enforced here at all: a peer
+            // sending repeated `MessageEdit` frames could push `messages.db` past
+            // its ceiling with no eviction. CLAUDE.md states every write path
+            // calls `enforce_cap`, and `storage.rs` asserts it in a comment.
+            crate::maintenance::enforce_cap(&app_handle, store, storage_cap);
         }
     }
 
