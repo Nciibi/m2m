@@ -68,16 +68,39 @@ describe("hashToColor", () => {
     expect(hashToColor("abc")).toBe(hashToColor("abc"));
   });
 
-  it("produces valid HSL strings in-range", () => {
+  it("returns a token reference, never a colour literal", () => {
+    // Regression: this used to build `hsl(<hue>, 55%, 48%)` in JS, which put
+    // every avatar outside tokens.css/theme.css and made it unable to respond to
+    // the theme. The literal is what the old test asserted, so the old test
+    // *pinned the violation in place*.
     const c = hashToColor("alice");
-    expect(c).toMatch(/^hsl\(\d+, 55%, 48%\)$/);
-    expect(parseInt(c.slice(4), 10)).toBeLessThan(360);
+    expect(c).toMatch(/^var\(--color-avatar-[0-7]\)$/);
+    expect(c).not.toMatch(/hsl|rgb|#/);
+  });
+
+  it("stays inside the eight-bucket ramp", () => {
+    for (const input of ["alice", "bob", "", "a".repeat(64), "ffff", "0000"]) {
+      const idx = Number(hashToColor(input).slice(-1));
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThanOrEqual(7);
+    }
   });
 
   it("differs across most inputs", () => {
     const a = hashToColor("alice");
     const b = hashToColor("bob");
     expect(a).not.toBe(b);
+  });
+
+  it("uses a bucket that actually exists in both themes", () => {
+    // The function must not be able to name a token that is missing, or the
+    // avatar silently falls back to no background at all.
+    const dark = readFileSync(resolve(__dirname, "../styles/tokens.css"), "utf8");
+    const light = readFileSync(resolve(__dirname, "../styles/theme.css"), "utf8");
+    for (let i = 0; i < 8; i++) {
+      expect(dark).toContain(`--color-avatar-${i}:`);
+      expect(light).toContain(`--color-avatar-${i}:`);
+    }
   });
 });
 
