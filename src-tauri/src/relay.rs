@@ -122,7 +122,13 @@ struct RelayFrame {
 // ─── Configuration ─────────────────────────────────────────────────────────────
 
 /// Relay server configuration.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+///
+/// Deliberately **not** `Debug`-derived and never `Serialize`d to the frontend.
+/// `auth_token` is a pre-shared secret that authenticates this client to the
+/// relay; a derived `Debug` is the standard way one of those ends up in a log
+/// line, because `tracing::debug!(?cfg)` looks harmless. This type has a manual
+/// `Debug` that redacts instead.
+#[derive(Clone, serde::Deserialize)]
 pub struct RelayConfig {
     /// Relay server hostname or IP.
     pub host: String,
@@ -132,6 +138,25 @@ pub struct RelayConfig {
     /// Sent as the body of REGISTER. May be empty for open relays.
     #[serde(default)]
     pub auth_token: String,
+}
+
+impl std::fmt::Debug for RelayConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Reveals only that a token exists. `set_relay_config` validates the
+        // length, so no secret material can escape through this formatting.
+        f.debug_struct("RelayConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field(
+                "auth_token",
+                &if self.auth_token.is_empty() {
+                    "<none>"
+                } else {
+                    "<redacted>"
+                },
+            )
+            .finish()
+    }
 }
 
 impl RelayConfig {
