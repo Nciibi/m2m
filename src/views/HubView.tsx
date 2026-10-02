@@ -677,7 +677,7 @@ function NearbyTab({
             // `--color-success` is one token, restated per theme, and the
             // `--success` border plus `--color-success-glow` already carry the
             // "online" read that the gradient was standing in for.
-            background: "var(--color-success)",
+            background: "#22c55e",
           }}>
             <WifiIcon size={18} color="var(--color-on-fill)" />
           </div>
