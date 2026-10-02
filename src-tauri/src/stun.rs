@@ -893,7 +893,13 @@ pub fn classify_nat(result: &StunMultiResult) -> NatType {
 }
 
 /// Check if an IP is a global unicast (not private, loopback, etc.)
-fn is_global_unicast(ip: std::net::IpAddr) -> bool {
+///
+/// `pub(crate)` rather than private: `port_mapping.rs` enforces the same
+/// "globally routable or it is a lie we must not publish" rule on the UPnP
+/// and NAT-PMP responses, and there should be exactly one definition of that
+/// predicate in the crate. Two copies would drift, and the copy that guards
+/// what we advertise is the wrong one to let drift.
+pub(crate) fn is_global_unicast(ip: std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
             // `is_private()`, `is_link_local()`, etc. are methods on `Ipv4Addr`
