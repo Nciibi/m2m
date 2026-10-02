@@ -57,6 +57,15 @@ function TestConsumer() {
       <span data-testid="storage-usage">{storageUsage ? String(storageUsage.used_bytes) : "null"}</span>
       <span data-testid="storage-usage-cap">{storageUsage ? String(storageUsage.cap_bytes) : "null"}</span>
       <button onClick={() => void handleStorageCapChange(5 * 1024 ** 3)}>Set Cap 5GB</button>
+      <span data-testid="relay-host">{relayConfig?.host ?? "null"}</span>
+      <span data-testid="relay-port">{relayConfig ? String(relayConfig.port) : "null"}</span>
+      <span data-testid="relay-token">{relayConfig?.has_auth_token ? "set" : "none"}</span>
+      <span data-testid="relay-form-host">{relayHost}</span>
+      <span data-testid="relay-form-port">{relayPort}</span>
+      <button onClick={() => setRelayHost("relay.example.com")}>Set Relay Host</button>
+      <button onClick={() => setRelayPort("3478")}>Set Relay Port</button>
+      <button onClick={() => void handleRelaySave()}>Save Relay</button>
+      <button onClick={() => void handleRelayClear()}>Clear Relay</button>
     </div>
   );
 }
