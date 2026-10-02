@@ -428,7 +428,7 @@ pub struct AppState {
     /// Used by the reconnection logic to re-establish X3DH sessions.
     pub pending_reconnects: RwLock<HashMap<String, ReconnectInfo>>,
     // ─── Security ───
-/// Security configuration (screen capture, clipboard, idle lock).
+    /// Security configuration (screen capture, clipboard, idle lock).
     pub security_config: RwLock<SecurityConfig>,
     // ─── Discovery ───
     /// Peer discovery configuration (LAN, DHT). Both OFF by default.
