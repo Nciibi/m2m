@@ -75,9 +75,12 @@ export default function MessageBubble({
     }
   }, [onEditSave, m.id, editText]);
 
-  const canEdit = typeof onEditSave === "function";
-  const canDelete = typeof onDelete === "function";
-  const canReact = typeof onReact === "function" || typeof onRemoveReaction === "function";
+// An unreadable message exposes no plaintext to act on. Editing one would send
+// the empty string back and overwrite the only remaining copy of the content;
+// reacting to or deleting it are still legitimate, so only edit is withdrawn.
+const canEdit = typeof onEditSave === "function" && !m.decrypt_failed;
+const canDelete = typeof onDelete === "function";
+const canReact = typeof onReact === "function" || typeof onRemoveReaction === "function";
   const senderLabel = m.direction === "sent" ? "you" : m.sender_peer_key_hex ? m.sender_peer_key_hex.substring(0, 8) : "peer";
 
   // "Did I react to this?" — by comparing against our OWN key.
