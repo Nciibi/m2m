@@ -1277,6 +1277,22 @@ pub async fn lock_vault(
     app_handle: AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), AppError> {
+    lock_vault_inner(&app_handle, &state).await
+}
+
+/// The lock implementation, callable from a background task.
+///
+/// Split out of [`lock_vault`] because the idle-lock deadline in
+/// `maintenance::spawn_security_timers` has to lock the vault on its own, and a
+/// background task cannot construct Tauri's `State<'_, Arc<AppState>>` borrowed
+/// wrapper. Keeping one implementation means the Rust-enforced idle lock and the
+/// user-facing "Lock Now" button do exactly the same thing — a second copy of
+/// this function would be another place for the two to drift.
+pub async fn lock_vault_inner(app_handle: &AppHandle, state: &Arc<AppState>) -> Result<(), AppError> {
+    // A stale deadline must not fire a second time against an already-locked
+    // vault, and the clipboard deadline has no meaning once the keys are gone.
+    crate::maintenance::disarm_security_deadlines(state);
+
     // Unlock mlock'd pages BEFORE dropping (zeroization happens in Drop).
     {
         let mut id_lock = state.identity.write().await;
