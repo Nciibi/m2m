@@ -428,27 +428,23 @@ pub fn run() {
                 if let Some(state) = app_handle.try_state::<Arc<AppState>>() {
                     let state = state.inner().clone();
                     let rt = tauri::async_runtime::handle();
-                    // A failure to release the UPnP/NAT-PMP mapping on exit
-                    // leaves the router port-forwarded until its own lease
-                    // expires, so it is logged rather than discarded. The 3s
-                    // bound keeps a wedged socket from hanging app shutdown;
-                    // a timeout is logged as such instead of being swallowed.
+                    // `release_port_mapping` returns `()` — it logs its own
+                    // per-protocol failures. The 3s bound still matters: without
+                    // it a wedged UPnP socket would hang app shutdown forever, and
+                    // the timeout is reported rather than swallowed so "the
+                    // router may still hold a forward" is visible in the log.
                     rt.block_on(async {
-                        match tokio::time::timeout(
+                        if tokio::time::timeout(
                             std::time::Duration::from_secs(3),
                             commands::network::release_port_mapping(&state),
                         )
                         .await
+                        .is_err()
                         {
-                            Ok(Ok(())) => {}
-                            Ok(Err(e)) => tracing::warn!(
-                                error = %e,
-                                "failed to release port mapping on exit; the router \
-                                 may keep the forward until its lease expires"
-                            ),
-                            Err(_) => tracing::warn!(
-                                "timed out after 3s releasing port mapping on exit"
-                            ),
+                            tracing::warn!(
+                                "timed out after 3s releasing port mapping on exit; the \
+                                 router may keep the forward until its lease expires"
+                            );
                         }
                     });
                 }
