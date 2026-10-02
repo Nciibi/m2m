@@ -224,6 +224,7 @@ impl Session {
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: x25519_pub,
             used_opk: None,
+            one_time: false,
             // The legacy handshake carries no prekey bundle, so there is no
             // one-time property to assert. A legacy peer's replay exposure is
             // the reduced-security mode documented on this path, not something
@@ -2121,6 +2122,7 @@ mod session_tests {
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             used_opk: None,
+            one_time: false,
             timestamp: 12345,
             signature: vec![0xDD; 64],
             candidates: vec![],
@@ -2165,6 +2167,7 @@ mod session_tests {
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             used_opk: None,
+            one_time: false,
             timestamp: 12345,
             signature,
             candidates: vec![],
@@ -2210,6 +2213,7 @@ mod session_tests {
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             used_opk: None,
+            one_time: false,
             timestamp,
             signature,
             candidates: vec![],
@@ -2272,6 +2276,7 @@ mod session_tests {
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             used_opk: None,
+            one_time: false,
             timestamp: stale_ts,
             signature,
             candidates: vec![],
@@ -2333,6 +2338,7 @@ mod session_tests {
             identity_pub: alice_identity.public_key_bytes(),
             x25519_identity_pub: [0u8; 32],
             used_opk: None,
+            one_time: false,
             timestamp,
             signature,
             candidates: poisoned,
