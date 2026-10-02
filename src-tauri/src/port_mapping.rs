@@ -1487,12 +1487,9 @@ fn extract_wanip_service_block(xml: &str) -> Option<&str> {
         }
         // `<service>` does not nest, so the first *exact* `</service>` after this
         // opening tag is this element's own.
-        let close = match find_closing_tag(after_open, "service") {
-            Some(c) => c,
-            // An unterminated `<service>` means the document is truncated; the
-            // HTTP body limit is the only thing that could have allowed it.
-            None => return None,
-        };
+        // An unterminated `<service>` means the document is truncated; the HTTP body
+        // limit is the only thing that could have allowed it.
+        let close = find_closing_tag(after_open, "service")?;
         let block = &after_open[..close];
         if extract_xml_tag(block, "serviceType").is_some_and(|t| t.contains("WANIPConnection")) {
             return Some(block);
