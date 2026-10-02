@@ -47,7 +47,7 @@ export default function Sidebar({ currentView, onNavigate, onError }: SidebarPro
     <aside className="app-sidebar">
       <div className="app-sidebar__brand">
         <div className="app-sidebar__logo">
-          <LockIcon size={16} color="white" />
+          <LockIcon size={16} color="var(--color-on-fill)" />
         </div>
         <div>
           <div className="app-sidebar__title">M2M</div>

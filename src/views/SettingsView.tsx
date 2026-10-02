@@ -163,7 +163,7 @@ export default function SettingsView() {
       <div className="app-header">
         <h1 className="app-header__title">
           <span className="app-header__icon-bg app-header__icon-bg--accent">
-            <GearIcon size={18} color="white" />
+            <GearIcon size={18} color="var(--color-on-fill)" />
           </span>
           Settings
         </h1>

@@ -673,7 +673,7 @@ function NearbyTab({
           <div className="conv-avatar conv-avatar--online" style={{
             background: `linear-gradient(135deg, #22c55e, #16a34a)`,
           }}>
-            <WifiIcon size={18} color="white" />
+            <WifiIcon size={18} color="var(--color-on-fill)" />
           </div>
           <div className="conv-body">
             <div className="conv-top">

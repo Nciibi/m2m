@@ -223,7 +223,7 @@ export default function GroupChatView() {
             groups.map((g) => (
               <button key={g.group_id} className="conv-item" onClick={() => handleOpenGroup(g.group_id)}>
                 <div className="conv-avatar" style={{ background: "var(--color-accent-bright)" }}>
-                  <GroupsIcon size={20} color="white" />
+                  <GroupsIcon size={20} color="var(--color-on-fill)" />
                 </div>
                 <div className="conv-body">
                   <div className="conv-top">
