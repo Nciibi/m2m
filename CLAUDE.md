@@ -65,7 +65,12 @@ See `docs/architecture.md` for the full module map. Key modules:
 - ✅ Markdown rendering (bold, italic, code, links)
 - ✅ Clipboard auto-clear + screen capture protection + idle vault lock
 - ✅ Runtime-validated Tauri event boundary; no `any` in `src/`
-- ✅ Typed translation catalog wired at the app root
+- ✅ Typed translation catalog wired at the app root — **English only.**
+  Infrastructure, not localisation: `LocaleCode` is `"en"`, there is no language
+  picker, and roughly half the catalog is unreachable from any rendered view
+  because most call sites are still literals. `HAS_MULTIPLE_LOCALES` is exposed
+  from the provider so a picker is not added until a second locale exists. Do not
+  describe the app as translated.
 
 ## Key Patterns
 
