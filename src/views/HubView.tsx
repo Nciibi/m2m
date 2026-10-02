@@ -676,7 +676,7 @@ function NearbyTab({
             // not follow the theme — on the light theme this stayed the dark
             // theme's green. `--color-success` is already restated per theme, so
             // deriving both stops from it keeps one source of truth.
-            background: `linear-gradient(135deg, var(--color-success), color-mix(in srgb, var(--color-success) 78%, black))`,
+            background: "var(--color-success)",
           }}>
             <WifiIcon size={18} color="var(--color-on-fill)" />
           </div>
