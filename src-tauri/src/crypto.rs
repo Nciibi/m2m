@@ -1066,22 +1066,6 @@ impl DoubleRatchet {
         let mut tent_epoch = dr.ratchet_epoch;
         let mut staged_skips: Vec<(u64, u64, [u8; 32])> = Vec::new();
 
-        // Scrub all tentative secrets (helper for the error exits below).
-        // Note: zeroizing an Option<[u8; 32]> clears the bytes when present.
-        macro_rules! scrub_and {
-            ($err:expr) => {{
-                tent_root.zeroize();
-                tent_chain_opt.zeroize();
-                // Zero on every exit, including the ones taken before the chain
-                // is loaded (where it is still all zeros and this is a no-op).
-                tent_chain.zeroize();
-                for (_, _, k) in staged_skips.iter_mut() {
-                    k.zeroize();
-                }
-                return Err($err);
-            }};
-        }
-
         // `tent_chain` is declared up front, all-zero, and filled in *after* the
         // ratchet step so that `scrub_and!` can scrub it on every exit above as
         // well as below. It is a separate binding from `tent_chain_opt` because
@@ -1093,7 +1077,29 @@ impl DoubleRatchet {
         // reach with one garbage frame, and the normal AEAD-failure path. The
         // module states this invariant twice in its own comments and it did not
         // hold.
+        //
+        // It must be declared BEFORE `scrub_and!` is *defined*, not merely
+        // before the macro is used. `macro_rules!` resolves the identifiers in a
+        // macro body at the definition site, so declaring it after the
+        // definition made every `tent_chain` reference fail to resolve — which
+        // is why this file did not compile, and why a build failure was the only
+        // thing standing between this and a build where the zeroization silently
+        // stopped happening.
         let mut tent_chain = [0u8; 32];
+
+        // Scrub all tentative secrets (helper for the error exits below).
+        // Note: zeroizing an Option<[u8; 32]> clears the bytes when present.
+        macro_rules! scrub_and {
+            ($err:expr) => {{
+                tent_root.zeroize();
+                tent_chain_opt.zeroize();
+                tent_chain.zeroize();
+                for (_, _, k) in staged_skips.iter_mut() {
+                    k.zeroize();
+                }
+                return Err($err);
+            }};
+        }
 
         // If peer sent a new ratchet key, compute the DH ratchet on locals.
         let mut ratchet_reset = None;
