@@ -106,6 +106,26 @@ function AppInner() {
       setCaptureWarning(payload.active);
     }).catch(() => () => {});
 
+    // `m2m://navigate` — the tray menu's "New Conversation" and "Settings"
+    // items. This event was emitted from `lib.rs` with a bare JSON string and
+    // had **no listener anywhere in `src/`**, so both items showed and focused
+    // the window and then did nothing at all: the user landed on whatever view
+    // happened to already be open, with no error to explain it.
+    //
+    // Validated against a closed set rather than passed through — it names the
+    // view to switch to, so an unrecognised value must leave us where we are.
+    const unlistenNav = listen("m2m://navigate", (event) => {
+      const target = asNavigate(event.payload);
+      if (!target) {
+        console.warn("M2M: dropping malformed m2m://navigate payload");
+        return;
+      }
+      setView(target);
+      // Navigating from the tray means the user is looking at this window again,
+      // so any blur/capture scrim from having been hidden is no longer wanted.
+      setBlurred(false);
+    }).catch(() => () => {});
+
     // `m2m://security-error` — emitted by the backend when a security control
     // FAILS to apply, e.g. screen-capture protection could not be established.
     // The event and its validator both existed and nothing listened, so the
