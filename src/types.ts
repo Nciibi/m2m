@@ -57,6 +57,15 @@ export interface ChatMessage {
   reactions: Record<string, string[]>;
   /// Sender of this message (used for group messages).
   sender_peer_key_hex: string;
+  /**
+   * The stored bytes for this message could not be decrypted on this read.
+   *
+   * The Rust side used to substitute the literal string `[encrypted]` for the
+   * content instead, which the UI had no way to distinguish from a real message
+   * and no way to attribute. When set, `content` is empty and the bubble must
+   * say the message is unreadable rather than render nothing.
+   */
+  decrypt_failed: boolean;
 }
 
 export interface ConnectionInfo {
