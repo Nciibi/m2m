@@ -196,6 +196,29 @@ pub async fn send_file(
     }
 }
 
+/// Whether a `save_dir` from the IPC boundary is safe to write a completed
+/// transfer to.
+///
+/// Split out from the command so it is testable without an `AppHandle` and a
+/// live `AppState`. An empty path is permitted: the chunk handler already reads
+/// it as "use the sanitized filename", and rejecting it would break the default
+/// download path rather than close a hole.
+fn validate_save_dir(save_dir: &str) -> Result<(), AppError> {
+    if save_dir.len() > 4096 {
+        return Err(AppError::invalid("save path is implausibly long"));
+    }
+    if save_dir.contains('\0') {
+        return Err(AppError::invalid("save path contains a NUL byte"));
+    }
+    if !save_dir.is_empty() && !std::path::Path::new(save_dir).is_absolute() {
+        return Err(AppError::invalid(
+            "save path must be absolute; a relative path would resolve against \
+             the app's working directory",
+        ));
+    }
+    Ok(())
+}
+
 /// Accept an incoming file transfer.
 #[tauri::command]
 pub async fn accept_file_transfer(
