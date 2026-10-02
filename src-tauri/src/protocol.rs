@@ -254,17 +254,22 @@ impl PacketType {
 
 /// Validate a protocol version byte.
 ///
-/// Accepts both the current version (0x02) and legacy version (0x01).
-/// Logs a deprecation notice when a legacy peer connects.
-/// Reserved versions (0x00, 0xFE, 0xFF) are always rejected.
+/// Accepts the current version only ([`PROTOCOL_VERSION`], 0x03). There is no
+/// downgrade path: 0x01 (pre-X3DH) and 0x02 (different AEAD AAD) are both
+/// rejected. Reserved versions (0x00, 0xFE, 0xFF) are always rejected.
 pub fn validate_version(version: u8) -> Result<(), ProtocolError> {
     if RESERVED_VERSIONS.contains(&version) {
         return Err(ProtocolError::ReservedVersion(version));
     }
-    if version == PROTOCOL_VERSION_LEGACY {
-        tracing::warn!("peer using legacy protocol version 0x01 — consider upgrading");
-        return Ok(());
-    }
+    // No downgrade path.
+    //
+    // This used to `return Ok(())` for `PROTOCOL_VERSION_LEGACY` (0x01) after a
+    // `tracing::warn!`, which contradicted the stated design directly: a 5.0.0
+    // client *would* complete a handshake with a 4.x peer, and a `warn!` is
+    // invisible to the user. It is also not merely a cosmetic mismatch — the
+    // legacy branch selects `handshake_as_initiator`, the non-X3DH path, so a
+    // peer that omitted the prekey bundle from its invite could force a 5.0.0
+    // initiator onto a handshake with no forward secrecy.
     if version != PROTOCOL_VERSION {
         return Err(ProtocolError::UnsupportedVersion(version));
     }
