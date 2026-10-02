@@ -583,28 +583,9 @@ export function asNavigate(v: unknown): NavigateTarget | null {
   return null;
 }
 
-export function asSyncStatus(v: unknown): { status: string; peer_key_hex: string } | null {
-  if (typeof v !== "object" || v === null) return null;
-  const p = v as Record<string, unknown>;
-  if (!isString(p.status) || p.status.length > 32) return null;
-  if (!isPeerKeyHex(p.peer_key_hex)) return null;
-  return { status: p.status, peer_key_hex: p.peer_key_hex };
-}
-
-export function asSyncDevice(
-  v: unknown,
-): { device_id: string; device_name: string } | null {
-  if (typeof v !== "object" || v === null) return null;
-  const p = v as Record<string, unknown>;
-  if (!isString(p.device_id) || p.device_id.length > 128) return null;
-  // `device_name` is peer-supplied and rendered in the UI.
-  if (!isDisplayText(p.device_name)) return null;
-  return { device_id: p.device_id, device_name: p.device_name };
-}
-
 /**
- * Emitted when a security control FAILS to apply. Surfaced so a silently
- * missing protection is not silent.
+ * `m2m://security-error` - emitted when a security control FAILS to apply.
+ * Surfaced so a silently missing protection is not silent.
  */
 export function asSecurityError(v: unknown): { source: string; message: string } | null {
   if (typeof v !== "object" || v === null) return null;
