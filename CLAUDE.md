@@ -265,7 +265,7 @@ default.
 | `tsc --noEmit` | clean | run. Was **1 error** (`ChatContext.tsx` `.catch(() => {})` typing). |
 | `pnpm test` | **379 passed**, 20 files | run |
 | `pnpm lint` | 0 errors, **8** warnings (budget 8) | run. Was 11 — over a budget of 10, i.e. CI-red. |
-| `pnpm test:coverage` | 65.35 stmts / 76.12 branch / 55.59 funcs / 65.35 lines | run. Gates are 50/60/34/50. |
+| `pnpm test:coverage` | 65.42 stmts / 76.57 branch / 55.72 funcs / 65.42 lines | run. Gates are 50/60/34/50. |
 | `./tools/typecheck-harness/check.sh --run` | **not run here** | needs a Rust linker; see below |
 | `tools/crypto-probe/sync.sh` | **not run here** | needs a C compiler (`rusqlite` bundled) |
 | `cargo test` (relay) | **not run here** | needs a Rust linker |
