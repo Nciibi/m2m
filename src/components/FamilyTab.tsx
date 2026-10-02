@@ -28,6 +28,34 @@ export default function FamilyTab({ family, onRefresh, onConnect, loadError = nu
   // family list from re-rendering every second.
   const now = useNow(60_000);
 
+  // Read failed. Distinct from "no members": rendering the empty state here
+  // would tell the user every family member had been removed, and invite them
+  // to re-add people who are already on the list.
+  if (loadError) {
+    return (
+      <div className="conv-empty">
+        <AlertTriangleIcon size={48} color="var(--color-danger)" />
+        <span style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--color-text-primary)" }}>
+          Could not load your family
+        </span>
+        <span style={{ maxWidth: "320px", textAlign: "center", lineHeight: 1.6 }}>
+          {loadError}
+        </span>
+        <Button onClick={onRefresh} style={{ marginTop: "var(--space-md)" }}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="conv-empty">
+        <span style={{ color: "var(--color-text-muted)" }}>Loading family…</span>
+      </div>
+    );
+  }
+
   if (family.length === 0) {
     return (
       <div className="conv-empty">
