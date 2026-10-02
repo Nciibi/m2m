@@ -16,6 +16,7 @@ import type {
   SecurityConfig,
   StorageUsage,
   StunConfig,
+  RelayConfigView,
 } from "../types";
 
 interface SettingsContextValue {
