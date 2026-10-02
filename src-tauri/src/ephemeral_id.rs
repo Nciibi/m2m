@@ -68,6 +68,12 @@ pub struct NetworkMonitor {
     last_public_ip: Option<std::net::SocketAddr>,
 }
 
+impl Default for NetworkMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkMonitor {
     pub fn new() -> Self {
         Self {

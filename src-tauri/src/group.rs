@@ -397,6 +397,12 @@ pub enum SenderKeyReceipt {
     NewMember,
 }
 
+impl Default for GroupManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GroupManager {
     pub fn new() -> Self {
         Self {

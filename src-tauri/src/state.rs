@@ -179,6 +179,12 @@ pub struct TransferQueue {
     pub max_concurrent: u32,
 }
 
+impl Default for TransferQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TransferQueue {
     pub fn new() -> Self {
         Self {

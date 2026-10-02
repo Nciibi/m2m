@@ -113,6 +113,12 @@ pub struct LanDiscoveryState {
     pub enabled: bool,
 }
 
+impl Default for LanDiscoveryState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LanDiscoveryState {
     pub fn new() -> Self {
         Self {
