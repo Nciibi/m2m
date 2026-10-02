@@ -91,6 +91,9 @@ const DEFAULT_SECURITY_CONFIG = {
  * Keying the mock on the command name makes the suite independent of how many
  * reads the provider performs, and of the order it performs them in.
  */
+/** Stand-in for the backend's relay config. `null` is the disabled state. */
+let relayStore: { host: string; port: number; has_auth_token: boolean } | null = null;
+
 function defaultInvoke(cmd: string, args?: Record<string, unknown>): unknown {
   switch (cmd) {
     case "get_security_config":
