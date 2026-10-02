@@ -86,12 +86,20 @@ const ANNOUNCE_FANOUT_DEADLINE: Duration = Duration::from_secs(10);
 
 // ─── DHT Message Types ─────────────────────────────────────────────────────────
 
+// PING/PONG/ERROR have no live call site: only `dht_ping` would send them, and
+// it is itself unused (see its `reason` for why). They are load-bearing for the
+// `dht_ping` protocol definition, so each is individually annotated rather than
+// blanket-allowed — the crate-root `#![allow(dead_code)]` this replaced hid six
+// unrelated unused items in one stroke.
+#[allow(dead_code, reason = "wire protocol; used by dht_ping")]
 const DHT_PING: u8 = 0x01;
+#[allow(dead_code, reason = "wire protocol; expected reply in dht_ping")]
 const DHT_PONG: u8 = 0x02;
 const DHT_ANNOUNCE: u8 = 0x03;
 const DHT_ANNOUNCE_OK: u8 = 0x04;
 const DHT_FIND_NODE: u8 = 0x05;
 const DHT_NODE_RESPONSE: u8 = 0x06;
+#[allow(dead_code, reason = "wire protocol; reserved for node-side errors")]
 const DHT_ERROR: u8 = 0xFF;
 
 // ─── Error ─────────────────────────────────────────────────────────────────────
