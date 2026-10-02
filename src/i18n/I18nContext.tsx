@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState, ReactNode } from "react";
-import { LOCALES, LocaleCode, makeT, Translation, type Translator } from "./catalog";
+import {
+  HAS_MULTIPLE_LOCALES,
+  LOCALES,
+  LocaleCode,
+  makeT,
+  Translation,
+  type Translator,
+} from "./catalog";
 
 interface I18nContextValue {
   locale: LocaleCode;
@@ -7,6 +14,12 @@ interface I18nContextValue {
   t: Translator;
   /** The full resolved bundle — use for `aria-label` maps and tests. */
   strings: Translation;
+  /**
+   * False, because English is the only locale shipped. Exposed so UI can avoid
+   * rendering a picker that offers one option, which would imply the app is
+   * translated when it is not. See the note on `LocaleCode`.
+   */
+  hasMultipleLocales: boolean;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
