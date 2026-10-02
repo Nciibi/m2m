@@ -2670,6 +2670,8 @@ async fn handle_message_update_frame(
                         let ephemeral = state.security_config.read().await.ephemeral_mode;
                         let mut accepted = ephemeral;
                         if !ephemeral {
+                            let storage_cap =
+                                state.security_config.read().await.effective_storage_cap();
                             let sk = state.storage_key.read().await;
                             let ms = state.message_store.lock().await;
                             if let Some(ref store) = *ms {
