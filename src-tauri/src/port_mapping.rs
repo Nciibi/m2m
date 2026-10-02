@@ -245,7 +245,9 @@ impl PortMapper {
     ///
     /// Best-effort — logs failures but does not propagate them to the caller
     /// (the mapping will eventually expire on the router anyway).
-    #[expect(dead_code, reason = "Reserved for cleanup on shutdown")]
+    // No `dead_code` expectation here any more: the mapping-lifecycle work wired
+    // this into `commands::network::release_port_mapping`, which runs on app
+    // exit, private-mode toggles and peer disconnect.
     pub async fn remove_port_mapping(mapping: &PortMapping) {
         match mapping.protocol {
             "nat-pmp" => {
