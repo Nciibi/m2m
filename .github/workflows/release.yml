@@ -65,13 +65,32 @@ jobs:
 
     - name: Verify tag matches manifest version
       shell: bash
+      # The header comment claims all three manifests are checked. Only
+      # package.json was, so the other two could drift from the tag and the
+      # release would ship a binary whose embedded version differs from the
+      # artifact name. CLAUDE.md lists exactly these four as the places the
+      # version lives, so all four are checked here.
       run: |
+        set -euo pipefail
         TAG="${GITHUB_REF_NAME#v}"
-        MANIFEST=$(node -p "require('./package.json').version")
-        if [ "$TAG" != "$MANIFEST" ]; then
-          echo "::error::Tag v$TAG does not match package.json version $MANIFEST"
-          exit 1
-        fi
+
+        PKG=$(node -p "require('./package.json').version")
+        CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
+        CARGO=$(sed -n 's/^version = "\(.*\)"$/\1/p' src-tauri/Cargo.toml | head -1)
+        RELAY=$(sed -n 's/^version = "\(.*\)"$/\1/p' relay-server/Cargo.toml | head -1)
+
+        fail=0
+        check() {
+          if [ "$2" != "$TAG" ]; then
+            echo "::error::Tag v$TAG does not match $1 version $2"
+            fail=1
+          fi
+        }
+        check "package.json"           "$PKG"
+        check "src-tauri/tauri.conf.json" "$CONF"
+        check "src-tauri/Cargo.toml"   "$CARGO"
+        check "relay-server/Cargo.toml" "$RELAY"
+        exit $fail
 
     - name: Build and Release
       uses: tauri-apps/tauri-action@v2
