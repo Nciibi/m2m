@@ -319,7 +319,7 @@ Each module owns exactly **one mechanism**:
 | [`port_mapping.rs`](src-tauri/src/port_mapping.rs) | Port mapping | UPnP IGD + NAT-PMP + PCP behind a single `PortMapper::add_port_mapping()` interface |
 | [`tor.rs`](src-tauri/src/tor.rs) | Tor routing | SOCKS5 proxy — entirely optional, never called unless user enables it |
 | [`state.rs`](src-tauri/src/state.rs) | App state | Central `AppState` shared across all Tauri commands |
-| [`commands.rs`](src-tauri/src/commands.rs) | IPC bridge | Tauri `#[tauri::command]` handlers — the biggest file, split planned in Phase 2 |
+| [`commands/`](src-tauri/src/commands/) | IPC bridge | 11 `#[tauri::command]` submodules — was one `commands.rs` until v2.1.1 |
 
 ### Data Flow
 
