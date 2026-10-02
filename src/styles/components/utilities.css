@@ -764,6 +764,11 @@
     var(--color-border-active),
     transparent 40%
   );
+  /* `#fff` here is an alpha stencil for the two-layer border mask, not a
+     colour: nothing is painted with it, it is only used to carve the border
+     ring out of the padding box. It cannot be replaced with a token without
+     breaking the mask, and it is invisible by definition, so it is exempt from
+     the no-colour-literal rule (see `src/__tests__/designTokens.test.ts`). */
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
