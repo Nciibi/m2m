@@ -72,6 +72,9 @@ pub async fn set_relay_config(
     }
 
     let mut relay_cfg = state.relay_config.write().await;
+    // `config.clone()`, not the original: the stored value must not share a
+    // buffer with anything the caller still holds. `auth_token` is a secret and
+    // is not `Zeroize`d on drop, so keeping two live copies is avoidable.
     *relay_cfg = config.clone();
 
     // Reset relay state when config changes
