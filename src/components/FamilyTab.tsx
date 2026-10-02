@@ -81,14 +81,12 @@ export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabPro
                   <Button size="xs" variant="secondary" onClick={() => { setShowUpdate(m.public_key_hex); setUpdateInvite(""); }}>
                     Renew
                   </Button>
-                  <Button size="xs" variant="secondary" onClick={async () => {
-                    try {
-                      await invoke("remove_family_member", { peerKeyHex: m.public_key_hex });
-                      onRefresh();
-                    } catch (e) {
-                      addToast("Failed to remove: " + errorMessage(e), "error");
-                    }
-                  }}>×</Button>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    aria-label={`Remove ${m.nickname} from family`}
+                    onClick={() => setPendingRemoval(m)}
+                  >×</Button>
                 </>
               ) : showUpdate === m.public_key_hex ? (
                 <div className="flex-row" style={{ gap: "var(--space-xs)" }}>
