@@ -195,10 +195,10 @@ export default function VaultView() {
             {passphrase.length > 0 && (
               <div className="strength-container">
                 <div className="strength-bar">
-                  <div className="strength-fill" style={{ width: `${strength.percent}%`, background: colorMap[strength.cls] || "transparent" }} />
+                  <div className="strength-fill" style={{ width: `${strength.percent}%`, background: STRENGTH_COLOR[strength.cls] || "transparent" }} />
                 </div>
                 <div className="strength-info">
-                  <span className="strength-label" style={{ color: colorMap[strength.cls] || "var(--color-text-muted)" }}>
+                  <span className="strength-label" style={{ color: STRENGTH_COLOR[strength.cls] || "var(--color-text-muted)" }}>
                     {strength.label && `${strength.label} — ${strength.bits} bits`}
                   </span>
                   <span className="strength-chars">{passphrase.length} chars</span>
