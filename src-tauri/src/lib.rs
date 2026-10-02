@@ -48,7 +48,6 @@ mod session;
 mod state;
 mod storage;
 mod stun;
-mod sync;
 mod tor;
 mod window_security;
 
