@@ -353,7 +353,16 @@ pub async fn attempt_reconnect(
                 // Drop the metadata rather than leaving a prompt the user can keep
                 // clicking into the same refusal.
                 pr.remove(&peer_key_hex);
-                return Ok(());
+                // `Err`, not a synthesised `ConnectionInfo`: this returns
+                // `Result<ConnectionInfo, AppError>` and the caller feeds the
+                // success value straight into connection state. Returning a
+                // fabricated "established" would be exactly the kind of claim the
+                // UI cannot back.
+                return Err(AppError::not_connected(
+                    "This peer is reachable, but reconnecting would require the \
+                     pre-5.0.0 handshake, which is refused because it has no forward \
+                     secrecy. Exchange a fresh invite to reconnect.",
+                ));
             }
             Err(_) => {
                 // Wait before next attempt
