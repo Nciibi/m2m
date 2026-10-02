@@ -67,10 +67,22 @@ const LITERAL =
 const STENCIL = /^\s*(-\w+-)?(mask|clip-path)\s*:/;
 
 /**
- * `CLAUDE.md`'s one sanctioned exception: a `var(--token, <literal>)` fallback in
+ * `CLAUDE.md`'s sanctioned exception: a `var(--token, <literal>)` fallback in
  * `src/App.tsx`, so the element still receives a colour if the stylesheet fails.
  */
 const SANCTIONED = new Set(["App.tsx"]);
+
+/**
+ * `src/context/ThemeContext.tsx` holds `DEFAULT_ACCENT`, the hex the app starts
+ * on and "Reset accent" restores.
+ *
+ * It cannot be a token reference: the value is *written into* the
+ * `--color-accent` custom property at runtime, so it has to be a concrete colour
+ * to seed with. It is also, by then, in exactly one place — it used to be
+ * duplicated in `SettingsView`'s reset handler, which is the bug that made this
+ * worth a named exception. Enforced separately below.
+ */
+const RUNTIME_ACCENT_FILE = "context/ThemeContext.tsx";
 
 /**
  * Strip `var(--token, <fallback>)` down to just the token name, so a sanctioned
