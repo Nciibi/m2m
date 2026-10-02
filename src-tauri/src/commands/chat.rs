@@ -474,6 +474,7 @@ pub async fn send_reaction(
 /// Remove a reaction from a message.
 #[tauri::command]
 pub async fn remove_reaction(
+    app_handle: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
     message_id: String,
@@ -481,6 +482,7 @@ pub async fn remove_reaction(
 ) -> Result<(), AppError> {
     // Remove locally (scoped to this conversation — H4). Ephemeral mode: no-op.
     if !state.security_config.read().await.ephemeral_mode {
+        let storage_cap = state.security_config.read().await.effective_storage_cap();
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
