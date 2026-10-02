@@ -312,7 +312,7 @@ pub async fn attempt_reconnect(
             .map_err(|e| AppError::invalid(format!("invalid peer address hint: {e}")))?;
 
         match crate::dial::dial_with_timeout(hint, RECONNECT_CONNECT_TIMEOUT).await {
-            Ok(mut stream) => {
+            Ok(stream) => {
                 // ── Refused, not silently downgraded ──
                 //
                 // This used to perform `handshake_as_initiator`, the pre-X3DH
