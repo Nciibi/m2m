@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! M2M — DHT Peer Discovery
 //!
 //! ⚠️ **PRIVACY WARNING** ⚠️
