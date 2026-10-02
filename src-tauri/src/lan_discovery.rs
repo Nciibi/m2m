@@ -218,12 +218,10 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // absence degrades to `SO_REUSEADDR` semantics rather than breaking a single
     // instance. Logged because it is the difference between two instances
     // coexisting and the second one failing to start.
-    // `set_reuse_port` is `socket2::Socket`'s extension trait method, not an
-    // inherent method, so the trait must be in scope. Without it this is a
-    // compile error rather than a runtime `SO_REUSEPORT` failure, which means
-    // this function — and therefore all LAN discovery — has never been built.
-    use socket2::SocketExt;
-    if let Err(e) = SocketExt::set_reuse_port(&socket, true) {
+    // `set_reuse_port` only exists behind socket2's `all` feature (Cargo.toml
+    // enables it). It is not an extension trait and not OS-gated — Windows and
+    // macOS both have it — so a plain method call is correct.
+    if let Err(e) = socket.set_reuse_port(true) {
         tracing::warn!(
             error = %e,
             "SO_REUSEPORT unavailable - a second M2M instance on this host may not be \
@@ -231,9 +229,10 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
         );
     }
 
-    // `SockAddr::from(&SocketAddr)` is `socket2`'s own conversion; written as
-    // an explicit `from` rather than `.into()` so the target type is stated
-    // rather than inferred from `bind`'s signature.
+    // `SockAddr::from(SocketAddr)` is socket2's own conversion; written as an
+    // explicit `from` rather than `.into()` so the target type is stated rather
+    // than inferred from `bind`'s signature. Passing `&SocketAddr` does not
+    // compile — there is no `From<&SocketAddr>` impl.
     let addr = socket2::SockAddr::from(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
     socket.bind(&addr).map_err(LanDiscoveryError::Io)?;
 
