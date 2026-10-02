@@ -92,6 +92,25 @@
   --color-on-danger: #ffffff;
   --color-on-accent: #ffffff;
 
+  /* === Translucent fills and scrims === */
+
+  /* Light-theme counterparts. A white wash would be invisible on a near-white
+     card, so these flip to dark ink at low alpha; a black scrim would be a heavy
+     smudge, so they soften and drop in opacity. */
+  --color-fill-faint: rgba(15, 23, 42, 0.02);
+  --color-fill-subtle: rgba(15, 23, 42, 0.04);
+  --color-fill-muted: rgba(15, 23, 42, 0.06);
+  --color-fill-soft: rgba(15, 23, 42, 0.08);
+  --color-fill-line: rgba(15, 23, 42, 0.08);
+  --color-fill-line-strong: rgba(15, 23, 42, 0.12);
+  --color-fill-edge: rgba(15, 23, 42, 0.28);
+  --color-scrim-soft: rgba(15, 23, 42, 0.06);
+  --color-scrim: rgba(15, 23, 42, 0.1);
+  --color-scrim-deep: rgba(15, 23, 42, 0.14);
+  --color-card-raised: rgba(255, 255, 255, 0.92);
+
+  --color-danger-glow-strong: rgba(185, 28, 28, 0.28);
+  --color-success-glow-strong: rgba(5, 150, 105, 0.26);
   /* === Avatar ramp === */
 
   /* Restated for light. The dark values are dark enough to read white initials
