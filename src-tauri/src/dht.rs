@@ -478,6 +478,11 @@ fn port_at(body: &[u8], offset: usize) -> u16 {
 /// Look up a peer by their public key hash.
 ///
 /// Queries the configured bootstrap nodes and returns the first valid response.
+#[allow(
+    dead_code,
+    reason = "no UI calls this yet; DHT is default-off, so being discoverable \
+              (announce_loop, wired) is implemented while being findable is not"
+)]
 pub async fn lookup_peer(
     peer_id: &[u8; 32],
     bootstrap_nodes: &[BootstrapNode],
