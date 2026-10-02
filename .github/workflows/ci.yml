@@ -114,7 +114,7 @@ jobs:
         include:
           - platform: ubuntu-latest
             args: ""
-            deps: "sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsodium-dev"
+            deps: "sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf"
           - platform: windows-latest
             args: ""
             deps: ""
@@ -136,7 +136,7 @@ jobs:
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri
+        workspaces: .
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
@@ -163,4 +163,7 @@ jobs:
         name: m2m-${{ matrix.platform }}
         path: |
           src-tauri/target/release/bundle/**/*
-        if-no-files-found: ignore
+        # Was `ignore`, which reported success when a build produced nothing. That is
+        # how the placeholder-pubkey failure (tauri build exiting non-zero after
+        # writing its bundles) went unnoticed: no artifact, no complaint.
+        if-no-files-found: error
