@@ -4,3 +4,27 @@ members = [
     "src-tauri",
     "relay-server",
 ]
+
+# Release profile lives HERE, at the workspace root, and not in
+# `src-tauri/Cargo.toml`.
+#
+# Cargo only honours `[profile.*]` in the root manifest of a workspace and
+# warns that "profiles for the non root package will be ignored" otherwise.
+# The six settings below lived in `src-tauri/Cargo.toml`, so every one of them
+# was silently discarded: `lto`, `strip`, `codegen-units = 1`,
+# `opt-level = "z"`, `overflow-checks = true` and `panic = "abort"` have never
+# applied to a release build. In practice `opt-level` fell back to `3`, so the
+# shipped binary was optimised for speed rather than for the size the comment
+# asks for, and it carried symbols rather than being stripped.
+#
+# `scripts/build-release.sh` papered over one of these by exporting
+# `RUSTFLAGS="-C codegen-units=1"`, which is why the gap stayed invisible: it
+# reproduced `codegen-units` while quietly overriding — rather than
+# supplementing — the profile.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "z"       # Optimize for binary size over speed
+panic = "abort"
+overflow-checks = true
