@@ -4,24 +4,19 @@
 #![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub id: String,
-    pub content: String,
-    pub direction: String,
-    pub timestamp: u64,
-    /// When this message was read (null = unread, only for received messages).
-    pub read_at: Option<i64>,
-    /// When this message was edited (null = never edited).
-    pub edited_at: Option<i64>,
-    /// Whether this message has been soft-deleted.
-    pub deleted: bool,
-    /// When this message self-destructs (null = never).
-    pub expires_at: Option<i64>,
-    /// Reactions on this message, as a map: reaction_emoji → [peer_key_hex, ...].
-    #[serde(default)]
-    pub reactions: std::collections::HashMap<String, Vec<String>>,
-    /// Sender of this message (used for group messages — Ed25519 hex).
-    /// Empty string for 1:1 messages (implicit from conversation).
-    #[serde(default)]
-    pub sender_peer_key_hex: String,
+pub struct IdentityInfo {
+    pub fingerprint: String,
+    pub public_key_hex: String,
+    pub has_identity: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionInfo {
+    pub state: String,
+    pub peer_fingerprint: Option<String>,
+    pub peer_verified: bool,
+    pub peer_key_hex: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {

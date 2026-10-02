@@ -27,11 +27,18 @@ use zeroize::Zeroize;
 pub const PROTOCOL_VERSION: u8 = 0x03;
 
 /// Legacy protocol version (v0x01 — pre-X3DH, SHA-256 KDF ratchet only).
-/// Accepted for backward compatibility with older peers.
 ///
-/// v0x02 (X3DH + Double Ratchet with an *unauthenticated* DR header) is
-/// deliberately NOT accepted: its AAD differs from v0x03's, so a v0x02 peer
-/// would handshake and then fail to decrypt everything.
+/// **Not accepted.** Retained only so [`validate_version`] and its tests can
+/// name the version it refuses.
+///
+/// v0x01 is pre-X3DH: there is no one-time prekey and no signed prekey, so a
+/// session established with it has no forward secrecy once the peer's long-term
+/// key is compromised. Accepting it was the downgrade path this project states
+/// it does not have.
+///
+/// v0x02 (X3DH + Double Ratchet with an *unauthenticated* DR header) is likewise
+/// NOT accepted: its AAD differs from v0x03's, so a v0x02 peer would handshake
+/// and then fail to decrypt everything.
 pub const PROTOCOL_VERSION_LEGACY: u8 = 0x01;
 
 /// Reserved version values that must never be used.
@@ -169,11 +176,24 @@ pub enum PacketType {
     /// Request to sync missed messages after reconnect.
     /// The reconnecting peer sends its most recent received timestamp;
     /// the peer responds by re-sending all messages after that timestamp.
+    ///
+    /// Still live. This is *not* the multi-device feature — it is how a peer that
+    /// missed messages while disconnected gets them back.
     SyncRequest = 0x44,
-    /// Multi-device sync: device identity exchange.
-    /// Sent after X3DH handshake during device pairing.
+    /// **RESERVED — multi-device sync was removed in 5.0.0.**
+    /// Device identity exchange, sent during device pairing. The three Tauri
+    /// commands that issued pairing invites had no frontend caller, so a device
+    /// could never obtain an invite and could therefore never be paired.
+    ///
+    /// The discriminant is kept so the wire format does not shift: reassigning
+    /// `0x45`/`0x46` to something else would be an authenticated-format change
+    /// without a version bump, which is exactly what this file's header warns
+    /// against. Receiving frames of these types is logged and dropped.
+    #[allow(dead_code)]
     SyncDeviceInfo = 0x45,
-    /// Multi-device sync: encrypted payload batch (peer keys, conversations, etc.).
+    /// **RESERVED — multi-device sync was removed in 5.0.0.** See
+    /// [`PacketType::SyncDeviceInfo`].
+    #[allow(dead_code)]
     SyncPayload = 0x46,
     // ─── Group Chat (Phase 3) ───
     /// Create a new group (0x50).
@@ -254,17 +274,22 @@ impl PacketType {
 
 /// Validate a protocol version byte.
 ///
-/// Accepts both the current version (0x02) and legacy version (0x01).
-/// Logs a deprecation notice when a legacy peer connects.
-/// Reserved versions (0x00, 0xFE, 0xFF) are always rejected.
+/// Accepts the current version only ([`PROTOCOL_VERSION`], 0x03). There is no
+/// downgrade path: 0x01 (pre-X3DH) and 0x02 (different AEAD AAD) are both
+/// rejected. Reserved versions (0x00, 0xFE, 0xFF) are always rejected.
 pub fn validate_version(version: u8) -> Result<(), ProtocolError> {
     if RESERVED_VERSIONS.contains(&version) {
         return Err(ProtocolError::ReservedVersion(version));
     }
-    if version == PROTOCOL_VERSION_LEGACY {
-        tracing::warn!("peer using legacy protocol version 0x01 — consider upgrading");
-        return Ok(());
-    }
+    // No downgrade path.
+    //
+    // This used to `return Ok(())` for `PROTOCOL_VERSION_LEGACY` (0x01) after a
+    // `tracing::warn!`, which contradicted the stated design directly: a 5.0.0
+    // client *would* complete a handshake with a 4.x peer, and a `warn!` is
+    // invisible to the user. It is also not merely a cosmetic mismatch — the
+    // legacy branch selects `handshake_as_initiator`, the non-X3DH path, so a
+    // peer that omitted the prekey bundle from its invite could force a 5.0.0
+    // initiator onto a handshake with no forward secrecy.
     if version != PROTOCOL_VERSION {
         return Err(ProtocolError::UnsupportedVersion(version));
     }
@@ -1033,9 +1058,17 @@ mod protocol_tests {
     }
 
     #[test]
-    fn test_legacy_version_accepted() {
-        // 0x01 is the legacy version — should be accepted with warning
-        assert!(validate_version(PROTOCOL_VERSION_LEGACY).is_ok());
+    fn test_legacy_version_is_rejected() {
+        // 0x01 is the pre-X3DH version: SHA-256 KDF ratchet, no one-time prekey,
+        // and therefore no forward secrecy against a peer whose long-term key
+        // is later compromised. Accepting it is exactly the downgrade the
+        // project documents as forbidden, so it is refused at the handshake
+        // where the user gets a clear "upgrade" signal instead of a session
+        // that silently has weaker guarantees.
+        assert!(matches!(
+            validate_version(PROTOCOL_VERSION_LEGACY),
+            Err(ProtocolError::UnsupportedVersion(0x01))
+        ));
     }
 
     #[test]
