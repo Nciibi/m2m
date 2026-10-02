@@ -2759,6 +2759,8 @@ async fn handle_message_update_frame(
                         let mut accepted = false;
                         let ephemeral = state.security_config.read().await.ephemeral_mode;
                         if !ephemeral {
+                            let storage_cap =
+                                state.security_config.read().await.effective_storage_cap();
                             let sk = state.storage_key.read().await;
                             if let Some(key) = sk.as_ref() {
                                 let ms = state.message_store.lock().await;
@@ -2781,6 +2783,16 @@ async fn handle_message_update_frame(
                                             tracing::warn!(error = %e, "failed to persist edit");
                                         }
                                     }
+                                    // The inbound twin of the outbound cap gap
+                                    // in `chat.rs::edit_message`. An edit re-keys
+                                    // the row, so it changes stored size; without
+                                    // this a peer could stream `MessageEdit` frames
+                                    // and grow `messages.db` past the ceiling.
+                                    crate::maintenance::enforce_cap(
+                                        app_handle,
+                                        store,
+                                        storage_cap,
+                                    );
                                 }
                             }
                         }
