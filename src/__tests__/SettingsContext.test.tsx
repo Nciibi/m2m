@@ -132,6 +132,15 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "clear_clipboard":
     case "set_tor_enabled":
       return undefined;
+    // Relay. `get_relay_config` returns the *view* — note there is no
+    // `auth_token` key anywhere in this fixture, which is the property the
+    // Rust side enforces by not deriving Serialize on `RelayConfig`.
+    case "get_relay_config":
+      return relayStore;
+    case "set_relay_config":
+      relayStore =
+        (args?.config as { host: string; port: number; has_auth_token: boolean } | null | undefined) ?? null;
+      return undefined;
     default:
       return undefined;
   }
