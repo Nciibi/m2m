@@ -346,6 +346,7 @@ pub struct PortMappingHandle {
     /// Cancel channel for the renewal task. Dropping the receiver stops renewal.
     pub renew_cancel: tokio::sync::watch::Sender<()>,
 }
+pub struct AppState {
 
 pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
