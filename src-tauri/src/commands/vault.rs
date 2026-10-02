@@ -1358,10 +1358,10 @@ pub async fn lock_vault_inner(
     let dropped_peers: Vec<String> = {
         let mut conns = state.connections.write().await;
         // `drain()` with no argument, not `drain(..)`. The range-taking overload was
-    // removed from `HashMap` (ranges moved to `extract_if`), so `drain(..)` does
-    // not compile on a current toolchain. Same behaviour — drain the whole map —
-    // but this line is why the Rust side had never been built.
-    conns.drain().map(|(peer, _)| peer).collect()
+        // removed from `HashMap` (ranges moved to `extract_if`), so `drain(..)` does
+        // not compile on a current toolchain. Same behaviour — drain the whole map —
+        // but this line is why the Rust side had never been built.
+        conns.drain().map(|(peer, _)| peer).collect()
     };
     for peer in &dropped_peers {
         let _ = tauri::Emitter::emit(
