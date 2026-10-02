@@ -349,22 +349,35 @@ Storage Key
 
 ### 5.2 The ratchet mechanism
 
-Each encrypted message advances the key:
+**A Signal-protocol Double Ratchet is implemented** (`crypto.rs::DoubleRatchet`),
+with the symmetric chain ratchet running HKDF-SHA256 throughout — the SHA-256
+chain described in earlier revisions of this document was replaced.
+
+Every derivation is HKDF-SHA256 with explicit domain-separation labels:
+
+- chain step: `M2M-MSG-KEY`
+- DH ratchet root: `M2M-DH-RATCHET`
+- X3DH: `m2m-kx-v1`
 
 ```
-Message N: encrypt(payload, tx_key_N)
-           tx_key_{N+1} = SHA-256(tx_key_N || "tx")
 
-Message N+1: encrypt(payload, tx_key_{N+1})
-             tx_key_{N+2} = SHA-256(tx_key_{N+1} || "tx")
+Message N:   encrypt(payload, chain_key_N, msg_key_N)
+ 
+  header = HKDF(chain_key_N, "M2M-MSG-KEY")
+ 
+  chain_key_{N+1} = HKDF(chain_key_N, "M2M-MSG-KEY")
+Message N+1: encrypt(payload, chain_key_{N+1}, msg_key_{N+1})
 ```
 
-This provides **forward secrecy**: if an attacker compromises `tx_key_{N+1}`, they cannot decrypt message N because the key has already evolved. They also cannot decrypt message N+2 because the key will evolve again.
+The DH ratchet contributes a new X25519 shared secret every `ratchet_interval`
+messages (default 100), which is what gives self-healing: compromising a chain
+key does not expose later traffic, because a fresh DH input re-enters the
+derivation.
 
-**Why SHA-256 instead of HKDF?** The ratchet is a performance-critical hot path. SHA-256 is faster than HKDF-extract-and-expand for a single output that we don't need to domain-separate. HKDF is used for the initial session key derivation where domain separation matters (identity vs. session context).
-
-**Why not a proper Double Ratchet (as in Signal)?** The current ratchet is a simplified single-chain ratchet. A full Double Ratchet would add a DH ratchet on top of the chain ratchet, providing self-healing (if a key is compromised, future messages become secure again after the next DH exchange). Signal's Double Ratchet is a goal for Phase 1 of the roadmap.
-
+**Correction to an earlier revision of this document**, which asked "Why SHA-256
+instead of HKDF?" and "Why not a proper Double Ratchet (as in Signal)?" and
+described the latter as "a goal for Phase 1". Both premises were stale: HKDF is
+used for every derivation, and the Double Ratchet shipped.
 ---
 
 ## 6. NAT Traversal Trade-offs
