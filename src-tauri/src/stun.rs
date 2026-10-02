@@ -916,15 +916,15 @@ pub(crate) fn is_global_unicast(ip: std::net::IpAddr) -> bool {
                 && !((octets[0] == 198) && (octets[1] & 0xFE) == 0x18)
         }
         std::net::IpAddr::V6(v6) => {
-            !v6.is_loopback()
-                && !v6.is_unspecified()
-                && !v6.is_multicast()
-                && !v6.is_unique_local()
-                && !v6.is_unicast_link_local()
-                // Documentation prefix 2001:db8::/32 (RFC 3849). Spelled out
-                // rather than calling `is_documentation()` so this predicate
-                // does not depend on that method's availability in std.
-                && !(v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8)
+            // Documentation prefix 2001:db8::/32 (RFC 3849). Spelled out rather than
+            // calling `is_documentation()` so this predicate does not depend on
+            // that method's availability in std.
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || v6.is_unique_local()
+                || v6.is_unicast_link_local()
+                || (v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8))
         }
     }
 }
