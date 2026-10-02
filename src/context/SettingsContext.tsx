@@ -50,6 +50,11 @@ interface SettingsContextValue {
   // crosses the IPC boundary, so it cannot be re-displayed or logged here, and
   // the form therefore tracks its own token draft separately.
   relayConfig: RelayConfigView | null;
+  /** Live form state for the host field, so typing does not round-trip IPC. */
+  relayHost: string;
+  /** Live form state for the port field. Kept as a string so a partially-typed
+   *  value is representable; validated as a number on save. */
+  relayPort: string;
   setRelayHost: (host: string) => void;
   setRelayPort: (port: string) => void;
   /** Empty clears the relay, which is what disabling it means. */
