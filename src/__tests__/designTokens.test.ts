@@ -156,8 +156,22 @@ describe("design tokens: no colour literals outside tokens.css / theme.css", () 
     const referenced = new Set<string>();
     for (const file of walk(SRC)) {
       if (!/\.tsx?$/.test(file) || file.includes(`${join("__tests__")}`)) continue;
-      for (const m of readFileSync(file, "utf8").matchAll(/var\(\s*(--[\w-]+)/g)) {
-        referenced.add(m[1]);
+      const lines = readFileSync(file, "utf8").split("\n");
+      let inBlockComment = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (inBlockComment) {
+          if (trimmed.includes("*/")) inBlockComment = false;
+          continue;
+        }
+        if (trimmed.startsWith("/*") && !trimmed.includes("*/")) {
+          inBlockComment = true;
+          continue;
+        }
+        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("{/*")) continue;
+        for (const m of line.split("//")[0].matchAll(/var\(\s*(--[\w-]+)/g)) {
+          referenced.add(m[1]);
+        }
       }
     }
 
