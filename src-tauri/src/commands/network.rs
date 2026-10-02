@@ -2193,7 +2193,8 @@ async fn handle_file_transfer_packet(
                                             Some(temp_path) => {
                                                 std::fs::rename(temp_path, &final_path)
                                             }
-                                            None => Err(std::io::Error::other("transfer was missing its temp path",
+                                            None => Err(std::io::Error::other(
+                                                "transfer was missing its temp path",
                                             )),
                                         };
 
@@ -2251,11 +2252,13 @@ async fn handle_file_transfer_packet(
                                                         .await
                                                         {
                                                             Ok(r) => r,
-                                                            Err(e) => Err(std::io::Error::other(format!("copy task failed: {e}"),
+                                                            Err(e) => Err(std::io::Error::other(
+                                                                format!("copy task failed: {e}"),
                                                             )),
                                                         }
                                                     }
-                                                    None => Err(std::io::Error::other("transfer was missing its temp path",
+                                                    None => Err(std::io::Error::other(
+                                                        "transfer was missing its temp path",
                                                     )),
                                                 };
                                                 match copied {
