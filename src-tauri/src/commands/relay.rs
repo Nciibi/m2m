@@ -12,13 +12,41 @@ use tauri::State;
 use crate::relay::{RelayConfig, RelayState};
 use crate::state::AppState;
 
-/// Get the current relay server configuration.
+/// Get the current relay server configuration, **without the secret**.
+///
+/// This is an IPC boundary, so the shape that crosses it is ours to choose.
+/// Returning `RelayConfig` directly handed the plaintext auth token to the
+/// webview, where it sat in renderer memory and in any DevTools console — and
+/// `#[derive(Debug)]` on `RelayConfig` meant a single `tracing::debug!(?config)`
+/// anywhere would print it to the log file. The UI only ever needs to know
+/// whether a token is *set*, so that is what it gets.
 #[tauri::command]
 pub async fn get_relay_config(
     state: State<'_, Arc<AppState>>,
-) -> Result<Option<RelayConfig>, AppError> {
+) -> Result<Option<RelayConfigView>, AppError> {
     let config = state.relay_config.read().await;
-    Ok(config.clone())
+    Ok(config.as_ref().map(RelayConfigView::from))
+}
+
+/// The relay configuration as exposed to the frontend.
+///
+/// `auth_token` is reduced to a boolean. The real value never leaves Rust.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RelayConfigView {
+    pub host: String,
+    pub port: u16,
+    /// Whether an auth token is configured. Never the token itself.
+    pub has_auth_token: bool,
+}
+
+impl From<&RelayConfig> for RelayConfigView {
+    fn from(c: &RelayConfig) -> Self {
+        Self {
+            host: c.host.clone(),
+            port: c.port,
+            has_auth_token: !c.auth_token.is_empty(),
+        }
+    }
 }
 
 /// Set the relay server configuration.
