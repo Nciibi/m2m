@@ -362,7 +362,11 @@ function ConnectTab({
                       e.currentTarget.click();
                     }
                   }}>
-                  <span>{inv.substring(0, 40)}…</span>
+                  // `typeof` guard: `inviteHistory` is only ever appended to with a non-empty
+                  // string, but a render that throws on a bad invariant takes the
+                  // whole view down, and an unhandled render throw surfaces in
+                  // vitest as an "unhandled error" while the test still passes.
+                  <span>{typeof inv === "string" ? inv.substring(0, 40) + "…" : ""}</span>
                   <CopyIcon size={12} />
                 </div>
               ))}
