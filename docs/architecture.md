@@ -398,11 +398,11 @@ QR codes would require a camera dependency and add complexity to the invite flow
 
 | Area | Score | Notes |
 |------|-------|-------|
-| Security | 9.0/10 | Strong crypto, weak mlock() / no audit |
-| Code Quality | 8.0/10 | commands.rs needs splitting, some dead code |
+| Security | 7.5/10 | Strong crypto + mlock; no external audit yet (see `SECURITY-HARDENING.md`) |
+| Code Quality | 8.0/10 | `commands.rs` split; dead code and unwired commands remain |
 | Architecture | 8.5/10 | Clean module boundaries, clear data flow |
-| Testing | 8.0/10 | 87 tests, but storage + identity need coverage |
+| Testing | 8.0/10 | ~463 Rust test attributes, 379 frontend; 14 Rust files have no `#[cfg(test)]` |
 | UI/UX | 6.5/10 | Functional but spartan |
-| **Overall** | **7.9/10** | See [ROADMAP.md](../ROADMAP.md) for path to 9.5 |
+| **Overall** | **7.5/10** | See [archived ROADMAP](archive/ROADMAP.md) for path to 9.5 |
 
-See the [Threat Model](threat-model.md) for a comprehensive security analysis, and the [ROADMAP.md](../ROADMAP.md) for planned improvements across all dimensions.
+See the [Threat Model](threat-model.md) for a comprehensive security analysis, and the [archived ROADMAP](archive/ROADMAP.md) for planned improvements across all dimensions.
