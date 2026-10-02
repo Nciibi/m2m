@@ -946,10 +946,16 @@ mod tests {
 
     #[test]
     fn limits_are_sane() {
-        assert!(MAX_PENDING_REGISTRATIONS > 0);
-        assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
-        assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
-        assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
-        assert!(MAX_BODY_SIZE > 0);
+        // `const {}` blocks are evaluated at compile time and cannot be
+        // optimised away the way a `const`-folded `assert!(...)` in a test body
+        // is — a failing check here becomes a build error, which is the point of
+        // asserting that these limits are coherent with each other.
+        const {
+            assert!(MAX_PENDING_REGISTRATIONS > 0);
+            assert!(MAX_PENDING_REGISTRATIONS <= MAX_TOTAL_CONNECTIONS);
+            assert!(MAX_CONNECTIONS_PER_IP <= MAX_TOTAL_CONNECTIONS);
+            assert!(BRIDGE_IDLE_TIMEOUT > READER_IDLE_TIMEOUT);
+            assert!(MAX_BODY_SIZE > 0);
+        }
     }
 }
