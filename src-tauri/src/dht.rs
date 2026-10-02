@@ -799,15 +799,6 @@ fn now_unix_secs() -> u64 {
 #[cfg(test)]
 mod dht_tests {
     use super::*;
-    use crate::crypto::IdentityKeypair;
-
-    fn init_crypto() {
-        // Pure-Rust crypto stack: no initialization needed.
-    }
-
-    fn make_identity() -> IdentityKeypair {
-        IdentityKeypair::generate().unwrap()
-    }
 
     #[test]
     fn test_build_dht_message() {
