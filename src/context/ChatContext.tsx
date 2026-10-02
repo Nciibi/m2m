@@ -535,13 +535,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     try {
       const info = await invoke<ConnectionInfo>("attempt_reconnect", { peerKeyHex: connection.peer_key_hex });
       setConnection(info);
-    } catch {
-      // Failure to reconnect is not actionable here; the caller retries on
-      // the next backoff tick. The old code bound `e` and never read it.
+    } catch (e) {
+      // Was `catch { … }` with the comment "failure to reconnect is not
+      // actionable here", on the strength of a backend that only ever failed
+      // opaquely. It is actionable now: `attempt_reconnect` refuses a
+      // pre-5.0.0 handshake and returns a message saying so, and that is the
+      // difference between a user retrying forever and a user being told to
+      // exchange a fresh invite. Swallowing it left the UI showing
+      // "Reconnecting…" against a peer it had just decided never to reconnect to.
       setReconnecting(false);
       setReconnectAttempt(0);
+      addToast("Could not reconnect: " + errorMessage(e), "error", 8000);
     }
-  }, [connection]);
+  }, [connection, addToast]);
 
   const handleMarkConversationRead = useCallback(async () => {
     if (!activeConversationId) return;
@@ -553,8 +559,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
         return m;
       }));
-    } catch { /* noop */ }
-  }, [activeConversationId]);
+    } catch (e) {
+      // Read receipts are a control the user acts on: an unreceipted message
+      // stays badged and the sender is never told it was read. Failing silently
+      // here is the exact `catch {}` CLAUDE.md names as a shipped bug, and the
+      // caller's retry timer never learns that anything went wrong.
+      addToast("Could not mark as read: " + errorMessage(e), "error");
+    }
+  }, [activeConversationId, addToast]);
 
   // ─── Self-destruct, Edit, Delete handlers ───
 
