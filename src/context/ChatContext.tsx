@@ -243,6 +243,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       expires_at: null,
       reactions: {},
       sender_peer_key_hex: "",
+      decrypt_failed: false,
     };
     setMessages((prev) => [...prev, optimistic]);
   }, [peerKeyHex]);
