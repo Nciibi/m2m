@@ -819,7 +819,7 @@ const scheduleClipboardClear = useCallback((secs: number) => {
     discoveryConfig, discoveredPeers,
     handleLanToggle, handleDhtToggle,
     handleConnectDiscoveredPeer, handleRefreshDiscovery,
-    relayConfig, setRelayHost, setRelayPort,
+    relayConfig, relayHost, relayPort, setRelayHost, setRelayPort,
     handleRelaySave, handleRelayClear, relaySaving,
     securityConfig, captureCapability,
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
