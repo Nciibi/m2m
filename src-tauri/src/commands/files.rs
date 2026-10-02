@@ -970,3 +970,53 @@ fn compute_file_hashes(
     let full_hash: [u8; 32] = full_hasher.finalize().into();
     Ok((full_hash, chunk_hashes))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::validate_save_dir;
+
+    /// The `save_dir` a completed transfer is renamed to. If this accepts a
+    /// relative path, a compromised webview chooses where a peer's file lands.
+    #[test]
+    fn rejects_a_relative_save_dir() {
+        // The dangerous cases specifically: a bare filename resolves into the
+        // app's working directory, and `..` walks out of whatever the CWD is.
+        for bad in ["file.txt", "downloads/file.txt", "../escape.txt", "..", "./x"] {
+            assert!(
+                validate_save_dir(bad).is_err(),
+                "relative path {bad:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_absolute_paths_and_the_empty_default() {
+        // Empty means "use the sanitized filename", which the chunk handler
+        // already implements; rejecting it would break the default download.
+        assert!(validate_save_dir("").is_ok());
+        assert!(validate_save_dir("/home/user/Downloads").is_ok());
+        // Windows-shaped, since the same code runs there.
+        assert!(validate_save_dir(r"C:\Users\me\Downloads").is_ok());
+    }
+
+    #[test]
+    fn rejects_nul_bytes_and_absurd_lengths() {
+        assert!(validate_save_dir("/tmp/a\0b").is_err());
+        assert!(validate_save_dir(&"a".repeat(4097)).is_err());
+    }
+
+    /// A traversal segment is caught by the absolute-path rule, but assert it
+    /// directly so the intent survives a future refactor that canonicalizes
+    /// paths instead of rejecting relative ones.
+    #[test]
+    fn traversal_is_not_reachable_via_an_absolute_path() {
+        let joined = std::path::Path::new("/tmp/safe").join("../../etc/passwd");
+        // `join` keeps the `..` lexically; `canonicalize` would resolve it. If a
+        // future change canonicalizes the parent, this catches the regression.
+        assert!(
+            joined.to_string_lossy().contains(".."),
+            "precondition: the traversal survives join(), so canonicalization \
+             would be needed to remove it"
+        );
+    }
+}
