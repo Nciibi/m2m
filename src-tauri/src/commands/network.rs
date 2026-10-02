@@ -2699,11 +2699,7 @@ async fn handle_message_update_frame(
                                 // applies here too — a peer sending repeated
                                 // Reaction frames must not be able to grow the
                                 // store past its ceiling.
-                                crate::maintenance::enforce_cap(
-                                    app_handle,
-                                    store,
-                                    storage_cap,
-                                );
+                                crate::maintenance::enforce_cap(app_handle, store, storage_cap);
                             }
                         }
                         if !accepted {
@@ -2788,11 +2784,7 @@ async fn handle_message_update_frame(
                                     // the row, so it changes stored size; without
                                     // this a peer could stream `MessageEdit` frames
                                     // and grow `messages.db` past the ceiling.
-                                    crate::maintenance::enforce_cap(
-                                        app_handle,
-                                        store,
-                                        storage_cap,
-                                    );
+                                    crate::maintenance::enforce_cap(app_handle, store, storage_cap);
                                 }
                             }
                         }
