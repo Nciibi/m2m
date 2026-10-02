@@ -769,13 +769,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // the peer-key prefix anyway. So use the key prefix directly rather
         // than keeping a variable that is provably always null.
         const displayName = peerKeyHex.substring(0, 8) + "…";
-        import("@tauri-apps/plugin-notification").then(({ sendNotification, isPermissionGranted: _i }) => {
-          sendNotification({
-            title: "M2M",
-            body: `New message from ${displayName}`,
-            group: peerKeyHex,
-          });
-        });
+        // `.catch`: the plugin is loaded lazily, so a failed dynamic `import()` — or a
+        // `sendNotification` the platform rejects — used to escape as an
+        // unhandled rejection. The navigation intent below is independent of it
+        // and must still run.
+        import("@tauri-apps/plugin-notification")
+          .then(({ sendNotification }) => {
+            sendNotification({
+              title: "M2M",
+              body: `New message from ${displayName}`,
+              group: peerKeyHex,
+            });
+          })
+          .catch(() => { /* a failed OS notification must not block navigation */ });
         // Record an intent to open this conversation, then nudge the app to
         // return to the foreground so the user sees it.
         //
