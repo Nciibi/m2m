@@ -1236,11 +1236,16 @@ impl Session {
 /// Retained as the reference implementation of that scrub even though
 /// `lock_vault` now drops the whole connection instead — `Drop for Session`
 /// below performs exactly these steps, and this documents what "scrubbed" means.
+///
+/// A free function taking `&mut Session`, not a method: this sits outside the
+/// `impl Session` block it documents, and `pub fn lock(&mut self)` in a free
+/// position is not valid Rust — `self` is only meaningful in an associated
+/// function. Written this way it compiles while staying the reference.
 #[allow(
     dead_code,
     reason = "reference scrubber; lock_vault drains connections so Drop handles this"
 )]
-pub fn lock(&mut self) {
+pub fn scrub_session_keys(session: &mut Session) {
     // Both fields' own `Drop` impls zeroize correctly (crypto.rs), so `take()`
     // is the whole mechanism — the same one `Drop for Session` uses.
     //
