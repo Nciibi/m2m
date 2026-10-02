@@ -1065,7 +1065,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     // deps), so listing it here does *not* re-register anything — and omitting
     // it would be a stale closure over a function that writes the ref the
     // connection listener reads.
-  }, [setView, addToast, setActiveConversation]);
+  }, [setView, addToast, setActiveConversation, drainNavigationIntent]);
 
   /**
    * Memoized — this is the single biggest render-cost fix in the app.
