@@ -348,9 +348,12 @@ pub async fn attempt_reconnect(
                         state: "needs_new_invite".to_string(),
                     },
                 );
-                // Drop the metadata rather than leaving a prompt the user can keep
-                // clicking into the same refusal.
-                pr.remove(&peer_key_hex);
+                // No `pr.remove` needed here: the metadata was already taken out
+                // of the map by `pr.remove(...)?` at the top of this function,
+                // so there is nothing left to drop. (An earlier version of this
+                // refusal path tried to remove it again, which did not compile —
+                // `pr` is scoped to the block that read it.)
+                //
                 // `Err`, not a synthesised `ConnectionInfo`: this returns
                 // `Result<ConnectionInfo, AppError>` and the caller feeds the
                 // success value straight into connection state. Returning a
