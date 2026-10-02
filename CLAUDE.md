@@ -259,33 +259,95 @@ default.
 
 **Last full run: 2026-10-02, commit `f0f3014` + the working tree.**
 
+The Rust rows were empty until now, and that emptiness was hiding a build
+break. See "The Rust side had never been compiled" below.
+
 | Command | Result | Verified how |
 |---------|--------|---------------|
 | `cargo fmt --all -- --check` | **clean** | run. Was 138 hunks dirty across 25 files before this pass. |
+| `cargo check --all-targets` (`src-tauri`) | **clean, 0 warnings** | run. Was **22 errors**. |
+| `cargo clippy --all-targets -- -D warnings` (`src-tauri`) | **clean** | run. Was **21 findings**. |
+| `tools/crypto-probe` (5 modules, executed) | **194 passed, 0 failed** | run. Was 192/2 — and the 2 were real bugs, see below. |
+| `cargo test` (`relay-server`) | **15 passed** | run |
+| `cargo clippy --all-targets -- -D warnings` (`relay-server`) | **clean** | run. Was 7 findings. |
 | `tsc --noEmit` | clean | run. Was **1 error** (`ChatContext.tsx` `.catch(() => {})` typing). |
 | `pnpm test` | **386 passed**, 21 files | run |
 | `pnpm lint` | 0 errors, **8** warnings (budget 8) | run. Was 11 — over a budget of 10, i.e. CI-red. |
 | `pnpm test:coverage` | 65.14 stmts / 76.63 branch / 56.15 funcs / 65.14 lines | run. Gates raised to 60/70/48/60 to match. |
-| `./tools/typecheck-harness/check.sh --run` | **not run here** | needs a Rust linker; see below |
-| `tools/crypto-probe/sync.sh` | **not run here** | needs a C compiler (`rusqlite` bundled) |
-| `cargo test` (relay) | **not run here** | needs a Rust linker |
-| `cargo clippy --all-targets -- -D warnings` | **not run here** | needs a Rust linker |
+| `./tools/typecheck-harness/check.sh --run` | **still not run** | needs `bash`; this is a Windows shell. |
+| `cargo test --lib` (`src-tauri`) | **cannot run here** | environment, not code — see below. |
 
-### The Rust rows are empty for an environment reason, not a project one
+### The Rust side had never been compiled
 
-`cargo fmt` works because it only parses. Everything that links does not: this
-machine has **no MSVC `link.exe`, no GCC, and a bundled `dlltool` that cannot
-produce an import library**. Any crate with a C dependency — Tauri itself, and
-`rusqlite` with `bundled` — fails to build, so `cargo clippy --all-targets`,
-`cargo test --all-targets` and `tools/crypto-probe` all stop at the first
-`proc-macro2`/`parking_lot_core` build script.
+This is the most important finding of the whole pass, and it is only visible
+because the linker finally worked.
 
-That is the same *conclusion* `CLAUDE.md` previously reached via a different
-route (it blamed missing GTK development packages), and the same conclusion
-`RELEASE_NOTES_v5.0.0.md` ignored when it recorded both as **"clean"**. Do not
-record a Rust verification result you did not observe. The pinned toolchain
-(1.89.0) *is* installed and `cargo fmt` *does* run, so "rustfmt is not installed
-here" is no longer true either.
+Installing WinLibs (`BrechtSanders.WinLibs.POSIX.UCRT`) supplied the missing
+`gcc`/`ld`, and `cargo +1.89.0-x86_64-pc-windows-gnu check --all-targets`
+immediately reported **22 compile errors** in a tree that `CLAUDE.md`,
+`README.md` and `RELEASE_NOTES_v5.0.0.md` had all described as building.
+`cargo fmt` had been passing the whole time, because rustfmt only *parses*.
+
+Several of these were not cosmetic, and two are worth naming because the
+project's own comments asserted the opposite:
+
+- **`crypto.rs` — the receive-chain key was not being scrubbed.** `scrub_and!`
+  zeroizes `tent_chain`, but `tent_chain` was declared *after* the macro was
+  defined. `macro_rules!` resolves body identifiers at the **definition site**,
+  so the name did not resolve and the file did not compile. Deleting the line
+  would have "fixed" the build while leaving the zeroization undone — the
+  comment right above it says every error exit returned with the live receive
+  chain key on the stack, and that was true. The declaration now precedes the
+  macro.
+- **`storage.rs` — a legacy database could not be opened.** The schema batch
+  created `CREATE INDEX ... ON messages(expires_at)` on the grounds that
+  `expires_at` is "declared above". But `CREATE TABLE IF NOT EXISTS` is a
+  **no-op** when the table already exists, so for any database predating that
+  column the index was created against a column that did not exist yet and
+  `MessageStore::open` failed outright — *before* `migrate_messages_table` could
+  `ALTER TABLE` and add it. Any user upgrading from the pre-crypto-shredding
+  schema could not open their messages. The indexes now live only in the
+  migration, which already created them idempotently.
+- **`commands/network.rs` — the duplicate-transfer guard never compiled.** A
+  binding declared without `mut` was assigned in both arms of a match, so the
+  "do not re-prompt for a transfer id that already exists" logic had never run.
+- **`port_mapping.rs`** — two call sites used a match arm whose guard bound a
+  variable the other arm did not, so the UPnP `<service>` parser had never
+  compiled; it is now `is_tag_name_end`, shared by both callers.
+- **`lan_discovery.rs`** — `set_reuse_port` was called as if it existed. It is
+  gated behind socket2's `all` feature **and** only exists in socket2's unix
+  backend; Windows has no `SO_REUSEPORT`. LAN discovery is behind a default-off
+  flag, which is the only reason this was invisible.
+- **`stun.rs` / `port_mapping.rs`** — `is_global_unicast` was called as if it
+  were a std method on `IpAddr`/`Ipv4Addr`. It is not; it is a project-local
+  helper in `stun.rs`, now `pub(crate)` and used by both, so "may we publish
+  this address" has one definition.
+- **`session.rs`** — five `HandshakeInit` test literals were missing `one_time`.
+  Adding the field alone would have compiled and then *failed*: the responder
+  verifies `append_used_opk_to_sign_data(..., one_time)`, so three tests also
+  needed the signed transcript updated to match.
+
+The lesson generalises past this pass: **`cargo fmt` is not a build.** A parser
+that accepts the file tells you nothing about whether it links.
+
+### `cargo test --lib` still cannot run in this shell, and it is not the code
+
+With the probe green and clippy clean, the full `src-tauri` test binary links
+but exits `0xC0000135` (`STATUS_DLL_NOT_FOUND`) then `0xC0000139`
+(`STATUS_ENTRYPOINT_NOT_FOUND`). Cause, established with `objdump -p`:
+
+- The binary imports `TaskDialogIndirect` from **`comctl32.dll`**.
+- This machine's `system32\comctl32.dll` is **version 5**, which does not export
+  it; only the side-by-side v6 does.
+- The test harness `.exe` has **no `.rsrc`/manifest**, so it cannot activate
+  comctl32 v6 the way the real app binary does. `WebView2Loader.dll` also has to
+  be copied into `target/debug/deps/` manually.
+
+That is Tauri GUI plumbing, not application logic — which is precisely the gap
+the crypto probe exists to cover. On a Linux CI runner the manifest and the v6
+comctl32 are both present, so `cargo test --all-targets` runs there. **Do not
+report the full Rust suite as passing on the strength of the probe alone; the
+probe covers 5 of ~20 modules.**
 
 ### Why the crypto probe is the load-bearing harness
 
