@@ -45,9 +45,15 @@ function walk(dir: string, out: string[] = []): string[] {
  *  - An accent has to be able to name the colour it mixes *toward*
  *    (`color-mix(…, black)`), so `black` is a legitimate argument while
  *    `color: black` is a violation. Hence the value-position requirement.
+ *
+ * The value-position class includes `"`, `'` and `=` because the two syntaxes
+ * differ: CSS writes `color: white`, JSX writes `color="white"`. An earlier
+ * version of this pattern omitted them and consequently missed every one of the
+ * seven `color="white"` violations it was written to catch — verified by
+ * reintroducing one and watching the suite stay green.
  */
 const LITERAL =
-  /(:|\(|,)\s*(#[0-9a-fA-F]{3,8}\b|rgba?\s*\(|hsla?\s*\()|(^|[:(,\s])(white|black|silver|maroon|navy|teal|olive|lime|aqua|fuchsia)(\s*[;,)\s}]|$)/;
+  /[:=(,]\s*["']?(#[0-9a-fA-F]{3,8}\b|rgba?\s*\(|hsla?\s*\()|(^|[:=(,\s"'])\s*(white|black|silver|maroon|navy|teal|olive|lime|aqua|fuchsia)\s*["']?\s*[;,)\s}\]]/;
 
 /**
  * `-webkit-mask` / `mask` / `clip-path` stencils.
