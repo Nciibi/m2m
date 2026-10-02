@@ -5622,7 +5622,7 @@ mod tests {
                 .conn
                 .query_row(
                     "SELECT COUNT(*),
-                            COALESCE(SUM(CASE WHEN content_key_wrapped = ?2 THEN 1 ELSE 0 END), 0)
+                            COALESCE(SUM(CASE WHEN content_key_wrapped = ?1 THEN 1 ELSE 0 END), 0)
                        FROM messages WHERE id = 'm-shredded'",
                     params![vec![0u8; WRAPPED_CEK_LEN]],
                     |r| Ok((r.get(0)?, r.get(1)?)),
