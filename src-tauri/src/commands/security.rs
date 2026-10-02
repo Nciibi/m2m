@@ -128,28 +128,27 @@ pub async fn set_security_config(
 ) -> Result<SecurityConfig, AppError> {
     let old_config = state.security_config.read().await.clone();
 
-    // Handle screen capture protection toggle
-    if config.screen_capture_protection != old_config.screen_capture_protection {
-        if config.screen_capture_protection {
-            window_security::apply_screen_protection(&app_handle, true)?;
-            tracing::info!("Screen capture protection ENABLED");
-        } else {
-            window_security::apply_screen_protection(&app_handle, false)?;
-            tracing::info!("Screen capture protection DISABLED");
-        }
-    }
-
-    // Capture monitor lifecycle follows its own toggle
-    if config.capture_process_detection != old_config.capture_process_detection {
-        sync_capture_monitor(&state, &app_handle, config.capture_process_detection);
-    }
-
     // Persist config (disk) + runtime state
     persist_config(&state.data_dir, &config);
     {
         let mut sc = state.security_config.write().await;
         *sc = config.clone();
     }
+
+    // Apply every platform-side effect immediately.
+    //
+    // This used to hand-roll two of the three effects inline (screen capture
+    // protection, capture-monitor lifecycle) and skip the third:
+    // `session::set_send_jitter_ms(config.send_batching_ms)`. So toggling the
+    // send-batching / traffic-analysis jitter returned `Ok(...)`, the toast said
+    // the setting was applied, and nothing changed until the next app start or
+    // webview reload — which is exactly the "control reports success when the
+    // thing it describes did not happen" failure CLAUDE.md is written around.
+    //
+    // `apply_side_effects` is the single definition of "the side effects are
+    // applied" and is idempotent, so calling it here is strictly better than
+    // duplicating part of it. The inline duplicates are gone for that reason.
+    apply_side_effects(&state, &app_handle, &config);
 
     Ok(config)
 }
