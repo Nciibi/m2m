@@ -16,7 +16,13 @@ M2M (Machine-to-Machine / Mouth-to-Mouth) is a **peer-to-peer encrypted desktop 
 - **No central server** in the message path.
 - **No accounts** — identity is a cryptographic keypair.
 - **No metadata leakage** — minimal protocol fields, no telemetry, no presence pings.
-- **Auditability** — open source, reproducible builds, ~8500 lines of Rust.
+  Caveat: `HandshakeInit` / `HandshakeResponse` are written before any key exists,
+  so they are plaintext by construction — readable by the peer, the Tor exit and
+  every AS in between. Candidate lists are filtered for this via
+  `dial::filter_advertised_candidates()`. See `CLAUDE.md`.
+- **Auditability** — open source, ~37,900 lines of Rust. Reproducible-build
+  *scaffolding* exists (`scripts/build-release.sh`) but the two-machine bit is
+  still unverified.
 
 ### Design Philosophy
 
