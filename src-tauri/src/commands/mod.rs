@@ -83,6 +83,7 @@ impl ChatMessage {
             expires_at: None,
             reactions: std::collections::HashMap::new(),
             sender_peer_key_hex: String::new(),
+            decrypt_failed: false,
         }
     }
 
