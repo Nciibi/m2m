@@ -329,6 +329,25 @@ pub struct DiscoveryConfig {
 
 /// Central application state.
 pub struct AppState {
+/// An active NAT port mapping plus the handle for its renewal task.
+///
+/// `PortMapping` on its own was returned by `add_port_mapping`, used to build a
+/// candidate, and then **dropped**. Nothing held it, so:
+///
+/// - `port_mapping::spawn_renewal` was never called, and the router lease (1 h)
+///   expired while `create_invite` kept advertising the address as a
+///   high-priority type-4 candidate — a candidate the app believed in and the
+///   network had already forgotten.
+/// - `port_mapping::remove_port_mapping` was never called, so the router kept a
+///   forward to a port this process no longer listens on, indefinitely.
+#[derive(Debug)]
+pub struct PortMappingHandle {
+    pub mapping: Arc<crate::port_mapping::PortMapping>,
+    /// Cancel channel for the renewal task. Dropping the receiver stops renewal.
+    pub renew_cancel: tokio::sync::watch::Sender<()>,
+}
+
+pub struct AppState {
     /// The local identity keypair (loaded from encrypted storage).
     pub identity: RwLock<Option<IdentityKeypair>>,
     /// X25519 identity keypair for X3DH key agreement.
@@ -410,24 +429,6 @@ pub struct AppState {
     /// Used by the reconnection logic to re-establish X3DH sessions.
     pub pending_reconnects: RwLock<HashMap<String, ReconnectInfo>>,
     // ─── Security ───
-/// An active NAT port mapping plus the handle for its renewal task.
-///
-/// `PortMapping` on its own was returned by `add_port_mapping`, used to build a
-/// candidate, and then **dropped**. Nothing held it, so:
-///
-/// - `port_mapping::spawn_renewal` was never called, and the router lease (1 h)
-///   expired while `create_invite` kept advertising the address as a
-///   high-priority type-4 candidate — a candidate the app believed in and the
-///   network had already forgotten.
-/// - `port_mapping::remove_port_mapping` was never called, so the router kept a
-///   forward to a port this process no longer listens on, indefinitely.
-#[derive(Debug)]
-pub struct PortMappingHandle {
-    pub mapping: Arc<crate::port_mapping::PortMapping>,
-    /// Cancel channel for the renewal task. Dropping the receiver stops renewal.
-    pub renew_cancel: tokio::sync::watch::Sender<()>,
-}
-
 /// Security configuration (screen capture, clipboard, idle lock).
     pub security_config: RwLock<SecurityConfig>,
     // ─── Discovery ───
