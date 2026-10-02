@@ -35,7 +35,7 @@
 
 .btn--default {
   background: var(--color-accent-gradient);
-  color: white;
+  color: var(--color-on-fill);
   border-color: var(--color-fill-muted);
   box-shadow: var(--shadow-accent);
 }

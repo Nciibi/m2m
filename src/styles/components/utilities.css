@@ -291,7 +291,7 @@
   width: 48px; height: 48px; border-radius: var(--radius-lg);
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; font-weight: 700; flex-shrink: 0;
-  color: white; text-transform: uppercase;
+  color: var(--color-on-fill); text-transform: uppercase;
 }
 .conv-avatar--online { border: 2px solid var(--color-success) !important; box-shadow: 0 0 12px var(--color-success-glow) !important; }
 .conv-avatar-wrap { position: relative; flex-shrink: 0; width: 48px; height: 48px; }
@@ -382,7 +382,7 @@
 }
 .msg-bubble--sent {
   align-self: flex-end;
-  background: var(--color-accent-gradient); color: white;
+  background: var(--color-accent-gradient); color: var(--color-on-fill);
   border-bottom-right-radius: var(--radius-xs);
   box-shadow: var(--shadow-bubble-sent);
   margin-left: auto;
@@ -398,7 +398,7 @@
 }
 
 .msg-time { font-size: var(--text-xs); opacity: 0.6; line-height: 1; }
-.msg-bubble--sent .msg-time { color: white; opacity: 0.65; }
+.msg-bubble--sent .msg-time { color: var(--color-on-fill); opacity: 0.65; }
 .msg-bubble--received .msg-time { color: var(--color-text-secondary); opacity: 0.5; }
 
 .msg-footer-row { display: flex; align-items: center; gap: var(--space-xxs); margin-top: var(--space-xxs); flex-wrap: wrap; }
@@ -457,7 +457,7 @@
 .msg-input-wrap textarea:disabled { opacity: 0.5; }
 
 .msg-send-btn {
-  background: var(--color-accent-gradient); color: white;
+  background: var(--color-accent-gradient); color: var(--color-on-fill);
   border: 1px solid var(--color-fill-muted);
   padding: 10px 16px; min-width: 44px; min-height: 42px;
   border-radius: var(--radius-lg); cursor: pointer;
@@ -489,7 +489,7 @@
   background: var(--color-scrim-soft); flex-shrink: 0;
 }
 
-.msg-send-spinner { width: 18px; height: 18px; border: 2px solid var(--color-fill-edge); border-top-color: white; border-radius: 50%; display: inline-block; animation: spin 0.6s linear infinite; }
+.msg-send-spinner { width: 18px; height: 18px; border: 2px solid var(--color-fill-edge); border-top-color: var(--color-on-fill); border-radius: 50%; display: inline-block; animation: spin 0.6s linear infinite; }
 .msg-input-limit { position: absolute; right: 12px; bottom: 6px; font-size: var(--text-xs); color: var(--color-warning); }
 
 /* ─── Date Separator ─── */
@@ -664,7 +664,7 @@
 }
 .toggle-slider::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-text-muted); transition: transform 200ms var(--ease-out-expo), background 200ms ease; }
 .toggle input:checked + .toggle-slider { background: var(--color-accent); border-color: var(--color-accent-bright); }
-.toggle input:checked + .toggle-slider::after { transform: translateX(16px); background: white; }
+.toggle input:checked + .toggle-slider::after { transform: translateX(16px); background: var(--color-on-fill); }
 .toggle input:focus-visible + .toggle-slider { box-shadow: 0 0 0 3px var(--color-accent-glow); }
 
 /* ─── Theme Selector ─── */
