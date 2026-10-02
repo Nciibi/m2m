@@ -428,12 +428,28 @@ pub fn run() {
                 if let Some(state) = app_handle.try_state::<Arc<AppState>>() {
                     let state = state.inner().clone();
                     let rt = tauri::async_runtime::handle();
+                    // A failure to release the UPnP/NAT-PMP mapping on exit
+                    // leaves the router port-forwarded until its own lease
+                    // expires, so it is logged rather than discarded. The 3s
+                    // bound keeps a wedged socket from hanging app shutdown;
+                    // a timeout is logged as such instead of being swallowed.
                     rt.block_on(async {
-                        tokio::time::timeout(
+                        match tokio::time::timeout(
                             std::time::Duration::from_secs(3),
                             commands::network::release_port_mapping(&state),
                         )
-                        .await;
+                        .await
+                        {
+                            Ok(Ok(())) => {}
+                            Ok(Err(e)) => tracing::warn!(
+                                error = %e,
+                                "failed to release port mapping on exit; the router \
+                                 may keep the forward until its lease expires"
+                            ),
+                            Err(_) => tracing::warn!(
+                                "timed out after 3s releasing port mapping on exit"
+                            ),
+                        }
                     });
                 }
             }
