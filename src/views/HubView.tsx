@@ -671,7 +671,12 @@ function NearbyTab({
       {discoveredPeers.map((peer, idx) => (
         <div key={`${peer.method}-${peer.id_hex}-${idx}`} className="conv-item" role="listitem">
           <div className="conv-avatar conv-avatar--online" style={{
-            background: `linear-gradient(135deg, #22c55e, #16a34a)`,
+            // Was a hardcoded `linear-gradient(135deg, #22c55e, #16a34a)`. Both
+            // hexes are absent from the token scale, so the "online" tint could
+            // not follow the theme — on the light theme this stayed the dark
+            // theme's green. `--color-success` is already restated per theme, so
+            // deriving both stops from it keeps one source of truth.
+            background: `linear-gradient(135deg, var(--color-success), color-mix(in srgb, var(--color-success) 78%, black))`,
           }}>
             <WifiIcon size={18} color="var(--color-on-fill)" />
           </div>
