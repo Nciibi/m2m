@@ -263,9 +263,9 @@ default.
 |---------|--------|---------------|
 | `cargo fmt --all -- --check` | **clean** | run. Was 138 hunks dirty across 25 files before this pass. |
 | `tsc --noEmit` | clean | run. Was **1 error** (`ChatContext.tsx` `.catch(() => {})` typing). |
-| `pnpm test` | **379 passed**, 20 files | run |
+| `pnpm test` | **386 passed**, 21 files | run |
 | `pnpm lint` | 0 errors, **8** warnings (budget 8) | run. Was 11 — over a budget of 10, i.e. CI-red. |
-| `pnpm test:coverage` | 65.42 stmts / 76.57 branch / 55.72 funcs / 65.42 lines | run. Gates are 50/60/34/50. |
+| `pnpm test:coverage` | 65.14 stmts / 76.63 branch / 56.15 funcs / 65.14 lines | run. Gates raised to 60/70/48/60 to match. |
 | `./tools/typecheck-harness/check.sh --run` | **not run here** | needs a Rust linker; see below |
 | `tools/crypto-probe/sync.sh` | **not run here** | needs a C compiler (`rusqlite` bundled) |
 | `cargo test` (relay) | **not run here** | needs a Rust linker |
