@@ -1220,7 +1220,7 @@ pub async fn connect_to_peer(
                 )
                 .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
             };
-let bundle = crate::crypto::PrekeyBundle {
+            let bundle = crate::crypto::PrekeyBundle {
                 identity_key: signed.payload.x25519_identity_pub,
                 signed_prekey: signed.payload.signed_prekey,
                 signed_prekey_sig: signed.payload.signed_prekey_sig.clone(),
