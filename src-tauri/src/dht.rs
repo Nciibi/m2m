@@ -278,7 +278,17 @@ async fn dht_recv(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), DhtError> {
     Ok((body[0], body[1..].to_vec()))
 }
 
-/// Connect to a DHT node and exchange a ping/pong to verify it's alive.
+/// Measure round-trip latency to a DHT node, for logging node quality.
+///
+/// Deliberately unused rather than wired in. A liveness probe that is called
+/// on every announce would multiply outbound connections by the node count for
+/// no protocol benefit — `announce_to_node` already fails loudly on an
+/// unreachable node, which is the signal that matters. It is kept because
+/// PING/PONG are part of the documented wire protocol and a node-set manager
+/// will want it; dead code is the honest state, and the previous
+/// `#![allow(dead_code)]` at the crate root hid this and five other unused
+/// items in this module at once.
+#[allow(dead_code, reason = "protocol PING/PONG; reserved for node-set quality scoring")]
 async fn dht_ping(addr: SocketAddr) -> Result<Duration, DhtError> {
     let start = std::time::Instant::now();
     let mut stream = crate::dial::dial_with_timeout(addr, DHT_CONNECT_TIMEOUT)
