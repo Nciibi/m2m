@@ -57,6 +57,21 @@ describe("asChatMessage", () => {
     expect(asChatMessage(message())).not.toBeNull();
   });
 
+  it("carries decrypt_failed through, and defaults an absent one to false", () => {
+    // Read-time only and `#[serde(default)]` on the Rust side, so an absent
+    // field means a healthy read rather than an unknown state.
+    expect(asChatMessage(message({ decrypt_failed: true }))?.decrypt_failed).toBe(true);
+    const { decrypt_failed: _omitted, ...without } = message();
+    expect(asChatMessage(without)?.decrypt_failed).toBe(false);
+  });
+
+  it("rejects a non-boolean decrypt_failed rather than coercing it", () => {
+    // A truthy string here would let a malformed payload present an unreadable
+    // message as readable.
+    expect(asChatMessage(message({ decrypt_failed: "true" as unknown as boolean }))).toBeNull();
+    expect(asChatMessage(message({ decrypt_failed: 1 as unknown as boolean }))).toBeNull();
+  });
+
   it("rejects a direction the app never produces", () => {
     // The bug this guards: `direction` was typed `string`, and the test
     // fixtures used "incoming"/"outgoing" — so the rendering tests exercised
