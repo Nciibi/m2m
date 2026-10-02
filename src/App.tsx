@@ -121,9 +121,6 @@ function AppInner() {
         return;
       }
       setView(target);
-      // Navigating from the tray means the user is looking at this window again,
-      // so any blur/capture scrim from having been hidden is no longer wanted.
-      setBlurred(false);
     }).catch(() => () => {});
 
     // `m2m://security-error` — emitted by the backend when a security control
