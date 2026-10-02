@@ -27,11 +27,18 @@ use zeroize::Zeroize;
 pub const PROTOCOL_VERSION: u8 = 0x03;
 
 /// Legacy protocol version (v0x01 — pre-X3DH, SHA-256 KDF ratchet only).
-/// Accepted for backward compatibility with older peers.
 ///
-/// v0x02 (X3DH + Double Ratchet with an *unauthenticated* DR header) is
-/// deliberately NOT accepted: its AAD differs from v0x03's, so a v0x02 peer
-/// would handshake and then fail to decrypt everything.
+/// **Not accepted.** Retained only so [`validate_version`] and its tests can
+/// name the version it refuses.
+///
+/// v0x01 is pre-X3DH: there is no one-time prekey and no signed prekey, so a
+/// session established with it has no forward secrecy once the peer's long-term
+/// key is compromised. Accepting it was the downgrade path this project states
+/// it does not have.
+///
+/// v0x02 (X3DH + Double Ratchet with an *unauthenticated* DR header) is likewise
+/// NOT accepted: its AAD differs from v0x03's, so a v0x02 peer would handshake
+/// and then fail to decrypt everything.
 pub const PROTOCOL_VERSION_LEGACY: u8 = 0x01;
 
 /// Reserved version values that must never be used.
