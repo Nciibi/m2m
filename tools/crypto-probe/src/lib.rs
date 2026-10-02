@@ -1,22 +1,26 @@
 //! Standalone runner for the app's pure-crypto modules.
 //!
-//! `crypto.rs`, `group.rs`, `protocol.rs` and `secure_key.rs` have no GTK or
-//! Tauri dependency, so this crate can compile **and execute** their
-//! `#[cfg(test)]` modules outside the Tauri build. That is the only way to
-//! actually *run* Rust tests in this environment: the app crate itself cannot
-//! link, because `glib-sys` / `gio-sys` / `gdk-sys` need GTK development
-//! packages that are not obtainable here.
+//! Five modules are copied in by `sync.sh`: `crypto.rs`, `group.rs`,
+//! `protocol.rs`, `secure_key.rs` and `storage.rs`. They have no Tauri
+//! dependency, so this crate can compile **and execute** their `#[cfg(test)]`
+//! modules outside the Tauri build. That is the only way to actually *run*
+//! Rust tests in an environment that cannot link the app crate — which needs a
+//! C toolchain for `rusqlite` (bundled SQLite) and for Tauri itself.
 //!
 //! This is not a substitute for the app's own test suite — that still needs a
-//! GTK-capable machine. It is the one place where a crypto change can be
+//! toolchain-capable machine. It is the one place where a crypto change can be
 //! executed rather than merely compiled.
 //!
 //! `storage.rs` is included so the storage-cap accounting and eviction tests
 //! actually execute — that is the whole point of the cap, and untested eviction
-//! is a silent data-loss feature. It reaches outside itself for `ChatMessage`
-//! and two AEAD helpers, which `commands.rs` provides as documented stand-ins.
+//! is a silent data-loss feature. It reaches outside itself for `ChatMessage`,
+//! which `commands.rs` now **generates** from the live
+//! `src-tauri/src/commands/mod.rs`. It used to be a hand-maintained,
+//! field-for-field copy, in a directory where everything else is
+//! machine-copied: adding a field to `ChatMessage` would silently desync it
+//! while `storage.rs`'s tests kept passing against the wrong shape.
 //!
-//! Run: `./sync.sh && cargo test --offline --lib`
+//! Run: `./sync.sh && cargo test --lib`
 pub mod commands;
 pub mod crypto;
 pub mod error;
