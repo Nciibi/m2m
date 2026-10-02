@@ -382,6 +382,23 @@ describe("asCaptureWarning", () => {
   it("rejects an unbounded list", () => {
     expect(asCaptureWarning({ active: Array(64).fill("x") })).toBeNull();
   });
+
+  it("distinguishes a failed scan from a clean one", () => {
+    // The bug this guards: `spawn_blocking(...).unwrap_or_default()` turned a
+    // panicking scan into `active: []`, which the banner read as "nothing
+    // detected" — so a broken monitor reported the user safe.
+    expect(asCaptureWarning({ active: [], scan_failed: true })?.scanFailed).toBe(true);
+    expect(asCaptureWarning({ active: [], scan_failed: false })?.scanFailed).toBe(false);
+  });
+
+  it("treats an absent scan_failed as healthy", () => {
+    expect(asCaptureWarning({ active: ["obs.exe"] })?.scanFailed).toBe(false);
+  });
+
+  it("rejects a non-boolean scan_failed rather than coercing it", () => {
+    expect(asCaptureWarning({ active: [], scan_failed: "yes" })).toBeNull();
+    expect(asCaptureWarning({ active: [], scan_failed: 1 })).toBeNull();
+  });
 });
 
 describe("asSecurityError", () => {
