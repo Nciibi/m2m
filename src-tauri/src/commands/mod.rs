@@ -315,76 +315,47 @@ pub async fn attempt_reconnect(
 
         match crate::dial::dial_with_timeout(hint, RECONNECT_CONNECT_TIMEOUT).await {
             Ok(mut stream) => {
-                // ── Real cryptographic handshake before claiming success (M4) ──
-                let expected_peer_pub: [u8; 32] = hex::decode(&info.peer_key_hex)
-                    .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?
-                    .try_into()
-                    .map_err(|_| "peer key length mismatch")?;
-
-                let x25519_pub = {
-                    let x = state.x25519_identity.read().await;
-                    x.as_ref()
-                        .map(|k| k.public_key_bytes())
-                        .unwrap_or([0u8; 32])
-                };
-
-                let mut session = crate::session::Session::new();
-                {
-                    // Snapshot, then release. `handshake_as_initiator` is a
-                    // blocking read of a peer-supplied frame bounded by a real
-                    // wall-clock deadline - so a slow peer costs this guard real
-                    // time, and with it `lock_vault`, `unlock_vault` and the
-                    // duress/panic wipes. `complete_inbound_connection` already
-                    // fixed this exact shape on the inbound side with the same
-                    // reasoning.
-                    let kp = {
-                        let id_lock = state.identity.read().await;
-                        let kp = id_lock.as_ref().ok_or("identity not initialized")?;
-                        crate::crypto::IdentityKeypair::from_bytes(
-                            &kp.public_key_bytes(),
-                            &kp.secret_key_bytes(),
-                        )
-                        .map_err(|e| format!("identity unusable: {e}"))?
-                    };
-                    // Refused, not downgraded.
-                    //
-                    // This used to perform `handshake_as_initiator`, the
-                    // pre-X3DH handshake, on every reconnect. `reconnect.rs`'s own
-                    // module doc promises "a fresh X3DH handshake" and CLAUDE.md
-                    // states there is no downgrade path, but the non-X3DH path has
-                    // no one-time prekey and therefore no forward secrecy — so a
-                    // reconnect silently produced a session with weaker
-                    // guarantees than the one it replaced, and the only trace was
-                    // a `tracing::warn!` nobody sees.
-                    //
-                    // Doing X3DH properly needs a *fresh* prekey bundle: the one in
-                    // the original invite carries a one-time prekey, which is
-                    // single-use by construction, so replaying it is not a fix. The
-                    // protocol has no prekey-refresh packet, so there is no way to
-                    // obtain one today, which makes refusing the honest option.
-                    let err = "cannot reconnect: X3DH needs a fresh prekey bundle, and \
-                               the pre-5.0.0 handshake would be a silent downgrade";
-                    tracing::warn!(
-                        peer = %peer_key_hex,
-                        "reconnect refused — peer reachable but handshake not attempted"
-                    );
-                    {
-                        let _ = app_handle.emit(
-                            "m2m://reconnect-attempt",
-                            crate::commands::ReconnectAttemptEvent {
-                                peer_key_hex: peer_key_hex.clone(),
-                                attempt: attempt + 1,
-                                max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
-                                delay_secs: delay.as_secs(),
-                                state: "needs_new_invite".to_string(),
-                            },
-                        );
-                    }
-                    drop(stream);
-                    let _ = err;
-                    let _ = pr.remove(&peer_key_hex);
-                    return Ok(());
-                }
+                // ── Refused, not silently downgraded ──
+                //
+                // This used to perform `handshake_as_initiator`, the pre-X3DH
+                // handshake, on every reconnect. `reconnect.rs`'s own module doc
+                // promises "a fresh X3DH handshake" and CLAUDE.md states there is
+                // no downgrade path, but the non-X3DH path has no one-time prekey
+                // and therefore no forward secrecy — so a reconnect quietly
+                // produced a session with weaker guarantees than the one it
+                // replaced, and the only trace was a `tracing::warn!` nobody sees.
+                //
+                // Doing X3DH properly needs a *fresh* prekey bundle: the one in the
+                // original invite carries a one-time prekey, which is single-use by
+                // construction, so replaying it is not a fix. The protocol has no
+                // prekey-refresh packet, so there is no way to obtain one today,
+                // which makes refusing the honest option.
+                //
+                // The transport is still dialled, so reachability is proven and the
+                // peer is not reported as down — we simply do not establish a
+                // session we cannot establish safely.
+                tracing::warn!(
+                    peer = %peer_key_hex,
+                    reason = "no fresh prekey bundle available for an X3DH reconnect",
+                    "reconnect refused — peer reachable but handshake not attempted"
+                );
+                drop(stream);
+                let _ = app_handle.emit(
+                    "m2m://reconnect-attempt",
+                    crate::commands::ReconnectAttemptEvent {
+                        peer_key_hex: peer_key_hex.clone(),
+                        attempt: attempt + 1,
+                        max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
+                        delay_secs: 0,
+                        state: "needs_new_invite".to_string(),
+                    },
+                );
+                // Drop the metadata rather than leaving a prompt the user can keep
+                // clicking into the same refusal.
+                pr.remove(&peer_key_hex);
+                return Ok(());
+            }
+            Err(_) => {
 
                 // Handshake succeeded — the session now has real keys and the
                 // peer's identity is cryptographically verified against the
