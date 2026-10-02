@@ -288,12 +288,12 @@ function ConnectTab({
       // The await is load-bearing. It used to await `undefined`, so `finally`
       // cleared `generating` before the invite existed and the three state
       // writes below ran unconditionally — on the failure path too.
-      const created = await onGenerateInvite();
-      if (!created) return;
+      const invite = await onGenerateInvite();
+      if (invite === null) return;
       setInviteCreatedAt(Date.now() / 1000);
       setInviteExpiry(60);
       setIsListening(true);
-      pushInviteHistory(generatedInviteRef.current);
+      pushInviteHistory(invite);
     } finally { setGenerating(false); }
   };
 
