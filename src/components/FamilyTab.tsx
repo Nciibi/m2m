@@ -17,7 +17,7 @@ interface FamilyTabProps {
   onConnect: (peerKeyHex: string) => Promise<void>;
 }
 
-export default function FamilyTab({ family, onRefresh, onConnect }: FamilyTabProps) {
+export default function FamilyTab({ family, onRefresh, onConnect, loadError = null, loading = false }: FamilyTabProps) {
   const { addToast } = useApp();
   const [showAdd, setShowAdd] = useState(false);
   const [showUpdate, setShowUpdate] = useState<string | null>(null);
