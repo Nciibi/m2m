@@ -396,7 +396,85 @@ const handleTorToggle = useCallback(async () => {
     }
   }, [addToast]);
 
-  // ── Clipboard auto-clear helper ──
+  // -- Relay --
+  //
+  // `get_relay_config` / `set_relay_config` existed and were registered with
+  // Tauri, but nothing in `src/` ever called them: a user had no way to point
+  // M2M at a relay at all, while the relay server shipped in the same repo.
+  // These handlers are that missing wiring.
+  //
+  // Host and port are local form state so typing does not round-trip IPC per
+  // keystroke. The token is tracked in the component that owns the field and
+  // never here, because the backend will not give it back.
+  const [relayConfig, setRelayConfig] = useState<RelayConfigView | null>(null);
+  const [relayHost, setRelayHost] = useState("");
+  const [relayPort, setRelayPort] = useState("");
+  const [relaySaving, setRelaySaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cfg = await invoke<RelayConfigView | null>("get_relay_config");
+        if (cancelled) return;
+        setRelayConfig(cfg);
+        // Only seed the inputs when a relay exists. Seeding from null would
+        // blank whatever the user has typed on an unrelated re-render.
+        if (cfg) {
+          setRelayHost(cfg.host);
+          setRelayPort(String(cfg.port));
+        }
+      } catch (e) {
+        if (!cancelled) addToast("Could not read relay config: " + errorMessage(e), "error");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [addToast]);
+
+  const handleRelaySave = useCallback(async () => {
+    const host = relayHost.trim();
+    if (!host) {
+      addToast("Relay host cannot be empty. Use Clear to disable the relay.", "error");
+      return;
+    }
+    const port = Number.parseInt(relayPort, 10);
+    // Validate before the IPC: `parseInt("80abc")` is 80 and `parseInt("")` is
+    // NaN, so a typo would otherwise be silently accepted.
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+      addToast("Relay port must be a whole number between 1 and 65535.", "error");
+      return;
+    }
+    setRelaySaving(true);
+    try {
+      await invoke("set_relay_config", {
+        config: { host, port, auth_token: "" },
+      });
+      // Re-read rather than assume: what is rendered must be what was stored.
+      const cfg = await invoke<RelayConfigView | null>("get_relay_config");
+      setRelayConfig(cfg);
+      addToast(`Relay set to ${host}:${port}.`, "success");
+    } catch (e) {
+      addToast("Failed to set relay: " + errorMessage(e), "error");
+    } finally {
+      setRelaySaving(false);
+    }
+  }, [relayHost, relayPort, addToast]);
+
+  const handleRelayClear = useCallback(async () => {
+    setRelaySaving(true);
+    try {
+      await invoke("set_relay_config", { config: null });
+      setRelayConfig(null);
+      setRelayHost("");
+      setRelayPort("");
+      addToast("Relay disabled.", "success");
+    } catch (e) {
+      addToast("Failed to disable relay: " + errorMessage(e), "error");
+    } finally {
+      setRelaySaving(false);
+    }
+  }, [addToast]);
+// ── Clipboard auto-clear helper ──
 
   // Clear the pending clipboard timer on unmount, otherwise it fires
   // `setState` after the provider is gone and a manual dismiss is followed by
