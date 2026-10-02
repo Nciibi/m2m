@@ -553,7 +553,7 @@ impl KeyStore {
         // 31-byte key produced a 62-char hex string that no caller, all of which
         // decode it back to `[u8; 32]`, could use. The member would be listed in
         // the Hub and impossible to remove, verify or look up.
-        let raw: Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)> = stmt
+        let raw: Vec<RawStoredRow> = stmt
             .query_map(params![now], |row| {
                 Ok((
                     row.get::<_, Vec<u8>>(0)?,
@@ -729,7 +729,7 @@ impl KeyStore {
         // Same validation as `list_family`, and for the same reason: this is the
         // export path, so a bad row would be written into a backup file as a
         // hex string that could never be imported again.
-        let raw: Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)> = stmt
+        let raw: Vec<RawStoredRow> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, Vec<u8>>(0)?,
@@ -1003,6 +1003,14 @@ fn open_meta_value(
         open_msg(k.as_bytes(), &nonce, &ct, aad).map_err(|_| StorageError::DecryptionFailed)?;
     String::from_utf8(pt).map_err(|_| StorageError::DecryptionFailed)
 }
+
+/// Columns returned by the two historical message scans below.
+///
+/// Named because clippy's `type_complexity` fires on the inline 5-tuple, and
+/// because "(ciphertext, peer, timestamp, expires, key)" is not obvious from
+/// the raw type. One alias used by both scans, so the two cannot drift into
+/// returning different shapes.
+type RawStoredRow = (Vec<u8>, String, i64, Option<i64>, Option<String>);
 
 impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
@@ -6164,7 +6172,7 @@ mod tests {
         // not passing because everything fails. (It still fails to decrypt: these
         // are not real wrapped keys.)
         assert!(
-            MessageStore::unwrap_cek(&vec![0xAA; WRAPPED_CEK_LEN], &test_key()).is_err(),
+            MessageStore::unwrap_cek(&[0xAA; WRAPPED_CEK_LEN], &test_key()).is_err(),
             "a well-formed-length blob of the wrong bytes must still fail to open"
         );
     }

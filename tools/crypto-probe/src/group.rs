@@ -397,6 +397,12 @@ pub enum SenderKeyReceipt {
     NewMember,
 }
 
+impl Default for GroupManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GroupManager {
     pub fn new() -> Self {
         Self {
@@ -1595,7 +1601,7 @@ mod group_tests {
                 "G".into(),
                 1,
                 alice_hex.clone(),
-                &[bob_hex.clone()],
+                std::slice::from_ref(&bob_hex),
             )
             .unwrap();
 
@@ -1607,7 +1613,7 @@ mod group_tests {
                 1,
                 bob_hex.clone(),
                 false,
-                &[alice_hex.clone()],
+                std::slice::from_ref(&alice_hex),
             )
             .unwrap();
 
