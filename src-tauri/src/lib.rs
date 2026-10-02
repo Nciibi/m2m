@@ -411,6 +411,31 @@ pub fn run() {
             commands::groups::load_group_messages,
             commands::groups::update_group_name,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running M2M");
+        .build(tauri::generate_context!())
+        .expect("error while building M2M")
+        .run(|app_handle, event| {
+            // Remove the router port mapping on a normal quit.
+            //
+            // `remove_port_mapping` talks to the gateway over the network, so it
+            // cannot complete during Tauri's own teardown. Blocking here is the
+            // price of not leaving a forward on the user's router pointing at a
+            // port this process will never listen on again. Bounded, because a
+            // silent hang on quit would be worse than a leaked mapping.
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                if let Some(state) = app_handle.try_state::<Arc<AppState>>() {
+                    let state = state.inner().clone();
+                    let rt = tauri::async_runtime::handle();
+                    rt.block_on(async {
+                        tokio::time::timeout(
+                            std::time::Duration::from_secs(3),
+                            commands::network::release_port_mapping(&state),
+                        )
+                        .await;
+                    });
+                }
+            }
+        });
 }
