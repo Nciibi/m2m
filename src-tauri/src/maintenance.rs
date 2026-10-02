@@ -199,8 +199,14 @@ pub fn now_unix_secs() -> u64 {
 /// `secs == 0` disarms. Called from the frontend when it copies something
 /// sensitive, and re-called whenever the setting changes.
 pub fn arm_clipboard_deadline(state: &Arc<AppState>, secs: u64) {
-    let deadline = if secs == 0 { 0 } else { now_unix_secs().saturating_add(secs) };
-    state.clipboard_clear_deadline.store(deadline, Ordering::Relaxed);
+    let deadline = if secs == 0 {
+        0
+    } else {
+        now_unix_secs().saturating_add(secs)
+    };
+    state
+        .clipboard_clear_deadline
+        .store(deadline, Ordering::Relaxed);
 }
 
 /// Push the idle-lock deadline out by `secs` from now.
