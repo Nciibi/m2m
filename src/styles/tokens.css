@@ -222,6 +222,30 @@
   --scrollbar-thumb-hover: color-mix(in srgb, var(--color-accent-bright) 30%, transparent);
 
 
+  /* === Translucent fills and scrims === */
+
+  /* Alpha washes and shadows that used to be inline rgba() in the component
+     sheets. They read as "just a subtle wash", which is exactly why they were
+     never questioned — but a white wash on the dark theme is a dark wash on the
+     light theme, and thirty of these shipped as literals, so component CSS could
+     not follow the theme. Enforced by `src/__tests__/designTokens.test.ts`. */
+  --color-fill-faint: rgba(255, 255, 255, 0.02);
+  --color-fill-subtle: rgba(255, 255, 255, 0.05);
+  --color-fill-muted: rgba(255, 255, 255, 0.08);
+  --color-fill-soft: rgba(255, 255, 255, 0.12);
+  /* Hairline borders on buttons/cards. */
+  --color-fill-line: rgba(255, 255, 255, 0.08);
+  --color-fill-line-strong: rgba(255, 255, 255, 0.15);
+  /* Foreground edge — spinner rim, code-block rules. */
+  --color-fill-edge: rgba(255, 255, 255, 0.3);
+  --color-scrim-soft: rgba(0, 0, 0, 0.12);
+  --color-scrim: rgba(0, 0, 0, 0.2);
+  --color-scrim-deep: rgba(0, 0, 0, 0.25);
+  --color-card-raised: rgba(35, 36, 50, 0.7);
+
+  /* Stronger status edges for the "copied"/"success" confirmation states. */
+  --color-danger-glow-strong: rgba(239, 68, 68, 0.3);
+  --color-success-glow-strong: rgba(16, 185, 129, 0.3);
   /* === Avatar ramp === */
 
   /* Eight hues for deterministic avatar gradients (`utils.ts::hashToColor`).
