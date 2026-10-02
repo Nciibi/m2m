@@ -190,7 +190,8 @@ pub async fn load_messages(
                 .with_edited_at(m.edited_at)
                 .with_deleted(m.deleted)
                 .with_expires_at(m.expires_at)
-                .with_reactions(reactions),
+                .with_reactions(reactions)
+                .with_decrypt_failed(decrypt_failed),
         );
     }
     Ok(messages)
