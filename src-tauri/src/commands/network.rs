@@ -38,7 +38,7 @@ use super::{
 ///
 /// Pure function so the policy is unit-testable. `require_known_contact`
 /// comes from the user's security config; when set, only peers that are
-/// already known (previously connected → `peers` table) or family members
+/// already known (previously connected â†’ `peers` table) or family members
 /// may establish a session. When unset, everyone passes (first-time
 /// invite connections must work out of the box).
 fn contact_gate_allows(require_known_contact: bool, is_family: bool, is_known_peer: bool) -> bool {
@@ -47,7 +47,7 @@ fn contact_gate_allows(require_known_contact: bool, is_family: bool, is_known_pe
 
 /// Evaluate the contact allowlist gate for a freshly-handshaked peer.
 ///
-/// Called by **every** inbound connection path — direct TCP *and* the relay —
+/// Called by **every** inbound connection path â€” direct TCP *and* the relay â€”
 /// after the handshake has authenticated `peer_identity_pub` and before any
 /// persistence or dispatch. It lives here, next to the direct-TCP caller,
 /// because the relay path previously omitted it entirely: a user who enabled
@@ -90,7 +90,7 @@ pub(crate) async fn check_contact_gate(
     if contact_gate_allows(require_known, is_family, is_known) {
         Ok(())
     } else {
-        Err("unknown contact — connection rejected")
+        Err("unknown contact â€” connection rejected")
     }
 }
 
@@ -110,8 +110,8 @@ pub(crate) async fn check_contact_gate(
 ///   1-4 were never acknowledged.
 /// * Worse, one frame was enough to finish the transfer. `wait_for_ack`
 ///   treats a confirmed watermark past `chunk_index` as "this chunk is
-///   delivered", so a single authenticated peer — the very party being asked
-///   to confirm delivery — could send `chunk_index = total_chunks - 1` once and
+///   delivered", so a single authenticated peer â€” the very party being asked
+///   to confirm delivery â€” could send `chunk_index = total_chunks - 1` once and
 ///   have every subsequent chunk treated as delivered, with the file declared
 ///   sent without a byte being written.
 ///
@@ -212,7 +212,7 @@ fn frame_presented_one_time_prekey(frame: &network::RawFrame) -> bool {
 ///
 /// The invite embeds the prekey's public key. Once burned, a second peer
 /// holding the same invite cannot complete DH4. X3DH is defined to work
-/// without an OPK, so that session proceeds with reduced forward secrecy —
+/// without an OPK, so that session proceeds with reduced forward secrecy â€”
 /// the correct price for a prekey that was already spent. It is logged rather
 /// than accepted silently, because it is a real (if modest) downgrade.
 ///
@@ -240,14 +240,14 @@ where
 
     let opk_consumed = frame_presented_one_time_prekey(init_frame);
 
-    // ── Reserve the one-time prekey atomically ──
+    // â”€â”€ Reserve the one-time prekey atomically â”€â”€
     //
     // The prekey slot is taken under a *write* guard held for the whole
     // handshake, not read-then-later-write. Reading availability under a read
     // guard and retiring under a write guard afterwards left a TOCTOU window:
     // two concurrent inbound handshakes could both observe the prekey as
     // present, both apply DH4 with the same secret, and only then serialise on
-    // the write lock — where the loser's `take()` returns `None` and the
+    // the write lock â€” where the loser's `take()` returns `None` and the
     // damage is already done. That defeats the entire purpose of a one-time
     // prekey, which is to guarantee at most one session derives DH4 from it.
     //
@@ -293,7 +293,7 @@ where
 /// Generate an invite link for sharing.
 /// If STUN has discovered a public IP, it replaces the local IP in the address
 /// so the invite works across the internet.
-/// In private mode, the public IP is NOT included — only the local address.
+/// In private mode, the public IP is NOT included â€” only the local address.
 #[tauri::command]
 pub async fn create_invite(
     app_handle: AppHandle,
@@ -302,19 +302,19 @@ pub async fn create_invite(
     validity_minutes: u64,
     one_time: bool,
 ) -> Result<String, AppError> {
-    // Air-gap mode: invite creation performs STUN/UPnP/relay registration —
+    // Air-gap mode: invite creation performs STUN/UPnP/relay registration â€”
     // all internet-facing. LAN invites are still possible via manual
     // address exchange, so this is a hard block rather than silent degrade.
     state.ensure_not_air_gapped().await?;
 
-    // ─── Snapshot the identity, then release the lock ───
+    // â”€â”€â”€ Snapshot the identity, then release the lock â”€â”€â”€
     //
     // `state.identity` is a write-preferring `RwLock`, and everything below
     // wants `identity.write()`: `lock_vault`, `unlock_vault`,
     // `create_vault_account`, `import_identity`, `execute_duress_wipe` and
     // `panic_wipe`. `kp` was last used at the very end of this function, so
-    // NLL kept the read guard alive for the whole body — across
-    // `add_port_mapping` (PCP 3s → NAT-PMP 3s → SSDP 4s → HTTP 5s → SOAP 5s →
+    // NLL kept the read guard alive for the whole body â€” across
+    // `add_port_mapping` (PCP 3s â†’ NAT-PMP 3s â†’ SSDP 4s â†’ HTTP 5s â†’ SOAP 5s â†’
     // GetExternalIPAddress 5s) and `relay::register` (8s connect + 5s frame).
     //
     // Worst case ~30s of sequential timeouts, during which one queued writer
@@ -329,7 +329,7 @@ pub async fn create_invite(
             .map_err(|e| AppError::invalid(format!("identity unusable: {e}")))?
     };
 
-    // ─── X3DH Prekey Bundle ───
+    // â”€â”€â”€ X3DH Prekey Bundle â”€â”€â”€
     let x25519_kp = {
         let x25519 = state.x25519_identity.read().await;
         let kp = x25519.as_ref().ok_or("X25519 identity not initialized")?;
@@ -353,7 +353,7 @@ pub async fn create_invite(
     // into the invite's prekey bundle so initiators include DH4 = DH(EK_A,
     // OPK_B) in the X3DH shared secret; the secret key is kept here for the
     // responder. Rotated together with the signed prekey on every new
-    // invite — replacing the slot drops (zeroizes) the previous key pair.
+    // invite â€” replacing the slot drops (zeroizes) the previous key pair.
     let opk = crate::crypto::EphemeralKeypair::generate();
     let opk_pub = opk.public_key_bytes();
     {
@@ -381,7 +381,7 @@ pub async fn create_invite(
         let pip = state.public_ip.read().await;
         match *pip {
             Some(public_addr) => {
-                // Use the FULL STUN-discovered address (IP:port) — the STUN
+                // Use the FULL STUN-discovered address (IP:port) â€” the STUN
                 // port is what the NAT maps, so the peer must connect to it.
                 public_addr.to_string()
             }
@@ -398,7 +398,7 @@ pub async fn create_invite(
 
     let validity_secs = validity_minutes.saturating_mul(60);
 
-    // ─── Tor Guard ───
+    // â”€â”€â”€ Tor Guard â”€â”€â”€
     // When Tor is enabled but private mode is off, the invite contains
     // the user's real IP address. Inbound connections will bypass Tor
     // entirely. We refuse to create the invite rather than just warning.
@@ -411,14 +411,14 @@ pub async fn create_invite(
         ));
     }
 
-    // ─── Try NAT port mapping (UPnP / NAT-PMP / PCP) ───
+    // â”€â”€â”€ Try NAT port mapping (UPnP / NAT-PMP / PCP) â”€â”€â”€
     // If the router supports port mapping protocols we can obtain a
     // guaranteed public address. This is more reliable than STUN's
     // UDP-only discovery and gives the peer a direct TCP path.
     let port_mapping = if !private_mode {
         match crate::port_mapping::PortMapper::add_port_mapping(
             listen_addr.port(),
-            3600, // 1 hour — the router may grant less
+            3600, // 1 hour â€” the router may grant less
         )
         .await
         {
@@ -431,7 +431,7 @@ pub async fn create_invite(
 
                 // Release any mapping we were already holding before taking the
                 // new one. Generating a second invite used to stack a fresh
-                // router forward on every call and orphan the previous one —
+                // router forward on every call and orphan the previous one â€”
                 // the router ends up with N forwards to the same local port and
                 // the app holds references to none of them.
                 release_port_mapping(&state).await;
@@ -442,7 +442,7 @@ pub async fn create_invite(
                 // into a candidate. That meant `spawn_renewal` was never called
                 // and `remove_port_mapping` never was either, so the router lease
                 // expired after an hour while `create_invite` kept publishing the
-                // address as a high-priority candidate — a route the app believed
+                // address as a high-priority candidate â€” a route the app believed
                 // in and the network had already dropped.
                 let mapping = std::sync::Arc::new(mapping);
                 // Clone the value for the return *before* the `Arc` is moved
@@ -471,7 +471,7 @@ pub async fn create_invite(
         None
     };
 
-    // ─── Relay Registration ───
+    // â”€â”€â”€ Relay Registration â”€â”€â”€
     // If a relay server is configured, register to get a relay_id and add
     // a relay candidate as a fallback. The relay stream is passed to a
     // background listener task that waits for incoming bridges.
@@ -544,7 +544,7 @@ pub async fn create_invite(
         // silently never fires is exactly the kind of thing that gets read as
         // "manual forwards are supported".
         //
-        // A user *can* still forward their router port by hand — they just have
+        // A user *can* still forward their router port by hand â€” they just have
         // to type the public address into the invite's candidate list, or rely
         // on UPnP/NAT-PMP (`port_mapping.rs`), which M2M does manage itself.
 
@@ -558,7 +558,7 @@ pub async fn create_invite(
             tracing::debug!(relay_addr = %addr, relay_id = %rid, "relay candidate added to invite");
         }
 
-        // ═══ NEVER PUBLISH AN UNFILTERED CANDIDATE LIST ═══
+        // â•â•â• NEVER PUBLISH AN UNFILTERED CANDIDATE LIST â•â•â•
         //
         // The `HandshakeInit`/`HandshakeResponse` frames are written before any
         // key exists, so every byte of them is readable by the peer, the Tor
@@ -575,7 +575,7 @@ pub async fn create_invite(
         // them. That is the correct outcome.
         //
         // Note the Tor guard above only refuses when `!private_mode`, so Tor +
-        // Private Mode — the explicitly-permitted combination — is exactly the
+        // Private Mode â€” the explicitly-permitted combination â€” is exactly the
         // one where this leak reaches the user, while `port_mapping` and relay
         // registration are correctly skipped.
         // The filter keeps only relay entries under Tor, and is a no-op with Tor
@@ -710,7 +710,7 @@ pub async fn start_listening(
                 let _ = network::send_error(
                     &mut stream,
                     protocol::ErrorCode::RateLimitExceeded,
-                    "rate limited — too many connections",
+                    "rate limited â€” too many connections",
                 )
                 .await;
                 drop(stream);
@@ -729,10 +729,10 @@ pub async fn start_listening(
 /// its active counter is incremented when a handshake starts and decremented
 /// when the handshake routine returns, not when the socket closes. A peer that
 /// keeps completing handshakes therefore walks the counter back down to zero
-/// while its established sessions stay in the map — and each entry pins a
+/// while its established sessions stay in the map â€” and each entry pins a
 /// socket, a `Session` and its ratchet state for as long as the peer keeps the
 /// socket open. Nothing bounded the map itself, which is why the cap has to be
-/// enforced here, on the size of the thing that is actually being bounded — and
+/// enforced here, on the size of the thing that is actually being bounded â€” and
 /// being here it also covers the outbound paths, which insert into the same map
 /// and were never counted by the limiter at all.
 ///
@@ -744,7 +744,7 @@ const MAX_ESTABLISHED_CONNECTIONS: usize = 50;
 
 /// Is there room in `state.connections` for one more established session?
 ///
-/// Pure predicate so the cap is unit-testable at its boundary — the rule is
+/// Pure predicate so the cap is unit-testable at its boundary â€” the rule is
 /// "`MAX_ESTABLISHED_CONNECTIONS` entries is full", and off-by-one there is the
 /// difference between a bound and no bound at all.
 fn connection_map_has_room(current_len: usize) -> bool {
@@ -756,8 +756,8 @@ fn connection_map_has_room(current_len: usize) -> bool {
 ///
 /// ## Why this exists
 ///
-/// There were five hand-rolled copies of "gather candidates → build a
-/// `PeerConnection` → insert into the map → emit → upsert → spawn the receive
+/// There were five hand-rolled copies of "gather candidates â†’ build a
+/// `PeerConnection` â†’ insert into the map â†’ emit â†’ upsert â†’ spawn the receive
 /// loop", and they had already diverged in ways that mattered. The clearest
 /// example is documented in the body of [`check_contact_gate`]: the allowlist
 /// gate was added to the direct-TCP and relay paths *after the fact*, because
@@ -770,7 +770,7 @@ fn connection_map_has_room(current_len: usize) -> bool {
 /// bypassed by adding a transport.
 ///
 /// Both call sites differ only in where the stream came from and whether the
-/// first frame has already been consumed — hence the `pre_read` frame.
+/// first frame has already been consumed â€” hence the `pre_read` frame.
 pub(crate) async fn complete_inbound_connection(
     app_handle: &AppHandle,
     state: &Arc<AppState>,
@@ -803,13 +803,13 @@ pub(crate) async fn complete_inbound_connection(
 
     let mut session = Session::new();
 
-    // ── Snapshot the identity, then release the lock ──
+    // â”€â”€ Snapshot the identity, then release the lock â”€â”€
     //
     // The handshake is a blocking read of a peer-supplied frame, so holding
     // `state.identity` across it turns an unauthenticated socket into a lever
     // on the vault. `handshake_as_responder_x3dh` waits for a
     // `HandshakeComplete` frame bounded at 256 KiB, and `read_frame_impl` reads
-    // three times per frame under a shared total deadline — so a slow peer still
+    // three times per frame under a shared total deadline â€” so a slow peer still
     // costs real wall-clock time here. Everything downstream of this point needs
     // `identity.write()` (lock_vault, unlock_vault, create_vault_account,
     // import_identity), so holding it across the handshake let a remote
@@ -856,7 +856,7 @@ pub(crate) async fn complete_inbound_connection(
     // Use CACHED candidates for the handshake response. Running a full STUN
     // discovery here would let any unauthenticated host force us into
     // expensive outbound work just by opening a connection (DoS
-    // amplification) — and, under Tor, would emit a STUN query from the user's
+    // amplification) â€” and, under Tor, would emit a STUN query from the user's
     // real address. The cache is populated at listener startup / settings
     // refresh; if it is empty we schedule an authenticated post-handshake
     // refresh below.
@@ -936,7 +936,7 @@ pub(crate) async fn complete_inbound_connection(
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();
 
-    // ── Contact allowlist gate (H5) ──
+    // â”€â”€ Contact allowlist gate (H5) â”€â”€
     // Runs AFTER the handshake (peer_identity_pub is now signature-authenticated)
     // and BEFORE any persistence: a stranger must not be upserted into the key
     // store merely by connecting, and must not reach the message dispatcher
@@ -965,7 +965,7 @@ pub(crate) async fn complete_inbound_connection(
 
     // Do not silently displace an existing session. This map is keyed by the
     // peer's *self-declared* Ed25519 key, and a responder cannot pin an
-    // identity without prior contact — so an attacker who announces a known
+    // identity without prior contact â€” so an attacker who announces a known
     // contact's key would otherwise overwrite the legitimate `PeerConnection`
     // and evict the real peer from the UI and dispatcher. Refusing is the safe
     // default.
@@ -983,7 +983,7 @@ pub(crate) async fn complete_inbound_connection(
         // count of in-flight handshakes, which a peer drives back to zero by
         // finishing each handshake: the relay (a full MITM by design) could
         // bridge unlimited peers, each leaving a permanent entry holding a
-        // socket, a `Session` and ratchet state — and all of them arrive from the
+        // socket, a `Session` and ratchet state â€” and all of them arrive from the
         // relay's single address, so the per-IP rotation defence never sees them.
         // The check sits inside the same `write()` guard as the insert, so two
         // peers racing for the last slot cannot both win it.
@@ -1004,7 +1004,7 @@ pub(crate) async fn complete_inbound_connection(
     }
     // Re-read the `Arc` we just stored so the teardown paths in the receive loop
     // can identify *this* session. `complete_inbound_connection` refuses
-    // duplicates, so this can only ever be its own entry — but the guard costs
+    // duplicates, so this can only ever be its own entry â€” but the guard costs
     // nothing and keeps the invariant explicit.
     let my_conn = match state.peer_connection(&peer_key_hex).await {
         Some(arc) => arc,
@@ -1027,8 +1027,8 @@ pub(crate) async fn complete_inbound_connection(
     // made it remotely triggerable: any stranger who completed a handshake
     // (only a self-signed Ed25519 identity is needed, and
     // `require_known_contact` is off by default) could make the victim perform
-    // STUN queries — and, before the fix in `query_single_server`, hostname
-    // resolutions — from its real address.
+    // STUN queries â€” and, before the fix in `query_single_server`, hostname
+    // resolutions â€” from its real address.
     //
     // Two things gate it now. Tor makes it a hard error, because STUN cannot
     // be performed over Tor and asking anyway is the leak. And the cache
@@ -1040,13 +1040,13 @@ pub(crate) async fn complete_inbound_connection(
     {
         if crate::tor::is_enabled() {
             tracing::debug!(
-                "candidates unknown and Tor is enabled — skipping the post-handshake \
+                "candidates unknown and Tor is enabled â€” skipping the post-handshake \
                  STUN refresh, which would disclose the real address"
             );
         } else {
             tracing::info!(
-                "candidates unknown after an inbound handshake — the listener \
-                 populates these at startup; use Settings → Run diagnostics to refresh"
+                "candidates unknown after an inbound handshake â€” the listener \
+                 populates these at startup; use Settings â†’ Run diagnostics to refresh"
             );
         }
     }
@@ -1105,7 +1105,7 @@ pub async fn connect_to_peer(
     // Get our listener address so we can race accept vs connect.
     let listen_addr = *state.listen_addr.read().await;
 
-    // Relay auth token (if a relay with authentication is configured) —
+    // Relay auth token (if a relay with authentication is configured) â€”
     // required by hardened relay servers on CONNECT.
     let relay_auth_token = state
         .relay_config
@@ -1115,11 +1115,11 @@ pub async fn connect_to_peer(
         .map(|c| c.auth_token.clone())
         .unwrap_or_default();
 
-    // ── TCP Hole Punch: race accept vs connect simultaneously ──
+    // â”€â”€ TCP Hole Punch: race accept vs connect simultaneously â”€â”€
     // Both peers race listener.accept() against connect(peer_candidates).
     // Whichever succeeds first determines our handshake role.
     // `role` is intentionally ignored: the dialer is connect-only, so it can
-    // only ever return `Initiator` — see `punch_connect_only`.
+    // only ever return `Initiator` â€” see `punch_connect_only`.
     let hole_punch::StrategyResult {
         mut stream,
         remote_addr,
@@ -1142,7 +1142,7 @@ pub async fn connect_to_peer(
         "connection established via connection manager"
     );
 
-    // Snapshot, then release — same reasoning as `create_invite`. `kp` is used
+    // Snapshot, then release â€” same reasoning as `create_invite`. `kp` is used
     // for the handshake at the end of this function, so without the copy NLL
     // keeps `state.identity` read-locked across STUN discovery and the whole
     // X3DH exchange, and `lock_vault` / the duress and panic wipes queue behind
@@ -1195,10 +1195,10 @@ pub async fn connect_to_peer(
 
     // A 5.0.0 peer must always X3DH.
     //
-    // This used to be a branch: `if has_x3dh { …x3dh… } else { …legacy… }`.
+    // This used to be a branch: `if has_x3dh { â€¦x3dhâ€¦ } else { â€¦legacyâ€¦ }`.
     // The condition reads the *invite*, which is plaintext on the wire before
     // any key exists, so a peer that omitted or zeroed the prekey bundle could
-    // choose which handshake a 5.0.0 initiator performed — and the legacy arm
+    // choose which handshake a 5.0.0 initiator performed â€” and the legacy arm
     // (`handshake_as_initiator`) has no one-time prekey and therefore no forward
     // secrecy. That is a downgrade an on-path peer could force, so the initiator
     // now demands X3DH and fails loudly instead.
@@ -1224,17 +1224,17 @@ pub async fn connect_to_peer(
     // Snapshot the X25519 identity keypair. `lock_vault` and `unlock_vault` both
     // *write* `x25519_identity`, and `tokio`'s `RwLock` is write-preferring, so
     // holding this read guard across the handshake below delays the vault lock
-    // and the duress/panic wipes behind a remote peer — the same hole the
+    // and the duress/panic wipes behind a remote peer â€” the same hole the
     // `identity` snapshot above closes, one lock over.
     //
     // The snapshot is the whole keypair, not just the public half, because X3DH
     // needs the secret for DH4. It was previously two snapshots (public for the
     // legacy handshake, whole keypair for X3DH) taken inside the two arms of an
-    // `if has_x3dh { … } else { … }`; the legacy arm is gone, so only one is
+    // `if has_x3dh { â€¦ } else { â€¦ }`; the legacy arm is gone, so only one is
     // needed and the public-half copy has no remaining reader.
 
     // The dialer only ever produces `Role::Initiator` (see below), so this is
-    // not a match — there is exactly one handshake to perform here.
+    // not a match â€” there is exactly one handshake to perform here.
     {
         {
             tracing::debug!("hole-punch role: Initiator (outgoing connect won)");
@@ -1270,8 +1270,8 @@ pub async fn connect_to_peer(
                 .await?;
         }
         // `Role::Responder` is intentionally not matched here. The outbound
-        // dialer is connect-only — see `punch_connect_only` for why the local
-        // accept leg was removed — so it can only ever return `Initiator`. An
+        // dialer is connect-only â€” see `punch_connect_only` for why the local
+        // accept leg was removed â€” so it can only ever return `Initiator`. An
         // inbound arrival is served by the listener in `start_listening`,
         // which hands off to `complete_inbound_connection` and does the
         // responder handshake there.
@@ -1308,7 +1308,7 @@ pub async fn connect_to_peer(
         // Deliberate replace, but now identity-tagged: the `Arc` is handed to
         // `spawn_receive_loop`, whose teardown paths remove by `Arc::ptr_eq`
         // rather than by peer key. See `remove_own_connection` for the race
-        // this closes — without it, this `insert` drops the live session and the
+        // this closes â€” without it, this `insert` drops the live session and the
         // OLD receive loop's teardown then deletes the NEW one.
         conns.insert(peer_key_hex.clone(), conn_arc.clone());
     }
@@ -1376,7 +1376,7 @@ pub async fn disconnect_peer(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
 ) -> Result<(), AppError> {
-    // Remove from the map first, then send — and never hold the map's *write*
+    // Remove from the map first, then send â€” and never hold the map's *write*
     // guard across the socket write.
     //
     // This held `connections.write()` for the whole send, up to the 10 s
@@ -1399,7 +1399,7 @@ pub async fn disconnect_peer(
         match protocol::serialize(&msg) {
             Ok(body) => {
                 // Destructure first so both borrows come from the
-                // destructured fields rather than from `conn` itself — the
+                // destructured fields rather than from `conn` itself â€” the
                 // project-wide pattern for `send_encrypted_typed`.
                 let PeerConnection {
                     session,
@@ -1434,7 +1434,7 @@ pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<Connectio
     // peer. Iterating the map in place held the global `connections` read lock
     // across every `conn_arc.lock().await`, so one peer stalled mid-send (up
     // to the 10s NETWORK_TIMEOUT) blocked this listing AND every writer in the
-    // process — disconnects, heartbeat teardown, new-connection insert.
+    // process â€” disconnects, heartbeat teardown, new-connection insert.
     let handles: Vec<(String, Arc<Mutex<crate::state::PeerConnection>>)> = {
         let conns = state.connections.read().await;
         conns.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
@@ -1462,7 +1462,7 @@ pub async fn get_listen_address(state: State<'_, Arc<AppState>>) -> Result<Strin
         .ok_or_else(|| AppError::not_connected("not listening for incoming connections"))
 }
 
-// ─── Message Receive Loop ───
+// â”€â”€â”€ Message Receive Loop â”€â”€â”€
 
 /// Spawn an async task that reads incoming frames from a peer
 /// and emits Tauri events for the React frontend.
@@ -1587,7 +1587,7 @@ async fn handle_incoming_text(
                         // on send. It was checked in `chat.rs` and on
                         // edit, but an established peer could post
                         // an arbitrarily large body that went straight
-                        // to SQLite — bounded only by the frame cap,
+                        // to SQLite â€” bounded only by the frame cap,
                         // which the receive-loop rate limiter then
                         // still allows at `MAX_INBOUND_FRAMES_PER_SEC`.
                         // (This comment used to cite 20, quoting the deleted
@@ -1622,7 +1622,7 @@ async fn handle_incoming_text(
                         // The security config is read once, here, and released
                         // before any store lock is taken. Reading it again inside
                         // the `message_store` scope would nest `security_config`
-                        // under `message_store` — a pair with no documented
+                        // under `message_store` â€” a pair with no documented
                         // acquisition order, which is how the two deadlocks in
                         // this codebase were shaped.
                         let ephemeral_mode = state.security_config.read().await.ephemeral_mode;
@@ -1783,8 +1783,8 @@ async fn handle_file_transfer_packet(
                                         // `inserted` is whether *this* request created the entry.
                                         //
                                         // `accepted` is a capacity check, so a peer re-sending a request
-                                        // for an id that already exists passed it without changing anything — and
-                                        // the emit below fired anyway, re-prompting the user's modal up to 30×/s
+                                        // for an id that already exists passed it without changing anything â€” and
+                                        // the emit below fired anyway, re-prompting the user's modal up to 30Ã—/s
                                         // and never repairing a transfer the user had already accepted (whose
                                         // placeholder has `total_chunks: 0`).
                                         accepted = transfers.len() < MAX_PENDING_INCOMING_TRANSFERS;
@@ -1862,7 +1862,7 @@ async fn handle_file_transfer_packet(
                                             tracing::warn!(
                                                 peer = %peer_key_hex,
                                                 transfer_id = %transfer_id,
-                                                "too many concurrent incoming transfers — rejecting"
+                                                "too many concurrent incoming transfers â€” rejecting"
                                             );
                                         }
                                     }
@@ -1918,13 +1918,13 @@ async fn handle_file_transfer_packet(
                             let mut transfers = state.incoming_transfers.write().await;
                             if let Some(transfer) = transfers.get_mut(&chunk.transfer_id) {
                                 // Transfer must belong to THIS peer and be actively
-                                // accepted (Transferring) — prevents cross-peer chunk
+                                // accepted (Transferring) â€” prevents cross-peer chunk
                                 // injection into another conversation's transfer and
                                 // writing into paused/unaccepted/cancelled temp files.
                                 if transfer.peer_key_hex != peer_key_hex {
                                     tracing::warn!(
                                         transfer_id = %chunk.transfer_id,
-                                        "file chunk from wrong peer — ignoring"
+                                        "file chunk from wrong peer â€” ignoring"
                                     );
                                 } else if transfer.state
                                     != crate::state::TransferState::Transferring
@@ -1932,7 +1932,7 @@ async fn handle_file_transfer_packet(
                                     tracing::debug!(
                                         transfer_id = %chunk.transfer_id,
                                         state = ?transfer.state,
-                                        "file chunk for non-active transfer — ignoring"
+                                        "file chunk for non-active transfer â€” ignoring"
                                     );
                                 }
                                 // Bounds-check the peer-controlled index and payload size
@@ -1944,26 +1944,26 @@ async fn handle_file_transfer_packet(
                                         tracing::warn!(
                                             chunk = chunk.chunk_index,
                                             total = transfer.total_chunks,
-                                            "file chunk index out of range — skipping"
+                                            "file chunk index out of range â€” skipping"
                                         );
                                     } else if (chunk.data.len() as u64) > transfer.chunk_stride {
                                         tracing::warn!(
                                             chunk = chunk.chunk_index,
                                             len = chunk.data.len(),
                                             stride = transfer.chunk_stride,
-                                            "file chunk larger than declared stride — skipping"
+                                            "file chunk larger than declared stride â€” skipping"
                                         );
                                     } else if transfer.chunks_bitmask[idx] {
                                         tracing::trace!(
                                             chunk = chunk.chunk_index,
-                                            "duplicate file chunk — ignoring"
+                                            "duplicate file chunk â€” ignoring"
                                         );
                                     } else {
                                         // Verify the chunk before writing it.
                                         //
                                         // Two checks, in this order:
                                         //
-                                        // 1. Against `transfer.chunk_hashes` —
+                                        // 1. Against `transfer.chunk_hashes` â€”
                                         //    the per-chunk hashes announced in the
                                         //    signed, session-authenticated transfer
                                         //    *request*. This is the only value the
@@ -1975,7 +1975,7 @@ async fn handle_file_transfer_packet(
                                         //
                                         // The old code did (2) alone, and the
                                         // pre-announced hashes were transmitted
-                                        // for every transfer and then dropped —
+                                        // for every transfer and then dropped â€”
                                         // defence in depth that cost a round trip
                                         // and was thrown away. A v1 sender sends no
                                         // per-chunk hashes, so (1) is skipped and
@@ -2000,7 +2000,7 @@ async fn handle_file_transfer_packet(
                                                 self_consistent,
                                                 matches_announcement,
                                                 had_announced_hash = announced.is_some(),
-                                                "file chunk hash mismatch — skipping"
+                                                "file chunk hash mismatch â€” skipping"
                                             );
                                         } else if let Some(ref mut file) = transfer.temp_file {
                                             use std::io::{Seek, Write};
@@ -2048,7 +2048,7 @@ async fn handle_file_transfer_packet(
                 // completion path below (SHA-256 over up to `MAX_FILE_SIZE`, a
                 // cross-device copy, a rename) used to run while holding this
                 // per-peer mutex, so every other send to the same peer blocked
-                // behind it — and the file's own doc comment for the *sender*
+                // behind it â€” and the file's own doc comment for the *sender*
                 // half explains why blocking work must not sit on the runtime.
                 let decrypted = {
                     let mut conn = conn_arc.lock().await;
@@ -2064,7 +2064,7 @@ async fn handle_file_transfer_packet(
                             // the whole verification below meant that while ONE peer
                             // finished a 2 GiB download, every other peer's chunks
                             // and requests queued behind it, and the per-peer
-                            // `conn.lock()` was held for the same span — so this was a
+                            // `conn.lock()` was held for the same span â€” so this was a
                             // process-wide stall, not a per-transfer one.
                             let finished = {
                                 let mut transfers = state.incoming_transfers.write().await;
@@ -2085,9 +2085,9 @@ async fn handle_file_transfer_packet(
                                     // Every other teardown path emits an event;
                                     // this one did not, so the download row sat at
                                     // its last progress value forever with no
-                                    // error — indistinguishable from a hang.
+                                    // error â€” indistinguishable from a hang.
                                     emit_transfer_error(
-                                        &app_handle,
+                                        app_handle,
                                         &complete.transfer_id,
                                         "the transfer ended before every chunk arrived",
                                     );
@@ -2106,7 +2106,7 @@ async fn handle_file_transfer_packet(
                                     // lock. `read` on a slow or full volume
                                     // blocks the OS thread, so a tokio worker
                                     // stops polling every other socket and timer
-                                    // on it — and *all* peers' chunk handlers were
+                                    // on it â€” and *all* peers' chunk handlers were
                                     // queued behind the global lock anyway. The
                                     // sender half of this same feature already
                                     // documents why this matters.
@@ -2186,7 +2186,7 @@ async fn handle_file_transfer_packet(
                                             };
 
                                         // `transfer.temp_file` was already `.take()`n and moved into the
-                                        // `spawn_blocking` hash closure above, which has returned by now —
+                                        // `spawn_blocking` hash closure above, which has returned by now â€”
                                         // so the handle is closed, which is what Windows needs before a
                                         // rename. The guard is on the *path* only.
                                         let rename_result = match transfer.temp_path.as_ref() {
@@ -2219,7 +2219,7 @@ async fn handle_file_transfer_packet(
                                             // Downloads folder.
                                             //
                                             // The old code treated that as a hard
-                                            // failure and DELETED the temp file —
+                                            // failure and DELETED the temp file â€”
                                             // so a fully received, per-chunk
                                             // hash-verified, whole-file-SHA-256
                                             // verified download was destroyed,
@@ -2278,7 +2278,7 @@ async fn handle_file_transfer_packet(
                                                             "cross-device copy failed - cleaning up"
                                                         );
                                                         emit_transfer_error(
-                                                            &app_handle,
+                                                            app_handle,
                                                             &transfer_id,
                                                             &format!(
                                                                 "could not save the file to {}: {ce}",
@@ -2297,7 +2297,7 @@ async fn handle_file_transfer_packet(
                                                     "failed to rename temp file - cleaning up"
                                                 );
                                                 emit_transfer_error(
-                                                    &app_handle,
+                                                    app_handle,
                                                     &transfer_id,
                                                     "could not save the received file",
                                                 );
@@ -2309,7 +2309,7 @@ async fn handle_file_transfer_packet(
                                     } else {
                                         tracing::warn!("file hash verification failed - deleting corrupted temp file");
                                         emit_transfer_error(
-                                            &app_handle,
+                                            app_handle,
                                             &transfer_id,
                                             "the received file failed its integrity check and was discarded",
                                         );
@@ -2328,7 +2328,7 @@ async fn handle_file_transfer_packet(
             }
         }
         PacketType::FileTransferAccept => {
-            // Peer accepted our file transfer — start sending chunks
+            // Peer accepted our file transfer â€” start sending chunks
             if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
                 match conn.session.decrypt_typed_frame(frame) {
@@ -2337,7 +2337,7 @@ async fn handle_file_transfer_packet(
                         // `serde_json`. `send_file_accept` writes via
                         // `protocol::serialize` = `rmp_serde::to_vec`, whose
                         // first byte is a map header, and `serde_json` rejects
-                        // anything that is not `{`/`[`/a literal — so this
+                        // anything that is not `{`/`[`/a literal â€” so this
                         // branch could never succeed, no chunk was ever sent,
                         // and the sender's UI sat in `Pending` forever with no
                         // error. The sibling handlers 40 lines away used the
@@ -2427,8 +2427,8 @@ async fn handle_file_transfer_packet(
                                 //    transfer. `wait_for_ack` treats
                                 //    `chunks_acked > chunk_index` as "this chunk
                                 //    is confirmed", so a single authenticated
-                                //    peer — the very party being asked to
-                                //    confirm delivery — could send
+                                //    peer â€” the very party being asked to
+                                //    confirm delivery â€” could send
                                 //    `chunk_index = total_chunks - 1` once and
                                 //    have every subsequent chunk treated as
                                 //    delivered. The file would be declared sent
@@ -2440,7 +2440,7 @@ async fn handle_file_transfer_packet(
                                 // construction and this accepts them unchanged. A
                                 // gap or a duplicate is now ignored, which is
                                 // also what the receiver's `chunks_bitmask`
-                                // already did — the sender now holds a
+                                // already did â€” the sender now holds a
                                 // conservative mirror of it instead of a
                                 // separately-invented count.
                                 if let Some(next) =
@@ -2568,7 +2568,7 @@ async fn handle_heartbeat_frame(
             }
         }
         PacketType::HeartbeatAck => {
-            // Peer answered our probe — but only a DECRYPTABLE ack
+            // Peer answered our probe â€” but only a DECRYPTABLE ack
             // counts as liveness (plaintext/injected acks must not
             // defeat the timeout).
             let decrypted = {
@@ -2719,7 +2719,7 @@ async fn handle_message_update_frame(
                                     Ok(false) => {
                                         tracing::warn!(
                                             peer = %peer_key_hex,
-                                            "reaction for message outside sender conversation — rejected"
+                                            "reaction for message outside sender conversation â€” rejected"
                                         );
                                     }
                                     Err(e) => {
@@ -2728,7 +2728,7 @@ async fn handle_message_update_frame(
                                 }
                                 // Inbound reactions are a `messages.db` write
                                 // path like the outbound ones, so the cap
-                                // applies here too — a peer sending repeated
+                                // applies here too â€” a peer sending repeated
                                 // Reaction frames must not be able to grow the
                                 // store past its ceiling.
                                 crate::maintenance::enforce_cap(app_handle, store, storage_cap);
@@ -2780,7 +2780,7 @@ async fn handle_message_update_frame(
                         // Validate + update storage with a fresh per-message
                         // content key (crypto-shredding, H7), scoped to the
                         // sender's conversation and 'received' messages only
-                        // (H4) — a peer can never rewrite our own sent messages
+                        // (H4) â€” a peer can never rewrite our own sent messages
                         // or rows in unrelated conversations.
                         // Ephemeral mode: accept the edit for the live UI
                         // without touching SQLite.
@@ -2804,7 +2804,7 @@ async fn handle_message_update_frame(
                                         Ok(false) => {
                                             tracing::warn!(
                                                 peer = %peer_key_hex,
-                                                "edit for message outside sender conversation — rejected"
+                                                "edit for message outside sender conversation â€” rejected"
                                             );
                                         }
                                         Err(e) => {
@@ -2877,7 +2877,7 @@ async fn handle_message_update_frame(
                                     Ok(false) => {
                                         tracing::warn!(
                                             peer = %peer_key_hex,
-                                            "delete for message outside sender conversation — rejected"
+                                            "delete for message outside sender conversation â€” rejected"
                                         );
                                     }
                                     Err(e) => {
@@ -2926,7 +2926,7 @@ const MAX_SYNC_LOOKBACK_SECS: i64 = 30 * 24 * 60 * 60;
 ///
 /// A peer that asks for more is **refused**, not truncated. The previous
 /// documentation here claimed "the oldest-N within the window rather than
-/// nothing, and the truncation is logged", and the handler did exactly that —
+/// nothing, and the truncation is logged", and the handler did exactly that â€”
 /// after decrypting every row in the window, so the cap bounded only what was
 /// kept. A control that is documented and not enforced is worse than no
 /// control: the code below now refuses, and the doc matches it.
@@ -2979,7 +2979,7 @@ async fn handle_sync_frame(
             // I/O. Holding it across this body meant a single authenticated
             // 20-byte `SyncRequest` from a peer that simply stops reading its
             // socket pinned the global `connections` read lock for up to
-            // `MAX_SYNC_RESEND_MESSAGES` × `NETWORK_TIMEOUT` (~5.5 hours),
+            // `MAX_SYNC_RESEND_MESSAGES` Ã— `NETWORK_TIMEOUT` (~5.5 hours),
             // blocking every `disconnect_peer`, every heartbeat teardown and
             // every new-connection insert in the process. The count and
             // lookback caps bound the work but never released the lock.
@@ -2991,13 +2991,13 @@ async fn handle_sync_frame(
                             crate::protocol::SyncRequestData,
                         >(&plaintext)
                         {
-                            // ── Bound the requested window ──
+                            // â”€â”€ Bound the requested window â”€â”€
                             // `since_timestamp` was fully peer-controlled
                             // with no lower bound (0 was accepted) and no cap
                             // on how many messages came back. A single
                             // 20-byte authenticated packet therefore
                             // triggered a full-table scan, a decrypt pass
-                            // over the entire history, and N re-sends —
+                            // over the entire history, and N re-sends â€”
                             // repeatable at will, since (before the
                             // receive-loop rate limiter) there was no
                             // inbound throttle either.
@@ -3012,19 +3012,19 @@ async fn handle_sync_frame(
                                 tracing::warn!(
                                     peer = %peer_key_hex,
                                     requested = sync.since_timestamp,
-                                    "sync request window too old — clamped"
+                                    "sync request window too old â€” clamped"
                                 );
                             }
                             let since = (sync.since_timestamp as i64).max(earliest);
 
-                            // ── Bound the count BEFORE any decryption ──
+                            // â”€â”€ Bound the count BEFORE any decryption â”€â”€
                             //
                             // The cap has to be applied to the *rows*, not to
                             // the decrypted output. It used to be applied after
                             // the decrypt loop, so `load_sent_messages_since`
                             // returned every row in the window and every one of
-                            // them was decrypted — a CEK unwrap plus an AEAD open
-                            // of up to `MAX_TEXT_MESSAGE_SIZE` — with only the
+                            // them was decrypted â€” a CEK unwrap plus an AEAD open
+                            // of up to `MAX_TEXT_MESSAGE_SIZE` â€” with only the
                             // first 2000 kept. A peer holding enough sent history
                             // to fill the window therefore bought 2000
                             // decryptions of work per 20-byte request, and could
@@ -3063,7 +3063,7 @@ async fn handle_sync_frame(
                                                     total = stored.len(),
                                                     cap = MAX_SYNC_RESEND_MESSAGES,
                                                     "sync response refused: window exceeds the \
-                                                     per-request cap — peer must resume from \
+                                                     per-request cap â€” peer must resume from \
                                                      a later since_timestamp"
                                                 );
                                                 SyncResend::Refused(
@@ -3094,7 +3094,7 @@ async fn handle_sync_frame(
                                                 tracing::warn!(
                                                     peer = %peer_key_hex,
                                                     error = %e,
-                                                    "sync: failed to read missed messages — \
+                                                    "sync: failed to read missed messages â€” \
                                                      response refused"
                                                 );
                                                 SyncResend::Refused("message store unavailable")
@@ -3116,7 +3116,7 @@ async fn handle_sync_frame(
                                     // options: the requester treats the conversation as
                                     // caught up, never advances its `since_timestamp`,
                                     // and asks the same over-cap question on every
-                                    // reconnect — a permanent, invisible hole in the
+                                    // reconnect â€” a permanent, invisible hole in the
                                     // history. The requesting side only logs incoming
                                     // `Error` frames today, so this cannot repair that
                                     // yet (it needs `commands/mod.rs` and the frontend),
@@ -3185,12 +3185,12 @@ async fn handle_sync_frame(
         //
         // The discriminants stay reserved in `PacketType` so the wire format
         // does not shift under any future peer. `SyncRequest` (0x44) above is
-        // unrelated and still live — it is missed-message recovery after a
+        // unrelated and still live â€” it is missed-message recovery after a
         // reconnect, which is why this handler exists at all.
         PacketType::SyncDeviceInfo | PacketType::SyncPayload => {
             tracing::debug!(
                 peer = %peer_key_hex,
-                "ignoring multi-device sync frame — the feature was removed in 5.0.0"
+                "ignoring multi-device sync frame â€” the feature was removed in 5.0.0"
             );
         }
         _ => {}
@@ -3207,7 +3207,7 @@ async fn handle_group_frame(
     // Owned copy: handlers were extracted verbatim and rely on String semantics.
     let peer_key_hex = peer_key_hex.to_string();
     match frame.packet_type {
-        // ─── Group Chat (Phase 3) ───
+        // â”€â”€â”€ Group Chat (Phase 3) â”€â”€â”€
         PacketType::GroupCreate => {
             if let Some(conn_arc) = state.peer_connection(&peer_key_hex).await {
                 let mut conn = conn_arc.lock().await;
@@ -3218,7 +3218,7 @@ async fn handle_group_frame(
                         {
                             tracing::info!(group = %create.group_id, "received group create");
 
-                            // ── Authorization ──
+                            // â”€â”€ Authorization â”€â”€
                             // `GroupInfo`, `GroupRemove` and `GroupLeave`
                             // all verify the sender's standing before
                             // acting. `GroupCreate` did not, and because
@@ -3233,7 +3233,7 @@ async fn handle_group_frame(
                             // Two conditions must hold:
                             //  1. The claim about who created the group
                             //     must match the authenticated peer.
-                            //  2. The creator must not already exist —
+                            //  2. The creator must not already exist â€”
                             //     re-using an id would clobber the
                             //     established roster and roles.
                             let peer_claims_creator = create.creator_peer_key_hex == peer_key_hex;
@@ -3271,9 +3271,9 @@ async fn handle_group_frame(
                             //
                             // Capped before the loop, and the dedup uses a set:
                             // `Vec::contains` inside a `for` over a peer-controlled
-                            // list is O(n²), and the list comes from a 512 KiB
-                            // frame, so ~260k single-character entries meant ~3×10¹⁰
-                            // string comparisons — minutes of CPU, on a runtime
+                            // list is O(nÂ²), and the list comes from a 512 KiB
+                            // frame, so ~260k single-character entries meant ~3Ã—10Â¹â°
+                            // string comparisons â€” minutes of CPU, on a runtime
                             // thread, with the peer's connection mutex still held
                             // (`drop(conn)` comes after).
                             let initial = &create.initial_members;
@@ -3402,7 +3402,7 @@ async fn handle_group_frame(
                             drop(conn);
 
                             if !inviter_pub_ok {
-                                tracing::warn!(group = %gid, peer = %peer_key_hex, "group invite signature invalid — ignoring");
+                                tracing::warn!(group = %gid, peer = %peer_key_hex, "group invite signature invalid â€” ignoring");
                                 return;
                             }
 
@@ -3574,7 +3574,7 @@ async fn handle_group_frame(
                                 // Ephemeral mode: group content stays in RAM.
                                 // Both values are snapshotted from
                                 // `security_config` in one read here, before the
-                                // store lock is taken — reading them inside the
+                                // store lock is taken â€” reading them inside the
                                 // `message_store` scope would nest
                                 // `security_config` under `message_store`.
                                 let (ephemeral_mode, storage_cap) = {
@@ -3673,7 +3673,7 @@ async fn handle_group_frame(
                                 tracing::warn!(
                                     peer = %peer_key_hex,
                                     group = %gid,
-                                    "unauthorized group rename attempt — ignored"
+                                    "unauthorized group rename attempt â€” ignored"
                                 );
                                 return;
                             }
@@ -3714,8 +3714,8 @@ async fn handle_group_frame(
                             let gid = remove.group_id.clone();
                             let is_us = removed == peer_key_hex;
                             // Authorization (H2): the remover must be the transport
-                            // peer itself, a member of the group, and — when removing
-                            // someone else — an admin.
+                            // peer itself, a member of the group, and â€” when removing
+                            // someone else â€” an admin.
                             let authorized = {
                                 let gm = state.group_manager.read().await;
                                 gm.get_group(&gid)
@@ -3733,7 +3733,7 @@ async fn handle_group_frame(
                                 tracing::warn!(
                                     peer = %peer_key_hex,
                                     group = %gid,
-                                    "unauthorized group removal claim — ignored"
+                                    "unauthorized group removal claim â€” ignored"
                                 );
                                 return;
                             }
@@ -3807,13 +3807,13 @@ async fn handle_group_frame(
                             let gid = leave.group_id.clone();
 
                             // Authorization (H2): a peer can only announce its OWN
-                            // departure — forged leave claims on behalf of others
+                            // departure â€” forged leave claims on behalf of others
                             // are dropped.
                             if leaving != peer_key_hex {
                                 tracing::warn!(
                                     peer = %peer_key_hex,
                                     group = %gid,
-                                    "forged group leave claim — ignored"
+                                    "forged group leave claim â€” ignored"
                                 );
                                 return;
                             }
@@ -3834,7 +3834,7 @@ async fn handle_group_frame(
                             }
                             drop(ms);
 
-                            // Forward secrecy: the leaver knew our old chain key —
+                            // Forward secrecy: the leaver knew our old chain key â€”
                             // rotate our sending chain and announce the new one.
                             if let Some(our) = our_peer_key_hex {
                                 rotate_and_announce(state.clone(), &gid, &our).await.ok();
@@ -3861,11 +3861,11 @@ async fn handle_group_frame(
 /// Maximum inbound file-transfer chunk frames per second, per connection.
 ///
 /// `network::MAX_INBOUND_FRAMES_PER_SEC` (30/s) is sized for *control* traffic:
-/// typing indicators, reactions, heartbeats — things a human produces. Charging
-/// bulk data frames against it capped every legitimate transfer at 30 × 256 KiB
-/// = 7.68 MB/s, and 30 × 128 KiB = 3.84 MB/s over a relay, because
+/// typing indicators, reactions, heartbeats â€” things a human produces. Charging
+/// bulk data frames against it capped every legitimate transfer at 30 Ã— 256 KiB
+/// = 7.68 MB/s, and 30 Ã— 128 KiB = 3.84 MB/s over a relay, because
 /// `compute_chunk_size` returns `MAX_FILE_CHUNK_SIZE` (256 KiB) for every
-/// non-relay strategy and `send_file_chunks_inner` paces nothing at all — it
+/// non-relay strategy and `send_file_chunks_inner` paces nothing at all â€” it
 /// reads, hashes and writes the next chunk as fast as the link allows. A 1 GiB
 /// transfer therefore cleared the one-second burst allowance and then had
 /// *every* frame rejected, so `rate_limit_strikes` never reset and the session
@@ -3877,7 +3877,7 @@ async fn handle_group_frame(
 /// 256 KiB and 512/s at 128 KiB. The cap binds only for a peer sending chunks
 /// *smaller* than 64 KiB, and its purpose is to bound per-frame dispatch cost
 /// (read syscall, MessagePack parse, AEAD open, SHA-256) when a peer declares
-/// tiny chunks — the case in which a byte-only budget would otherwise become a
+/// tiny chunks â€” the case in which a byte-only budget would otherwise become a
 /// 65536-frames-per-second CPU allowance. A peer cannot widen that allowance by
 /// choosing a chunk size; it can only choose to accept a 1000/s ceiling.
 const MAX_INBOUND_CHUNK_FRAMES_PER_SEC: u32 = 1000;
@@ -3885,7 +3885,7 @@ const MAX_INBOUND_CHUNK_FRAMES_PER_SEC: u32 = 1000;
 /// Maximum inbound bulk-transfer bytes per second, per connection.
 ///
 /// This is the budget that actually bounds a file transfer, so it has to sit
-/// above what a real link delivers — otherwise the limiter simply becomes the
+/// above what a real link delivers â€” otherwise the limiter simply becomes the
 /// reason transfers fail. The control-frame byte budget (16 MiB/s) is not safe
 /// to reuse here: a 1 GiB transfer over a 1 Gbps LAN sustains ~119 MiB/s, so at
 /// 16 MiB/s the bucket drains in well under a second and every later frame is
@@ -3903,8 +3903,8 @@ const MAX_INBOUND_CHUNK_BYTES_PER_SEC: u32 = 64 * 1024 * 1024;
 ///
 /// Both directions of the per-chunk protocol qualify: the chunk itself, and the
 /// `FileTransferChunkAck` the receiver returns for each one. The ACK rate is
-/// dictated by the data rate — at 64 MiB/s of 256 KiB chunks the *sender*
-/// receives 256 ACKs/s — so leaving ACKs on the 30/s control budget would drop
+/// dictated by the data rate â€” at 64 MiB/s of 256 KiB chunks the *sender*
+/// receives 256 ACKs/s â€” so leaving ACKs on the 30/s control budget would drop
 /// the sender's own session mid-transfer for a transfer the byte budget had
 /// already allowed.
 fn is_bulk_transfer_frame(packet_type: PacketType) -> bool {
@@ -3919,7 +3919,7 @@ fn is_bulk_transfer_frame(packet_type: PacketType) -> bool {
 /// `conn_arc` is the *identity* of this session. Both workers must be able to
 /// tell "the connection I was spawned for died" apart from "the slot for this
 /// peer now holds a different, live connection", and `connections` is keyed by
-/// peer key alone — so a bare `remove(&peer_key_hex)` from either worker deletes
+/// peer key alone â€” so a bare `remove(&peer_key_hex)` from either worker deletes
 /// whatever is there now. See [`remove_own_connection`].
 pub fn spawn_receive_loop(
     app_handle: AppHandle,
@@ -3953,7 +3953,7 @@ pub fn spawn_receive_loop(
             // Lock *this* session, never whatever currently holds the map
             // slot. A re-dial for the same peer replaces the entry, and resolving
             // by peer key here would probe the replacement's socket while this
-            // worker still believed it owned the old one — and, worse, clear the
+            // worker still believed it owned the old one â€” and, worse, clear the
             // replacement's liveness bookkeeping. `hb_conn` is the same identity
             // `remove_own_connection` below compares against.
             let mut dead_reason: Option<String> = None;
@@ -3991,7 +3991,7 @@ pub fn spawn_receive_loop(
                             )
                     });
                     if probe_due {
-                        // Encrypted heartbeat — sent through the session's
+                        // Encrypted heartbeat â€” sent through the session's
                         // AEAD path (plaintext heartbeats were a liveness
                         // oracle and forgeable by any active attacker).
                         let crate::state::PeerConnection {
@@ -4013,7 +4013,7 @@ pub fn spawn_receive_loop(
             } // guards dropped before teardown writes
 
             if let Some(reason) = dead_reason {
-                tracing::info!(peer = %hb_peer, reason = %reason, "connection dead — cleaning up");
+                tracing::info!(peer = %hb_peer, reason = %reason, "connection dead â€” cleaning up");
                 if let Some(ri) = hb_reconnect.clone() {
                     let mut pr = hb_state.pending_reconnects.write().await;
                     pr.insert(hb_peer.clone(), ri);
@@ -4044,7 +4044,7 @@ pub fn spawn_receive_loop(
         let frame_limiter = network::FrameRateLimiter::new();
         // A second, separate budget for bulk transfer frames. Both buckets are
         // token buckets and both are still enforced; only the *frame* ceiling
-        // differs, which is the whole point — see `is_bulk_transfer_frame` for
+        // differs, which is the whole point â€” see `is_bulk_transfer_frame` for
         // why charging 256 KiB chunks against a 30-frames/s control budget
         // dropped every transfer faster than 7.68 MB/s.
         let bulk_frame_limiter = network::FrameRateLimiter::with_limits(
@@ -4091,7 +4091,7 @@ pub fn spawn_receive_loop(
                 }
             };
 
-            // ── Inbound rate limit ──
+            // â”€â”€ Inbound rate limit â”€â”€
             // Charged on the frame's declared wire size, before any
             // deserialization, database write, or event emission. The
             // limiter is a token bucket, so brief bursts pass while a
@@ -4111,7 +4111,7 @@ pub fn spawn_receive_loop(
             //
             // A breach is not immediately fatal. The token bucket already
             // tolerated a full second of burst, so one breach means a full
-            // second over budget — strong evidence of a flood — but dropping an
+            // second over budget â€” strong evidence of a flood â€” but dropping an
             // established session on the first one makes a false positive
             // expensive. The frame is dropped either way; only a *sustained*
             // breach (MAX_INBOUND_RATE_LIMIT_STRIKES) ends the connection.
@@ -4137,14 +4137,14 @@ pub fn spawn_receive_loop(
                         bulk,
                         strike = rate_limit_strikes,
                         of = network::MAX_INBOUND_RATE_LIMIT_STRIKES,
-                        "inbound rate limit exceeded — frame dropped"
+                        "inbound rate limit exceeded â€” frame dropped"
                     );
                     if rate_limit_strikes < network::MAX_INBOUND_RATE_LIMIT_STRIKES {
                         continue;
                     }
                     tracing::warn!(
                         peer = %peer_key_hex,
-                        "sustained rate limiting — dropping connection"
+                        "sustained rate limiting â€” dropping connection"
                     );
                     let _ = app_handle.emit(
                         "m2m://connection",
@@ -4227,7 +4227,7 @@ pub fn spawn_receive_loop(
                     // A Disconnect is only honoured if it DECRYPTS. It used to
                     // be sent and accepted in plaintext, which made a 14-byte
                     // injected frame a universal session-kill primitive for any
-                    // on-path attacker — and trivially for the relay server,
+                    // on-path attacker â€” and trivially for the relay server,
                     // which is a full MITM for relayed connections.
                     //
                     // The only cost of requiring authentication is that a peer
@@ -4273,7 +4273,7 @@ pub fn spawn_receive_loop(
                     tracing::warn!(peer = %peer_key_hex, "peer sent error packet");
                 }
                 // Typing indicators are SENT encrypted (see commands/chat.rs) but
-                // were RECEIVED without decryption — the handler ignored the
+                // were RECEIVED without decryption â€” the handler ignored the
                 // body entirely, so any peer could inject fake typing events
                 // into the victim's UI. Authenticate them like every other
                 // encrypted packet type, and only surface a decryptable one.
@@ -4362,7 +4362,7 @@ mod contact_gate_tests {
         assert!(!connection_map_has_room(MAX_ESTABLISHED_CONNECTIONS + 1));
     }
 
-    /// H5: gate disabled (default) — everyone passes, first-time invite
+    /// H5: gate disabled (default) â€” everyone passes, first-time invite
     /// connections keep working.
     #[test]
     fn test_gate_disabled_lets_everyone_through() {
@@ -4371,7 +4371,7 @@ mod contact_gate_tests {
         assert!(contact_gate_allows(false, false, true));
     }
 
-    /// H5: gate enabled — a validly-signed STRANGER must be rejected.
+    /// H5: gate enabled â€” a validly-signed STRANGER must be rejected.
     /// Pre-fix there was no gate at all: any signed identity could open a
     /// session, get persisted into the key store, and deliver messages.
     #[test]
@@ -4379,7 +4379,7 @@ mod contact_gate_tests {
         assert!(!contact_gate_allows(true, false, false));
     }
 
-    /// H5: gate enabled — known peers and family pass.
+    /// H5: gate enabled â€” known peers and family pass.
     #[test]
     fn test_gate_enabled_accepts_known_and_family() {
         assert!(contact_gate_allows(true, true, false));
