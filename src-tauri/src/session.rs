@@ -421,6 +421,16 @@ impl Session {
     /// The peer's prekey bundle is extracted from the invite by the caller.
     /// The caller MUST have verified `bundle.signed_prekey_sig` against the peer's
     /// Ed25519 identity key before calling this.
+    ///
+    /// Eight parameters trips `clippy::too_many_arguments`. Allowed on purpose:
+    /// every one of these is a distinct, individually-required input to the X3DH
+    /// key agreement, and bundling them into a struct would only move the same
+    /// eight fields one level down while adding a type that can be constructed
+    /// partially. Collapsing the two identity keypairs would be worse — they are
+    /// different algorithms on different curves, and conflating them in a
+    /// caller-supplied `impl Into<Keypair>` is precisely the confusion that makes
+    /// X25519 vs Ed25519 mistakes.
+    #[allow(clippy::too_many_arguments)]
     pub async fn handshake_as_initiator_x3dh<S: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         stream: &mut S,
