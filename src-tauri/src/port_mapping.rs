@@ -1425,7 +1425,7 @@ fn find_closing_tag(xml: &str, name: &str) -> Option<usize> {
                 continue;
             }
         };
-        if matches!(after_name.chars().next(), Some('>') | Some(c) if c.is_whitespace()) {
+        if is_tag_name_end(after_name) {
             return Some(at);
         }
         from = at + 2;
