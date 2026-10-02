@@ -1613,7 +1613,7 @@ mod group_tests {
                 1,
                 bob_hex.clone(),
                 false,
-                &[alice_hex.clone()],
+                std::slice::from_ref(&alice_hex),
             )
             .unwrap();
 
