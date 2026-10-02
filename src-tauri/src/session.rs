@@ -2260,10 +2260,11 @@ let mut sign_data = Vec::new();
         // Replay simulation: signature is VALID but the timestamp is ancient.
         let eph = EphemeralKeypair::generate();
         let stale_ts = now_unix_secs().saturating_sub(HANDSHAKE_FRESHNESS_WINDOW_SECS * 10);
-        let mut sign_data = Vec::new();
+let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&stale_ts.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &[]);
+        append_used_opk_to_sign_data(&mut sign_data, None, false);
         let signature = alice_identity.sign(&sign_data);
 
         let init = HandshakeInit {
