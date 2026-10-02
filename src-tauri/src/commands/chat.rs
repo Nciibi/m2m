@@ -494,6 +494,10 @@ pub async fn remove_reaction(
                     sk.as_ref(),
                 )
                 .map_err(|e| AppError::invalid(format!("failed to remove reaction: {e}")))?;
+            // See `send_reaction`: this is a `messages.db` write path, so the cap
+            // applies. Removal only shrinks a row, but the cap is enforced per
+            // write so the accounting cannot drift either way.
+            crate::maintenance::enforce_cap(&app_handle, store, storage_cap);
         }
     }
 
