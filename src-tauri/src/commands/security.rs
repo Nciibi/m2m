@@ -126,8 +126,6 @@ pub async fn set_security_config(
     state: State<'_, Arc<AppState>>,
     config: SecurityConfig,
 ) -> Result<SecurityConfig, AppError> {
-    let old_config = state.security_config.read().await.clone();
-
     // Persist config (disk) + runtime state
     persist_config(&state.data_dir, &config);
     {
