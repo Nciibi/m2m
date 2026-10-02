@@ -223,7 +223,7 @@ impl Session {
             ephemeral_pub: ephemeral.public_key_bytes(),
             identity_pub: identity.public_key_bytes(),
             x25519_identity_pub: x25519_pub,
-used_opk: None,
+            used_opk: None,
             one_time: false,
             timestamp: now,
             signature,
@@ -2196,7 +2196,7 @@ mod session_tests {
 
         let eph = EphemeralKeypair::generate();
         let timestamp = now_unix_secs(); // fresh — this test targets bad HandshakeComplete
-let mut sign_data = Vec::new();
+        let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &[]);
@@ -2260,7 +2260,7 @@ let mut sign_data = Vec::new();
         // Replay simulation: signature is VALID but the timestamp is ancient.
         let eph = EphemeralKeypair::generate();
         let stale_ts = now_unix_secs().saturating_sub(HANDSHAKE_FRESHNESS_WINDOW_SECS * 10);
-let mut sign_data = Vec::new();
+        let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&stale_ts.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &[]);
@@ -2317,7 +2317,7 @@ let mut sign_data = Vec::new();
             candidate_type: 1,
             relay_id: None,
         }];
-let mut sign_data = Vec::new();
+        let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &real_candidates);
