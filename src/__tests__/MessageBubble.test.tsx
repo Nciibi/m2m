@@ -398,18 +398,21 @@ describe("MessageBubble", () => {
     expect(document.querySelector(".msg-content")).toBeNull();
   });
 
-  it("withdraws edit for an unreadable message so it cannot be blanked", () => {
-    const onEditSave = vi.fn();
+  it("withdraws edit for an unreadable message so it cannot be blanked", async () => {
     render(
       <MessageBubble
         message={msg({ decrypt_failed: true, content: "" })}
-        onEditSave={onEditSave}
+        onEditSave={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
+    // Delete is still coherent — it acts on the row, not the plaintext — so
+    // the options menu is reachable and must contain Delete...
+    await userEvent.click(screen.getByRole("button", { name: "Message options" }));
+    expect(await screen.findByRole("button", { name: /Delete/ })).toBeInTheDocument();
+    // ...but not Edit, which would save an empty string over the only
+    // remaining copy of the content.
     expect(screen.queryByRole("button", { name: /Edit/ })).not.toBeInTheDocument();
-    // Deleting and reacting stay available: those act on the row rather than
-    // the plaintext, so offering them is not incoherent.
-    expect(screen.getByRole("button", { name: "Message options" })).toBeInTheDocument();
   });
 
   it("is a labelled group, not a tab stop", () => {
