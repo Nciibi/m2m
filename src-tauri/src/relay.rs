@@ -759,6 +759,42 @@ mod tests {
         }
     }
 
+    /// The auth token must not be reachable through any derived trait.
+    ///
+    /// `RelayConfig` is deserialized from the IPC boundary and `#[derive(Debug)]`
+    /// would put the pre-shared secret into any `tracing::debug!(?cfg)`. The
+    /// manual `Debug` and the absence of `Serialize` are both load-bearing, and
+    /// nothing enforces them except a test that fails when someone re-adds the
+    /// derive.
+    #[test]
+    fn auth_token_never_escapes_via_derive() {
+        let secret = "SUPER-SECRET-RELAY-TOKEN";
+        let config = RelayConfig {
+            host: "relay.example.com".to_string(),
+            port: 3478,
+            auth_token: secret.to_string(),
+        };
+
+        // Debug must redact the secret, not print it.
+        let debugged = format!("{:?}", config);
+        assert!(
+            !debugged.contains(secret),
+            "Debug leaked the auth token: {debugged}"
+        );
+        assert!(
+            debugged.contains("<redacted>"),
+            "Debug should still say a token is set: {debugged}"
+        );
+        // An empty token must be distinguishable from a redacted one, or a
+        // misconfiguration would look configured.
+        let empty = RelayConfig {
+            host: "relay.example.com".to_string(),
+            port: 3478,
+            auth_token: String::new(),
+        };
+        assert!(format!("{:?}", empty).contains("<none>"));
+    }
+
     #[test]
     fn test_config_addr_str() {
         let config = RelayConfig {
