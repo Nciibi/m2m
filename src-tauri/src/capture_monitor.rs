@@ -149,6 +149,11 @@ pub fn start_monitor(state: Arc<crate::state::AppState>, app_handle: AppHandle) 
     tokio::spawn(async move {
         tracing::info!("capture software monitor started");
         let mut last_active: Vec<String> = Vec::new();
+        // What the UI was last told, so we only emit on a real change of either
+        // the detected set or the health of the scan itself.
+        let mut last_emitted_active: Vec<String> = Vec::new();
+        let mut last_emitted_scan_failed = false;
+        let mut scan_failed = false;
 
         loop {
             let enabled = state
