@@ -218,9 +218,16 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // absence degrades to `SO_REUSEADDR` semantics rather than breaking a single
     // instance. Logged because it is the difference between two instances
     // coexisting and the second one failing to start.
-    // `set_reuse_port` only exists behind socket2's `all` feature (Cargo.toml
-    // enables it). It is not an extension trait and not OS-gated — Windows and
-    // macOS both have it — so a plain method call is correct.
+    // `SO_REUSEPORT` lets a second instance bind the same fixed port. Not fatal
+    // when unavailable: it is an extra safeguard for the multi-instance case and
+    // `SO_REUSEADDR` above already covers the common one.
+    //
+    // socket2 exposes `set_reuse_port` only from its unix backend, and only
+    // behind the `all` feature (which Cargo.toml enables). Windows has no
+    // `SO_REUSEPORT` socket option at all, so there is nothing to call there —
+    // hence the cfg. Calling it unconditionally was a compile error, which is
+    // why this function, and therefore all LAN discovery, had never been built.
+    #[cfg(unix)]
     if let Err(e) = socket.set_reuse_port(true) {
         tracing::warn!(
             error = %e,
@@ -228,6 +235,11 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
              able to discover peers"
         );
     }
+    #[cfg(not(unix))]
+    tracing::debug!(
+        "SO_REUSEPORT does not exist on this platform; multi-instance LAN discovery \
+         relies on SO_REUSEADDR alone"
+    );
 
     // `SockAddr::from(SocketAddr)` is socket2's own conversion; written as an
     // explicit `from` rather than `.into()` so the target type is stated rather
