@@ -272,7 +272,7 @@ graph TB
     end
 
     subgraph IPC ["Tauri Bridge"]
-        CM["commands.rs<br/><i>~2000 lines</i>"]
+        CM["commands/ (11 modules)<br/><i>~4600 lines</i>"]
     end
 
     subgraph Backend ["Backend (Rust)"]
