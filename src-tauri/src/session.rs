@@ -2317,10 +2317,11 @@ let mut sign_data = Vec::new();
             candidate_type: 1,
             relay_id: None,
         }];
-        let mut sign_data = Vec::new();
+let mut sign_data = Vec::new();
         sign_data.extend_from_slice(&eph.public_key_bytes());
         sign_data.extend_from_slice(&timestamp.to_be_bytes());
         append_candidates_to_sign_data(&mut sign_data, &real_candidates);
+        append_used_opk_to_sign_data(&mut sign_data, None, false);
         let signature = alice_identity.sign(&sign_data);
 
         let poisoned = vec![WireCandidate {
