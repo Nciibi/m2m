@@ -82,7 +82,9 @@ describe("hashToColor", () => {
 
   it("stays inside the eight-bucket ramp", () => {
     for (const input of ["alice", "bob", "", "a".repeat(64), "ffff", "0000"]) {
-      const idx = Number(hashToColor(input).slice(-1));
+      const m = hashToColor(input).match(/^var\(--color-avatar-(\d)\)$/);
+      expect(m, `unexpected shape for ${JSON.stringify(input)}`).not.toBeNull();
+      const idx = Number(m![1]);
       expect(idx).toBeGreaterThanOrEqual(0);
       expect(idx).toBeLessThanOrEqual(7);
     }
