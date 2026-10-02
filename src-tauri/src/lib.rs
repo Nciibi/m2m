@@ -360,6 +360,8 @@ pub fn run() {
             commands::security::reapply_security_config,
             commands::security::get_capture_capability,
             commands::security::clear_clipboard,
+            commands::security::arm_clipboard_auto_clear,
+            commands::security::note_activity,
             commands::vault::lock_vault,
             commands::vault::set_duress_passphrase,
             commands::vault::clear_duress_passphrase,
