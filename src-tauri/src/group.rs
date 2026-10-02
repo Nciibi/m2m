@@ -1631,7 +1631,7 @@ mod group_tests {
     /// one-time key, recovering the message key and allowing forgery.
     #[test]
     fn test_sender_key_bundle_cannot_rewind_an_in_use_chain() {
-        let (mut gm_alice, mut gm_bob, bundle, bob_id, alice_hex) = alice_bob_g();
+        let (mut gm_alice, mut gm_bob, bundle, bob_id, _alice_hex) = alice_bob_g();
 
         gm_alice
             .handle_sender_key(&bundle, "", &bob_id.public_key_bytes())
