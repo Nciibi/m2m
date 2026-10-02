@@ -103,8 +103,13 @@ jobs:
         APPLE_ID: ${{ secrets.APPLE_ID }}
         APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # ── Updater signature key (only relevant once the updater is
-        #    re-enabled with a real pubkey + endpoint) ──
+        # ── Updater signature key ──
+        # Only relevant once the updater is re-enabled (see
+        # docs/SIGNED-UPDATES.md): bundle.createUpdaterArtifacts is currently
+        # false and the pubkey is a placeholder. While that is the case these
+        # secrets are unused. `includeUpdaterJson: false` below means that even
+        # with them set, any signature produced is discarded — set it to true in
+        # the same commit that turns the updater on, or drop the secrets.
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       with:
