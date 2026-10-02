@@ -446,7 +446,7 @@ pub async fn create_invite(
                 // in and the network had already dropped.
                 let mapping = std::sync::Arc::new(mapping);
                 let renew_cancel =
-                    crate::port_mapping::spawn_renewal(std::sync::Arc::clone(&mapping));
+                    crate::port_mapping::PortMapper::spawn_renewal(std::sync::Arc::clone(&mapping));
                 {
                     let mut slot = state.port_mapping.write().await;
                     *slot = Some(crate::state::PortMappingHandle {
@@ -2959,7 +2959,7 @@ pub async fn release_port_mapping(state: &Arc<AppState>) {
     // Stop the renewal task first, so it cannot recreate the mapping while we
     // are removing it.
     let _ = handle.renew_cancel.send(());
-    crate::port_mapping::remove_port_mapping(&handle.mapping).await;
+    crate::port_mapping::PortMapper::remove_port_mapping(&handle.mapping).await;
 }
 
 async fn handle_sync_frame(
