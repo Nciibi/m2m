@@ -166,3 +166,124 @@ fn report_sweep(outcome: &SweepOutcome, app_handle: &AppHandle) {
     }
     emit_storage_evicted(app_handle, report);
 }
+
+// ─── Security deadlines: clipboard auto-clear and idle vault lock ───
+
+/// Tick period for the security deadlines.
+///
+/// One second, because the shortest clipboard setting a user can pick is on the
+/// order of seconds and the whole point is that the deadline is honoured without
+/// the renderer. The per-tick cost is two relaxed atomic loads plus two
+/// comparisons, so a 1s tick over a multi-day run is negligible next to the
+/// 15-minute sweep.
+pub const SECURITY_TICK: Duration = Duration::from_secs(1);
+
+/// Current wall-clock time in unix seconds, or 0 if the clock is before the
+/// epoch.
+///
+/// A pre-epoch clock yields 0, which the callers treat as "disarmed" — so the
+/// failure mode is that the control does not fire, not that it fires constantly.
+/// A monotonic source would be wrong here: these deadlines are compared against
+/// `SystemTime` values supplied by command handlers, so both sides must use the
+/// same clock.
+pub fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Arm (or disarm) the clipboard auto-clear deadline.
+///
+/// `secs == 0` disarms. Called from the frontend when it copies something
+/// sensitive, and re-called whenever the setting changes.
+pub fn arm_clipboard_deadline(state: &Arc<AppState>, secs: u64) {
+    let deadline = if secs == 0 { 0 } else { now_unix_secs().saturating_add(secs) };
+    state.clipboard_clear_deadline.store(deadline, Ordering::Relaxed);
+}
+
+/// Push the idle-lock deadline out by `secs` from now.
+///
+/// Called on user activity. If activity stops — or stops being *reported*, which
+/// is the case when the webview is gone — the deadline passes and the vault
+/// locks.
+pub fn note_activity(state: &Arc<AppState>, secs: u64) {
+    if secs == 0 {
+        state.idle_lock_deadline.store(0, Ordering::Relaxed);
+        return;
+    }
+    state
+        .idle_lock_deadline
+        .store(now_unix_secs().saturating_add(secs), Ordering::Relaxed);
+}
+
+/// Disarm both deadlines. Used when the vault locks, so a stale deadline cannot
+/// fire a second time against an already-locked vault.
+pub fn disarm_security_deadlines(state: &Arc<AppState>) {
+    state.clipboard_clear_deadline.store(0, Ordering::Relaxed);
+    state.idle_lock_deadline.store(0, Ordering::Relaxed);
+}
+
+/// Start the security-deadline task. Returns immediately.
+///
+/// Separate from [`spawn`] because the intervals differ by three orders of
+/// magnitude; one loop cannot serve both.
+pub fn spawn_security_timers(app_handle: AppHandle, state: Arc<AppState>) {
+    tauri::async_runtime::spawn(async move {
+        let mut ticker = tokio::time::interval(SECURITY_TICK);
+        // A suspended laptop must not return and fire 86 400 catch-up ticks,
+        // each of which would re-check a deadline that has long since passed.
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            let now = now_unix_secs();
+
+            let clip = state.clipboard_clear_deadline.load(Ordering::Relaxed);
+            if clip != 0 && now >= clip {
+                state.clipboard_clear_deadline.store(0, Ordering::Relaxed);
+                if let Err(e) = crate::commands::security::clear_clipboard().await {
+                    // NOT swallowed. Failing to clear the clipboard is the whole
+                    // failure this deadline exists to prevent, and a passphrase
+                    // may be sitting in it.
+                    tracing::error!(
+                        error = %e,
+                        "clipboard auto-clear FAILED — a sensitive value may still be on the clipboard"
+                    );
+                    let _ = app_handle.emit(
+                        "m2m://security-error",
+                        serde_json::json!({
+                            "source": "clipboard_auto_clear",
+                            "message": format!("{e}"),
+                        }),
+                    );
+                } else {
+                    tracing::info!("clipboard auto-cleared on deadline");
+                }
+            }
+
+            let idle = state.idle_lock_deadline.load(Ordering::Relaxed);
+            if idle != 0 && now >= idle {
+                state.idle_lock_deadline.store(0, Ordering::Relaxed);
+                tracing::info!("idle deadline reached — locking vault");
+                // Re-arm the deadline to match the configured setting so the
+                // vault keeps locking on every subsequent idle period rather
+                // than once. If the setting is 0 the caller disarms it, which
+                // means "do not auto-lock".
+                let secs = state.security_config.read().await.idle_lock_secs;
+                match crate::commands::vault::lock_vault_inner(&app_handle, &state).await {
+                    Ok(()) => note_activity(&state, secs),
+                    Err(e) => {
+                        tracing::error!(error = %e, "idle auto-lock FAILED");
+                        let _ = app_handle.emit(
+                            "m2m://security-error",
+                            serde_json::json!({
+                                "source": "idle_auto_lock",
+                                "message": format!("{e}"),
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    });
+}
