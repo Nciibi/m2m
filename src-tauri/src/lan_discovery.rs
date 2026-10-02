@@ -218,7 +218,12 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // absence degrades to `SO_REUSEADDR` semantics rather than breaking a single
     // instance. Logged because it is the difference between two instances
     // coexisting and the second one failing to start.
-    if let Err(e) = socket.set_reuse_port(true) {
+    // `set_reuse_port` is `socket2::Socket`'s extension trait method, not an
+    // inherent method, so the trait must be in scope. Without it this is a
+    // compile error rather than a runtime `SO_REUSEPORT` failure, which means
+    // this function — and therefore all LAN discovery — has never been built.
+    use socket2::SocketExt;
+    if let Err(e) = SocketExt::set_reuse_port(&socket, true) {
         tracing::warn!(
             error = %e,
             "SO_REUSEPORT unavailable - a second M2M instance on this host may not be \
@@ -229,7 +234,10 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // `SockAddr::from(&SocketAddr)` is `socket2`'s own conversion; written as
     // an explicit `from` rather than `.into()` so the target type is stated
     // rather than inferred from `bind`'s signature.
-    let addr = socket2::SockAddr::from(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
+    let addr = socket2::SockAddr::from(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        port,
+    ));
     socket.bind(&addr).map_err(LanDiscoveryError::Io)?;
 
     // `From<Socket> for UdpSocket` transfers ownership, so the resulting
