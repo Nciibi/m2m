@@ -330,7 +330,7 @@ pub async fn attempt_reconnect(
 
                 let mut session = crate::session::Session::new();
                 {
-// Snapshot, then release. `handshake_as_initiator` is a
+                    // Snapshot, then release. `handshake_as_initiator` is a
                     // blocking read of a peer-supplied frame bounded by a real
                     // wall-clock deadline - so a slow peer costs this guard real
                     // time, and with it `lock_vault`, `unlock_vault` and the
@@ -518,7 +518,9 @@ pub async fn attempt_reconnect(
         },
     );
 
-    Err(AppError::not_connected("reconnection failed after max attempts — the peer may be offline or the network changed"))
+    Err(AppError::not_connected(
+        "reconnection failed after max attempts — the peer may be offline or the network changed",
+    ))
 }
 
 /// List all peers with pending reconnection info.

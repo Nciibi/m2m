@@ -173,7 +173,8 @@ pub async fn reapply_security_config(
 /// Honest capability report for screen-capture protection on THIS platform,
 /// so the Settings UI can show exactly what the toggle does and does not do.
 #[tauri::command]
-pub async fn get_capture_capability() -> Result<crate::window_security::CaptureCapability, AppError> {
+pub async fn get_capture_capability() -> Result<crate::window_security::CaptureCapability, AppError>
+{
     Ok(window_security::platform_capability())
 }
 

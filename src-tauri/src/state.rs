@@ -540,10 +540,7 @@ impl AppState {
     /// Cloning the `Arc` and dropping the guard here makes that ordering the
     /// default instead of something each call site has to remember. Per-peer
     /// locking still serialises that peer's own sends, which is intended.
-    pub async fn peer_connection(
-        &self,
-        peer_key_hex: &str,
-    ) -> Option<Arc<Mutex<PeerConnection>>> {
+    pub async fn peer_connection(&self, peer_key_hex: &str) -> Option<Arc<Mutex<PeerConnection>>> {
         let conns = self.connections.read().await;
         conns.get(peer_key_hex).cloned()
     }
@@ -623,7 +620,12 @@ impl AppState {
         // store lock. The previous implementation took the lock
         // unconditionally and then checked — double-checked locking done
         // backwards, with the lock in the fast path.
-        if self.message_store.try_lock().map(|g| g.is_some()).unwrap_or(false) {
+        if self
+            .message_store
+            .try_lock()
+            .map(|g| g.is_some())
+            .unwrap_or(false)
+        {
             return Ok(());
         }
         let mut ms = self.message_store.lock().await;
@@ -641,7 +643,12 @@ impl AppState {
     /// Called on first file transfer, not during vault unlock.
     pub async fn ensure_transfer_store(&self, data_dir: &str) -> Result<(), String> {
         // Fast path without the global lock — see `ensure_message_store`.
-        if self.transfer_store.try_lock().map(|g| g.is_some()).unwrap_or(false) {
+        if self
+            .transfer_store
+            .try_lock()
+            .map(|g| g.is_some())
+            .unwrap_or(false)
+        {
             return Ok(());
         }
         let mut ts = self.transfer_store.lock().await;

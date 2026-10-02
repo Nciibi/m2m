@@ -1952,8 +1952,10 @@ mod port_mapping_tests {
             assert!(accepted.is_ok(), "{url} must be accepted as a gateway");
             let (host, port) = parse_url_host_port(url).unwrap();
             let sock: SocketAddr = format!("{host}:{port}").parse().unwrap_or_else(|e| {
-                panic!("{url} was accepted by validate_upnp_location but parse_url_host_port \
-                        produced an unusable address {host}:{port} ({e})")
+                panic!(
+                    "{url} was accepted by validate_upnp_location but parse_url_host_port \
+                        produced an unusable address {host}:{port} ({e})"
+                )
             });
             assert!(sock.port() != 0);
         }
@@ -1985,10 +1987,11 @@ mod port_mapping_tests {
         // working router.
         assert!(reject_unusable_external_addr("8.8.8.8:41234".parse().unwrap(), "PCP").is_ok());
         assert!(reject_unusable_external_addr("1.1.1.1:41234".parse().unwrap(), "PCP").is_ok());
-        assert!(
-            reject_unusable_external_addr("[2606:4700:4700::1111]:41234".parse().unwrap(), "PCP")
-                .is_ok()
-        );
+        assert!(reject_unusable_external_addr(
+            "[2606:4700:4700::1111]:41234".parse().unwrap(),
+            "PCP"
+        )
+        .is_ok());
     }
 
     /// F19 — `controlURL` must come from the `WANIPConnection` service, not from

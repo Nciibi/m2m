@@ -137,7 +137,11 @@ fn append_candidates_to_sign_data(sign_data: &mut Vec<u8>, candidates: &[WireCan
 ///
 /// This changes the signed transcript and therefore the wire contract; it ships
 /// with the same protocol version bump that introduced the candidate binding.
-fn append_used_opk_to_sign_data(sign_data: &mut Vec<u8>, used_opk: Option<&[u8; 32]>, one_time: bool) {
+fn append_used_opk_to_sign_data(
+    sign_data: &mut Vec<u8>,
+    used_opk: Option<&[u8; 32]>,
+    one_time: bool,
+) {
     match used_opk {
         Some(opk) => {
             sign_data.push(1);
@@ -1232,7 +1236,10 @@ impl Session {
 /// Retained as the reference implementation of that scrub even though
 /// `lock_vault` now drops the whole connection instead — `Drop for Session`
 /// below performs exactly these steps, and this documents what "scrubbed" means.
-#[allow(dead_code, reason = "reference scrubber; lock_vault drains connections so Drop handles this")]
+#[allow(
+    dead_code,
+    reason = "reference scrubber; lock_vault drains connections so Drop handles this"
+)]
 pub fn lock(&mut self) {
     // Both fields' own `Drop` impls zeroize correctly (crypto.rs), so `take()`
     // is the whole mechanism — the same one `Drop for Session` uses.

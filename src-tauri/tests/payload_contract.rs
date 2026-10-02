@@ -131,7 +131,10 @@ fn message_event_key_set_is_exactly_as_the_frontend_expects() {
     assert_eq!(keys, vec!["message", "peer_key_hex"]);
 
     // The nested message must keep its own key set.
-    assert_eq!(chat_message_keys(&v["message"]), expected_chat_message_keys());
+    assert_eq!(
+        chat_message_keys(&v["message"]),
+        expected_chat_message_keys()
+    );
 }
 
 #[test]

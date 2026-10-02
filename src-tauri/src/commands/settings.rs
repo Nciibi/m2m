@@ -88,7 +88,9 @@ pub async fn discover_public_ip(state: State<'_, Arc<AppState>>) -> Result<Strin
 
 /// Get the current STUN configuration.
 #[tauri::command]
-pub async fn get_stun_config(state: State<'_, Arc<AppState>>) -> Result<stun::StunConfig, AppError> {
+pub async fn get_stun_config(
+    state: State<'_, Arc<AppState>>,
+) -> Result<stun::StunConfig, AppError> {
     let config = state.stun_config.read().await;
     Ok(config.clone())
 }
@@ -176,16 +178,22 @@ fn validate_stun_server_list(servers: &[String]) -> Result<(), AppError> {
     // probe target: it must be validated, not merely colon-checked.
     for s in servers {
         if s.len() > 255 {
-            return Err(AppError::invalid(format!("STUN server address too long: {s}")));
+            return Err(AppError::invalid(format!(
+                "STUN server address too long: {s}"
+            )));
         }
         if s.chars().any(|c| c.is_whitespace() || c.is_control()) {
-            return Err(AppError::invalid(format!("invalid STUN server address: {s}")));
+            return Err(AppError::invalid(format!(
+                "invalid STUN server address: {s}"
+            )));
         }
         let (host, port) = s
             .rsplit_once(':')
             .ok_or_else(|| format!("invalid STUN server address (missing port): {s}"))?;
         if host.is_empty() {
-            return Err(AppError::invalid(format!("invalid STUN server address (missing host): {s}")));
+            return Err(AppError::invalid(format!(
+                "invalid STUN server address (missing host): {s}"
+            )));
         }
         if host.contains(':') && !host.starts_with('[') {
             return Err(AppError::invalid(format!(
@@ -196,7 +204,9 @@ fn validate_stun_server_list(servers: &[String]) -> Result<(), AppError> {
             .parse()
             .map_err(|_| format!("invalid STUN server port: {s}"))?;
         if port == 0 {
-            return Err(AppError::invalid(format!("invalid STUN server port (0): {s}")));
+            return Err(AppError::invalid(format!(
+                "invalid STUN server port (0): {s}"
+            )));
         }
     }
     Ok(())
@@ -228,9 +238,9 @@ pub async fn check_connectivity(
 ) -> Result<stun::ConnectivityStatus, AppError> {
     state.ensure_not_air_gapped().await?;
     let config = state.stun_config.read().await;
-    let multi_result = stun::discover_public_addrs(&config)
-        .await
-        .map_err(|e| AppError::invalid(format!("STUN discovery failed for connectivity check: {e}")))?;
+    let multi_result = stun::discover_public_addrs(&config).await.map_err(|e| {
+        AppError::invalid(format!("STUN discovery failed for connectivity check: {e}"))
+    })?;
 
     let nat_type = stun::classify_nat(&multi_result);
     let host_addrs: Vec<String> = crate::local_addr::gather_host_candidates()
@@ -305,7 +315,9 @@ async fn collect_network_diagnostics(
 ) -> Result<candidate::NetworkDiagnostics, AppError> {
     state.ensure_not_air_gapped().await?;
     if tor_enabled {
-        return Err(AppError::blocked("Tor routing is enabled — direct STUN diagnostics are blocked"));
+        return Err(AppError::blocked(
+            "Tor routing is enabled — direct STUN diagnostics are blocked",
+        ));
     }
 
     let nat_type = *state.nat_type.read().await;
@@ -451,13 +463,11 @@ mod tests {
     fn stun_list_requires_a_quorum() {
         assert!(validate_stun_server_list(&[]).is_err());
         assert!(validate_stun_server_list(&["stun.example:3478".to_string()]).is_err());
-        assert!(
-            validate_stun_server_list(&[
-                "stun.a.example:3478".to_string(),
-                "stun.b.example:3478".to_string(),
-            ])
-            .is_ok()
-        );
+        assert!(validate_stun_server_list(&[
+            "stun.a.example:3478".to_string(),
+            "stun.b.example:3478".to_string(),
+        ])
+        .is_ok());
     }
 
     /// Two copies of one server look like a quorum and are not one. Compared
@@ -478,12 +488,21 @@ mod tests {
     /// quorum branch.
     #[test]
     fn stun_list_still_validates_each_entry() {
-        assert!(validate_stun_server_list(&["a:b".to_string(), "stun.b:3478".to_string()]).is_err());
-        assert!(validate_stun_server_list(&[":3478".to_string(), "stun.b:3478".to_string()]).is_err());
-        assert!(validate_stun_server_list(&["stun.a:0".to_string(), "stun.b:3478".to_string()]).is_err());
         assert!(
-            validate_stun_server_list(&["stun.a:99999".to_string(), "stun.b:3478".to_string()]).is_err()
+            validate_stun_server_list(&["a:b".to_string(), "stun.b:3478".to_string()]).is_err()
         );
+        assert!(
+            validate_stun_server_list(&[":3478".to_string(), "stun.b:3478".to_string()]).is_err()
+        );
+        assert!(
+            validate_stun_server_list(&["stun.a:0".to_string(), "stun.b:3478".to_string()])
+                .is_err()
+        );
+        assert!(validate_stun_server_list(&[
+            "stun.a:99999".to_string(),
+            "stun.b:3478".to_string()
+        ])
+        .is_err());
     }
 
     #[tokio::test]

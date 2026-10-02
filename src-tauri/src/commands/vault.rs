@@ -41,10 +41,12 @@ async fn derive_key_blocking(
 pub async fn init_identity(state: State<'_, Arc<AppState>>) -> Result<IdentityInfo, AppError> {
     crypto::init().map_err(|e| AppError::invalid(format!("crypto init failed: {e}")))?;
 
-    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
+    let data_dir = storage::ensure_data_dir()
+        .map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
     let keys_db_path = data_dir.join("keys.db");
 
-    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::storage(format!("key store error: {e}")))?;
+    let key_store = KeyStore::open(&keys_db_path)
+        .map_err(|e| AppError::storage(format!("key store error: {e}")))?;
 
     let has_identity = key_store.has_identity().unwrap_or(false);
 
@@ -139,7 +141,8 @@ pub async fn unlock_vault(
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let _data_dir = storage::ensure_data_dir().map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
+    let _data_dir = storage::ensure_data_dir()
+        .map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
     // Note: messages.db and transfers.db paths are used by
     // ensure_message_store / ensure_transfer_store lazy init in chat.rs/state.rs
 
@@ -358,8 +361,7 @@ pub async fn unlock_vault(
         (kp, xkp, true, legacy_store_data)
     } else if !has_identity {
         // Case 1: First run
-        let kp =
-            IdentityKeypair::generate()?;
+        let kp = IdentityKeypair::generate()?;
 
         let pub_bytes = kp.public_key_bytes();
         let sk_bytes = kp.secret_key_bytes();
@@ -468,10 +470,12 @@ pub async fn unlock_vault(
             if let Some((lnonce, lenc, _lsk, lpub)) = &legacy_store_data {
                 store
                     .update_encrypted_private_key(lenc, lnonce)
-                    .map_err(|e| AppError::invalid(format!("failed to persist migrated identity: {e}")))?;
-                store
-                    .set_vault_initialized()
-                    .map_err(|e| AppError::storage(format!("failed to mark vault initialized: {e}")))?;
+                    .map_err(|e| {
+                        AppError::invalid(format!("failed to persist migrated identity: {e}"))
+                    })?;
+                store.set_vault_initialized().map_err(|e| {
+                    AppError::storage(format!("failed to mark vault initialized: {e}"))
+                })?;
                 if store
                     .insert_account(
                         lpub,
@@ -484,7 +488,9 @@ pub async fn unlock_vault(
                 {
                     store
                         .update_account_private_key(lpub, lenc, lnonce)
-                        .map_err(|e| AppError::invalid(format!("failed to persist migrated account: {e}")))?;
+                        .map_err(|e| {
+                            AppError::invalid(format!("failed to persist migrated account: {e}"))
+                        })?;
                 }
             }
             if let Some((ref x_pub, ref x_enc, ref x_nonce)) = x25519_store_data {
@@ -512,7 +518,8 @@ pub async fn create_vault_account(
     // ─── Passphrase Strength Check ───
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let kp = IdentityKeypair::generate().map_err(|e| AppError::invalid(format!("keypair generation failed: {e}")))?;
+    let kp = IdentityKeypair::generate()
+        .map_err(|e| AppError::invalid(format!("keypair generation failed: {e}")))?;
     let fingerprint = kp.fingerprint();
     let pub_bytes = kp.public_key_bytes();
     let sk_bytes = kp.secret_key_bytes();
@@ -600,8 +607,8 @@ pub async fn add_family_member(
     if nickname.trim().is_empty() {
         return Err(AppError::invalid("nickname cannot be empty"));
     }
-    let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
 
     // Check peer has a conversation (must have connected at least once)
     {
@@ -635,8 +642,8 @@ pub async fn remove_family_member(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
 ) -> Result<(), AppError> {
-    let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
     {
         let ks = state.key_store.lock().await;
         let store = ks.as_ref().ok_or("key store not initialized")?;
@@ -657,8 +664,8 @@ pub async fn set_family_nickname(
     if nickname.trim().is_empty() {
         return Err(AppError::invalid("nickname cannot be empty"));
     }
-    let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
     {
         let sk = state.storage_key.read().await;
         let ks = state.key_store.lock().await;
@@ -678,8 +685,8 @@ pub async fn connect_family_member(
     state: State<'_, Arc<AppState>>,
     peer_key_hex: String,
 ) -> Result<ConnectionInfo, AppError> {
-    let pk_bytes =
-        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
+    let pk_bytes = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
 
     // Extract the identity keypair bytes — drop guard before any .await
     let identity_keypair = {
@@ -762,8 +769,7 @@ pub async fn connect_family_member(
                         our_candidates,
                         x25519_pub,
                     )
-                    .await
-                    ?;
+                    .await?;
 
                 let actual_peer_key = hex::encode(session.peer_identity_pub);
                 let peer_fingerprint = session.peer_fingerprint();
@@ -845,8 +851,8 @@ pub async fn update_family_member(
     peer_key_hex: String,
     invite_str: String,
 ) -> Result<FamilyMember, AppError> {
-    let old_key =
-        util::decode_peer_key(&peer_key_hex).map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
+    let old_key = util::decode_peer_key(&peer_key_hex)
+        .map_err(|e| AppError::invalid(format!("invalid peer key: {e}")))?;
 
     // Validate the invite to extract the new peer key and address
     let signed = crate::identity::validate_invite(&invite_str)
@@ -918,8 +924,8 @@ pub async fn export_identity(
         })).collect::<Vec<_>>(),
     });
 
-    let payload_bytes =
-        serde_json::to_vec(&payload).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+    let payload_bytes = serde_json::to_vec(&payload)
+        .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     // Write: nonce || ciphertext
     std::fs::write(&path, &payload_bytes)
@@ -944,7 +950,8 @@ pub async fn import_identity(
     // so it must meet the same strength requirements as unlock_vault.
     util::validate_passphrase(&passphrase, util::PassphraseKind::Vault)?;
 
-    let data = std::fs::read(&path).map_err(|e| AppError::invalid(format!("failed to read import file: {e}")))?;
+    let data = std::fs::read(&path)
+        .map_err(|e| AppError::invalid(format!("failed to read import file: {e}")))?;
 
     // Parse JSON payload
     let payload: serde_json::Value = serde_json::from_slice(&data)
@@ -1009,7 +1016,9 @@ pub async fn import_identity(
         Ok(kp) => kp,
         Err(e) => {
             sk_arr.zeroize();
-            return Err(AppError::storage(format!("failed to reconstruct identity: {e}")));
+            return Err(AppError::storage(format!(
+                "failed to reconstruct identity: {e}"
+            )));
         }
     };
 
@@ -1017,9 +1026,11 @@ pub async fn import_identity(
     let pub_hex = hex::encode(&pub_bytes);
 
     // Store to vault
-    let data_dir = storage::ensure_data_dir().map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
+    let data_dir = storage::ensure_data_dir()
+        .map_err(|e| AppError::storage(format!("data dir error: {e}")))?;
     let keys_db_path = data_dir.join("keys.db");
-    let key_store = KeyStore::open(&keys_db_path).map_err(|e| AppError::storage(format!("key store error: {e}")))?;
+    let key_store = KeyStore::open(&keys_db_path)
+        .map_err(|e| AppError::storage(format!("key store error: {e}")))?;
 
     // Seal the private key under Argon2id(passphrase, salt = public key) —
     // the exact derivation unlock_vault uses for account lookup — so the
@@ -1303,7 +1314,7 @@ pub async fn lock_vault(
     *ts = None;
     drop(ts);
 
-// Tear down every live connection.
+    // Tear down every live connection.
     //
     // The doc comment above this function used to say "Active connections
     // remain open", and a `Session::lock` scrubber was added on the strength of

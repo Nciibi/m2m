@@ -77,7 +77,9 @@ pub async fn set_discovery_config(
     // Air-gap mode: both LAN multicast and DHT announce leak presence.
     if (config.lan_enabled || config.dht_enabled) && state.security_config.read().await.air_gap_mode
     {
-        return Err(AppError::blocked("air-gap mode is enabled — peer discovery is blocked"));
+        return Err(AppError::blocked(
+            "air-gap mode is enabled — peer discovery is blocked",
+        ));
     }
 
     // Tor routing: LAN multicast does not leave the L2 domain, so it is not an
@@ -423,8 +425,7 @@ pub async fn connect_discovered_peer(
             our_candidates,
             x25519_pub,
         )
-        .await
-        ?;
+        .await?;
 
     let peer_key_hex = hex::encode(session.peer_identity_pub);
     let peer_fingerprint = session.peer_fingerprint();

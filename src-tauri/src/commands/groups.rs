@@ -44,7 +44,9 @@ pub async fn create_group(
     let identity_kp = state.our_identity_kp().await?;
 
     if member_peer_keys.is_empty() {
-        return Err(AppError::invalid("group must have at least one member besides yourself"));
+        return Err(AppError::invalid(
+            "group must have at least one member besides yourself",
+        ));
     }
 
     let group_id = uuid::Uuid::new_v4().to_string();
@@ -95,8 +97,8 @@ pub async fn create_group(
     for (peer_key_hex, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
         finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
-        let serialized =
-            protocol::serialize(&signed).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+        let serialized = protocol::serialize(&signed)
+            .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
         if let Some(conn_arc) = state.peer_connection(peer_key_hex).await {
             let mut conn = conn_arc.lock().await;
@@ -122,8 +124,8 @@ pub async fn create_group(
         created_at: now,
         initial_members: member_peer_keys.clone(),
     };
-    let create_bytes =
-        protocol::serialize(&create_payload).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+    let create_bytes = protocol::serialize(&create_payload)
+        .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     {
         for member_key in &member_peer_keys {
@@ -193,7 +195,12 @@ pub async fn send_group_message(
         let group = gm.get_group_mut(&group_id).ok_or("group not found")?;
         let data = group
             .encrypt_message(&our_peer_key_hex, content.as_bytes())
-            .map_err(|e| AppError::new("crypto.encryption_failed", format!("encryption failed: {e}")))?;
+            .map_err(|e| {
+                AppError::new(
+                    "crypto.encryption_failed",
+                    format!("encryption failed: {e}"),
+                )
+            })?;
         data
     };
 
@@ -209,8 +216,8 @@ pub async fn send_group_message(
             .collect()
     };
 
-    let serialized =
-        protocol::serialize(&encrypted_data).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+    let serialized = protocol::serialize(&encrypted_data)
+        .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     let mut delivered_count = 0u32;
     {
@@ -311,7 +318,9 @@ pub async fn send_group_message(
 
 /// List all groups.
 #[tauri::command]
-pub async fn list_groups(state: State<'_, Arc<AppState>>) -> Result<Vec<super::GroupInfo>, AppError> {
+pub async fn list_groups(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<super::GroupInfo>, AppError> {
     let gm = state.group_manager.read().await;
     let groups = gm.list_groups();
 
@@ -411,8 +420,8 @@ pub async fn invite_to_group(
         for bundle in &bundles {
             let mut signed = bundle.clone();
             finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
-            let serialized =
-                protocol::serialize(&signed).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+            let serialized = protocol::serialize(&signed)
+                .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
             let _ = session
                 .send_encrypted_typed(write_half, PacketType::GroupSenderKey, &serialized)
                 .await;
@@ -442,8 +451,8 @@ pub async fn invite_to_group(
         };
         drop(gm_read);
 
-        let invite_bytes =
-            protocol::serialize(&invite).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+        let invite_bytes = protocol::serialize(&invite)
+            .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
         let _ = session
             .send_encrypted_typed(write_half, PacketType::GroupInvite, &invite_bytes)
             .await;
@@ -496,8 +505,8 @@ pub async fn remove_from_group(
     for (member_key, bundle_data) in &bundles {
         let mut signed = bundle_data.clone();
         finalize_bundle(&identity_kp, &our_peer_key_hex, &mut signed);
-        let serialized =
-            protocol::serialize(&signed).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+        let serialized = protocol::serialize(&signed)
+            .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
         if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
@@ -519,8 +528,8 @@ pub async fn remove_from_group(
             removed_by_peer_key_hex: our_peer_key_hex.clone(),
             new_sender_key: Some(signed),
         };
-        let remove_bytes =
-            protocol::serialize(&remove_msg).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+        let remove_bytes = protocol::serialize(&remove_msg)
+            .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
         if let Some(conn_arc) = state.peer_connection(member_key).await {
             let mut conn = conn_arc.lock().await;
             let PeerConnection {
@@ -579,8 +588,8 @@ pub async fn leave_group(
         group_id: group_id.clone(),
         leaving_peer_key_hex: our_peer_key_hex.clone(),
     };
-    let leave_bytes =
-        protocol::serialize(&leave_msg).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+    let leave_bytes = protocol::serialize(&leave_msg)
+        .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     let gm_read = state.group_manager.read().await;
     let group = gm_read.get_group(&group_id);
@@ -717,8 +726,8 @@ pub async fn update_group_name(
         new_name: Some(new_name),
         changed_by_peer_key_hex: our_peer_key_hex,
     };
-    let info_bytes =
-        protocol::serialize(&info_msg).map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
+    let info_bytes = protocol::serialize(&info_msg)
+        .map_err(|e| AppError::serialization(format!("serialization failed: {e}")))?;
 
     let gm_read = state.group_manager.read().await;
     let member_keys: Vec<String> = gm_read

@@ -34,7 +34,8 @@ pub async fn send_file(
         return Err(AppError::invalid("file not found"));
     }
 
-    let metadata = std::fs::metadata(path).map_err(|e| AppError::invalid(format!("cannot read file: {e}")))?;
+    let metadata =
+        std::fs::metadata(path).map_err(|e| AppError::invalid(format!("cannot read file: {e}")))?;
     let total_size = metadata.len();
     if total_size == 0 {
         return Err(AppError::invalid("cannot send an empty file"));
@@ -188,7 +189,9 @@ pub async fn send_file(
         Err(e) => {
             // Clean up state on send failure
             state.outgoing_transfers.write().await.remove(&transfer_id);
-            Err(AppError::invalid(format!("failed to send file request: {e}")))
+            Err(AppError::invalid(format!(
+                "failed to send file request: {e}"
+            )))
         }
     }
 }
@@ -671,10 +674,14 @@ async fn send_file_chunks_inner(
             let buf = match read_result {
                 Ok(Ok(b)) => b,
                 Ok(Err(e)) => {
-                    return Err(AppError::invalid(format!("failed to read chunk {chunk_index}: {e}")));
+                    return Err(AppError::invalid(format!(
+                        "failed to read chunk {chunk_index}: {e}"
+                    )));
                 }
                 Err(e) => {
-                    return Err(AppError::invalid(format!("chunk {chunk_index} read task failed: {e}")));
+                    return Err(AppError::invalid(format!(
+                        "chunk {chunk_index} read task failed: {e}"
+                    )));
                 }
             };
 
@@ -759,7 +766,10 @@ async fn send_file_chunks_inner(
         };
 
         if !chunk_success {
-            return Err(AppError::invalid(format!("failed to send chunk {}", chunk_index)));
+            return Err(AppError::invalid(format!(
+                "failed to send chunk {}",
+                chunk_index
+            )));
         }
 
         // Emit progress periodically
@@ -908,9 +918,9 @@ fn compute_file_hashes(
     let mut buf = vec![0u8; chunk_size];
 
     loop {
-        let n = file.read(&mut buf).map_err(|e| {
-            AppError::new("io", format!("read error during hash computation: {e}"))
-        })?;
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| AppError::new("io", format!("read error during hash computation: {e}")))?;
         if n == 0 {
             break;
         }

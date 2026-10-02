@@ -57,7 +57,10 @@ fn contact_gate_allows(require_known_contact: bool, is_family: bool, is_known_pe
 ///
 /// Returns `Ok(())` when the connection may proceed, or the user-facing
 /// rejection reason.
-pub(crate) async fn check_contact_gate(state: &AppState, peer_key_hex: &str) -> Result<(), &'static str> {
+pub(crate) async fn check_contact_gate(
+    state: &AppState,
+    peer_key_hex: &str,
+) -> Result<(), &'static str> {
     let require_known = state.security_config.read().await.require_known_contact;
     if !require_known {
         return Ok(());
@@ -330,8 +333,11 @@ pub async fn create_invite(
     let x25519_kp = {
         let x25519 = state.x25519_identity.read().await;
         let kp = x25519.as_ref().ok_or("X25519 identity not initialized")?;
-        crate::crypto::X25519IdentityKeypair::from_bytes(&kp.public_key_bytes(), &kp.secret_key_bytes())
-            .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
+        crate::crypto::X25519IdentityKeypair::from_bytes(
+            &kp.public_key_bytes(),
+            &kp.secret_key_bytes(),
+        )
+        .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
     };
     // Generate a signed prekey for this invite
     let spk = crate::crypto::EphemeralKeypair::generate();
@@ -553,7 +559,9 @@ pub async fn create_invite(
         if private_mode {
             filtered
                 .into_iter()
-                .filter(|c| c.candidate_type != crate::candidate::CandidateType::ServerReflexive as u8)
+                .filter(|c| {
+                    c.candidate_type != crate::candidate::CandidateType::ServerReflexive as u8
+                })
                 .collect()
         } else {
             filtered
@@ -605,8 +613,8 @@ pub async fn start_listening(
 
     // Use std TcpListener first to set a custom backlog (128 for DoS resilience),
     // then convert to tokio for async usage.
-    let std_listener =
-        std::net::TcpListener::bind(addr).map_err(|e| AppError::invalid(format!("failed to bind listener: {e}")))?;
+    let std_listener = std::net::TcpListener::bind(addr)
+        .map_err(|e| AppError::invalid(format!("failed to bind listener: {e}")))?;
     std_listener
         .set_nonblocking(true)
         .map_err(|e| AppError::invalid(format!("failed to set non-blocking: {e}")))?;
@@ -767,7 +775,7 @@ pub(crate) async fn complete_inbound_connection(
     // ── Snapshot the identity, then release the lock ──
     //
     // The handshake is a blocking read of a peer-supplied frame, so holding
-// `state.identity` across it turns an unauthenticated socket into a lever
+    // `state.identity` across it turns an unauthenticated socket into a lever
     // on the vault. `handshake_as_responder_x3dh` waits for a
     // `HandshakeComplete` frame bounded at 256 KiB, and `read_frame_impl` reads
     // three times per frame under a shared total deadline — so a slow peer still
@@ -874,7 +882,13 @@ pub(crate) async fn complete_inbound_connection(
             .map(|k| k.public_key_bytes())
             .unwrap_or([0u8; 32]);
         if let Err(e) = session
-            .handshake_as_responder(&mut stream, &identity_kp, &frame, wire_candidates, x25519_pub)
+            .handshake_as_responder(
+                &mut stream,
+                &identity_kp,
+                &frame,
+                wire_candidates,
+                x25519_pub,
+            )
             .await
         {
             tracing::warn!(error = %e, "handshake failed for incoming connection");
@@ -902,7 +916,8 @@ pub(crate) async fn complete_inbound_connection(
             fingerprint = %peer_fingerprint,
             "incoming connection rejected: {reason} (allowlist enabled)"
         );
-        let _ = network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
+        let _ =
+            network::send_error(&mut stream, protocol::ErrorCode::HandshakeFailed, reason).await;
         return;
     }
 
@@ -1042,8 +1057,8 @@ pub async fn connect_to_peer(
     state: State<'_, Arc<AppState>>,
     invite_str: String,
 ) -> Result<ConnectionInfo, AppError> {
-    let signed =
-        identity::validate_invite(&invite_str).map_err(|e| AppError::invalid(format!("invite invalid: {e}")))?;
+    let signed = identity::validate_invite(&invite_str)
+        .map_err(|e| AppError::invalid(format!("invite invalid: {e}")))?;
 
     let peer_addrs = hole_punch::extract_candidates_from_invite(
         &signed.payload.address_hint,
@@ -1186,7 +1201,9 @@ pub async fn connect_to_peer(
                 // required for DH4 and a public-key-only copy cannot perform it.
                 let xkp = {
                     let x25519 = state.x25519_identity.read().await;
-                    let kp = x25519.as_ref().ok_or("X25519 key not initialized for X3DH")?;
+                    let kp = x25519
+                        .as_ref()
+                        .ok_or("X25519 key not initialized for X3DH")?;
                     crate::crypto::X25519IdentityKeypair::from_bytes(
                         &kp.public_key_bytes(),
                         &kp.secret_key_bytes(),
@@ -1392,10 +1409,7 @@ pub async fn list_peers(state: State<'_, Arc<AppState>>) -> Result<Vec<Connectio
     // process — disconnects, heartbeat teardown, new-connection insert.
     let handles: Vec<(String, Arc<Mutex<crate::state::PeerConnection>>)> = {
         let conns = state.connections.read().await;
-        conns
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
+        conns.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     };
     let mut peers = Vec::new();
 
@@ -1489,8 +1503,8 @@ pub(crate) async fn send_own_bundle(
         super::groups::finalize_bundle(identity, our_peer_key_hex, &mut bundle);
     }
 
-    let serialized =
-        protocol::serialize(&bundle).map_err(|e| AppError::serialization(format!("serialize sender key: {e}")))?;
+    let serialized = protocol::serialize(&bundle)
+        .map_err(|e| AppError::serialization(format!("serialize sender key: {e}")))?;
 
     let conn_arc = state
         .peer_connection(target_peer)
@@ -1507,7 +1521,6 @@ pub(crate) async fn send_own_bundle(
         .await
         .map_err(|e| AppError::invalid(format!("send sender key failed: {e}")))
 }
-
 
 /// Packet handler extracted from spawn_receive_loop (receive-loop split).
 #[allow(clippy::single_match)] // uniform handler signature across packet domains
@@ -1584,8 +1597,7 @@ async fn handle_incoming_text(
                         // under `message_store` — a pair with no documented
                         // acquisition order, which is how the two deadlocks in
                         // this codebase were shaped.
-                        let ephemeral_mode =
-                            state.security_config.read().await.ephemeral_mode;
+                        let ephemeral_mode = state.security_config.read().await.ephemeral_mode;
                         let storage_cap =
                             state.security_config.read().await.effective_storage_cap();
                         let history = *state.history_enabled.read().await && !ephemeral_mode;
@@ -1596,11 +1608,7 @@ async fn handle_incoming_text(
                                 // Enforce the storage cap before writing, so a
                                 // peer already over the ceiling cannot push the
                                 // store further past it.
-                                crate::maintenance::enforce_cap(
-                                    app_handle,
-                                    store,
-                                    storage_cap,
-                                );
+                                crate::maintenance::enforce_cap(app_handle, store, storage_cap);
 
                                 if let Some(peer_bytes) =
                                     util::decode_peer_key_logged(&peer_key_hex)
@@ -1811,9 +1819,7 @@ async fn handle_file_transfer_packet(
                                                         ],
                                                         state: crate::state::TransferState::Pending,
                                                         created_at: std::time::SystemTime::now()
-                                                            .duration_since(
-                                                                std::time::UNIX_EPOCH,
-                                                            )
+                                                            .duration_since(std::time::UNIX_EPOCH)
                                                             .unwrap_or_default()
                                                             .as_secs(),
                                                         error: None,
@@ -2148,18 +2154,18 @@ async fn handle_file_transfer_packet(
                                             };
 
                                         // `transfer.temp_file` was already `.take()`n and moved into the
-                                            // `spawn_blocking` hash closure above, which has returned by now —
-                                            // so the handle is closed, which is what Windows needs before a
-                                            // rename. The guard is on the *path* only.
-                                            let rename_result = match transfer.temp_path.as_ref() {
-                                                Some(temp_path) => {
-                                                    std::fs::rename(temp_path, &final_path)
-                                                }
-                                                None => Err(std::io::Error::new(
-                                                    std::io::ErrorKind::Other,
-                                                    "transfer was missing its temp path",
-                                                )),
-                                            };
+                                        // `spawn_blocking` hash closure above, which has returned by now —
+                                        // so the handle is closed, which is what Windows needs before a
+                                        // rename. The guard is on the *path* only.
+                                        let rename_result = match transfer.temp_path.as_ref() {
+                                            Some(temp_path) => {
+                                                std::fs::rename(temp_path, &final_path)
+                                            }
+                                            None => Err(std::io::Error::new(
+                                                std::io::ErrorKind::Other,
+                                                "transfer was missing its temp path",
+                                            )),
+                                        };
 
                                         match rename_result {
                                             Ok(()) => {
@@ -2206,9 +2212,11 @@ async fn handle_file_transfer_packet(
                                                 let copied = match temp {
                                                     Some(t) => {
                                                         match tokio::task::spawn_blocking(
-                                                            move || util::move_across_filesystems(
-                                                                &t, &dest,
-                                                            ),
+                                                            move || {
+                                                                util::move_across_filesystems(
+                                                                    &t, &dest,
+                                                                )
+                                                            },
                                                         )
                                                         .await
                                                         {

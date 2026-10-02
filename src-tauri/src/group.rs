@@ -122,9 +122,18 @@ impl std::fmt::Debug for Group {
             .field("name", &self.name)
             .field("created_at", &self.created_at)
             .field("members", &self.members.len())
-            .field("our_initial_chain_key", &self.our_initial_chain_key.as_ref().map(|_| "[redacted]"))
-            .field("our_signing_key", &self.our_signing_key.as_ref().map(|_| "[redacted]"))
-            .field("our_verification_key", &self.our_verification_key.as_ref().map(|_| "[redacted]"))
+            .field(
+                "our_initial_chain_key",
+                &self.our_initial_chain_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "our_signing_key",
+                &self.our_signing_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "our_verification_key",
+                &self.our_verification_key.as_ref().map(|_| "[redacted]"),
+            )
             .field("receiver_chains", &self.receiver_chains.len())
             .field("verification_keys", &self.verification_keys.len())
             .finish()
@@ -719,7 +728,8 @@ impl GroupManager {
             .verification_keys
             .contains_key(&data.sender_peer_key_hex);
 
-        group.accepted_bundles
+        group
+            .accepted_bundles
             .insert(data.sender_peer_key_hex.clone());
         group.store_receiver_key(
             &data.sender_peer_key_hex,
@@ -1580,15 +1590,32 @@ mod group_tests {
 
         let mut gm_alice = make_group_manager();
         gm_alice
-            .create_group("g".into(), "G".into(), 1, alice_hex.clone(), &[bob_hex.clone()])
+            .create_group(
+                "g".into(),
+                "G".into(),
+                1,
+                alice_hex.clone(),
+                &[bob_hex.clone()],
+            )
             .unwrap();
 
         let mut gm_bob = make_group_manager();
         gm_bob
-            .join_group("g".into(), "G".into(), 1, bob_hex.clone(), false, &[alice_hex.clone()])
+            .join_group(
+                "g".into(),
+                "G".into(),
+                1,
+                bob_hex.clone(),
+                false,
+                &[alice_hex.clone()],
+            )
             .unwrap();
 
-        let mut bundle = gm_bob.get_group_mut("g").unwrap().own_sender_bundle().unwrap();
+        let mut bundle = gm_bob
+            .get_group_mut("g")
+            .unwrap()
+            .own_sender_bundle()
+            .unwrap();
         bundle.sender_peer_key_hex = bob_hex.clone();
         bundle.signature = bob_id.sign(&sender_key_bundle_sign_bytes(&bundle));
 
@@ -1618,7 +1645,11 @@ mod group_tests {
             .encrypt_message(&bundle.sender_peer_key_hex, b"first")
             .unwrap();
         assert_eq!(
-            gm_alice.get_group_mut("g").unwrap().decrypt_message(&msg).unwrap(),
+            gm_alice
+                .get_group_mut("g")
+                .unwrap()
+                .decrypt_message(&msg)
+                .unwrap(),
             b"first"
         );
 
@@ -1638,7 +1669,11 @@ mod group_tests {
             .encrypt_message(&bundle.sender_peer_key_hex, b"second")
             .unwrap();
         assert_eq!(
-            gm_alice.get_group_mut("g").unwrap().decrypt_message(&second).unwrap(),
+            gm_alice
+                .get_group_mut("g")
+                .unwrap()
+                .decrypt_message(&second)
+                .unwrap(),
             b"second"
         );
     }
@@ -1666,7 +1701,9 @@ mod group_tests {
     #[test]
     fn test_sender_key_bundle_accepted_again_after_rejoin() {
         let (mut gm_alice, _gm_bob, bundle, bob_id, alice_hex) = alice_bob_g();
-        gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes()).unwrap();
+        gm_alice
+            .handle_sender_key(&bundle, "", &bob_id.public_key_bytes())
+            .unwrap();
         gm_alice
             .remove_member("g", &bundle.sender_peer_key_hex, &alice_hex)
             .unwrap();
@@ -1684,7 +1721,10 @@ mod group_tests {
                 added_at: 1,
             });
         let res = gm_alice.handle_sender_key(&bundle, "", &bob_id.public_key_bytes());
-        assert!(res.is_ok(), "a re-joined member must be able to re-announce: {res:?}");
+        assert!(
+            res.is_ok(),
+            "a re-joined member must be able to re-announce: {res:?}"
+        );
     }
 
     /// A `GroupInvite` for a group we are *already in* used to skip the roster
@@ -1706,7 +1746,10 @@ mod group_tests {
         let err = gm
             .join_group("g".into(), "G".into(), 1, alice_hex.clone(), false, &huge)
             .expect_err("an oversized roster must be rejected even for a group we are in");
-        assert!(err.contains("exceeds the maximum"), "unhelpful error: {err}");
+        assert!(
+            err.contains("exceeds the maximum"),
+            "unhelpful error: {err}"
+        );
 
         // And nothing was added.
         assert_eq!(gm.get_group("g").unwrap().members.len(), 1);

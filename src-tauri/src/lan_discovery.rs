@@ -211,7 +211,9 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // gets `EADDRINUSE` and discovery silently stops working for that user. A
     // failure here is fatal for the same reason — carrying on would bind a
     // socket that cannot receive anything and report discovery as running.
-    socket.set_reuse_address(true).map_err(LanDiscoveryError::Io)?;
+    socket
+        .set_reuse_address(true)
+        .map_err(LanDiscoveryError::Io)?;
     // Not fatal on its own: this option is absent on some platforms, and its
     // absence degrades to `SO_REUSEADDR` semantics rather than breaking a single
     // instance. Logged because it is the difference between two instances
@@ -227,10 +229,7 @@ fn bind_multicast_listener(port: u16) -> Result<UdpSocket, LanDiscoveryError> {
     // `SockAddr::from(&SocketAddr)` is `socket2`'s own conversion; written as
     // an explicit `from` rather than `.into()` so the target type is stated
     // rather than inferred from `bind`'s signature.
-    let addr = socket2::SockAddr::from(&SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        port,
-    ));
+    let addr = socket2::SockAddr::from(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port));
     socket.bind(&addr).map_err(LanDiscoveryError::Io)?;
 
     // `From<Socket> for UdpSocket` transfers ownership, so the resulting
@@ -430,14 +429,18 @@ pub async fn start(
     // and the node listed *itself* as a discovered LAN peer — an entry the UI
     // then offered to connect to, and (via `dht::lan_dht_seeds`) a DHT node to
     // announce our own address to.
-    socket.set_multicast_loop_v4(false).map_err(LanDiscoveryError::Io)?;
+    socket
+        .set_multicast_loop_v4(false)
+        .map_err(LanDiscoveryError::Io)?;
 
     // TTL 1 keeps the datagram on the local link, which is the entire intent
     // of LAN discovery. The platform default happens to be 1 on the common
     // stacks, but "happens to be" is not a property this disclosure should
     // depend on: a datagram that escaped onto a routed segment would be
     // readable by every AS between here and wherever it landed.
-    socket.set_multicast_ttl_v4(1).map_err(LanDiscoveryError::Io)?;
+    socket
+        .set_multicast_ttl_v4(1)
+        .map_err(LanDiscoveryError::Io)?;
 
     // Join the multicast group. This used to be `let _ = ...`, i.e. the error
     // was constructed and thrown away: a failed join (no route to the group,
@@ -457,7 +460,9 @@ pub async fn start(
     // receive loop, heartbeat and self-destruct timer in the messaging path —
     // and it also meant `cancel` was only observed after each 5s block.
     // `from_std` requires non-blocking mode to already be set.
-    socket.set_nonblocking(true).map_err(LanDiscoveryError::Io)?;
+    socket
+        .set_nonblocking(true)
+        .map_err(LanDiscoveryError::Io)?;
     let socket = Arc::new(tokio::net::UdpSocket::from_std(socket).map_err(LanDiscoveryError::Io)?);
     let socket_listener = socket.clone();
     let socket_announcer = socket.clone();
@@ -581,7 +586,10 @@ pub async fn start(
             }
 
             match socket_announcer
-                .send_to(&packet, SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT))
+                .send_to(
+                    &packet,
+                    SocketAddr::new(IpAddr::V4(MULTICAST_ADDR), MULTICAST_PORT),
+                )
                 .await
             {
                 Ok(n) => {

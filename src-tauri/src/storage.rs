@@ -1624,11 +1624,11 @@ impl MessageStore {
         // unreadable". Collapsing the second into zero makes a broken counter
         // read as an empty store, which disables the cap and shows the user
         // "0 bytes used" on a full disk — a claim the disk cannot back.
-        match self
-            .conn
-            .query_row("SELECT total_bytes FROM storage_stats WHERE id = 1", [], |row| {
-                row.get::<_, i64>(0)
-            }) {
+        match self.conn.query_row(
+            "SELECT total_bytes FROM storage_stats WHERE id = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        ) {
             Ok(total) => Ok(total.max(0) as u64),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
             Err(e) => Err(e.into()),
@@ -1741,7 +1741,7 @@ impl MessageStore {
     /// messages before the user turned ephemeral mode on still owes them the
     /// timers they were given.
     pub fn sweep(&self, cap_bytes: u64) -> Result<SweepOutcome, StorageError> {
-let expired_messages = self.delete_expired_messages()?;
+        let expired_messages = self.delete_expired_messages()?;
         if expired_messages > 0 {
             tracing::info!(
                 expired = expired_messages,
@@ -1901,10 +1901,7 @@ let expired_messages = self.delete_expired_messages()?;
             {
                 let tx = self.conn.unchecked_transaction()?;
                 for id in &gids {
-                    tx.execute(
-                        "DELETE FROM group_messages WHERE id = ?1",
-                        params![id],
-                    )?;
+                    tx.execute("DELETE FROM group_messages WHERE id = ?1", params![id])?;
                 }
                 tx.commit()?;
             }
@@ -1983,10 +1980,7 @@ let expired_messages = self.delete_expired_messages()?;
     }
 
     /// The oldest `limit` group message ids, with their total stored size.
-    fn oldest_group_message_batch(
-        &self,
-        limit: usize,
-    ) -> Result<(Vec<String>, i64), StorageError> {
+    fn oldest_group_message_batch(&self, limit: usize) -> Result<(Vec<String>, i64), StorageError> {
         let rows: Vec<(String, i64)> = {
             let mut stmt = self.conn.prepare(
                 "SELECT id,
@@ -2043,7 +2037,8 @@ let expired_messages = self.delete_expired_messages()?;
 
     /// How many content keys this store has destroyed by shredding.
     pub fn shredded_key_count(&self) -> u64 {
-        self.shredded_keys.load(std::sync::atomic::Ordering::Relaxed)
+        self.shredded_keys
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Finish any shred whose delete did not survive a crash.
@@ -2112,7 +2107,6 @@ let expired_messages = self.delete_expired_messages()?;
         }
         Ok(n as u64)
     }
-
 
     /// Create or get a conversation.
     pub fn ensure_conversation(
@@ -2343,8 +2337,7 @@ let expired_messages = self.delete_expired_messages()?;
     /// Returns the number of messages destroyed.
     pub fn delete_messages_by_retention_policy(&self) -> Result<u32, StorageError> {
         let now = chrono::Utc::now().timestamp();
-        self.conn
-            .pragma_update(None, "secure_delete", "ON")?;
+        self.conn.pragma_update(None, "secure_delete", "ON")?;
 
         // Only conversations that actually asked for destruction. `policy =
         // 'export'` means "keep it, I'll export it", so it must not be swept.
@@ -2889,7 +2882,7 @@ let expired_messages = self.delete_expired_messages()?;
 
     // ─── Self-Destruct (Expired Messages) ─────────────
 
-/// Permanently delete expired messages from the database, with
+    /// Permanently delete expired messages from the database, with
     /// crypto-shredding (H7): shred wrapped keys first, truncate the WAL,
     /// then delete the rows in one transaction.
     ///
@@ -4736,7 +4729,16 @@ mod tests {
         let once = store.stored_bytes().unwrap();
         for _ in 0..5 {
             store
-                .store_message_secure("m0", "c1", "received", &vec![b'x'; 500], 1_000, None, true, &test_key())
+                .store_message_secure(
+                    "m0",
+                    "c1",
+                    "received",
+                    &vec![b'x'; 500],
+                    1_000,
+                    None,
+                    true,
+                    &test_key(),
+                )
                 .unwrap();
         }
         assert_eq!(store.stored_bytes().unwrap(), once);
@@ -4826,7 +4828,10 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(live_keys, 0, "surviving rows keep their keys; evicted keys are zeroed");
+        assert_eq!(
+            live_keys, 0,
+            "surviving rows keep their keys; evicted keys are zeroed"
+        );
     }
 
     #[test]
@@ -4913,19 +4918,26 @@ mod tests {
 
         let before: Vec<u8> = store
             .conn
-            .query_row("SELECT content_key_wrapped FROM messages WHERE id = 'm0'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT content_key_wrapped FROM messages WHERE id = 'm0'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
-        assert!(before.iter().any(|&b| b != 0), "a real wrapped key is not all zeros");
+        assert!(
+            before.iter().any(|&b| b != 0),
+            "a real wrapped key is not all zeros"
+        );
 
         store.shred_message_keys(&["m0".to_string()]).unwrap();
 
         let after: Vec<u8> = store
             .conn
-            .query_row("SELECT content_key_wrapped FROM messages WHERE id = 'm0'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT content_key_wrapped FROM messages WHERE id = 'm0'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(after.len(), WRAPPED_CEK_LEN);
         assert!(
@@ -4936,7 +4948,10 @@ mod tests {
         // And the consequence: the content can no longer be decrypted, even
         // though the row and its ciphertext are still there.
         let msgs = store.load_messages("c1", 10).unwrap();
-        let m0 = msgs.iter().find(|m| m.id == "m0").expect("row still present");
+        let m0 = msgs
+            .iter()
+            .find(|m| m.id == "m0")
+            .expect("row still present");
         assert!(
             MessageStore::decrypt_stored_content(
                 &m0.content_encrypted,
@@ -5069,7 +5084,16 @@ mod tests {
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let past = chrono::Utc::now().timestamp() - 3600;
         store
-            .store_message_secure("m-expired", "c1", "sent", b"gone", past, Some(past), true, &test_key())
+            .store_message_secure(
+                "m-expired",
+                "c1",
+                "sent",
+                b"gone",
+                past,
+                Some(past),
+                true,
+                &test_key(),
+            )
             .unwrap();
         fill_messages(&store, "c1", 6, 1000);
         let after_expiry_bytes = {
@@ -5082,7 +5106,11 @@ mod tests {
             store.stored_bytes().unwrap()
         };
         assert!(
-            store.load_messages("c1", 100).unwrap().iter().all(|m| m.id != "m-expired"),
+            store
+                .load_messages("c1", 100)
+                .unwrap()
+                .iter()
+                .all(|m| m.id != "m-expired"),
             "the expired message must be gone from the store"
         );
 
@@ -5131,11 +5159,16 @@ mod tests {
         // expired rows, so asserting through it would prove nothing.
         let on_disk: i64 = store
             .conn
-            .query_row("SELECT COUNT(*) FROM messages WHERE conversation_id = 'c1'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = 'c1'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
-        assert_eq!(on_disk, 0, "the rows must be physically removed, not just hidden");
+        assert_eq!(
+            on_disk, 0,
+            "the rows must be physically removed, not just hidden"
+        );
     }
 
     #[test]
@@ -5154,7 +5187,10 @@ mod tests {
             .unwrap();
 
         let outcome = store.sweep(u64::MAX / 4).unwrap();
-        assert_eq!(outcome.expired_messages, 0, "an 'export' policy must not destroy");
+        assert_eq!(
+            outcome.expired_messages, 0,
+            "an 'export' policy must not destroy"
+        );
         let on_disk: i64 = store
             .conn
             .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
@@ -5197,14 +5233,29 @@ mod tests {
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let far = chrono::Utc::now().timestamp() + 7 * 86_400;
         store
-            .store_message_secure("m7d", "c1", "sent", b"keep", 1_000, Some(far), true, &test_key())
+            .store_message_secure(
+                "m7d",
+                "c1",
+                "sent",
+                b"keep",
+                1_000,
+                Some(far),
+                true,
+                &test_key(),
+            )
             .unwrap();
 
-        store.set_conversation_retention("c1", "delete", Some(3600)).unwrap();
+        store
+            .set_conversation_retention("c1", "delete", Some(3600))
+            .unwrap();
 
         let got: i64 = store
             .conn
-            .query_row("SELECT expires_at FROM messages WHERE id = 'm7d'", [], |r| r.get(0))
+            .query_row(
+                "SELECT expires_at FROM messages WHERE id = 'm7d'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(got, far, "the longer per-message timer must win");
     }
@@ -5220,7 +5271,16 @@ mod tests {
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let past = chrono::Utc::now().timestamp() - 60;
         store
-            .store_message_secure("m-gone", "c1", "sent", b"x", past, Some(past), true, &test_key())
+            .store_message_secure(
+                "m-gone",
+                "c1",
+                "sent",
+                b"x",
+                past,
+                Some(past),
+                true,
+                &test_key(),
+            )
             .unwrap();
         store
             .conn
@@ -5237,7 +5297,10 @@ mod tests {
             .conn
             .query_row("SELECT COUNT(*) FROM reactions", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(remaining, 0, "a reaction must not outlive the message it annotates");
+        assert_eq!(
+            remaining, 0,
+            "a reaction must not outlive the message it annotates"
+        );
     }
 
     #[test]
@@ -5249,10 +5312,28 @@ mod tests {
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let past = chrono::Utc::now().timestamp() - 60;
         store
-            .store_message_secure("m-exp", "c1", "received", b"x", past, Some(past), true, &test_key())
+            .store_message_secure(
+                "m-exp",
+                "c1",
+                "received",
+                b"x",
+                past,
+                Some(past),
+                true,
+                &test_key(),
+            )
             .unwrap();
         store
-            .store_message_secure("m-live", "c1", "received", b"y", 2_000, None, true, &test_key())
+            .store_message_secure(
+                "m-live",
+                "c1",
+                "received",
+                b"y",
+                2_000,
+                None,
+                true,
+                &test_key(),
+            )
             .unwrap();
         store
             .conn
@@ -5267,7 +5348,10 @@ mod tests {
 
         let summary = store.list_conversations().unwrap();
         let c1 = summary.iter().find(|c| c.id == "c1").unwrap();
-        assert_eq!(c1.unread_count, 0, "expired and deleted rows must not inflate the badge");
+        assert_eq!(
+            c1.unread_count, 0,
+            "expired and deleted rows must not inflate the badge"
+        );
         assert_eq!(c1.message_count, 0);
     }
 
@@ -5384,10 +5468,28 @@ mod tests {
             let store = MessageStore::open(&db_path).unwrap();
             store.ensure_conversation("c1", &[0x11; 32]).unwrap();
             store
-                .store_message_secure("m-expired", "c1", "sent", b"boom", past, Some(past), true, &test_key())
+                .store_message_secure(
+                    "m-expired",
+                    "c1",
+                    "sent",
+                    b"boom",
+                    past,
+                    Some(past),
+                    true,
+                    &test_key(),
+                )
                 .unwrap();
             store
-                .store_message_secure("m-live", "c1", "sent", b"keep", past, Some(future), true, &test_key())
+                .store_message_secure(
+                    "m-live",
+                    "c1",
+                    "sent",
+                    b"keep",
+                    past,
+                    Some(future),
+                    true,
+                    &test_key(),
+                )
                 .unwrap();
         }
         // "Closed" — the process is gone, nothing has run since.
@@ -5475,15 +5577,22 @@ mod tests {
             store.ensure_conversation("c1", &[0x11; 32]).unwrap();
             for id in ["m-gone", "m-shredded", "m-keep", "m-tombstone"] {
                 store
-                    .store_message_secure(id, "c1", "sent", b"content", 1000, None, true, &test_key())
+                    .store_message_secure(
+                        id,
+                        "c1",
+                        "sent",
+                        b"content",
+                        1000,
+                        None,
+                        true,
+                        &test_key(),
+                    )
                     .unwrap();
             }
             // A user-initiated "delete for everyone": also a zeroed key, but
             // `deleted = 1`, and it must survive as a tombstone.
             assert!(
-                store
-                    .delete_message("m-tombstone", "c1", "sent")
-                    .unwrap(),
+                store.delete_message("m-tombstone", "c1", "sent").unwrap(),
                 "the user-delete under test must actually have applied"
             );
 
@@ -5526,10 +5635,7 @@ mod tests {
 
         assert_eq!(
             on_disk,
-            vec![
-                "m-keep".to_string(),
-                "m-tombstone".to_string(),
-            ],
+            vec!["m-keep".to_string(), "m-tombstone".to_string(),],
             "the interrupted shred's row must be reclaimed at open, while the \
              user-deleted tombstone and untouched rows survive"
         );
@@ -5728,7 +5834,10 @@ mod tests {
             .get_reactions(&["m-1".to_string()], Some(&key))
             .unwrap();
         assert_eq!(map["m-1"].len(), 1);
-        assert_eq!(map["m-1"][0].0, "🎉", "the wrong reaction must not be deleted");
+        assert_eq!(
+            map["m-1"][0].0, "🎉",
+            "the wrong reaction must not be deleted"
+        );
     }
 
     /// A wrong *key* is the same failure as a missing one and must be treated
@@ -5906,7 +6015,16 @@ mod tests {
         store.ensure_conversation("c1", &[0x11; 32]).unwrap();
         let past = chrono::Utc::now().timestamp() - 60;
         store
-            .store_message_secure("m-old", "c1", "sent", b"x", past, Some(past), true, &test_key())
+            .store_message_secure(
+                "m-old",
+                "c1",
+                "sent",
+                b"x",
+                past,
+                Some(past),
+                true,
+                &test_key(),
+            )
             .unwrap();
         store
             .conn
@@ -5946,10 +6064,7 @@ mod tests {
     fn test_fresh_database_has_all_migrated_columns() {
         let store = mem_messagestore();
 
-        let mut stmt = store
-            .conn
-            .prepare("PRAGMA table_info(messages)")
-            .unwrap();
+        let mut stmt = store.conn.prepare("PRAGMA table_info(messages)").unwrap();
         let columns: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(1))
             .unwrap()
@@ -6028,14 +6143,7 @@ mod tests {
         // and was handed to the AEAD as a 24-byte nonce plus one byte of
         // ciphertext — rejected by Poly1305 for a reason that has nothing to do
         // with the real cause, and indistinguishable from tampering.
-        for len in [
-            0usize,
-            1,
-            23,
-            25,
-            WRAPPED_CEK_LEN - 1,
-            WRAPPED_CEK_LEN + 1,
-        ] {
+        for len in [0usize, 1, 23, 25, WRAPPED_CEK_LEN - 1, WRAPPED_CEK_LEN + 1] {
             let err = MessageStore::unwrap_cek(&vec![0xAA; len], &test_key()).unwrap_err();
             assert!(
                 matches!(err, StorageError::KeyNotFound),

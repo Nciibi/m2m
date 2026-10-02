@@ -465,7 +465,10 @@ pub struct RawFrame {
 /// [`FRAME_READ_DEADLINE`]. Prefer the `_with` form where the wait is
 /// meaningful: the relay keepalive loop must pass a *longer* budget, because it
 /// is deliberately parked waiting for a reply that may not arrive.
-#[allow(dead_code, reason = "default-budget convenience wrapper; see read_exact_timeout_with")]
+#[allow(
+    dead_code,
+    reason = "default-budget convenience wrapper; see read_exact_timeout_with"
+)]
 pub(crate) async fn read_exact_timeout<R: AsyncRead + Unpin>(
     reader: &mut R,
     buf: &mut [u8],

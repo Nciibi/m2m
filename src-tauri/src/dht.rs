@@ -613,7 +613,10 @@ pub async fn announce_loop(
         // [`lan_dht_seeds`].
         let (nodes, warned) = {
             let state = dht_state.read().await;
-            (state.config.bootstrap_nodes.clone(), state.warned_no_bootstrap)
+            (
+                state.config.bootstrap_nodes.clone(),
+                state.warned_no_bootstrap,
+            )
         };
 
         let nodes = if nodes.is_empty() {

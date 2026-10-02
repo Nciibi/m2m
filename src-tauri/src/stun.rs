@@ -1172,10 +1172,7 @@ mod tests {
         let results = vec![result("8.8.8.8:40000", "rogue.example:3478")];
         let (consensus, addr) = aggregate_consensus(&results);
         assert!(!consensus, "one responder must not be consensus");
-        assert_eq!(
-            addr, None,
-            "a below-quorum address must not be published"
-        );
+        assert_eq!(addr, None, "a below-quorum address must not be published");
     }
 
     /// Two independent servers agreeing is the documented floor.
@@ -1274,16 +1271,16 @@ mod tests {
             "192.168.1.5:1",     // LAN address published into an invite
             "10.0.0.1:1",
             "172.16.0.1:1",
-            "100.64.0.1:1",      // CGNAT — identifies the ISP, not routable
-            "169.254.169.254:80", // cloud instance metadata (SSRF target)
-            "224.0.0.1:1",       // multicast
-            "255.255.255.255:1", // broadcast
-            "[::1]:1",           // IPv6 loopback
+            "100.64.0.1:1",           // CGNAT — identifies the ISP, not routable
+            "169.254.169.254:80",     // cloud instance metadata (SSRF target)
+            "224.0.0.1:1",            // multicast
+            "255.255.255.255:1",      // broadcast
+            "[::1]:1",                // IPv6 loopback
             "[::ffff:192.168.1.5]:1", // private address in IPv4-mapped form
-            "[fc00::1]:1",       // unique local
-            "[fe80::1]:1",       // link local
-            "[ff02::1]:1",       // multicast
-            "[2001:db8::1]:1",   // documentation (RFC 3849)
+            "[fc00::1]:1",            // unique local
+            "[fe80::1]:1",            // link local
+            "[ff02::1]:1",            // multicast
+            "[2001:db8::1]:1",        // documentation (RFC 3849)
         ] {
             let parsed: SocketAddr = addr
                 .parse()
@@ -1303,8 +1300,8 @@ mod tests {
             "8.8.8.8:19302",
             "1.1.1.1:3478",
             "45.33.32.156:41234",
-            "172.32.0.1:1000",   // just outside 172.16/12
-            "100.128.0.1:1000",  // just outside 100.64/10
+            "172.32.0.1:1000",             // just outside 172.16/12
+            "100.128.0.1:1000",            // just outside 100.64/10
             "[2606:4700:4700::1111]:3478", // global IPv6 unicast
         ] {
             let parsed: SocketAddr = addr.parse().expect("SocketAddr");

@@ -108,7 +108,10 @@ struct Registration {
 impl Registration {
     /// Age since the last KEEPALIVE (or since registration, if none arrived).
     fn idle_for(&self) -> Duration {
-        self.last_seen.lock().expect("last_seen mutex poisoned").elapsed()
+        self.last_seen
+            .lock()
+            .expect("last_seen mutex poisoned")
+            .elapsed()
     }
 }
 

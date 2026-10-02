@@ -61,7 +61,10 @@ pub struct AppError {
 impl AppError {
     /// Build an error with an explicit code.
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+        Self {
+            code,
+            message: message.into(),
+        }
     }
 
     /// A validation / bad-input failure. The default for anything the caller

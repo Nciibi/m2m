@@ -6,7 +6,6 @@
 ///
 /// This prevents the storage encryption key from being written to disk
 /// via swapping, which would defeat the at-rest encryption.
-
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use zeroize::Zeroize;

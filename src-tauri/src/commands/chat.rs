@@ -191,13 +191,7 @@ pub async fn list_conversations(
     // taking the storage locks. Holding it across the message-store work
     // blocked every connection writer in the process for the duration of a
     // full-table scan plus a per-conversation decrypt.
-    let connected: HashSet<String> = state
-        .connections
-        .read()
-        .await
-        .keys()
-        .cloned()
-        .collect();
+    let connected: HashSet<String> = state.connections.read().await.keys().cloned().collect();
     let sk = state.storage_key.read().await;
 
     // Lazy init: open message store on first list if not already opened
@@ -399,7 +393,8 @@ pub async fn export_conversation(
     file_data.extend_from_slice(&nonce);
     file_data.extend_from_slice(&ciphertext);
 
-    std::fs::write(&export_path, &file_data).map_err(|e| AppError::invalid(format!("failed to write export: {e}")))?;
+    std::fs::write(&export_path, &file_data)
+        .map_err(|e| AppError::invalid(format!("failed to write export: {e}")))?;
 
     Ok(export_path)
 }
@@ -448,8 +443,8 @@ pub async fn send_reaction(
         reaction,
         remove: false,
     };
-    let plaintext =
-        crate::protocol::serialize(&data).map_err(|e| AppError::serialization(format!("serialize reaction: {e}")))?;
+    let plaintext = crate::protocol::serialize(&data)
+        .map_err(|e| AppError::serialization(format!("serialize reaction: {e}")))?;
     let crate::state::PeerConnection {
         session,
         write_half,
@@ -502,8 +497,8 @@ pub async fn remove_reaction(
         reaction,
         remove: true,
     };
-    let plaintext =
-        crate::protocol::serialize(&data).map_err(|e| AppError::serialization(format!("serialize reaction: {e}")))?;
+    let plaintext = crate::protocol::serialize(&data)
+        .map_err(|e| AppError::serialization(format!("serialize reaction: {e}")))?;
     let crate::state::PeerConnection {
         session,
         write_half,
@@ -693,8 +688,8 @@ pub async fn edit_message(
             new_content: new_content.clone(),
             edited_at: now,
         };
-        let serialized =
-            protocol::serialize(&edit_data).map_err(|e| AppError::serialization(format!("serialization error: {e}")))?;
+        let serialized = protocol::serialize(&edit_data)
+            .map_err(|e| AppError::serialization(format!("serialization error: {e}")))?;
         let PeerConnection {
             session,
             write_half,
@@ -745,8 +740,8 @@ pub async fn delete_message(
         let delete_data = crate::protocol::MessageDeleteData {
             message_id: message_id.clone(),
         };
-        let serialized =
-            protocol::serialize(&delete_data).map_err(|e| AppError::serialization(format!("serialization error: {e}")))?;
+        let serialized = protocol::serialize(&delete_data)
+            .map_err(|e| AppError::serialization(format!("serialization error: {e}")))?;
         let PeerConnection {
             session,
             write_half,
@@ -779,11 +774,7 @@ pub async fn cleanup_expired_messages(state: State<'_, Arc<AppState>>) -> Result
 /// default-constructed config to the 10 GiB default rather than to "no limit".
 #[tauri::command]
 pub async fn get_storage_usage(state: State<'_, Arc<AppState>>) -> Result<StorageUsage, AppError> {
-    let cap = state
-        .security_config
-        .read()
-        .await
-        .effective_storage_cap();
+    let cap = state.security_config.read().await.effective_storage_cap();
     // The store is opened lazily, so a fresh install has none yet. That is a
     // legitimate "0 bytes used", not an error — reporting it as a failure would
     // leave the settings screen blank on first run.
@@ -1008,9 +999,9 @@ pub async fn search_messages(
     query: String,
 ) -> Result<Vec<ChatMessage>, AppError> {
     let messages: Vec<ChatMessage> = {
-                                // Lock order: `storage_key` before `message_store`, the
-                                // order used by every other read path. See
-                                // `commands::util::LOCK_ORDER` for why.
+        // Lock order: `storage_key` before `message_store`, the
+        // order used by every other read path. See
+        // `commands::util::LOCK_ORDER` for why.
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let (Some(store), Some(key)) = (ms.as_ref(), sk.as_ref()) {

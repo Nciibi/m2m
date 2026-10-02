@@ -554,7 +554,11 @@ mod dial_tests {
         );
     }
 
-    fn wc(address: &str, candidate_type: u8, relay_id: Option<&str>) -> crate::protocol::WireCandidate {
+    fn wc(
+        address: &str,
+        candidate_type: u8,
+        relay_id: Option<&str>,
+    ) -> crate::protocol::WireCandidate {
         crate::protocol::WireCandidate {
             address: address.to_string(),
             candidate_type,

@@ -58,7 +58,8 @@ pub fn decode_peer_key(hex_str: &str) -> Result<[u8; 32], AppError> {
             hex_str.len()
         )));
     }
-    let bytes = hex::decode(hex_str).map_err(|e| AppError::invalid(format!("invalid peer key hex: {e}")))?;
+    let bytes = hex::decode(hex_str)
+        .map_err(|e| AppError::invalid(format!("invalid peer key hex: {e}")))?;
     let mut key = [0u8; 32];
     key.copy_from_slice(&bytes);
     Ok(key)
@@ -593,7 +594,10 @@ pub fn create_temp_file() -> std::io::Result<(std::fs::File, std::path::PathBuf)
 /// or full volume, so this must be called off the async runtime
 /// (`spawn_blocking`). The `rename` fast path is kept first because it is atomic
 /// and free.
-pub fn move_across_filesystems(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+pub fn move_across_filesystems(
+    from: &std::path::Path,
+    to: &std::path::Path,
+) -> std::io::Result<()> {
     use std::io::{Read, Write};
 
     match std::fs::rename(from, to) {
