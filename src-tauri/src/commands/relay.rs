@@ -58,6 +58,8 @@ pub async fn set_relay_config(
     state: State<'_, Arc<AppState>>,
     config: Option<RelayConfig>,
 ) -> Result<(), AppError> {
+    // `RelayConfig` has no `Serialize`, so it cannot be echoed back to the
+    // webview on any path — including the error path below.
     // Validate the config if provided
     if let Some(ref cfg) = config {
         if cfg.host.trim().is_empty() {
