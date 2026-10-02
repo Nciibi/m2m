@@ -401,7 +401,7 @@ async fn punch_connect_only(
     }
     // Retained for symmetry with the other strategies; unused by design.
     let _ = our_listener_addr;
-    connect_sequential(&peer_candidates).await
+    connect_sequential(peer_candidates).await
 }
 
 /// Try all peer candidates sequentially (simple connect).
