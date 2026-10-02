@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Input, Card, Badge, ToastContainer } from "../components/ui";
 import {
@@ -47,17 +47,18 @@ export default function HubView() {
   const [family, setFamily] = useState<FamilyMember[]>([]);
   const [_familyLoading, setFamilyLoading] = useState(false);
 
-  const handleCopy = async () => {
-    // `setCopied(true)` used to be unconditional, so the green ✓ — the user's
+const handleCopy = async (): Promise<boolean> => {
+    // `setCopied(true)` used to be unconditional, so the green ✓ the user's
     // only confirmation that a 60-minute one-time invite actually reached the
     // clipboard — appeared even when the write was refused.
     const ok = await copyInvite();
-    if (!ok) return;
+    if (!ok) return false;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     if (securityConfig?.clipboard_clear_secs && securityConfig.clipboard_clear_secs > 0) {
       scheduleClipboardClear(securityConfig.clipboard_clear_secs);
     }
+    return true;
   };
 
   const loadFamily = useCallback(async () => {

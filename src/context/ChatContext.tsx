@@ -80,7 +80,8 @@ interface ChatContextValue {
   sendFileAtPath: (filePath: string) => Promise<void>;
   handleExportConversation: () => Promise<void>;
   handleSetRetention: (policy: string, durationSecs: number | null) => Promise<void>;
-  handleGenerateInvite: () => Promise<void>;
+  /** Resolves the new invite string, or `null` if generation failed. */
+  handleGenerateInvite: () => Promise<string | null>;
   copyInvite: () => Promise<boolean>;
   handleConnect: () => Promise<void>;
   handleOpenChat: (conv: ConversationEntry) => Promise<void>;
