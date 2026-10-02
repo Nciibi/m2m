@@ -122,6 +122,7 @@ describe("groupByDate", () => {
     expires_at: null,
     reactions: {},
     sender_peer_key_hex: "p",
+    decrypt_failed: false,
   });
 
   it("groups messages by calendar day", () => {
