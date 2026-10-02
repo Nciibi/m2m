@@ -22,7 +22,15 @@ export function useTheme(): ThemeContextValue {
   return ctx;
 }
 
-const DEFAULT_ACCENT = "#6366f1";
+/**
+ * The accent the app starts on, and the value "Reset accent" restores.
+ *
+ * Exported because `SettingsView` had its own copy of this literal. Two copies
+ * of a default is exactly the hand-synchronised-copy failure this file's own
+ * comment about `DEFAULT_SECURITY_CONFIG` describes: change one and the Reset
+ * button silently stops resetting to the real default.
+ */
+export const DEFAULT_ACCENT = "#6366f1";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { addToast } = useApp();
