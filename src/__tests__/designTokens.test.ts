@@ -134,7 +134,11 @@ describe("design tokens: no colour literals outside tokens.css / theme.css", () 
         }
         if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("{/*")) return;
         const code = line.split("//")[0];
-        if (LITERAL.test(code)) violations.push(`${rel}:${i + 1}  ${trimmed}`);
+        if (!LITERAL.test(code)) return;
+        // The one allowed literal in this file is DEFAULT_ACCENT, and only on the
+        // line that declares it.
+        if (rel === RUNTIME_ACCENT_FILE && /DEFAULT_ACCENT\s*=/.test(code)) return;
+        violations.push(`${rel}:${i + 1}  ${trimmed}`);
       });
     }
     expect(
