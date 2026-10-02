@@ -1254,9 +1254,9 @@ pub fn scrub_session_keys(session: &mut Session) {
     // root key is *for* — so a session locked this way must be re-established,
     // not un-locked. `lock_vault` consequently tears connections down rather than
     // scrubbing them in place.
-    self.session_keys.take();
-    self.ratchet.take();
-    self.state = ConnectionState::Disconnected;
+    session.session_keys.take();
+    session.ratchet.take();
+    session.state = ConnectionState::Disconnected;
 }
 
 impl Drop for Session {
