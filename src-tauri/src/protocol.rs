@@ -176,11 +176,24 @@ pub enum PacketType {
     /// Request to sync missed messages after reconnect.
     /// The reconnecting peer sends its most recent received timestamp;
     /// the peer responds by re-sending all messages after that timestamp.
+    ///
+    /// Still live. This is *not* the multi-device feature — it is how a peer that
+    /// missed messages while disconnected gets them back.
     SyncRequest = 0x44,
-    /// Multi-device sync: device identity exchange.
-    /// Sent after X3DH handshake during device pairing.
+    /// **RESERVED — multi-device sync was removed in 5.0.0.**
+    /// Device identity exchange, sent during device pairing. The three Tauri
+    /// commands that issued pairing invites had no frontend caller, so a device
+    /// could never obtain an invite and could therefore never be paired.
+    ///
+    /// The discriminant is kept so the wire format does not shift: reassigning
+    /// `0x45`/`0x46` to something else would be an authenticated-format change
+    /// without a version bump, which is exactly what this file's header warns
+    /// against. Receiving frames of these types is logged and dropped.
+    #[allow(dead_code)]
     SyncDeviceInfo = 0x45,
-    /// Multi-device sync: encrypted payload batch (peer keys, conversations, etc.).
+    /// **RESERVED — multi-device sync was removed in 5.0.0.** See
+    /// [`PacketType::SyncDeviceInfo`].
+    #[allow(dead_code)]
     SyncPayload = 0x46,
     // ─── Group Chat (Phase 3) ───
     /// Create a new group (0x50).
