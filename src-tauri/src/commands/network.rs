@@ -1744,7 +1744,11 @@ async fn handle_file_transfer_packet(
                                     let safe_name = network::sanitize_filename(&filename)
                                         .unwrap_or_else(|| format!("file_{}", transfer_id));
 
-                                    let (accepted, inserted);
+                                    // `inserted` is assigned in both arms of the `entry()` match below, so the
+                                    // binding has to be `mut`. Declaring it plain made this file fail
+                                    // to compile, which is why the duplicate-request guard it implements
+                                    // has never actually run.
+                                    let (accepted, mut inserted);
                                     // Collected here so the deletes can happen
                                     // *after* the map guard is released, on the
                                     // blocking pool. `remove_file` is a blocking
