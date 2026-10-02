@@ -613,9 +613,8 @@ pub(crate) async fn read_frame_impl<R: AsyncRead + Unpin>(
     let mut body = vec![0u8; body_len];
     read_exact_timeout_with(reader, &mut body, "frame body", remaining(deadline)).await?;
 
-    // The body we hand out excludes the version and type bytes.
-    let _ = version;
-
+    // The body we hand out excludes the version and type bytes; `version` stays on
+    // the frame so a handler can log or branch on it, and it is not discarded.
     Ok(RawFrame {
         version,
         packet_type,
