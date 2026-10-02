@@ -346,21 +346,29 @@ pub async fn attempt_reconnect(
                         )
                         .map_err(|e| format!("identity unusable: {e}"))?
                     };
-                    if let Err(e) = session
-                        .handshake_as_initiator(
-                            &mut stream,
-                            &kp,
-                            &expected_peer_pub,
-                            Vec::new(),
-                            x25519_pub,
-                        )
-                        .await
+                    // Refused, not downgraded.
+                    //
+                    // This used to perform `handshake_as_initiator`, the
+                    // pre-X3DH handshake, on every reconnect. `reconnect.rs`'s own
+                    // module doc promises "a fresh X3DH handshake" and CLAUDE.md
+                    // states there is no downgrade path, but the non-X3DH path has
+                    // no one-time prekey and therefore no forward secrecy — so a
+                    // reconnect silently produced a session with weaker
+                    // guarantees than the one it replaced, and the only trace was
+                    // a `tracing::warn!` nobody sees.
+                    //
+                    // Doing X3DH properly needs a *fresh* prekey bundle: the one in
+                    // the original invite carries a one-time prekey, which is
+                    // single-use by construction, so replaying it is not a fix. The
+                    // protocol has no prekey-refresh packet, so there is no way to
+                    // obtain one today, which makes refusing the honest option.
+                    let err = "cannot reconnect: X3DH needs a fresh prekey bundle, and \
+                               the pre-5.0.0 handshake would be a silent downgrade";
+                    tracing::warn!(
+                        peer = %peer_key_hex,
+                        "reconnect refused — peer reachable but handshake not attempted"
+                    );
                     {
-                        tracing::warn!(
-                            peer = %peer_key_hex,
-                            error = %e,
-                            "reconnect handshake failed — peer reachable but handshake rejected"
-                        );
                         let _ = app_handle.emit(
                             "m2m://reconnect-attempt",
                             crate::commands::ReconnectAttemptEvent {
@@ -368,12 +376,14 @@ pub async fn attempt_reconnect(
                                 attempt: attempt + 1,
                                 max_attempts: crate::reconnect::MAX_RECONNECT_ATTEMPTS,
                                 delay_secs: delay.as_secs(),
-                                state: "handshake_failed".to_string(),
+                                state: "needs_new_invite".to_string(),
                             },
                         );
-                        tokio::time::sleep(delay).await;
-                        continue;
                     }
+                    drop(stream);
+                    let _ = err;
+                    let _ = pr.remove(&peer_key_hex);
+                    return Ok(());
                 }
 
                 // Handshake succeeded — the session now has real keys and the
