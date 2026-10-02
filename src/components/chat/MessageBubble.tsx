@@ -144,6 +144,13 @@ export default function MessageBubble({
       )}
       {m.deleted ? (
         <em style={{ opacity: 0.5, fontStyle: "italic" }}>Message deleted</em>
+      ) : m.decrypt_failed ? (
+        /* Checked before `editing`: the content is empty, so edit mode would
+           otherwise offer to edit a blank string and overwrite the only
+           remaining copy of the plaintext with nothing. */
+        <em style={{ opacity: 0.7, fontStyle: "italic" }}>
+          Unable to decrypt this message
+        </em>
       ) : editing ? (
         /* Inline edit mode */
         <div className="msg-edit-inline">
