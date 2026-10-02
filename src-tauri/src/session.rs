@@ -156,6 +156,16 @@ fn append_used_opk_to_sign_data(
     sign_data.push(u8::from(one_time));
 }
 
+/// A `Session` with no peer, no keys and no state is exactly the disconnected
+/// starting point `new()` returns, so `Default` delegates rather than
+/// duplicating the field list — a second copy of these defaults would be free
+/// to drift from the real one.
+impl Default for Session {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Session {
     /// Create a new session in the initial state.
     ///
