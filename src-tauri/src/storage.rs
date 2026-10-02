@@ -1130,13 +1130,25 @@ impl MessageStore {
             );
             CREATE INDEX IF NOT EXISTS idx_messages_conversation
                 ON messages(conversation_id, timestamp);
-            -- These two depend on `expires_at`, which is declared above now, so
-            -- they are created here rather than deferred to the migration. The
-            -- migration still creates them (IF NOT EXISTS) for older databases.
-            CREATE INDEX IF NOT EXISTS idx_messages_expires_at
-                ON messages(expires_at);
-            CREATE INDEX IF NOT EXISTS idx_messages_read_status
-                ON messages(conversation_id, direction, read_at);
+            -- Deliberately NOT here:
+            --
+            --   CREATE INDEX idx_messages_expires_at ON messages(expires_at)
+            --   CREATE INDEX idx_messages_read_status ON messages(conversation_id, direction, read_at)
+            --
+            -- They were in this batch, with a comment claiming `expires_at` is
+            -- "declared above". That is true only when the CREATE TABLE above
+            -- actually runs — and `CREATE TABLE IF NOT EXISTS` is a NO-OP for a
+            -- database that already has a `messages` table. So for any database
+            -- predating the `expires_at` column, this batch created an index on
+            -- a column that does not exist yet, and `MessageStore::open` failed
+            -- outright with "no such column: expires_at" — *before*
+            -- `migrate_messages_table` below got a chance to ALTER TABLE and add
+            -- it. A user upgrading from the pre-crypto-shredding schema could not
+            -- open their message database at all.
+            --
+            -- `migrate_messages_table` creates both, with IF NOT EXISTS, right
+            -- after it adds the columns, so every path is covered: new databases
+            -- run the migration too.
             CREATE TABLE IF NOT EXISTS reactions (
                 message_id TEXT NOT NULL,
                 reaction TEXT NOT NULL,
