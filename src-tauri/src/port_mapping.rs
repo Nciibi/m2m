@@ -1456,8 +1456,7 @@ fn extract_wanip_service_block(xml: &str) -> Option<&str> {
         let after_open = &xml[open + OPEN_TAG.len()..];
         // `<serviceList>` also starts with "<service"; require the tag name to
         // end here.
-        let is_service_tag =
-            matches!(after_open.chars().next(), Some('>') | Some(c) if c.is_whitespace());
+        let is_service_tag = is_tag_name_end(after_open);
         if !is_service_tag {
             from = open + OPEN_TAG.len();
             continue;
