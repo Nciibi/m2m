@@ -1,6 +1,6 @@
 # M2M — Protocol Specification
 
-> **Version**: 0.1.0 (Protocol Version 1)  
+> **Version**: 1.0.0 (Protocol Version **0x03**)  
 > **Status**: Draft  
 > **Last Updated**: 2026-06-27
 
@@ -8,7 +8,12 @@
 
 Every M2M packet begins with a protocol version byte.
 
-- `0x01` = Protocol Version 1 (this document)
+- `0x03` = Protocol Version 3 (current; this document)`r
+- `0x02` = Protocol Version 2 — X3DH with an *unauthenticated* DR header. NOT accepted:
+  its AEAD AAD differs from `0x03`'s, so a v2 peer would handshake and then fail to`r
+  decrypt everything.`r
+- `0x01` = Protocol Version 1 — pre-X3DH, SHA-256 KDF ratchet, no one-time prekey,`r
+  therefore **no forward secrecy**. NOT accepted.
 - `0x00`, `0xFE`, `0xFF` are reserved (must never be assigned — prevents downgrade detection mistakes)
 - Version mismatch → `Error` packet + disconnect
 
@@ -29,7 +34,7 @@ Length-prefixed framing over TCP:
 
 - **Length**: size of Version + Payload (big-endian u32), excludes the 4-byte length field itself.
   Max: 1 MiB. Min: 2 bytes (version + at least 1 byte of packet type).
-- **Version**: protocol version byte (`0x01`).
+- **Version**: protocol version byte (`0x03`).
 - **Payload**: packet type byte + serialized body.
 
 ### Size limits
