@@ -36,7 +36,7 @@
 .btn--default {
   background: var(--color-accent-gradient);
   color: white;
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-fill-muted);
   box-shadow: var(--shadow-accent);
 }
 
@@ -71,13 +71,13 @@
 .btn--danger {
   background: transparent;
   color: var(--color-danger);
-  border-color: rgba(239, 68, 68, 0.2);
+  border-color: var(--color-danger-glow);
   box-shadow: none;
 }
 
 .btn--danger:not(:disabled):hover {
   background: var(--color-danger-bg);
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: var(--color-danger-glow-strong);
 }
 
 .btn--ghost {
@@ -139,7 +139,7 @@
   left: -100%;
   width: 100%;
   bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  background: linear-gradient(90deg, transparent, var(--color-fill-soft), transparent);
   pointer-events: none;
 }
 

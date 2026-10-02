@@ -27,25 +27,25 @@
 .badge--success {
   background: var(--color-success-glow);
   color: var(--color-success);
-  border-color: rgba(16, 185, 129, 0.25);
+  border-color: var(--color-success-glow);
 }
 
 .badge--danger {
   background: var(--color-danger-glow);
   color: var(--color-danger);
-  border-color: rgba(239, 68, 68, 0.2);
+  border-color: var(--color-danger-glow);
 }
 
 .badge--warning {
   background: var(--color-warning-glow);
   color: var(--color-warning);
-  border-color: rgba(245, 158, 11, 0.2);
+  border-color: var(--color-warning-glow);
 }
 
 .badge--info {
   background: var(--color-accent-glow-subtle);
   color: var(--color-accent-bright);
-  border-color: rgba(129, 140, 248, 0.2);
+  border-color: var(--color-accent-glow);
 }
 
 .badge__dot {
