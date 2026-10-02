@@ -50,6 +50,17 @@ const LITERAL =
   /(:|\(|,)\s*(#[0-9a-fA-F]{3,8}\b|rgba?\s*\(|hsla?\s*\()|(^|[:(,\s])(white|black|silver|maroon|navy|teal|olive|lime|aqua|fuchsia)(\s*[;,)\s}]|$)/;
 
 /**
+ * `-webkit-mask` / `mask` / `clip-path` stencils.
+ *
+ * `linear-gradient(#fff 0 0)` in a mask is alpha geometry, not paint: nothing
+ * is drawn with it, it exists to carve a ring out of the padding box. It cannot
+ * be expressed as a token without breaking the mask, and it is invisible by
+ * definition. `linear-gradient(#fff …)` also appears with no space before the
+ * hex, which the value-position regex above intentionally does not match.
+ */
+const STENCIL = /^\s*(-\w+-)?(mask|clip-path)\s*:/;
+
+/**
  * `CLAUDE.md`'s one sanctioned exception: a `var(--token, <literal>)` fallback in
  * `src/App.tsx`, so the element still receives a colour if the stylesheet fails.
  */
