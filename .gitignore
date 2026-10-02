@@ -28,33 +28,35 @@ src-tauri/target2
 target
 relay-server/target
 
-# ===== INTERNAL / DO NOT RELEASE =====
+# ===== AI agent runtime state (not docs) =====
 
 # Secrets & API keys
 .claude/.env
-.claude/settings.json
 .claude/settings.local.json
 .env
 *.env.local
 
-# AI agent configs, prompts, plans, skills
-CLAUDE.md
-prompt.txt
-.claude/plans/
-.claude/skills/
+# `.claude/settings.json` used to be ignored here too. It is small, contains no
+# secrets, and is the file that makes the repo's agent configuration reproducible
+# for anyone who clones it — with it ignored, a clone got zero agent config.
+
+# Agent worktrees and locks are ephemeral.
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 skills/
-plans/
 
-# Internal audits & design docs
-project-audit.md
-docs/design-bible*.md
-docs/design-system.md
-docs/full_analysis.md
-docs/ui-ux-upgrade-phase-1-summary.md
-docs/wcag-contrast-audit.md
-docs/ui/implementation_prompts/
+# ─── Docs that SHIP ───
+#
+# These were previously under "INTERNAL / DO NOT RELEASE", which was wrong for
+# three of them:
+#   * CLAUDE.md — the project's engineering guide. README and CONTRIBUTING both
+#     point at it, so ignoring it meant the repo's own front matter referred to
+#     a file a clone could not see.
+#   * docs/design-system.md — README links to it directly. A clone got a broken
+#     link on the front page.
+#   * docs/design-bible*.md — the UI design rationale the implementation prompts
+#     are written against.
+# `plans/` and `UX/` remain ignored: they are session scratch, not documentation.
 
 # Stitch mockups & prototypes
 stitch-*.html
