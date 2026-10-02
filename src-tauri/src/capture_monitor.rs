@@ -163,10 +163,19 @@ pub fn start_monitor(state: Arc<crate::state::AppState>, app_handle: AppHandle) 
                 .unwrap_or(true); // lock contention: keep monitoring this cycle
 
             if !enabled {
-                if !last_active.is_empty() {
-                    // Toggle was switched off while tools were flagged.
-                    let _ = app_handle
-                        .emit("m2m://capture-warning", serde_json::json!({ "active": [] }));
+                if !last_active.is_empty() || scan_failed {
+                    // Toggle was switched off while tools were flagged, or the
+                    // scan was unhealthy. Either way the UI must be told, so it
+                    // does not keep a stale banner up after the toggle — and
+                    // `active` is the retained list rather than a hardcoded
+                    // empty one, which would have claimed nothing was detected.
+                    let _ = app_handle.emit(
+                        "m2m://capture-warning",
+                        serde_json::json!({
+                            "active": last_active,
+                            "scan_failed": scan_failed,
+                        }),
+                    );
                 }
                 break;
             }
