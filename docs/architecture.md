@@ -1,8 +1,13 @@
 # M2M — Architecture Document
 
-> **Version**: 0.1.0  
-> **Status**: Draft  
-> **Last Updated**: 2026-06-27
+> **Version**: 1.0.0  
+> **Status**: Current  
+> **Last Updated**: 2026-10-02
+
+> Written against a ~8,500-line codebase at v0.1.0. The app is now 5.0.0
+> and src-tauri/src is ~37,900 lines across 40 modules, so the module map in
+> §2 is missing roughly half of them. Treat the prose below as background and
+> CLAUDE.md as authoritative - it is the file kept in sync with the code.
 
 ## 1. Overview
 
