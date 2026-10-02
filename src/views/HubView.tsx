@@ -229,10 +229,12 @@ interface ConnectTabProps {
   namingMyName: string;
   namingTheirName: string;
   isConnecting: boolean;
-  /** Resolves true only when an invite was actually created. Never a bare `void`:
-   *  the caller sets a countdown and a "listening" badge from this value, and a
-   *  void return made a failed generation indistinguishable from a successful one. */
-  onGenerateInvite: () => Promise<boolean>;
+  /** Resolves to the new invite string, or `null` if none was created. Never a
+   *  bare `void` and never just `boolean`: the caller needs to record the
+   *  invite in history, and it needs to do so *after* the await, when the
+   *  `generatedInvite` prop has not re-rendered yet. A void return made a
+   *  failed generation indistinguishable from a successful one. */
+  onGenerateInvite: () => Promise<string | null>;
   /** Resolves true only when the invite text actually reached the clipboard. */
   onCopyInvite: () => Promise<boolean>;
   copied: boolean;
