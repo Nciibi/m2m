@@ -1033,9 +1033,17 @@ mod protocol_tests {
     }
 
     #[test]
-    fn test_legacy_version_accepted() {
-        // 0x01 is the legacy version — should be accepted with warning
-        assert!(validate_version(PROTOCOL_VERSION_LEGACY).is_ok());
+    fn test_legacy_version_is_rejected() {
+        // 0x01 is the pre-X3DH version: SHA-256 KDF ratchet, no one-time prekey,
+        // and therefore no forward secrecy against a peer whose long-term key
+        // is later compromised. Accepting it is exactly the downgrade the
+        // project documents as forbidden, so it is refused at the handshake
+        // where the user gets a clear "upgrade" signal instead of a session
+        // that silently has weaker guarantees.
+        assert!(matches!(
+            validate_version(PROTOCOL_VERSION_LEGACY),
+            Err(ProtocolError::UnsupportedVersion(0x01))
+        ));
     }
 
     #[test]
