@@ -346,10 +346,9 @@ let s = state();
         // doubling horizon.
         note_activity(&s, 600);
         let second = s.idle_lock_deadline.load(Ordering::Relaxed);
-        assert!(
+assert!(
             second - first < 5,
-            "re-arming must replace the deadline, not add to it \
-             (first={first}, second={second})"
+            "re-arming must replace the deadline, not add to it (first={first}, second={second})"
         );
 
         // Idle lock switched off.
