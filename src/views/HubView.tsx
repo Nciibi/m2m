@@ -209,7 +209,13 @@ const handleCopy = async (): Promise<boolean> => {
             onOpenChat={handleOpenChat}
           />
         ) : tab === "family" ? (
-          <FamilyTab family={family} onRefresh={loadFamily} onConnect={handleFamilyConnect} />
+          <FamilyTab
+            family={family}
+            onRefresh={loadFamily}
+            onConnect={handleFamilyConnect}
+            loadError={familyLoadError}
+            loading={familyLoading}
+          />
         ) : (
           <ChatsTab conversations={filtered} onOpenChat={handleOpenChat} onDeleteConversation={handleDeleteConversation} search={search} setSearch={setSearch} onGetStarted={() => setTab("connect")} mutedConversations={mutedConversations} onMute={handleMuteConversation} onUnmute={handleUnmuteConversation} addToast={addToast} />
         )}
