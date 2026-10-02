@@ -117,6 +117,7 @@ export function asChatMessage(v: unknown): ChatMessage | null {
   if (!isStringOrNull(m.read_at) || (m.read_at !== null && !isU64(m.read_at))) return null;
   if (!isStringOrNull(m.edited_at) || (m.edited_at !== null && !isU64(m.edited_at))) return null;
   if (m.deleted !== undefined && !isBool(m.deleted)) return null;
+  if (m.decrypt_failed !== undefined && !isBool(m.decrypt_failed)) return null;
   if (!isStringOrNull(m.expires_at) || (m.expires_at !== null && !isU64(m.expires_at))) return null;
   // A 1:1 message has an EMPTY sender key by design: the peer is implicit from
   // the conversation, and the Rust side documents this explicitly
@@ -162,6 +163,10 @@ export function asChatMessage(v: unknown): ChatMessage | null {
     expires_at: (m.expires_at as number | null | undefined) ?? null,
     reactions: (m.reactions as Record<string, string[]> | undefined) ?? {},
     sender_peer_key_hex: m.sender_peer_key_hex,
+    // Read-time only, never persisted, so `#[serde(default)]` means an absent
+    // field is a healthy read. Rejects a non-boolean rather than coercing it,
+    // so a malformed payload cannot present an unreadable message as readable.
+    decrypt_failed: m.decrypt_failed ?? false,
   } as ChatMessage;
 }
 
