@@ -3,6 +3,9 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    /* Needed by the tests that read `tokens.css`/`theme.css` off disk to verify
+       the design-token rule (`src/__tests__/designTokens.test.ts`). */
+    "types": ["vitest/globals", "node"],
     "module": "ESNext",
     "skipLibCheck": true,
 
