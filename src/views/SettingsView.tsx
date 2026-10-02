@@ -98,6 +98,8 @@ export default function SettingsView() {
     handleConnectivityCheck, handleTorToggle, setStunServerInput,
     discoveryConfig, discoveredPeers,
     handleLanToggle, handleDhtToggle, handleRefreshDiscovery,
+    relayConfig, setRelayHost, setRelayPort,
+    handleRelaySave, handleRelayClear, relaySaving,
     securityConfig,
     captureCapability,
     handleScreenCaptureToggle, handleCaptureDetectionToggle, handleBlurOnFocusLossToggle,
