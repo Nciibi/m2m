@@ -360,13 +360,9 @@ Every derivation is HKDF-SHA256 with explicit domain-separation labels:
 - X3DH: `m2m-kx-v1`
 
 ```
-
-Message N:   encrypt(payload, chain_key_N, msg_key_N)
- 
-  header = HKDF(chain_key_N, "M2M-MSG-KEY")
- 
-  chain_key_{N+1} = HKDF(chain_key_N, "M2M-MSG-KEY")
-Message N+1: encrypt(payload, chain_key_{N+1}, msg_key_{N+1})
+Message N:    encrypt(payload, msg_key_N)      msg_key_N       = HKDF(chain_key_N,     "M2M-MSG-KEY")
+              chain_key_{N+1} = HKDF(chain_key_N, "M2M-MSG-KEY")
+Message N+1:  encrypt(payload, msg_key_{N+1})   chain_key_{N+1} = HKDF(chain_key_N,     "M2M-MSG-KEY")
 ```
 
 The DH ratchet contributes a new X25519 shared secret every `ratchet_interval`
