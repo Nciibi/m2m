@@ -20,7 +20,6 @@ pub mod vault;
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 
-use crate::state::PeerConnection;
 // ─── Response types for the frontend — never contain secrets ───
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
