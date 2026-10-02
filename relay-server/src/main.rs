@@ -919,9 +919,10 @@ mod tests {
         };
         assert!(reg.idle_for() < Duration::from_secs(1));
 
-        // Simulate a keepalive arriving: only `last_seen` moves, `created_at`
-        // stays put. The reaper reads `idle_for()`, so this is what keeps the
-        // registration alive.
+        // Simulate a keepalive arriving: only `last_seen` moves. There is no
+        // separate creation timestamp on `Registration` at all — the reaper
+        // reads `idle_for()`, so this is what keeps the registration alive, and
+        // there is no field left for age-based expiry to creep back in through.
         std::thread::sleep(Duration::from_millis(20));
         *reg.last_seen.lock().unwrap() = Instant::now();
         assert!(reg.idle_for() < Duration::from_secs(1));
