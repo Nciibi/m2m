@@ -11,10 +11,12 @@ content key. Three databases, not two.
 
 ```
 ~/.m2m/
-├── keys.db      (SQLCipher — identity keys, peer keys, trust state)
-├── messages.db  (SQLCipher — chat history, optional)
-├── transfers.db (file-transfer state; transfer payloads stream to a
-└──               temp file, there is no attachments/ directory)
+├── keys.db      (identity keys, peer keys, trust state)
+├── messages.db  (chat history, optional)
+├── transfers.db (file-transfer state)
+└── security.json (non-sensitive settings only — there is no config.toml,
+                   and there is no attachments/ directory: transfer payloads
+                   stream to a temp file)
 ```
 
 ## 2. Key Store (`keys.db`)
