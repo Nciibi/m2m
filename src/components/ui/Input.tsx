@@ -53,9 +53,18 @@ export default function Input({
           className={mono ? "input--mono" : ""}
           value={value}
           onChange={onChange}
+          // `rest` is spread FIRST, so the internal handlers below always win.
+          //
+          // It used to be spread last, which meant any caller passing its own
+          // `onFocus`/`onBlur` silently replaced `handleFocus`/`handleBlur` and
+          // the `input-wrap--focused` / `input-wrap--error` class toggling
+          // stopped working entirely. `VaultView` passes `onFocus` on *both*
+          // passphrase fields to drive the on-screen keyboard, so the two fields
+          // that most need a visible focus ring never had one — and no test
+          // asserted on the class, so nothing caught it.
+          {...rest}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          {...rest}
         />
         {clearable && hasValue && onClear && (
           <button
