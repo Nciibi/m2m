@@ -104,7 +104,10 @@ const [captureScanFailed, setCaptureScanFailed] = useState(false);
     const unlisten = listen("m2m://capture-warning", (event) => {
       const payload = asCaptureWarning(event.payload);
       if (!payload) return;  // malformed → drop, never render
+      // Both halves are set from the same validated event, so the banner can
+      // never show a stale detection list alongside a fresh health state.
       setCaptureWarning(payload.active);
+      setCaptureScanFailed(payload.scanFailed);
     }).catch(() => () => {});
 
     // `m2m://navigate` — the tray menu's "New Conversation" and "Settings"
