@@ -503,19 +503,18 @@ pub async fn create_invite(
             }
         }
 
-        // Append user-configured manual port forwards as type 4 candidates.
-        let mf = state.manual_forwards.read().await;
-        for fwd in mf.iter() {
-            if fwd.listen_port == listen_addr.port()
-                && !all.iter().any(|c| c.address == fwd.public_addr)
-            {
-                all.push(protocol::WireCandidate {
-                    address: fwd.public_addr.clone(),
-                    candidate_type: 4,
-                    relay_id: None,
-                });
-            }
-        }
+        // Manual port forwards used to be appended here as type-4 candidates.
+        //
+        // The list was only ever populated by `commands/forwards.rs`, whose four
+        // commands had no frontend caller, so this loop could not have run with
+        // a non-empty vector. It was removed along with the subsystem rather
+        // than left as dead code with a comment: a candidate source that
+        // silently never fires is exactly the kind of thing that gets read as
+        // "manual forwards are supported".
+        //
+        // A user *can* still forward their router port by hand — they just have
+        // to type the public address into the invite's candidate list, or rely
+        // on UPnP/NAT-PMP (`port_mapping.rs`), which M2M does manage itself.
 
         // Add relay candidate if registration succeeded.
         if let (Some(ref addr), Some(ref rid)) = (relay_addr_str, relay_registered_id) {
