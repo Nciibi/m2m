@@ -75,6 +75,7 @@ function AppInner() {
   const { view, setView } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
   const [captureWarning, setCaptureWarning] = useState<string[]>([]);
+const [captureScanFailed, setCaptureScanFailed] = useState(false);
   const [securityError, setSecurityError] = useState<string | null>(null);
   // Set when the storage cap permanently destroys history, so the user is told
   // rather than finding messages gone with no explanation.
