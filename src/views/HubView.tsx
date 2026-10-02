@@ -342,8 +342,12 @@ function ConnectTab({
           {inviteHistory.length > 0 && (
             <div className="invite-history">
               <div className="invite-history__title">Recent Invites</div>
-              {inviteHistory.map((inv, i) => (
-                <div key={i} className="invite-history__item" role="button" tabIndex={0}
+              {inviteHistory.map((inv) => (
+                // `key={inv}`, not `key={i}`: this list is *prepended* to on every
+                // generation, so an index key makes React reuse the wrong DOM node
+                // — Recent Invites could show one invite's text beside another's
+                // copy button.
+                <div key={inv} className="invite-history__item" role="button" tabIndex={0}
                   onClick={() => {
                     void copyToClipboard(inv).then((ok) => {
                       if (!ok) { addToast("Could not copy to the clipboard", "error"); return; }
