@@ -22,6 +22,7 @@
 //!
 //! Run: `./sync.sh && cargo test --lib`
 pub mod commands;
+pub mod commands_generated;
 pub mod crypto;
 pub mod error;
 pub mod group;
