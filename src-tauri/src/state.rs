@@ -395,6 +395,12 @@ pub struct AppState {
     pub private_mode: RwLock<bool>,
     /// Connection rate limiter for DoS protection.
     pub connection_limiter: network::ConnectionLimiter,
+    /// The NAT port mapping this process currently holds, if any.
+    ///
+    /// `create_invite` used to obtain a mapping, turn it into a candidate, and
+    /// drop it on the floor — so nothing renewed the lease and nothing removed it.
+    /// See [`PortMappingHandle`].
+    pub port_mapping: RwLock<Option<PortMappingHandle>>,
     /// Relay server configuration (optional).
     /// When set, relay candidates are included in invites as a fallback.
     pub relay_config: RwLock<Option<relay::RelayConfig>>,
@@ -506,6 +512,7 @@ impl AppState {
             connectivity_verified: RwLock::new(None),
             private_mode: RwLock::new(false),
             connection_limiter: network::ConnectionLimiter::new(),
+            port_mapping: RwLock::new(None),
             relay_config: RwLock::new(None),
             relay_state: RwLock::new(relay::RelayState::default()),
             pending_reconnects: RwLock::new(HashMap::new()),
