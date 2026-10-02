@@ -417,6 +417,10 @@ pub async fn send_reaction(
     // Store locally first (scoped to this conversation — H4).
     // Ephemeral mode: reactions live in RAM only.
     if !state.security_config.read().await.ephemeral_mode {
+        // Cap read BEFORE the store lock: taking `security_config` while
+        // holding `message_store` nests two write-preferring locks in the wrong
+        // order, which is the shape of every deadlock this crate has had.
+        let storage_cap = state.security_config.read().await.effective_storage_cap();
         let sk = state.storage_key.read().await;
         let ms = state.message_store.lock().await;
         if let Some(ref store) = *ms {
@@ -430,6 +434,12 @@ pub async fn send_reaction(
                     sk.as_ref(),
                 )
                 .map_err(|e| AppError::invalid(format!("failed to store reaction: {e}")))?;
+            // A reaction row lands in `messages.db`, so this is a write path for
+            // the cap. CLAUDE.md says "every write path calls `enforce_cap`", and
+            // `storage.rs` asserts it in a comment — but this one, and the two
+            // below it, did not. A peer sending repeated Reaction or MessageEdit
+            // frames could therefore grow the store past its ceiling at leisure.
+            crate::maintenance::enforce_cap(&app_handle, store, storage_cap);
         }
     }
 
