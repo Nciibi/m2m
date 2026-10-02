@@ -1222,36 +1222,23 @@ pub async fn connect_to_peer(
                 )
                 .map_err(|e| AppError::invalid(format!("X25519 identity unusable: {e}")))?
             };
-            let bundle = crate::crypto::PrekeyBundle {
+let bundle = crate::crypto::PrekeyBundle {
                 identity_key: signed.payload.x25519_identity_pub,
                 signed_prekey: signed.payload.signed_prekey,
                 signed_prekey_sig: signed.payload.signed_prekey_sig.clone(),
                 one_time_prekey: signed.payload.one_time_prekey,
-                };
-                session
-                    .handshake_as_initiator_x3dh(
-                        &mut stream,
-                        &kp,
-                        &xkp,
-                        &expected_peer_pub,
-                        &bundle,
-                        our_candidates,
-                        identity::is_one_time(&signed),
-                    )
-                    .await?;
-            } else {
-                let x25519_pub = x25519_pub_key.unwrap_or([0u8; 32]);
-                session
-                    .handshake_as_initiator(
-                        &mut stream,
-                        &kp,
-                        &expected_peer_pub,
-                        our_candidates,
-                        x25519_pub,
-                    )
-                    .await
-                    .map_err(|e| AppError::invalid(format!("initiator handshake failed: {e}")))?;
-            }
+            };
+            session
+                .handshake_as_initiator_x3dh(
+                    &mut stream,
+                    &kp,
+                    &xkp,
+                    &expected_peer_pub,
+                    &bundle,
+                    our_candidates,
+                    identity::is_one_time(&signed),
+                )
+                .await?;
         }
         // `Role::Responder` is intentionally not matched here. The outbound
         // dialer is connect-only — see `punch_connect_only` for why the local
