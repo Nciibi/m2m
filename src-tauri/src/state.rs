@@ -489,7 +489,6 @@ impl AppState {
             connectivity_verified: RwLock::new(None),
             private_mode: RwLock::new(false),
             connection_limiter: network::ConnectionLimiter::new(),
-            manual_forwards: RwLock::new(Vec::new()),
             relay_config: RwLock::new(None),
             relay_state: RwLock::new(relay::RelayState::default()),
             pending_reconnects: RwLock::new(HashMap::new()),
@@ -506,7 +505,6 @@ impl AppState {
             // UI Theme
             theme_preference: RwLock::new("system".to_string()),
             accent_color: RwLock::new("#6366f1".to_string()),
-            sync_manager: RwLock::new(crate::sync::SyncManager::new()),
             group_manager: RwLock::new(GroupManager::new()),
             capture_monitor_running: AtomicBool::new(false),
             clipboard_clear_deadline: AtomicU64::new(0),
