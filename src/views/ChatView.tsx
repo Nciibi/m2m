@@ -487,25 +487,31 @@ export default function ChatView() {
         </div>
 
         {activeConversationId && (
-          <div className="retention-config">
-            <div className="retention-config__title">Conversation Policy</div>
-            <div className="retention-row">
-              <div className="select-wrap" style={{ width: 'auto' }}>
-                <select className="select--compact" value={retentionPolicy} onChange={e => { setRetentionPolicy(e.target.value); handleSetRetention(e.target.value, e.target.value === "none" ? null : parseInt(retentionDuration, 10)); }}>
-                  <option value="none">No Expiration</option>
-                  <option value="delete">Auto-Delete After</option>
-                  <option value="export">Auto-Export After</option>
-                </select>
-              </div>
-              {retentionPolicy !== "none" && (
+// Both selects get an explicit `aria-label`. The section heading
+            // ("Conversation Policy") is a plain `div`, not a label, and a
+            // `<select>` with no associated label has no accessible name at
+            // all — so a screen-reader user could not tell which of the two
+            // selects was the policy and which was the duration, on the one
+            // control that decides whether messages are permanently deleted.
+            <div className="retention-config">
+              <div className="retention-config__title">Conversation Policy</div>
+              <div className="retention-row">
                 <div className="select-wrap" style={{ width: 'auto' }}>
-                  <select className="select--compact" value={retentionDuration} onChange={e => { setRetentionDuration(e.target.value); handleSetRetention(retentionPolicy, parseInt(e.target.value, 10)); }}>
-                    <option value="3600">1 Hour</option>
-                    <option value="86400">24 Hours</option>
-                    <option value="604800">7 Days</option>
+                  <select aria-label="Retention policy" className="select--compact" value={retentionPolicy} onChange={e => { setRetentionPolicy(e.target.value); handleSetRetention(e.target.value, e.target.value === "none" ? null : parseInt(retentionDuration, 10)); }}>
+                    <option value="none">No Expiration</option>
+                    <option value="delete">Auto-Delete After</option>
+                    <option value="export">Auto-Export After</option>
                   </select>
                 </div>
-              )}
+                {retentionPolicy !== "none" && (
+                  <div className="select-wrap" style={{ width: 'auto' }}>
+                    <select aria-label="Retention duration" className="select--compact" value={retentionDuration} onChange={e => { setRetentionDuration(e.target.value); handleSetRetention(retentionPolicy, parseInt(e.target.value, 10)); }}>
+                      <option value="3600">1 Hour</option>
+                      <option value="86400">24 Hours</option>
+                      <option value="604800">7 Days</option>
+                    </select>
+                  </div>
+                )}
               <Button variant="secondary" size="xs" onClick={handleExportConversation}>Export Now</Button>
             </div>
           </div>
