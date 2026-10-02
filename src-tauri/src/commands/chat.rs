@@ -152,14 +152,28 @@ pub async fn load_messages(
     let all_reactions = store.get_reactions(&msg_ids, Some(key)).unwrap_or_default();
 
     for m in stored {
-        let content = MessageStore::decrypt_stored_content(
-            &m.content_encrypted,
-            &m.content_nonce,
-            m.content_key_wrapped.as_deref(),
-            key,
-        )
-        .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
-        .unwrap_or_else(|_| "[encrypted]".to_string());
+        // A decrypt failure is reported as a flag on the message, not as its text.
+        // Writing "[encrypted]" into `content` made an unreadable row
+        // indistinguishable from a message whose plaintext was literally that
+        // string, and hid the difference between a wrong key, a shredded key
+        // and corruption — the three cases a user needs to tell apart.
+        let (content, decrypt_failed) =
+            match MessageStore::decrypt_stored_content(
+                &m.content_encrypted,
+                &m.content_nonce,
+                m.content_key_wrapped.as_deref(),
+                key,
+            ) {
+                Ok(bytes) => (String::from_utf8_lossy(&bytes).to_string(), false),
+                Err(e) => {
+                    tracing::warn!(
+                        message_id = %m.id,
+                        error = %e,
+                        "stored message could not be decrypted; surfacing as unreadable"
+                    );
+                    (String::new(), true)
+                }
+            };
 
         // Build reactions map: reaction → [peer_key_hex, ...]
         let mut reactions: std::collections::HashMap<String, Vec<String>> =
