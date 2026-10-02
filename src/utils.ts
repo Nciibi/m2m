@@ -122,11 +122,27 @@ function detectKeyboard(s: string): number {
   return Math.max(1.0 - ratio * 0.5, 0.3);
 }
 
-/// Deterministic HSL color derived from a string (used for avatar gradients).
+/**
+ * Deterministic avatar colour for a peer key, as a **CSS token reference**.
+ *
+ * Was `hsl(${hash % 360}, 55%, 48%)` — a colour literal built in JS, outside the
+ * two files that own colour in this codebase. That put every avatar outside the
+ * token system: off-palette by construction, and unable to respond to the theme,
+ * so the light theme rendered a fixed mid-lightness wash behind near-white
+ * initials on a near-white card.
+ *
+ * Returns `var(--color-avatar-N)` instead. The determinism the callers depend on
+ * is unchanged — same peer key, same avatar, forever — but the palette now lives
+ * in `tokens.css` with a light override in `theme.css`, and this function needs
+ * no theme branch.
+ */
 export function hashToColor(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return `hsl(${Math.abs(hash) % 360}, 55%, 48%)`;
+  // 8 buckets, matching the ramp in tokens.css / theme.css. Modulo rather than
+  // `& 0xFF` so the value stays uniform for short strings (a peer key is 64
+  // chars, so both are fine in practice; this just keeps the intent obvious).
+  return `var(--color-avatar-${Math.abs(hash) % 8})`;
 }
 
 /// Relative-time formatter for unix-seconds timestamps ("now", "5m ago", ...).
