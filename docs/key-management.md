@@ -78,7 +78,7 @@ Session Layer (ephemeral, per-connection)
 | Create invite | Sign invite with identity key |
 | Accept connection | Generate ephemeral X25519 keypair |
 | Handshake complete | Derive session key, zeroize ephemeral private key |
-| Session timeout (1hr) | Rotate session key via new DH exchange |
+| Session timeout (24h) | Session ends; peer must reconnect |
 | Disconnect | Zeroize session key |
 | Session expiry (24hr) | Force disconnect + zeroize |
 | App shutdown | Zeroize all in-memory keys |
