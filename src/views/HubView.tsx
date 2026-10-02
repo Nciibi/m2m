@@ -262,6 +262,12 @@ function ConnectTab({
   const [inviteExpiry, setInviteExpiry] = useState<number>(60);
   const [isListening, setIsListening] = useState(false);
 
+  // `handleGenerate` reads the invite immediately after awaiting
+  // `onGenerateInvite`, before React has re-rendered with the new
+  // `generatedInvite` prop — so the prop cannot be the source here.
+  const generatedInviteRef = useRef(generatedInvite);
+  generatedInviteRef.current = generatedInvite;
+
   // Check if we're listening
   useEffect(() => {
     invoke<string>("get_listen_address").then((addr) => {
