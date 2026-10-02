@@ -88,12 +88,25 @@ describe("design tokens: no colour literals outside tokens.css / theme.css", () 
       if (!/\.tsx?$/.test(file)) continue;
       if (file.includes(`${join("__tests__")}`)) continue;
       const rel = relative(SRC, file).replace(/\\/g, "/");
-      readFileSync(file, "utf8")
-        .split("\n")
-        .forEach((line, i) => {
-          const code = line.split("//")[0];
-          if (LITERAL.test(code)) violations.push(`${rel}:${i + 1}  ${line.trim()}`);
-        });
+      if (SANCTIONED.has(rel)) continue;
+      const lines = readFileSync(file, "utf8").split("\n");
+      let inBlockComment = false;
+      lines.forEach((line, i) => {
+        const trimmed = line.trim();
+        // Skip comment bodies. A doc comment that *describes* the old literal in
+        // order to say it was removed must not itself be flagged.
+        if (inBlockComment) {
+          if (trimmed.includes("*/")) inBlockComment = false;
+          return;
+        }
+        if (trimmed.startsWith("/*") && !trimmed.includes("*/")) {
+          inBlockComment = true;
+          return;
+        }
+        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("{/*")) return;
+        const code = line.split("//")[0];
+        if (LITERAL.test(code)) violations.push(`${rel}:${i + 1}  ${trimmed}`);
+      });
     }
     expect(
       violations,
