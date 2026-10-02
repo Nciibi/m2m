@@ -242,7 +242,7 @@ async fn registration_reader(
                         // KEEPALIVE â†’ refresh the idle timer, then PONG.
                         //
                         // Without this refresh the registration was reaped on
-                        // `created_at` age alone, so every invite outliving
+                        // registration age alone, so every invite outliving
                         // READER_IDLE_TIMEOUT (5 min) silently died even with
                         // the client connected and sending keepalives â€” while
                         // the client still reported itself connected.
