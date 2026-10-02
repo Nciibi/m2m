@@ -60,7 +60,15 @@ Session Layer (ephemeral, per-connection)
 
 - Key store DB key derived from user passphrase via Argon2id
 - Message DB uses a separate random key, itself stored in the key store
-- Both DBs are SQLCipher (AES-256-CBC with HMAC-SHA256)
+- **There is no SQLCipher.** This document previously said "Both DBs are
+  SQLCipher (AES-256-CBC with HMAC-SHA256)". SQLCipher was evaluated and
+  rejected — see `docs/adr/002-app-level-encryption-vs-sqlcipher.md`. What
+  actually happens: plain `rusqlite` (bundled SQLite) with **application-level**
+  XChaCha20-Poly1305 envelopes. Each row's content is sealed individually with
+  its own 24-byte nonce, and the *content key* for that row is itself wrapped
+  under a KEK derived from the passphrase.
+- There are **three** databases, not two: `keys.db`, `messages.db`, and
+  `transfers.db`.
 
 ## 6. Key Lifecycle
 
