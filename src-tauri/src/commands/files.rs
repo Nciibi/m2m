@@ -981,7 +981,13 @@ mod tests {
     fn rejects_a_relative_save_dir() {
         // The dangerous cases specifically: a bare filename resolves into the
         // app's working directory, and `..` walks out of whatever the CWD is.
-        for bad in ["file.txt", "downloads/file.txt", "../escape.txt", "..", "./x"] {
+        for bad in [
+            "file.txt",
+            "downloads/file.txt",
+            "../escape.txt",
+            "..",
+            "./x",
+        ] {
             assert!(
                 validate_save_dir(bad).is_err(),
                 "relative path {bad:?} must be rejected"
