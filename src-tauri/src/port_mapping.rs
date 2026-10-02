@@ -1414,6 +1414,26 @@ fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
 /// full of elements whose names merely start with the one being searched for
 /// (`serviceType`, `serviceId`, `SCPDURL`), so a prefix match terminates the
 /// block early and hands back a fragment of the wrong element.
+/// True when the text following an XML open-tag name is at a legal boundary —
+/// i.e. the tag really ends there rather than being a prefix of a longer name.
+///
+/// Needed twice below: `serviceType` must not match `serviceTypes`, and
+/// `<service>` must not match `<serviceList>`.
+///
+/// The previous inline form was
+/// `matches!(next, Some('>') | Some(c) if c.is_whitespace())`, which does not
+/// compile: a match guard applies to the *whole* arm, and `c` is not bound in
+/// the `Some('>')` arm. That is a build error, so this function was never
+/// reached in any build — the two call sites below it had never been compiled.
+fn is_tag_name_end(after_name: &str) -> bool {
+    match after_name.chars().next() {
+        Some('>') => true,
+        Some(c) => c.is_whitespace(),
+        // A tag name at the very end of the buffer with no `>` is truncated XML.
+        None => false,
+    }
+}
+
 fn find_closing_tag(xml: &str, name: &str) -> Option<usize> {
     let mut from = 0usize;
     while let Some(rel) = xml[from..].find("</") {
