@@ -17,6 +17,7 @@
 /// ```
 
 import { useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 interface IdleDetectionOptions {
   /** Idle timeout in seconds. 0 or negative = disabled. */
@@ -26,6 +27,27 @@ interface IdleDetectionOptions {
 }
 
 const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "wheel", "click"] as const;
+
+/**
+ * Push the idle deadline out on the Rust side too.
+ *
+ * `SecurityConfig::idle_lock_secs` had no reader in Rust at all — "✅ idle
+ * vault lock" was this hook and nothing else. A lock that depends on the
+ * webview's timer keeps running is not a lock: tab out, throttle the renderer,
+ * or crash it, and the timer stops while the keys stay resident. The Rust task
+ * in `maintenance::spawn_security_timers` enforces the same deadline on a 1s
+ * tick, so activity has to be reported there too or it fires while the user is
+ * actively typing.
+ *
+ * Best-effort by design: if this invoke fails the local timer still locks the
+ * vault, which is the more important of the two.
+ */
+function reportActivityToRust(timeoutSecs: number): void {
+  if (timeoutSecs <= 0) return;
+  void invoke("note_activity", { secs: timeoutSecs }).catch(() => {
+    /* the webview timer is still authoritative for the primary lock */
+  });
+}
 
 export function useIdleDetection({ timeoutSecs, onIdle }: IdleDetectionOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
