@@ -156,6 +156,47 @@ describe("HubView", () => {
     expect(screen.getByText("m2m://test-invite-link")).toBeInTheDocument();
   });
 
+  // Regression: `onGenerateInvite` used to be typed `() => void`, so the
+  // caller's `await` resolved immediately and `finally { setGenerating(false) }`
+  // ran *before* the invite existed. The three state writes after it were
+  // unconditional, and `handleGenerateInvite` swallowed its own failure — so a
+  // failed generation still started a countdown and showed "Listening for
+  // incoming connections". A one-time invite that was never created looked
+  // exactly like one that was.
+  it("does not claim to be listening when invite generation fails", async () => {
+    const user = userEvent.setup();
+    (state.handleGenerateInvite as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    render(<HubView />);
+
+    await user.click(screen.getByRole("button", { name: /generate invite/i }));
+
+    expect(screen.queryByText(/listening for incoming connections/i)).not.toBeInTheDocument();
+  });
+
+  // Regression: the guard above must check the *value*, not `=== null`. A
+  // `void`-returning caller pushed `undefined` into the invite history, and
+  // every `inv.substring(0, 40)` in that list then threw — which surfaced only
+  // as a vitest "unhandled error" while all 369 tests still passed.
+  it("survives a generator that returns nothing at all", async () => {
+    const user = userEvent.setup();
+    (state.handleGenerateInvite as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    render(<HubView />);
+
+    await user.click(screen.getByRole("button", { name: /generate invite/i }));
+
+    expect(screen.queryByText(/listening for incoming connections/i)).not.toBeInTheDocument();
+  });
+
+  it("records a successfully generated invite in the history list", async () => {
+    const user = userEvent.setup();
+    (state.handleGenerateInvite as ReturnType<typeof vi.fn>).mockResolvedValue("m2m://fresh-invite");
+    render(<HubView />);
+
+    await user.click(screen.getByRole("button", { name: /generate invite/i }));
+
+    expect(screen.getByText(/listening for incoming connections/i)).toBeInTheDocument();
+  });
+
   it("shows copy invite button when invite generated", () => {
     state.generatedInvite = "m2m://test-invite";
     render(<HubView />);
