@@ -1006,11 +1006,12 @@ fn open_meta_value(
 
 /// Columns returned by the two historical message scans below.
 ///
-/// Named because clippy's 	ype_complexity fires on the inline 5-tuple, and
+/// Named because clippy's `type_complexity` fires on the inline 5-tuple, and
 /// because "(ciphertext, peer, timestamp, expires, key)" is not obvious from
-/// Vec<(Vec<u8>, String, i64, Option<i64>, Option<String>)>. One alias used by
-/// both scans, so the two cannot drift into returning different shapes.
+/// the raw type. One alias used by both scans, so the two cannot drift into
+/// returning different shapes.
 type RawStoredRow = (Vec<u8>, String, i64, Option<i64>, Option<String>);
+
 impl MessageStore {
     /// Generate a fresh 32-byte content encryption key.
     fn generate_cek() -> [u8; 32] {
