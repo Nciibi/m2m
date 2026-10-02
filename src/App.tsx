@@ -72,7 +72,7 @@ function SecurityBanner({
 }
 
 function AppInner() {
-  const { view } = useApp();
+  const { view, setView } = useApp();
   const [helpOpen, setHelpOpen] = useState(false);
   const [captureWarning, setCaptureWarning] = useState<string[]>([]);
   const [securityError, setSecurityError] = useState<string | null>(null);
