@@ -154,7 +154,11 @@ function AppInner() {
       unlistenEvict.then((fn) => fn()).catch(() => {});
       unlistenNav.then((fn) => fn()).catch(() => {});
     };
-  }, []);
+    // `setView` is a stable `useCallback` over `[]`, so listing it re-registers
+    // nothing — it is here because the `m2m://navigate` handler closes over it,
+    // and omitting it would be the one thing that could later make the tray
+    // items navigate somewhere stale.
+  }, [setView]);
 
   // Auto-lock on idle.
   //
