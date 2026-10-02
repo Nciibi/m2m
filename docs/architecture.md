@@ -306,9 +306,22 @@ Every untrusted input is validated at the earliest possible boundary:
 6. **Encrypted messages** — AEAD authentication tag verified before decryption.
 7. **Message body** — Deserialized with length limits.
 
-### 4.3 Why no mlock() yet?
+### 4.3 Memory locking
 
-The roadmap (Phase 4) includes `mlock()` for all sensitive memory regions (session keys, private key material). Currently, `zeroize` ensures key material is zeroed on `drop`, but a swapped-out page could persist to disk in plaintext. `mlock()` prevents swapping. This is deferred because `mlock()` requires platform-specific code (Unix `mlockall`, Windows `VirtualLock`) and interacts poorly with Rust's memory model (the allocator can move data).
+**`mlock()` is implemented.** This section previously read "Why no mlock() yet?"
+and explained why it was deferred as platform-specific work.
+
+`secure_key.rs` does it, per-platform, via `libloading`: `mlockall(MCL_CURRENT |
+MCL_FUTURE)` on Linux, `mlock()` per page range on macOS, and `VirtualLock` on
+Windows. `lock_range` / `unlock_range` are applied to the identity Ed25519 seed
+and the X25519 secret as they are placed into `AppState`, and unlocked before
+being dropped by `lock_vault`. `SECURITY-HARDENING.md` tracks it as done.
+
+The trade-off named in the old text is still real: a page locked in physical
+memory cannot be swapped, but the allocator may still move it within the
+process, so the lock must be re-applied if a buffer is reallocated.
+`zeroize`-on-drop remains the primary guarantee; `mlock` is a second layer
+against the page reaching disk.
 
 ---
 
