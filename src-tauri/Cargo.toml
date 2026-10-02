@@ -66,7 +66,12 @@ governor = "0.6"
 # Socket options (SO_REUSEADDR/SO_REUSEPORT) for the LAN multicast listener.
 # Already in the dependency tree via tokio/tauri, so this pins the existing
 # version rather than adding anything new.
-socket2 = "0.6"
+# The `all` feature is what exposes `Socket::set_reuse_port`. Without it the
+# method does not exist and `lan_discovery::bind_multicast_listener` fails to
+# compile, so LAN discovery was never built. The gate is the feature, not the
+# OS: the cfg excludes solaris/illumos/cygwin/wasi, so Windows and macOS both
+# get the method.
+socket2 = { version = "0.6", features = ["all"] }
 
 # Local storage (app-level encryption via RustCrypto AEAD, no OpenSSL needed)
 rusqlite = { version = "0.33", features = ["bundled"] }
