@@ -3259,6 +3259,7 @@ impl MessageStore {
                     expires_at: None,
                     reactions: std::collections::HashMap::new(),
                     sender_peer_key_hex: row.get::<_, String>(2)?,
+                    decrypt_failed: false,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -3296,6 +3297,7 @@ impl MessageStore {
                     expires_at: None,
                     reactions: std::collections::HashMap::new(),
                     sender_peer_key_hex: row.get::<_, String>(2)?,
+                    decrypt_failed: false,
                 };
                 let content_encrypted: Vec<u8> = row.get(3)?;
                 let content_nonce: Vec<u8> = row.get(4)?;

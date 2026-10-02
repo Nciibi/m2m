@@ -39,4 +39,15 @@ pub struct ChatMessage {
     /// Empty string for 1:1 messages (implicit from conversation).
     #[serde(default)]
     pub sender_peer_key_hex: String,
+    /// This message's stored bytes could not be decrypted on this read.
+    ///
+    /// Deliberately NOT persisted: whether a row opens depends on the key in
+    /// hand right now, so it is a property of this read rather than of the
+    /// message. It used to be signalled by writing the literal string
+    /// `[encrypted]` into `content`, which made an unreadable message
+    /// indistinguishable from a message whose text happens to be exactly that,
+    /// and left the user no way to tell a wrong vault key from a shredded one
+    /// from corruption.
+    #[serde(default)]
+    pub decrypt_failed: bool,
 }
