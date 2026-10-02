@@ -414,24 +414,33 @@ function ChatsTab({
   conversations, onOpenChat, onDeleteConversation, search, setSearch, onGetStarted,
   mutedConversations, onMute, onUnmute, addToast,
 }: ChatsTabProps) {
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [archived, setArchived] = useState<Set<string>>(new Set());
+  // Favourite/archive are derived from the conversation list, with local
+  // *overrides* layered on top for the window between a successful toggle and
+  // the next `loadConversations`.
+  //
+  // These were `useState<Set>` mirrored by an effect keyed on `conversations`,
+  // which was a real bug and not just an extra render: any conversation refresh
+  // landing between the toggle's `invoke` resolving and the server state
+  // catching up replaced the whole Set, so the star the user had just clicked
+  // silently reverted. An override cannot be reverted by a refresh, because a
+  // refresh no longer writes to it.
+  const [favOverride, setFavOverride] = useState<Record<string, boolean>>({});
+  const [archOverride, setArchOverride] = useState<Record<string, boolean>>({});
 
-  // Init from conversation data
-  useEffect(() => {
-    setFavorites(new Set(conversations.filter((c) => c.is_favorite).map((c) => c.peer_key_hex)));
-    setArchived(new Set(conversations.filter((c) => c.archived).map((c) => c.peer_key_hex)));
-  }, [conversations]);
+  const favorites = useMemo(
+    () => new Set(conversations.filter((c) => favOverride[c.peer_key_hex] ?? c.is_favorite).map((c) => c.peer_key_hex)),
+    [conversations, favOverride],
+  );
+  const archived = useMemo(
+    () => new Set(conversations.filter((c) => archOverride[c.peer_key_hex] ?? c.archived).map((c) => c.peer_key_hex)),
+    [conversations, archOverride],
+  );
 
   const toggleFav = async (peerKeyHex: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       const newVal = await invoke<boolean>("toggle_favorite", { peerKeyHex });
-      setFavorites((prev) => {
-        const next = new Set(prev);
-        if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
-        return next;
-      });
+      setFavOverride((prev) => ({ ...prev, [peerKeyHex]: newVal }));
     } catch (err) {
       // Not cosmetic. `catch {}` here meant a failed write left the star
       // un-moved and said nothing, so the user's only evidence was their own
@@ -446,11 +455,7 @@ function ChatsTab({
     e.stopPropagation();
     try {
       const newVal = await invoke<boolean>("toggle_archive", { peerKeyHex });
-      setArchived((prev) => {
-        const next = new Set(prev);
-        if (newVal) next.add(peerKeyHex); else next.delete(peerKeyHex);
-        return next;
-      });
+      setArchOverride((prev) => ({ ...prev, [peerKeyHex]: newVal }));
     } catch (err) {
       addToast("Could not update archive: " + errorMessage(err), "error");
     }
