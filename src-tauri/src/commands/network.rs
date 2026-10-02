@@ -1190,19 +1190,17 @@ pub async fn connect_to_peer(
     )
     .map_err(|_| "invalid signed prekey signature in invite".to_string())?;
 
-    // Snapshot the X25519 identity too. `lock_vault` and `unlock_vault` both
+    // Snapshot the X25519 identity keypair. `lock_vault` and `unlock_vault` both
     // *write* `x25519_identity`, and `tokio`'s `RwLock` is write-preferring, so
     // holding this read guard across the handshake below delays the vault lock
     // and the duress/panic wipes behind a remote peer — the same hole the
     // `identity` snapshot above closes, one lock over.
     //
-    // Two snapshots: the public half for the legacy handshake, the whole keypair
-    // for X3DH (which needs the secret for DH4). Both are taken inside the arms
-    // below so no `x25519_identity` guard survives the handshake.
-    let x25519_pub_key = {
-        let x25519 = state.x25519_identity.read().await;
-        x25519.as_ref().map(|k| k.public_key_bytes())
-    };
+    // The snapshot is the whole keypair, not just the public half, because X3DH
+    // needs the secret for DH4. It was previously two snapshots (public for the
+    // legacy handshake, whole keypair for X3DH) taken inside the two arms of an
+    // `if has_x3dh { … } else { … }`; the legacy arm is gone, so only one is
+    // needed and the public-half copy has no remaining reader.
 
     // The dialer only ever produces `Role::Initiator` (see below), so this is
     // not a match — there is exactly one handshake to perform here.
