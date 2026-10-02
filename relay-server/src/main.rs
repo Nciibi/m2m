@@ -334,12 +334,10 @@ async fn handle_register(
     state: Arc<RwLock<HashMap<String, Registration>>>,
     auth_token: &str,
 ) {
-    if !auth_token.is_empty() {
-        if !verify_auth(&auth_body, auth_token) {
-            tracing::warn!(peer = %peer_addr, "authentication failed");
-            send_error(&mut stream, 1, "authentication failed").await;
-            return;
-        }
+    if !auth_token.is_empty() && !verify_auth(&auth_body, auth_token) {
+        tracing::warn!(peer = %peer_addr, "authentication failed");
+        send_error(&mut stream, 1, "authentication failed").await;
+        return;
     }
 
     let relay_id = generate_relay_id();
