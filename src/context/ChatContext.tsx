@@ -787,9 +787,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // to force-navigate to the last peer's conversation, discarding
         // whatever the user was doing. A queued intent is explicit, has no
         // listener to leak, and cannot fire spuriously.
-        navIntentRef.current = { peerKeyHex };
         try { window.focus(); } catch { /* not all platforms allow this */ }
-        forceNavRender((n) => n + 1);
+        drainNavigationIntent(peerKeyHex);
       }
     });
 
