@@ -341,10 +341,6 @@ pub fn run() {
             commands::settings::set_tor_enabled,
             commands::settings::get_theme_preference,
             commands::settings::set_theme_preference,
-            commands::forwards::list_manual_forwards,
-            commands::forwards::add_manual_forward,
-            commands::forwards::remove_manual_forward,
-            commands::forwards::reorder_manual_forwards,
             commands::relay::get_relay_config,
             commands::relay::set_relay_config,
             commands::relay::get_relay_state,
@@ -404,9 +400,6 @@ pub fn run() {
             commands::chat::toggle_favorite,
             commands::chat::toggle_archive,
             // Multi-Device Sync
-            sync::generate_sync_invite,
-            sync::connect_sync_device,
-            sync::pair_sync_device,
             // Group Chat (Phase 3)
             commands::groups::create_group,
             commands::groups::send_group_message,
