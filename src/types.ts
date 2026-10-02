@@ -68,6 +68,20 @@ export interface ChatMessage {
   decrypt_failed: boolean;
 }
 
+/**
+ * The relay configuration as the backend exposes it.
+ *
+ * There is deliberately no `auth_token` field. `get_relay_config` returns a
+ * `RelayConfigView` whose token is reduced to `has_auth_token`, so the secret
+ * never enters renderer memory. A settings form must therefore treat the token
+ * as write-only: it can be set, and it cannot be read back or displayed.
+ */
+export interface RelayConfigView {
+  host: string;
+  port: number;
+  has_auth_token: boolean;
+}
+
 export interface ConnectionInfo {
   state: string;
   peer_fingerprint: string | null;
