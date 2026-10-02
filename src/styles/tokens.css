@@ -221,6 +221,31 @@
   --scrollbar-thumb: color-mix(in srgb, var(--color-accent-bright) 15%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--color-accent-bright) 30%, transparent);
 
+
+  /* === Avatar ramp === */
+
+  /* Eight hues for deterministic avatar gradients (`utils.ts::hashToColor`).
+
+     These used to be generated at runtime as `hsl(<hash> % 360, 55%, 48%)` --
+     a colour literal produced in JS, outside the token system, so it could not
+     respond to the theme. On the light theme that put a fixed mid-lightness
+     wash behind near-white initials on a near-white card: off-palette and
+     low-contrast.
+
+     A token reference keeps the determinism (same peer, same avatar, forever)
+     while moving every literal into the two files that own colour, and lets
+     `theme.css` restate the ramp for light. Eight is enough that collisions
+     across a conversation list are rare, and because the value is a token and
+     not a colour, a palette change is a one-line edit here rather than a code
+     change in two components. */
+  --color-avatar-0: hsl(210, 55%, 42%);
+  --color-avatar-1: hsl(172, 48%, 38%);
+  --color-avatar-2: hsl(28, 62%, 46%);
+  --color-avatar-3: hsl(268, 46%, 52%);
+  --color-avatar-4: hsl(346, 52%, 46%);
+  --color-avatar-5: hsl(196, 58%, 40%);
+  --color-avatar-6: hsl(88, 38%, 38%);
+  --color-avatar-7: hsl(232, 44%, 50%);
   /* ─── Sidebar ─── */
   --sidebar-width: 200px;
   --right-panel-width: 280px;
