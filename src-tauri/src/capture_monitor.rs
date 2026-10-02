@@ -166,16 +166,50 @@ pub fn start_monitor(state: Arc<crate::state::AppState>, app_handle: AppHandle) 
                 break;
             }
 
-            let detected = tokio::task::spawn_blocking(scan_live)
-                .await
-                .unwrap_or_default();
-            if detected != last_active {
-                tracing::info!(detected = ?detected, "capture software set changed");
+            // A scan that failed is NOT an empty result. `unwrap_or_default()` here
+            // turned a panicking `scan_live` into `vec![]`, which the UI reads as
+            // "nothing detected" — so the banner cleared and the app reported
+            // the user safe precisely when detection had stopped working. That
+            // is the "protection failed but the control says fine" shape, and it
+            // is the failure mode this monitor exists to prevent.
+            //
+            // On failure the previous `last_active` is kept, the failure is
+            // reported to the UI as its own state, and the next cycle retries.
+            let detected = match tokio::task::spawn_blocking(scan_live).await {
+                Ok(found) => {
+                    scan_failed = false;
+                    Some(found)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "capture scan failed; keeping previous result");
+                    scan_failed = true;
+                    None
+                }
+            };
+
+            // `None` means "this cycle produced no new information", so the
+            // banner is re-emitted with the retained list rather than being
+            // cleared.
+            if let Some(detected) = detected {
+                if detected != last_active {
+                    tracing::info!(detected = ?detected, "capture software set changed");
+                    last_active = detected;
+                }
+            }
+
+            // Emit whenever either the detected set or the health changed, so
+            // the UI can never be left showing a stale "all clear".
+            let reported_active = last_active.clone();
+            if reported_active != last_emitted_active || scan_failed != last_emitted_scan_failed {
                 let _ = app_handle.emit(
                     "m2m://capture-warning",
-                    serde_json::json!({ "active": detected }),
+                    serde_json::json!({
+                        "active": reported_active,
+                        "scan_failed": scan_failed,
+                    }),
                 );
-                last_active = detected;
+                last_emitted_active = last_active.clone();
+                last_emitted_scan_failed = scan_failed;
             }
 
             tokio::time::sleep(std::time::Duration::from_secs(SCAN_INTERVAL_SECS)).await;
