@@ -47,6 +47,7 @@ function message(over: Record<string, unknown> = {}) {
     expires_at: null,
     reactions: {},
     sender_peer_key_hex: KEY,
+    decrypt_failed: false,
     ...over,
   };
 }
