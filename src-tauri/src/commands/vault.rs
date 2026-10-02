@@ -1361,7 +1361,7 @@ pub async fn lock_vault_inner(
     };
     for peer in &dropped_peers {
         let _ = tauri::Emitter::emit(
-            &app_handle,
+            app_handle,
             "m2m://connection",
             serde_json::json!({
                 "peer_key_hex": peer,
