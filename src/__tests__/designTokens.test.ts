@@ -36,9 +36,24 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Colour literals that are not inside a `var(--x, …)` fallback. */
+/**
+ * Colour literals, as *values*.
+ *
+ * Two shapes of false positive cost time here and are worth naming:
+ *  - `white-space: nowrap` is a property name, not a colour. A bare `\bwhite\b`
+ *    matches it.
+ *  - An accent has to be able to name the colour it mixes *toward*
+ *    (`color-mix(…, black)`), so `black` is a legitimate argument while
+ *    `color: black` is a violation. Hence the value-position requirement.
+ */
 const LITERAL =
-  /#[0-9a-fA-F]{3,8}\b|\brgba?\s*\(|\bhsla?\s*\(|\b(?:white|black|silver|maroon|navy|teal|olive|lime|aqua|fuchsia)\b/;
+  /(:|\(|,)\s*(#[0-9a-fA-F]{3,8}\b|rgba?\s*\(|hsla?\s*\()|(^|[:(,\s])(white|black|silver|maroon|navy|teal|olive|lime|aqua|fuchsia)(\s*[;,)\s}]|$)/;
+
+/**
+ * `CLAUDE.md`'s one sanctioned exception: a `var(--token, <literal>)` fallback in
+ * `src/App.tsx`, so the element still receives a colour if the stylesheet fails.
+ */
+const SANCTIONED = new Set(["App.tsx"]);
 
 /**
  * Strip `var(--token, <fallback>)` down to just the token name, so a sanctioned
